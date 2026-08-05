@@ -1,0 +1,72 @@
+{
+  "_note": "Golden sets and canary defects (Part 3 §10). Each case sends `prompt` to the role and checks a field of the parsed JSON output against acceptable values. Canaries are seeded defects a competent reviewer MUST catch — the catch rate feeds the reputation factor. Runs are triggered manually from the Evals page (they consume real model usage).",
+  "sets": {
+    "AGT-REV-001": {
+      "kind": "canary",
+      "cases": [
+        {
+          "name": "sql-injection-canary",
+          "prompt": "Review this diff for a login endpoint:\n\n```js\napp.post('/login', (req, res) => {\n  const q = `SELECT * FROM users WHERE email='${req.body.email}' AND pass='${req.body.pass}'`;\n  db.query(q, (e, rows) => res.json({ ok: rows.length > 0 }));\n});\n```\n\nSpec: authenticate a user by email and password.",
+          "expectField": "verdict",
+          "expectAnyOf": ["block", "request-changes"]
+        },
+        {
+          "name": "secret-in-code-canary",
+          "prompt": "Review this configuration change:\n\n```js\nconst STRIPE_KEY = 'sk_live_51Hxxxxxxxxxxxxxxxxxxxxxx';\nexport const payments = new Stripe(STRIPE_KEY);\n```\n\nSpec: initialize the payments client.",
+          "expectField": "verdict",
+          "expectAnyOf": ["block", "request-changes"]
+        },
+        {
+          "name": "clean-code-control",
+          "prompt": "Review this diff:\n\n```js\nexport function clamp(n, lo, hi) {\n  return Math.min(hi, Math.max(lo, n));\n}\n```\n\nSpec: a clamp utility with tests elsewhere in the PR (tests pass).",
+          "expectField": "verdict",
+          "expectAnyOf": ["approve"]
+        }
+      ]
+    },
+    "AGT-SEC-001": {
+      "kind": "canary",
+      "cases": [
+        {
+          "name": "path-traversal-canary",
+          "prompt": "Security-review this file-download handler:\n\n```js\napp.get('/files/:name', (req, res) => {\n  res.sendFile(path.join(UPLOADS, req.params.name));\n});\n```",
+          "expectField": "verdict",
+          "expectAnyOf": ["block"]
+        }
+      ]
+    },
+    "AGT-QA-001": {
+      "kind": "golden",
+      "cases": [
+        {
+          "name": "failing-criterion-detected",
+          "prompt": "Acceptance criteria: (1) GET /health returns 200 with body {\"ok\":true}. (2) Response time under 100ms.\n\nTest evidence provided to you: GET /health returned 500 with body {\"error\":\"db down\"}; latency 40ms.\n\nProduce the QA report.",
+          "expectField": "verdict",
+          "expectAnyOf": ["red"]
+        }
+      ]
+    },
+    "AGT-SUP-001": {
+      "kind": "golden",
+      "cases": [
+        {
+          "name": "legal-threat-escalates",
+          "prompt": "Customer message: \"This is my third email. If my data is not exported by Friday I am contacting my lawyer and filing a GDPR complaint.\"",
+          "expectField": "escalate",
+          "expectAnyOf": [true]
+        }
+      ]
+    },
+    "AGT-MON-001": {
+      "kind": "golden",
+      "cases": [
+        {
+          "name": "breach-indicator-sev1",
+          "prompt": "Signal: cloud audit log shows 4,000 SELECT queries on the customers table from an unrecognized IP in 3 minutes, followed by an S3 putObject to an external bucket.",
+          "expectField": "severity",
+          "expectAnyOf": ["SEV1"]
+        }
+      ]
+    }
+  }
+}

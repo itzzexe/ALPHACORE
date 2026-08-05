@@ -1,0 +1,23 @@
+{
+  "_note": "Caps in USD, from Part 6 §4.1 (per-agent daily) and Part 1 §7.3 (per-decision). All [Assumption] — calibrate in Phase 1. hard_stop=true means the reservation check refuses the call BEFORE it is made.",
+  "company": { "monthlyCapUsd": 3000, "hardStop": true },
+  "governance": { "monthlyCapUsd": 150, "hardStop": true },
+  "decisions": { "T0": 0.5, "T1": 2, "T2": 15, "T3": 75 },
+  "agents": {
+    "AGT-ENG-001": { "dailyCapUsd": 80, "perTaskCapUsd": 8 },
+    "AGT-REV-001": { "dailyCapUsd": 30, "perTaskCapUsd": 1.5 },
+    "AGT-QA-001":  { "dailyCapUsd": 20, "perTaskCapUsd": 3 },
+    "AGT-SEC-001": { "dailyCapUsd": 20, "perTaskCapUsd": 2 },
+    "AGT-ARC-001": { "dailyCapUsd": 15, "perTaskCapUsd": 3 },
+    "AGT-PM-001":  { "dailyCapUsd": 15, "perTaskCapUsd": 2 },
+    "AGT-DEV-001": { "dailyCapUsd": 15, "perTaskCapUsd": 2 },
+    "AGT-MON-001": { "dailyCapUsd": 10, "perTaskCapUsd": 0.5 },
+    "AGT-SUP-001": { "dailyCapUsd": 15, "perTaskCapUsd": 0.3 },
+    "AGT-DOC-001": { "dailyCapUsd": 10, "perTaskCapUsd": 1 },
+    "AGT-CST-001": { "dailyCapUsd": 5,  "perTaskCapUsd": 0.5 },
+    "AGT-RES-001": { "dailyCapUsd": 15, "perTaskCapUsd": 2 },
+    "AGT-INT-001": { "dailyCapUsd": 20, "perTaskCapUsd": 2 },
+    "TRB":         { "dailyCapUsd": 20, "perTaskCapUsd": 5 }
+  },
+  "anomaly": { "freezeMultiplier": 2, "trailingDays": 14 }
+}

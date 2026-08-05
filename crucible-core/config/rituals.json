@@ -1,0 +1,13 @@
+{
+  "_note": "Governance calendar (Part 2 §9). A body that produces no artifact did not meet — completing a ritual requires a note, which is the artifact pointer.",
+  "rituals": [
+    { "id": "weekly-gate-sync",    "title": "Gate & priority sync",            "cadence": "weekly",    "description": "Pending approvals, escalations, metric flags. Artifact: updated decision queue." },
+    { "id": "weekly-reliability",  "title": "Reliability + cost report review","cadence": "weekly",    "description": "Ops Monitor + Cost Sentinel reports, annotated." },
+    { "id": "monthly-council",     "title": "AI Governance Council",           "cadence": "monthly",   "description": "Agent authority changes, model policy, escalation-band check, accuracy review. Artifact: council note." },
+    { "id": "monthly-cross-audit", "title": "Cross-audit + canary results",    "cadence": "monthly",   "description": "Each founder audits the other's domain; run the Evals page canaries first. Artifact: audit note." },
+    { "id": "monthly-finance",     "title": "Finance pack",                    "cadence": "monthly",   "description": "Burn, unit economics, budget vs actual. Export from the Governance page." },
+    { "id": "quarterly-risk",      "title": "Risk register + expiry sweep",    "cadence": "quarterly", "description": "Review risks; run the decision expiry sweep; check reopened decisions." },
+    { "id": "quarterly-restore",   "title": "Backup restore drill",            "cadence": "quarterly", "description": "Restore data/crucible.db from backup on a scratch copy; time it; record RTO." },
+    { "id": "annual-pentest",      "title": "External pentest + policy review","cadence": "annual",    "description": "Vendor engagement; provider-terms re-review (A5); policy refresh." }
+  ]
+}

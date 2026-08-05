@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crucible Core — Operations Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 90,85 10,85' fill='%23ff6b2c'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wdth,wght@62.5..100,300..800&family=Red+Hat+Mono:wght@300..600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-glyph">▲</div>
+      <div class="brand-name">
+        <span>CRUCIBLE</span>
+        <span class="brand-sub">CORE · OPS CONSOLE</span>
+      </div>
+    </div>
+    <nav id="nav">
+      <div class="nav-sec">Steer</div>
+      <a href="#/" data-route="">Overview</a>
+      <a href="#/governance" data-route="governance">Governance <span class="nav-count" id="alert-count"></span></a>
+      <div class="nav-sec">Decide</div>
+      <a href="#/gate" data-route="gate">Human Gate <span class="nav-count" id="gate-count"></span></a>
+      <a href="#/decisions" data-route="decisions">Decisions</a>
+      <div class="nav-sec">Produce</div>
+      <a href="#/products" data-route="products">Products</a>
+      <a href="#/pipelines" data-route="pipelines">Pipelines</a>
+      <a href="#/runs" data-route="runs">Runs</a>
+      <a href="#/artifacts" data-route="artifacts">Artifacts</a>
+      <div class="nav-sec">Plan</div>
+      <a href="#/projects" data-route="projects">Projects</a>
+      <a href="#/tasks" data-route="tasks">Tasks</a>
+      <a href="#/risks" data-route="risks">Risks</a>
+      <a href="#/quality" data-route="quality">Quality</a>
+      <div class="nav-sec">Operate</div>
+      <a href="#/incidents" data-route="incidents">Incidents</a>
+      <a href="#/support" data-route="support">Support</a>
+      <div class="nav-sec">Data</div>
+      <a href="#/intel" data-route="intel">Intelligence</a>
+      <a href="#/segments" data-route="segments">Segments</a>
+      <a href="#/data" data-route="data">Datasets</a>
+      <a href="#/archive" data-route="archive">Archive</a>
+      <div class="nav-sec">Commercial</div>
+      <a href="#/marketing" data-route="marketing">Marketing</a>
+      <a href="#/customers" data-route="customers">Customers</a>
+      <a href="#/finance" data-route="finance">Finance</a>
+      <div class="nav-sec">Corporate</div>
+      <a href="#/people" data-route="people">People (HR)</a>
+      <a href="#/legal" data-route="legal">Legal</a>
+      <a href="#/vendors" data-route="vendors">Vendors</a>
+      <a href="#/knowledge" data-route="knowledge">Knowledge</a>
+      <a href="#/objectives" data-route="objectives">Objectives</a>
+      <div class="nav-sec">Admin</div>
+      <a href="#/oversight" data-route="oversight">Oversight</a>
+      <a href="#/users" data-route="users">Users &amp; Roles</a>
+      <a href="#/settings" data-route="settings">Settings</a>
+      <div class="nav-sec">Assure</div>
+      <a href="#/evals" data-route="evals">Evals &amp; Canaries</a>
+      <a href="#/agents" data-route="agents">Agents</a>
+      <a href="#/budgets" data-route="budgets">Budgets</a>
+      <a href="#/audit" data-route="audit">Audit Chain</a>
+      <a href="#/providers" data-route="providers">Providers</a>
+    </nav>
+    <div class="side-foot">
+      <div class="acting">
+        <label>Signed in</label>
+        <div id="who" class="mono" style="color:var(--steel);font-size:12px;padding:4px 0">—</div>
+        <button class="btn btn-sm" id="logout" style="width:100%">Logout</button>
+      </div>
+      <div class="foot-row">
+        <span id="mode-chip" class="chip"></span>
+        <span class="ver">v0.3</span>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <h1 id="page-title">Overview</h1>
+      <div class="top-right">
+        <span id="chain-chip" class="chip chip-dim" title="Audit hash-chain integrity">chain —</span>
+        <span id="clock" class="clock"></span>
+      </div>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+</div>
+<div id="login" hidden>
+  <div class="login-panel">
+    <div class="brand" style="border:none;justify-content:center;padding-bottom:4px">
+      <div class="brand-glyph">▲</div>
+      <div class="brand-name"><span>CRUCIBLE</span><span class="brand-sub">CORE · OPS CONSOLE</span></div>
+    </div>
+    <label class="fl">Username</label>
+    <input type="text" id="login-user" autocomplete="username">
+    <label class="fl" style="margin-top:10px">Password</label>
+    <input type="password" id="login-pass" autocomplete="current-password">
+    <button class="btn btn-primary" id="login-go" style="width:100%;margin-top:16px">Sign in</button>
+    <div id="login-err" class="reason" style="margin-top:10px;text-align:center"></div>
+    <div class="map-legend" style="text-align:center;margin-top:12px">first boot: admin / crucible</div>
+  </div>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

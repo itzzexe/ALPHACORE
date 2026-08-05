@@ -1,0 +1,128 @@
+{
+  "_note": "Prices are USD per 1M tokens [in, out], entered 2026-08 — verify against provider pricing pages before production (Part 6 §1.2: no benchmark laundering; reforecast monthly). Model changes are T2 decisions requiring green regression evals (ADR-005).",
+  "providers": {
+    "anthropic": {
+      "family": "anthropic",
+      "kind": "anthropic",
+      "keyEnv": "ANTHROPIC_API_KEY",
+      "dpa": true,
+      "noTraining": true,
+      "models": {
+        "claude-opus-5":   { "priceIn": 5.0,  "priceOut": 25.0 },
+        "claude-sonnet-5": { "priceIn": 3.0,  "priceOut": 15.0 },
+        "claude-haiku-4-5": { "priceIn": 1.0, "priceOut": 5.0 }
+      }
+    },
+    "claude-subscription": {
+      "family": "anthropic",
+      "kind": "claude-cli",
+      "keyEnv": null,
+      "enabledEnv": "CLAUDE_CLI_ENABLED",
+      "dpa": true,
+      "noTraining": true,
+      "_note": "Claude Pro/Max subscription via the Claude Code CLI (`claude -p --model <alias>`). Zero marginal cash cost; usage metered in tokens against the plan's 5-hour windows. Same model family as `anthropic` — never pair as an independent reviewer against it.",
+      "models": {
+        "cli-default": { "priceIn": 0, "priceOut": 0 },
+        "haiku":  { "priceIn": 0, "priceOut": 0 },
+        "sonnet": { "priceIn": 0, "priceOut": 0 },
+        "opus":   { "priceIn": 0, "priceOut": 0 }
+      }
+    },
+    "openai": {
+      "family": "openai",
+      "kind": "openai-compat",
+      "baseUrl": "https://api.openai.com/v1",
+      "keyEnv": "OPENAI_API_KEY",
+      "dpa": true,
+      "noTraining": true,
+      "models": {
+        "gpt-5.1":    { "priceIn": 1.25, "priceOut": 10.0 },
+        "gpt-5-mini": { "priceIn": 0.25, "priceOut": 2.0 }
+      }
+    },
+    "deepseek": {
+      "family": "deepseek",
+      "kind": "openai-compat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "keyEnv": "DEEPSEEK_API_KEY",
+      "dpa": false,
+      "noTraining": false,
+      "_note": "No DPA/no-training posture assumed — sensitivity router therefore never sends customer_min data here (Part 3 §7.5).",
+      "models": {
+        "deepseek-chat":     { "priceIn": 0.28, "priceOut": 0.42 },
+        "deepseek-reasoner": { "priceIn": 0.28, "priceOut": 0.42 }
+      }
+    },
+    "google": {
+      "family": "google",
+      "kind": "gemini",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "keyEnv": "GEMINI_API_KEY",
+      "dpa": true,
+      "noTraining": true,
+      "models": {
+        "gemini-3-pro-preview": { "priceIn": 2.0, "priceOut": 12.0 },
+        "gemini-2.5-flash":     { "priceIn": 0.3, "priceOut": 2.5 }
+      }
+    },
+    "mock": {
+      "family": "mock",
+      "kind": "mock",
+      "keyEnv": null,
+      "dpa": true,
+      "noTraining": true,
+      "models": { "mock-small": { "priceIn": 0, "priceOut": 0 }, "mock-large": { "priceIn": 0, "priceOut": 0 } }
+    }
+  },
+  "tiers": {
+    "T1": {
+      "purpose": "Classification, extraction, triage",
+      "chain": [
+        { "provider": "claude-subscription", "model": "haiku" },
+        { "provider": "anthropic", "model": "claude-haiku-4-5" },
+        { "provider": "google", "model": "gemini-2.5-flash" },
+        { "provider": "deepseek", "model": "deepseek-chat" }
+      ],
+      "onExhausted": "queue"
+    },
+    "T2": {
+      "purpose": "Drafting and analysis",
+      "chain": [
+        { "provider": "claude-subscription", "model": "sonnet" },
+        { "provider": "anthropic", "model": "claude-sonnet-5" },
+        { "provider": "openai", "model": "gpt-5-mini" },
+        { "provider": "deepseek", "model": "deepseek-chat" }
+      ],
+      "onExhausted": "degrade-T1-with-flag"
+    },
+    "T3": {
+      "purpose": "Reasoning, architecture, coding",
+      "chain": [
+        { "provider": "claude-subscription", "model": "opus" },
+        { "provider": "anthropic", "model": "claude-opus-5" },
+        { "provider": "openai", "model": "gpt-5.1" },
+        { "provider": "google", "model": "gemini-3-pro-preview" }
+      ],
+      "onExhausted": "stop-human"
+    },
+    "T4": {
+      "purpose": "Critical cross-check — two independent families in parallel; disagreement goes to a human. Fail closed.",
+      "pair": [
+        { "provider": "anthropic", "model": "claude-opus-5" },
+        { "provider": "openai", "model": "gpt-5.1" }
+      ],
+      "pairFallback": [
+        { "provider": "anthropic", "model": "claude-opus-5" },
+        { "provider": "google", "model": "gemini-3-pro-preview" }
+      ],
+      "onExhausted": "fail-closed"
+    }
+  },
+  "sensitivity": {
+    "_note": "Part 3 §7.5 — customer_min payloads may only reach providers with dpa AND noTraining; restricted content never enters model context at all.",
+    "public": ["anthropic", "claude-subscription", "openai", "deepseek", "google", "mock"],
+    "internal": ["anthropic", "claude-subscription", "openai", "deepseek", "google", "mock"],
+    "customer_min": ["anthropic", "claude-subscription", "openai", "google", "mock"],
+    "restricted": []
+  }
+}
