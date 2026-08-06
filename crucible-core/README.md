@@ -1,8 +1,32 @@
-# Crucible Core — the AI-Native Company Platform
+<div align="center">
 
-A complete company in one process: **72 departments across 12 divisions, run day-to-day by an AI workforce, governed by humans at the gates.** Agents draft, build, research, review, and route; humans approve, publish, sign, hire, and rule. Every action from either side lands on a hash-chained, append-only audit log.
+# ⚙️ CRUCIBLE CORE
 
-Built as the working implementation of **Part 3 — Technical Design** of the Crucible blueprint (see the repository root), then expanded far past it. Zero frameworks: Node's standard library, `node:sqlite`, and a vanilla-JS dashboard.
+### The company that runs itself — and proves every move on a hash chain.
+
+**An entire AI-native company inside a single Node process.**
+Seventy-two departments across twelve divisions, staffed by an AI workforce that drafts, builds,
+researches, sells, supports, and even **hires its own new employees** — while humans hold every
+gate that matters: approving, publishing, signing, and ruling.
+
+<img src="https://img.shields.io/badge/departments-72-ff6b2c?style=flat-square" alt="72 departments">
+<img src="https://img.shields.io/badge/divisions-12-e8c547?style=flat-square" alt="12 divisions">
+<img src="https://img.shields.io/badge/AI_providers-5_%2B_free_mock-4f9cf0?style=flat-square" alt="5 providers + mock">
+<img src="https://img.shields.io/badge/permissions-~95_atomic-e07bd2?style=flat-square" alt="~95 atomic permissions">
+<img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
+<img src="https://img.shields.io/badge/frameworks-zero-78bf6d?style=flat-square" alt="zero frameworks">
+<img src="https://img.shields.io/badge/node-%E2%89%A522.5-5ec3c9?style=flat-square" alt="Node ≥ 22.5">
+
+*No frameworks. No build step. One process, one SQLite file, and a living circuit-board map
+where you literally watch the company work.*
+
+</div>
+
+---
+
+**What makes it different:** most "AI agent" projects are a chat loop with tools. Crucible Core is an **operating company** — money is reserved before any model is called, reviewers are forced onto a different model family than authors, low-confidence work stops at a human gate, incidents demand postmortems, every produced file lands on disk through an explicit human apply, and the whole story is sealed into an append-only SHA-256 hash chain you can verify from the dashboard header. The AI does the work; the humans keep the authority; the chain keeps them both honest.
+
+Born as the working implementation of **Part 3 — Technical Design** of the Crucible blueprint (see the repository root), then expanded far past it. Built with Node's standard library, `node:sqlite`, and a vanilla-JS dashboard.
 
 <p align="center">
   <img src="docs/mainboard.svg" alt="The living mainboard — 12 divisions and 72 departments around the Harmony CPU" width="100%">
