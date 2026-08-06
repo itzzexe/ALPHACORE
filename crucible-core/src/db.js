@@ -932,6 +932,144 @@ CREATE TABLE IF NOT EXISTS nexus_log (
   UNIQUE (rule_id, subject_key)
 );
 
+-- Expansion wave: trust, capital, talent and executive divisions.
+CREATE TABLE IF NOT EXISTS security_events (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind         TEXT NOT NULL,                 -- injection|secret-leak|vendor-dpa|anomaly
+  severity     TEXT NOT NULL DEFAULT 'low',   -- low|medium|high
+  summary      TEXT NOT NULL,
+  subject_type TEXT,
+  subject_id   TEXT,
+  state        TEXT NOT NULL DEFAULT 'open',  -- open|triaged|closed
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS compliance_checks (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  area       TEXT NOT NULL,                   -- dpa|data-retention|access-control|...
+  status     TEXT NOT NULL DEFAULT 'gap',     -- ok|gap|na
+  note       TEXT,
+  checked_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS experiments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  hypothesis TEXT,
+  variant_a  TEXT NOT NULL,
+  variant_b  TEXT NOT NULL,
+  agent_id   TEXT,
+  run_a      TEXT,
+  run_b      TEXT,
+  result_a   TEXT,
+  result_b   TEXT,
+  winner     TEXT,                            -- a|b|inconclusive
+  state      TEXT NOT NULL DEFAULT 'running', -- running|concluded
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS candidates (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  role_name   TEXT NOT NULL,
+  brief       TEXT,
+  spec        TEXT,                            -- JSON drafted by an agent
+  state       TEXT NOT NULL DEFAULT 'drafting',-- drafting|screening|trial|hired|rejected
+  trial_note  TEXT,
+  spec_run    TEXT,
+  trial_run   TEXT,
+  agent_id    TEXT,                            -- set on hire
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS stage_gates (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id TEXT NOT NULL,
+  gate       TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'pending', -- pending|passed|failed
+  approver   TEXT,
+  note       TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS purchase_requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  item          TEXT NOT NULL,
+  vendor_id     INTEGER,
+  amount_usd    REAL NOT NULL DEFAULT 0,
+  justification TEXT,
+  state         TEXT NOT NULL DEFAULT 'requested', -- requested|approved|rejected|ordered
+  approver      TEXT,
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS brand_assets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,                  -- voice|palette|logo-spec|boilerplate|guideline
+  name       TEXT NOT NULL,
+  content    TEXT,
+  state      TEXT NOT NULL DEFAULT 'draft',  -- draft|approved
+  run_id     TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS releases (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  version    TEXT NOT NULL,
+  product_id TEXT,
+  notes      TEXT,
+  state      TEXT NOT NULL DEFAULT 'draft',  -- draft|published
+  run_id     TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS curricula (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id     TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  source       TEXT NOT NULL DEFAULT 'manual', -- manual|eval-fail|enablement
+  state        TEXT NOT NULL DEFAULT 'proposed', -- proposed|active|done
+  score_before REAL,
+  score_after  REAL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS investor_updates (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  period     TEXT NOT NULL,
+  body       TEXT,
+  state      TEXT NOT NULL DEFAULT 'draft',  -- draft|sent
+  run_id     TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS board_records (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  period      TEXT NOT NULL,
+  packet      TEXT,
+  resolutions TEXT,
+  state       TEXT NOT NULL DEFAULT 'draft', -- draft|held
+  run_id      TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bulletins (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  week       TEXT NOT NULL,
+  body       TEXT,
+  state      TEXT NOT NULL DEFAULT 'draft',  -- draft|published
+  run_id     TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   seq          INTEGER PRIMARY KEY AUTOINCREMENT,
   occurred_at  TEXT NOT NULL DEFAULT (datetime('now')),

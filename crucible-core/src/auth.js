@@ -64,6 +64,23 @@ export const PERMS = [
   'infra.view', 'infra.manage',
   'finreports.view', 'finreports.manage',
   'users.manage', 'settings.manage',
+  // Expansion wave.
+  'security.view', 'security.manage',
+  'compliance.view', 'compliance.manage',
+  'sustainability.view',
+  'capacity.view',
+  'lab.view', 'lab.manage',
+  'releases.view', 'releases.manage',
+  'pmo.view', 'pmo.manage',
+  'insights.view',
+  'brand.view', 'brand.manage',
+  'procurement.view', 'procurement.manage',
+  'finops.view',
+  'recruiting.view', 'recruiting.manage',
+  'academy.view', 'academy.manage',
+  'board.view', 'board.manage',
+  'ir.view', 'ir.manage',
+  'comms.view', 'comms.manage',
 ];
 
 const hashPassword = (pw) => {
@@ -77,6 +94,12 @@ const checkPassword = (pw, stored) => {
   const b = Buffer.from(hash, 'hex');
   return a.length === b.length && timingSafeEqual(a, b);
 };
+
+/** Re-authentication for destructive actions: does this password belong to this user? */
+export function verifyPassword(userId, password) {
+  const u = one('SELECT pass FROM users WHERE id = ?', userId);
+  return Boolean(u) && checkPassword(password || '', u.pass);
+}
 
 /** First boot: create the superadmin (admin / crucible — change it). */
 export function seedAdmin() {

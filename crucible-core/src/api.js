@@ -5,7 +5,23 @@ import { q, one } from './db.js';
 import { verifyChain, audit } from './audit.js';
 import { providersConfig, budgetsConfig } from './env.js';
 import { isProviderAvailable as providerAvailable, isMockMode as mockMode, settingsOverview, setSetting } from './settings.js';
-import { PERMS, hasPerm, listUsers, createUser, updateUser } from './auth.js';
+import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword } from './auth.js';
+import { wipeSystem } from './wipe.js';
+import { activityFeed } from './links.js';
+import {
+  securityOverview, securityScan, setSecurityState,
+  complianceOverview, addComplianceCheck, sustainabilityOverview, capacityOverview,
+  listExperiments, createExperiment, concludeExperiment,
+  listReleases, draftRelease, publishRelease,
+  pmoOverview, createGate, resolveGate, insightsOverview,
+  listBrandAssets, createBrandAsset, approveBrandAsset,
+  listPurchases, createPurchase, resolvePurchase, finopsOverview,
+  listCandidates, createOpening, trialCandidate, decideCandidate,
+  academyOverview, createCurriculum, setCurriculumState,
+  listInvestorUpdates, generateInvestorUpdate, sendInvestorUpdate,
+  listBoardRecords, generateBoardPacket, holdBoardMeeting,
+  listBulletins, generateBulletin, publishBulletin,
+} from './expansion.js';
 import {
   createProject, listProjects, setProjectState,
   createTask, listTasks, setTaskState,
@@ -306,6 +322,59 @@ const routes = [
   ['GET', /^\/api\/users$/, () => listUsers()],
   ['POST', /^\/api\/users$/, (_p, body) => ({ id: createUser({ username: need(body, 'username'), displayName: body.displayName || null, password: need(body, 'password'), perms: body.perms || [], actor: need(body, 'actor') }) })],
   ['POST', /^\/api\/users\/(\d+)\/update$/, ([id], body) => { updateUser(Number(id), { perms: body.perms ?? null, status: body.status ?? null, password: body.password ?? null, actor: need(body, 'actor') }); return { ok: true }; }],
+  // --- Live map activity: the board's heartbeat ---
+  ['GET', /^\/api\/map\/activity$/, (_p, _b, url) => activityFeed(Number(url.searchParams.get('since') || 0))],
+
+  // --- Expansion wave: TRUST / CAPITAL / TALENT / EXEC + friends ---
+  ['GET', /^\/api\/security$/, () => securityOverview()],
+  ['POST', /^\/api\/security\/scan$/, (_p, body) => securityScan({ actor: need(body, 'actor') })],
+  ['POST', /^\/api\/security\/(\d+)\/state$/, ([id], body) => { setSecurityState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/compliance$/, () => complianceOverview()],
+  ['POST', /^\/api\/compliance\/check$/, (_p, body) => ({ id: addComplianceCheck({ area: need(body, 'area'), status: need(body, 'status'), note: body.note || null, actor: need(body, 'actor') }) })],
+  ['GET', /^\/api\/sustainability$/, () => sustainabilityOverview()],
+  ['GET', /^\/api\/capacity$/, () => capacityOverview()],
+  ['GET', /^\/api\/lab$/, () => listExperiments()],
+  ['POST', /^\/api\/lab$/, (_p, body) => ({ id: createExperiment({ name: need(body, 'name'), hypothesis: body.hypothesis || null, variantA: need(body, 'variantA'), variantB: need(body, 'variantB'), actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/lab\/(\d+)\/conclude$/, ([id], body) => { concludeExperiment(Number(id), { winner: need(body, 'winner'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/releases$/, () => listReleases()],
+  ['POST', /^\/api\/releases$/, (_p, body) => ({ id: draftRelease({ version: need(body, 'version'), productId: body.productId || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/releases\/(\d+)\/publish$/, ([id], body) => { publishRelease(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/pmo$/, () => pmoOverview()],
+  ['POST', /^\/api\/pmo$/, (_p, body) => ({ id: createGate({ projectId: need(body, 'projectId'), gate: need(body, 'gate'), actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/pmo\/(\d+)\/resolve$/, ([id], body) => { resolveGate(Number(id), { state: need(body, 'state'), note: body.note || null, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/insights$/, () => insightsOverview()],
+  ['GET', /^\/api\/brand$/, () => listBrandAssets()],
+  ['POST', /^\/api\/brand$/, (_p, body) => ({ id: createBrandAsset({ kind: need(body, 'kind'), name: need(body, 'name'), content: body.content || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/brand\/(\d+)\/approve$/, ([id], body) => { approveBrandAsset(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/procurement$/, () => listPurchases()],
+  ['POST', /^\/api\/procurement$/, (_p, body) => ({ id: createPurchase({ item: need(body, 'item'), vendorId: body.vendorId || null, amountUsd: body.amountUsd || 0, justification: body.justification || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/procurement\/(\d+)\/resolve$/, ([id], body) => { resolvePurchase(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/finops$/, () => finopsOverview()],
+  ['GET', /^\/api\/recruiting$/, () => listCandidates()],
+  ['POST', /^\/api\/recruiting$/, (_p, body) => ({ id: createOpening({ roleName: need(body, 'roleName'), brief: need(body, 'brief'), actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/recruiting\/(\d+)\/trial$/, ([id], body) => { trialCandidate(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/recruiting\/(\d+)\/decide$/, ([id], body) => decideCandidate(Number(id), { verdict: need(body, 'verdict'), actor: need(body, 'actor') })],
+  ['GET', /^\/api\/academy$/, () => academyOverview()],
+  ['POST', /^\/api\/academy$/, (_p, body) => ({ id: createCurriculum({ agentId: need(body, 'agentId'), title: need(body, 'title'), source: body.source || 'manual', actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/academy\/(\d+)\/state$/, ([id], body) => { setCurriculumState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/ir$/, () => listInvestorUpdates()],
+  ['POST', /^\/api\/ir$/, (_p, body) => ({ id: generateInvestorUpdate({ period: need(body, 'period'), actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/ir\/(\d+)\/send$/, ([id], body) => { sendInvestorUpdate(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/board$/, () => listBoardRecords()],
+  ['POST', /^\/api\/board$/, (_p, body) => ({ id: generateBoardPacket({ period: need(body, 'period'), actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/board\/(\d+)\/hold$/, ([id], body) => { holdBoardMeeting(Number(id), { resolutions: need(body, 'resolutions'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/comms$/, () => listBulletins()],
+  ['POST', /^\/api\/comms$/, (_p, body) => ({ id: generateBulletin({ actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/comms\/(\d+)\/publish$/, ([id], body) => { publishBulletin(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+
+  // Factory reset — superadmin only, re-authenticated, typed confirmation.
+  ['POST', /^\/api\/system\/wipe$/, (_p, body, _url, user) => {
+    if (user?.role !== 'superadmin') { const e = new Error('superadmin only'); e.status = 403; throw e; }
+    if (body?.confirm !== 'WIPE ALL DATA') { const e = new Error('type the exact phrase: WIPE ALL DATA'); e.status = 400; throw e; }
+    if (!verifyPassword(user.id, body.password)) { const e = new Error('password incorrect'); e.status = 403; throw e; }
+    return wipeSystem({ actor: body.actor, full: Boolean(body.full), workspace: Boolean(body.workspace) });
+  }],
+
   ['GET', /^\/api\/settings$/, () => settingsOverview()],
   ['POST', /^\/api\/settings$/, (_p, body) => {
     setSetting(need(body, 'key'), body.value ?? null);
@@ -747,7 +816,24 @@ function permFor(m, path) {
   if (path.startsWith('/api/relations') || path.startsWith('/api/partners') || path.startsWith('/api/interactions')) return m === 'GET' ? 'relations.view' : 'relations.manage';
   if (path === '/api/journey-template' || path.startsWith('/api/journeys')) return m === 'GET' ? 'journeys.view' : 'journeys.manage';
   if (path === '/api/perms' || path.startsWith('/api/users')) return 'users.manage';
-  if (path.startsWith('/api/settings')) return 'settings.manage';
+  if (path.startsWith('/api/settings') || path === '/api/system/wipe') return 'settings.manage';
+  if (path === '/api/map/activity') return 'dashboard.view';
+  if (path.startsWith('/api/security')) return m === 'GET' ? 'security.view' : 'security.manage';
+  if (path.startsWith('/api/compliance')) return m === 'GET' ? 'compliance.view' : 'compliance.manage';
+  if (path === '/api/sustainability') return 'sustainability.view';
+  if (path === '/api/capacity') return 'capacity.view';
+  if (path.startsWith('/api/lab')) return m === 'GET' ? 'lab.view' : 'lab.manage';
+  if (path.startsWith('/api/releases')) return m === 'GET' ? 'releases.view' : 'releases.manage';
+  if (path.startsWith('/api/pmo')) return m === 'GET' ? 'pmo.view' : 'pmo.manage';
+  if (path === '/api/insights') return 'insights.view';
+  if (path.startsWith('/api/brand')) return m === 'GET' ? 'brand.view' : 'brand.manage';
+  if (path.startsWith('/api/procurement')) return m === 'GET' ? 'procurement.view' : 'procurement.manage';
+  if (path === '/api/finops') return 'finops.view';
+  if (path.startsWith('/api/recruiting')) return m === 'GET' ? 'recruiting.view' : 'recruiting.manage';
+  if (path.startsWith('/api/academy')) return m === 'GET' ? 'academy.view' : 'academy.manage';
+  if (path.startsWith('/api/ir')) return m === 'GET' ? 'ir.view' : 'ir.manage';
+  if (path.startsWith('/api/board')) return m === 'GET' ? 'board.view' : 'board.manage';
+  if (path.startsWith('/api/comms')) return m === 'GET' ? 'comms.view' : 'comms.manage';
   return 'dashboard.view';
 }
 
@@ -768,7 +854,7 @@ export async function handleApi(req, res, url, body, user) {
     const m = url.pathname.match(pattern);
     if (!m) continue;
     try {
-      const result = await handler(m.slice(1), body, url);
+      const result = await handler(m.slice(1), body, url, user);
       if (result?.__raw) {
         res.writeHead(200, {
           'content-type': result.__raw.contentType,
