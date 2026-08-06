@@ -470,6 +470,468 @@ CREATE TABLE IF NOT EXISTS quality_reviews (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS partners (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'partner',   -- partner|investor|government|media|community|strategic
+  tier         TEXT NOT NULL DEFAULT 'standard',  -- strategic|key|standard
+  owner        TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'prospect',  -- prospect|active|dormant|ended
+  health       INTEGER NOT NULL DEFAULT 3,        -- 1..5 relationship health
+  notes        TEXT,
+  draft        TEXT,                              -- AI outreach draft (human sends)
+  draft_run_id TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS interactions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  partner_id  INTEGER,
+  customer_id INTEGER,
+  vendor_id   TEXT,
+  kind        TEXT NOT NULL DEFAULT 'note',       -- meeting|call|email|event|note|ai-draft
+  summary     TEXT NOT NULL,
+  next_action TEXT,
+  next_date   TEXT,
+  logged_by   TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS journeys (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  product_id  TEXT,
+  state       TEXT NOT NULL DEFAULT 'running',    -- running|awaiting_human|done|cancelled
+  current_seq INTEGER NOT NULL DEFAULT 1,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS journey_stages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  journey_id INTEGER NOT NULL,
+  seq        INTEGER NOT NULL,
+  dept       TEXT NOT NULL,                       -- strategy|research|product|finance|legal|architecture|engineering|review|qa|security|release|marketing|support|governance
+  title      TEXT NOT NULL,
+  mode       TEXT NOT NULL DEFAULT 'agent',       -- agent|human
+  agent_id   TEXT,
+  run_id     TEXT,
+  state      TEXT NOT NULL DEFAULT 'pending',     -- pending|active|awaiting_human|done|skipped
+  summary    TEXT,
+  note       TEXT,
+  started_at TEXT,
+  ended_at   TEXT,
+  UNIQUE (journey_id, seq)
+);
+
+CREATE TABLE IF NOT EXISTS channels (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform   TEXT NOT NULL,                     -- x|linkedin|instagram|facebook|tiktok|youtube|telegram
+  handle     TEXT NOT NULL,
+  followers  INTEGER NOT NULL DEFAULT 0,
+  state      TEXT NOT NULL DEFAULT 'connected', -- connected|paused|disconnected
+  notes      TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS posts (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id   INTEGER,
+  campaign_id  INTEGER,
+  product_id   TEXT,
+  kind         TEXT NOT NULL DEFAULT 'post',      -- post|thread|reel-script|story
+  brief        TEXT NOT NULL,
+  draft        TEXT,
+  hashtags     TEXT,                              -- JSON array
+  best_time    TEXT,
+  draft_run_id TEXT,
+  state        TEXT NOT NULL DEFAULT 'drafting',  -- drafting|draft_ready|scheduled|published|cancelled
+  schedule_at  TEXT,
+  published_by TEXT,                              -- a human, always
+  published_at TEXT,
+  metrics      TEXT NOT NULL DEFAULT '{"likes":0,"comments":0,"shares":0,"reach":0}',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS content_items (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind         TEXT NOT NULL DEFAULT 'article',   -- article|blog|video-script|email|landing|doc
+  title        TEXT NOT NULL,
+  brief        TEXT NOT NULL,
+  draft        TEXT,
+  seo          TEXT,                              -- JSON keywords
+  product_id   TEXT,
+  campaign_id  INTEGER,
+  draft_run_id TEXT,
+  state        TEXT NOT NULL DEFAULT 'drafting',  -- drafting|draft_ready|approved|published|cancelled
+  approved_by  TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS designs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind         TEXT NOT NULL DEFAULT 'social-visual',  -- logo|banner|ui|social-visual|brand|diagram
+  title        TEXT NOT NULL,
+  brief        TEXT NOT NULL,
+  spec         TEXT,
+  svg          TEXT,
+  file_ref     TEXT,                              -- workspace-relative .svg path
+  product_id   TEXT,
+  campaign_id  INTEGER,
+  draft_run_id TEXT,
+  state        TEXT NOT NULL DEFAULT 'drafting',  -- drafting|draft_ready|approved|cancelled
+  approved_by  TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pricing_records (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  product_id  TEXT,
+  plan        TEXT NOT NULL DEFAULT 'standard',
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  amount      REAL NOT NULL DEFAULT 0,
+  unit        TEXT NOT NULL DEFAULT 'per month',
+  state       TEXT NOT NULL DEFAULT 'draft',      -- draft|approved|retired
+  rationale   TEXT,
+  run_id      TEXT,
+  approved_by TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS customer_health (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL,
+  score       INTEGER NOT NULL DEFAULT 3,          -- 1..5
+  stage       TEXT NOT NULL DEFAULT 'onboarding',  -- onboarding|adopting|healthy|at_risk|churn_risk
+  notes       TEXT,
+  next_step   TEXT,
+  next_date   TEXT,
+  owner       TEXT,
+  run_id      TEXT,
+  reviewed_by TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS assets (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'license',    -- domain|license|credential|device|repo|account|certificate
+  owner        TEXT NOT NULL,
+  vendor_id    TEXT,
+  cost_usd     REAL NOT NULL DEFAULT 0,
+  renewal_date TEXT,
+  sensitivity  TEXT NOT NULL DEFAULT 'internal',
+  state        TEXT NOT NULL DEFAULT 'active',     -- active|expiring|retired
+  notes        TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS localizations (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_kind TEXT NOT NULL,                       -- content|design|post|doc|manual
+  source_id   TEXT,
+  title       TEXT NOT NULL,
+  source_text TEXT NOT NULL,
+  target_lang TEXT NOT NULL DEFAULT 'ar',
+  state       TEXT NOT NULL DEFAULT 'translating', -- translating|ready|approved|failed
+  output      TEXT,
+  notes       TEXT,
+  run_id      TEXT,
+  approved_by TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS competitors (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  website      TEXT,
+  segment      TEXT,
+  brief        TEXT,
+  strengths    TEXT,
+  weaknesses   TEXT,
+  pricing_note TEXT,
+  threat       INTEGER NOT NULL DEFAULT 3,         -- 1..5
+  state        TEXT NOT NULL DEFAULT 'watching',   -- watching|archived
+  run_id       TEXT,
+  last_checked TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS enablement_plans (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id   TEXT NOT NULL,
+  trigger    TEXT NOT NULL DEFAULT 'manual',       -- manual|eval-fail|incident|dispute
+  findings   TEXT,
+  plan       TEXT,
+  state      TEXT NOT NULL DEFAULT 'analysing',    -- analysing|ready|applied|dismissed
+  run_id     TEXT,
+  applied_by TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS disputes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  title         TEXT NOT NULL,
+  subject_type  TEXT,
+  subject_id    TEXT,
+  party_a       TEXT NOT NULL,
+  position_a    TEXT NOT NULL,
+  party_b       TEXT NOT NULL,
+  position_b    TEXT NOT NULL,
+  context       TEXT,
+  state         TEXT NOT NULL DEFAULT 'arbitrating', -- arbitrating|recommended|ruled|withdrawn
+  hr_run_id     TEXT,
+  recommendation TEXT,
+  reasoning     TEXT,
+  ruling        TEXT,
+  ruled_by      TEXT,
+  ruled_at      TEXT,
+  raised_by     TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS requests (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  title        TEXT NOT NULL,
+  body         TEXT NOT NULL,                     -- exactly what the human wrote
+  requester    TEXT NOT NULL,
+  priority     TEXT NOT NULL DEFAULT 'normal',
+  state        TEXT NOT NULL DEFAULT 'triaging',  -- triaging|running|awaiting_human|done|failed|cancelled
+  plan_summary TEXT,
+  deliverable  TEXT,
+  file_ref     TEXT,
+  current_seq  INTEGER NOT NULL DEFAULT 0,
+  run_id       TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS request_steps (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL,
+  seq        INTEGER NOT NULL,
+  dept       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  brief      TEXT,
+  kind       TEXT NOT NULL DEFAULT 'agent',       -- agent|human|spawn
+  spawn_kind TEXT,
+  spawn_id   TEXT,
+  agent_id   TEXT,
+  run_id     TEXT,
+  state      TEXT NOT NULL DEFAULT 'pending',     -- pending|active|awaiting_human|done|failed|skipped
+  output     TEXT,
+  note       TEXT,
+  cost_usd   REAL NOT NULL DEFAULT 0,
+  started_at TEXT,
+  ended_at   TEXT,
+  UNIQUE (request_id, seq)
+);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel      TEXT NOT NULL DEFAULT 'general',   -- general|standup|random|<department>|dm
+  from_agent   TEXT NOT NULL,
+  to_agent     TEXT,                              -- null = to the room
+  kind         TEXT NOT NULL DEFAULT 'chat',      -- chat|handoff|kudos|debate|standup|question|celebration|banter
+  body         TEXT NOT NULL,
+  context_type TEXT,
+  context_id   TEXT,
+  scene_id     INTEGER,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS agent_relations (
+  a_id         TEXT NOT NULL,
+  b_id         TEXT NOT NULL,
+  rapport      REAL NOT NULL DEFAULT 0,           -- -2..+2
+  interactions INTEGER NOT NULL DEFAULT 0,
+  last_kind    TEXT,
+  last_at      TEXT,
+  PRIMARY KEY (a_id, b_id)
+);
+
+CREATE TABLE IF NOT EXISTS society_scenes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,                       -- standup|watercooler|handoff|debate|kudos|retro
+  channel    TEXT NOT NULL DEFAULT 'general',
+  cast       TEXT NOT NULL,                       -- JSON agent ids
+  premise    TEXT,
+  state      TEXT NOT NULL DEFAULT 'writing',     -- writing|posted|failed
+  run_id     TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS autonomy_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,                      -- the inbox item type decided
+  subject_id TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  verdict    TEXT NOT NULL,                      -- approve|reject|hold
+  reason     TEXT,
+  outcome    TEXT,                               -- what actually happened
+  ok         INTEGER NOT NULL DEFAULT 1,
+  reverted   INTEGER NOT NULL DEFAULT 0,
+  run_id     TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS maestro_cycles (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  state      TEXT NOT NULL DEFAULT 'planning',   -- planning|executed|failed|empty
+  snapshot   TEXT NOT NULL,                      -- JSON company state at plan time
+  plan       TEXT,                               -- JSON [{action,params,why,priority}]
+  assessment TEXT,
+  flags      TEXT,                               -- JSON: things only a human may do
+  executed   TEXT,                               -- JSON [{action,ok,detail}]
+  run_id     TEXT,
+  mode       TEXT NOT NULL DEFAULT 'live',       -- live|dry-run
+  trigger    TEXT NOT NULL DEFAULT 'auto',       -- auto|manual
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS maestro_actions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  cycle_id   INTEGER NOT NULL,
+  action     TEXT NOT NULL,
+  dedup_key  TEXT NOT NULL,
+  ok         INTEGER NOT NULL DEFAULT 1,
+  detail     TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS blueprints (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  goal        TEXT NOT NULL,
+  product_id  TEXT,
+  project_id  TEXT,
+  context     TEXT,                              -- JSON: audience, scale, budget, stack hints, compliance
+  state       TEXT NOT NULL DEFAULT 'drafting',  -- drafting|awaiting_human|ready|cancelled
+  current_seq INTEGER NOT NULL DEFAULT 1,
+  workspace   TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS blueprint_docs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  blueprint_id INTEGER NOT NULL,
+  doc_key      TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  seq          INTEGER NOT NULL,
+  agent_id     TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'pending',  -- pending|writing|awaiting_human|done|skipped
+  content      TEXT,
+  open_questions TEXT,
+  run_id       TEXT,
+  file_ref     TEXT,
+  approved_by  TEXT,
+  cost_usd     REAL NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at     TEXT,
+  UNIQUE (blueprint_id, doc_key)
+);
+
+CREATE TABLE IF NOT EXISTS infra_plans (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  blueprint_id INTEGER,
+  product_id   TEXT,
+  spec         TEXT NOT NULL,                    -- JSON inputs: users, rps, data, budget, cloud, compliance
+  section      TEXT NOT NULL DEFAULT 'full',     -- full|sizing|ratelimits|cicd|observability|dr|cost
+  state        TEXT NOT NULL DEFAULT 'drafting', -- drafting|ready|failed
+  content      TEXT,
+  cost_table   TEXT,
+  run_id       TEXT,
+  file_ref     TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS fin_reports (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,                      -- pnl|balance-sheet|cash-flow|budget|annual-report|company-research|health-check
+  title      TEXT NOT NULL,
+  subject    TEXT NOT NULL DEFAULT 'own',        -- 'own' or an external company name
+  period     TEXT,                               -- 2026-08 | 2026-Q3 | 2026
+  inputs     TEXT,                               -- JSON figures fed to the analyst
+  state      TEXT NOT NULL DEFAULT 'drafting',   -- drafting|ready|approved|failed
+  content    TEXT,
+  metrics    TEXT,
+  flags      TEXT,
+  run_id     TEXT,
+  file_ref   TEXT,
+  approved_by TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS intel_contacts (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_id    INTEGER NOT NULL,
+  name         TEXT,
+  role         TEXT,
+  email        TEXT,
+  phone        TEXT,
+  method       TEXT NOT NULL DEFAULT 'model-knowledge',  -- web-scrape|model-knowledge|human|dataset
+  source_url   TEXT,
+  confidence   REAL,
+  verification TEXT NOT NULL DEFAULT 'unverified',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (record_id, email, phone, name)
+);
+
+CREATE TABLE IF NOT EXISTS intel_evidence (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_id  INTEGER NOT NULL,
+  field      TEXT NOT NULL,                    -- email|phone|address|website|profile|...
+  value      TEXT NOT NULL,
+  method     TEXT NOT NULL,                    -- web-scrape|model-knowledge|human|dataset
+  source_url TEXT,
+  confidence REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS deals (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  customer_id  INTEGER,
+  partner_id   INTEGER,
+  product_id   TEXT,
+  value_usd    REAL NOT NULL DEFAULT 0,
+  stage        TEXT NOT NULL DEFAULT 'lead',   -- lead|qualified|proposal|won|lost
+  owner        TEXT NOT NULL,
+  proposal     TEXT,
+  draft_run_id TEXT,
+  notes        TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS automations (
+  id       TEXT PRIMARY KEY,                 -- rule id
+  enabled  INTEGER NOT NULL DEFAULT 1,
+  runs     INTEGER NOT NULL DEFAULT 0,
+  last_run TEXT
+);
+
+CREATE TABLE IF NOT EXISTS nexus_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  rule_id     TEXT NOT NULL,
+  subject_key TEXT NOT NULL,                 -- dedup: a rule fires once per subject
+  note        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (rule_id, subject_key)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   seq          INTEGER PRIMARY KEY AUTOINCREMENT,
   occurred_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -496,6 +958,45 @@ try { db.exec('ALTER TABLE pipelines ADD COLUMN product_id TEXT'); } catch { /* 
 try { db.exec('ALTER TABLE tickets ADD COLUMN product_id TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE tickets ADD COLUMN incident_id INTEGER'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE incidents ADD COLUMN postmortem_pipeline_id TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE journeys ADD COLUMN autopilot INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+// Intelligence v2 — structured criteria, multi-round collection, web enrichment.
+for (const sql of [
+  'ALTER TABLE intel_queries ADD COLUMN criteria TEXT',
+  'ALTER TABLE intel_queries ADD COLUMN target_count INTEGER NOT NULL DEFAULT 15',
+  'ALTER TABLE intel_queries ADD COLUMN round INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE intel_queries ADD COLUMN dry_rounds INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE intel_queries ADD COLUMN stats TEXT',
+  'ALTER TABLE intel_records ADD COLUMN domain TEXT',
+  'ALTER TABLE intel_records ADD COLUMN email2 TEXT',
+  'ALTER TABLE intel_records ADD COLUMN phone2 TEXT',
+  'ALTER TABLE intel_records ADD COLUMN whatsapp TEXT',
+  'ALTER TABLE intel_records ADD COLUMN linkedin TEXT',
+  'ALTER TABLE intel_records ADD COLUMN social TEXT',
+  'ALTER TABLE intel_records ADD COLUMN region TEXT',
+  'ALTER TABLE intel_records ADD COLUMN size_hint TEXT',
+  'ALTER TABLE intel_records ADD COLUMN completeness REAL NOT NULL DEFAULT 0',
+  "ALTER TABLE intel_records ADD COLUMN enrichment TEXT NOT NULL DEFAULT 'pending'",
+  'ALTER TABLE intel_records ADD COLUMN enriched_at TEXT',
+  'ALTER TABLE intel_records ADD COLUMN gaps TEXT',
+  'ALTER TABLE intel_records ADD COLUMN gapfill_tries INTEGER NOT NULL DEFAULT 0',
+  // Data division cross-links: segments reach marketing, datasets carry lineage.
+  // Intelligence v3 — conditional escalation rules and hard constraints.
+  'ALTER TABLE intel_queries ADD COLUMN rules TEXT',
+  'ALTER TABLE intel_queries ADD COLUMN constraints TEXT',
+  "ALTER TABLE intel_records ADD COLUMN rules_state TEXT NOT NULL DEFAULT 'pending'",
+  'ALTER TABLE intel_records ADD COLUMN rules_log TEXT',
+  'ALTER TABLE intel_records ADD COLUMN rejected_reason TEXT',
+  'ALTER TABLE intel_records ADD COLUMN email_pattern TEXT',
+  'ALTER TABLE intel_contacts ADD COLUMN note TEXT',
+  'ALTER TABLE segments ADD COLUMN campaign_id INTEGER',
+  'ALTER TABLE segments ADD COLUMN criteria TEXT',
+  'ALTER TABLE datasets ADD COLUMN source_kind TEXT',
+  'ALTER TABLE datasets ADD COLUMN source_ref TEXT',
+  // The workforce as people: an editable persona, and which departments they serve.
+  'ALTER TABLE agents ADD COLUMN persona TEXT',
+  'ALTER TABLE agents ADD COLUMN departments TEXT',
+  'ALTER TABLE agents ADD COLUMN nickname TEXT',
+]) { try { db.exec(sql); } catch { /* column exists */ } }
 
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }

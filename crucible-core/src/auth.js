@@ -39,6 +39,30 @@ export const PERMS = [
   'risks.view', 'risks.manage',
   'quality.view', 'quality.manage',
   'oversight.view',
+  'relations.view', 'relations.manage',
+  'journeys.view', 'journeys.manage',
+  'workforce.view',
+  'social.view', 'social.manage',
+  'content.view', 'content.manage',
+  'design.view', 'design.manage',
+  'sales.view', 'sales.manage',
+  'autopilot.view', 'autopilot.manage',
+  'harmony.view', 'harmony.manage',
+  'requests.view', 'requests.create',
+  'pricing.view', 'pricing.manage',
+  'success.view', 'success.manage',
+  'assets.view', 'assets.manage',
+  'localization.view', 'localization.manage',
+  'marketwatch.view', 'marketwatch.manage',
+  'enablement.view', 'enablement.manage',
+  'org.view', 'org.manage',
+  'disputes.view', 'disputes.raise',
+  // The owner's own powers. Held by the superadmin via "*"; grantable to
+  // nobody else by default, because a final ruling has to belong to one person.
+  'owner.rule',
+  'systems.view', 'systems.manage',
+  'infra.view', 'infra.manage',
+  'finreports.view', 'finreports.manage',
   'users.manage', 'settings.manage',
 ];
 
@@ -86,7 +110,15 @@ export function userForToken(token) {
 }
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, displayName: u.display_name, role: u.role, perms: JSON.parse(u.perms) };
+  const perms = JSON.parse(u.perms);
+  const isOwner = u.role === 'superadmin' || perms.includes('*');
+  return {
+    id: u.id, username: u.username, displayName: u.display_name,
+    role: u.role, perms,
+    // The superadmin is the owner of the company: every permission, plus the
+    // powers that exist only for them — final rulings and the kill switches.
+    isOwner, title: isOwner ? 'Owner' : 'Member',
+  };
 }
 
 export function hasPerm(user, perm) {

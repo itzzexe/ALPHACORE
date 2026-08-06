@@ -1,19 +1,11 @@
-// Data Division — Intelligence collection, Segmentation, Data processing,
-// and the Archive. The honesty rule is structural: the Intelligence agent has
-// no live web access, so every collected record enters as `unverified` with
-// per-record confidence, and outreach-grade verification is a HUMAN act.
-// Everything produced here lands in the repository (workspace/_intel) and the
-// Archive, and every record can be targeted straight into the CRM.
-import fs from 'node:fs';
-import path from 'node:path';
+// Data Division — Segmentation, Data processing, and the Archive.
+// (Intelligence collection lives in intel.js: a multi-pass campaign engine
+// with live web enrichment. This file keeps the surrounding data services.)
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
-import { WS_ROOT } from './artifacts.js';
-import { createCustomer } from './commercial.js';
-
-const INTEL_DIR = path.join(WS_ROOT, '_intel');
+import { createCampaign } from './commercial.js';
 
 // ---------- Archive (used by everyone) ----------
 export function archiveItem({ title, kind, subjectType = null, subjectId = null, snapshot = null, fileRef = null, actor }) {
@@ -25,110 +17,29 @@ export function archiveItem({ title, kind, subjectType = null, subjectId = null,
   return id;
 }
 
-export function listArchive() {
-  return q('SELECT id, title, kind, subject_type, subject_id, file_ref, created_by, created_at FROM archive_items ORDER BY id DESC LIMIT 200');
+export function listArchive({ kind = null, search = null, subjectType = null } = {}) {
+  let sql = 'SELECT id, title, kind, subject_type, subject_id, file_ref, created_by, created_at FROM archive_items WHERE 1=1';
+  const p = [];
+  if (kind) { sql += ' AND kind = ?'; p.push(kind); }
+  if (subjectType) { sql += ' AND subject_type = ?'; p.push(subjectType); }
+  if (search) { sql += ' AND title LIKE ?'; p.push(`%${search}%`); }
+  sql += ' ORDER BY id DESC LIMIT 300';
+  return q(sql, ...p);
+}
+
+export function archiveStats() {
+  return {
+    total: one('SELECT COUNT(*) AS n FROM archive_items').n,
+    withFiles: one('SELECT COUNT(*) AS n FROM archive_items WHERE file_ref IS NOT NULL').n,
+    byKind: q('SELECT kind, COUNT(*) AS n FROM archive_items GROUP BY kind ORDER BY n DESC'),
+    bySubject: q('SELECT subject_type, COUNT(*) AS n FROM archive_items WHERE subject_type IS NOT NULL GROUP BY subject_type ORDER BY n DESC'),
+    last7d: one("SELECT COUNT(*) AS n FROM archive_items WHERE created_at >= datetime('now','-7 days')").n,
+  };
 }
 
 export function getArchiveItem(id) {
   const a = one('SELECT * FROM archive_items WHERE id = ?', id);
   return a ? { ...a, snapshot: a.snapshot ? JSON.parse(a.snapshot) : null } : null;
-}
-
-// ---------- Intelligence ----------
-export function createIntelQuery({ question, actor }) {
-  if (!question?.trim()) throw new Error('question required');
-  exec('INSERT INTO intel_queries (question, created_by) VALUES (?,?)', question.trim(), actor);
-  const id = one('SELECT last_insert_rowid() AS id').id;
-  const runId = enqueueRun({
-    agentId: 'AGT-INT-001',
-    taskType: `intel:${id}`,
-    input: {
-      prompt: `Intelligence request:\n${question}\n\n` +
-        'Return the best structured records you can compile from training knowledge. ' +
-        'Output JSON exactly: {"records":[{"name":"","nameAr":null,"kind":"company","sector":null,"country":null,"city":null,"profile":"","website":null,"email":null,"phone":null,"address":null,"source":"model-knowledge","confidence":0.0}],"summary":"","confidence":0.0} ' +
-        '— nameAr is the Arabic name when known; profile is 2-3 sentences; unknown contact fields are null, never invented.',
-    },
-    actor,
-  });
-  exec('UPDATE intel_queries SET run_id = ? WHERE id = ?', runId, id);
-  audit({ actorType: 'human', actorId: actor, action: 'intel.query_created', subjectType: 'intelQuery', subjectId: id, payload: { question: question.slice(0, 160) } });
-  return getIntelQuery(id);
-}
-
-export function getIntelQuery(id) {
-  const iq = one('SELECT * FROM intel_queries WHERE id = ?', id);
-  if (!iq) return null;
-  return { ...iq, records: q('SELECT * FROM intel_records WHERE query_id = ? ORDER BY confidence DESC, id', id) };
-}
-
-export function listIntelQueries() {
-  return q('SELECT id FROM intel_queries ORDER BY id DESC LIMIT 50').map((r) => getIntelQuery(r.id));
-}
-
-export function listIntelRecords() {
-  return q('SELECT * FROM intel_records ORDER BY id DESC LIMIT 500');
-}
-
-/** Human verification of a record (before any outreach). */
-export function verifyIntelRecord(id, actor) {
-  const r = one('SELECT * FROM intel_records WHERE id = ?', id);
-  if (!r) throw new Error('record not found');
-  exec("UPDATE intel_records SET verification = 'verified' WHERE id = ?", id);
-  audit({ actorType: 'human', actorId: actor, action: 'intel.record_verified', subjectType: 'intelRecord', subjectId: id, payload: { name: r.name } });
-}
-
-/** Cross-link: target a record → it becomes a CRM lead, linked both ways. */
-export function targetIntelRecord(id, { productId = null, actor }) {
-  const r = one('SELECT * FROM intel_records WHERE id = ?', id);
-  if (!r) throw new Error('record not found');
-  if (r.customer_id) throw new Error(`already targeted → customer #${r.customer_id}`);
-  const customer = createCustomer({
-    name: r.name, company: r.name_ar ? `${r.name} / ${r.name_ar}` : r.name,
-    state: 'lead', productId, actor,
-  });
-  exec('UPDATE customers SET notes = ? WHERE id = ?',
-    `From intel record #${r.id} (query #${r.query_id}). ${r.profile || ''}\nContact: ${r.email || '—'} · ${r.phone || '—'} · ${r.website || '—'} · ${r.city || ''} ${r.country || ''}\nVerification: ${r.verification}`.slice(0, 900),
-    customer.id);
-  exec("UPDATE intel_records SET state = 'targeted', customer_id = ? WHERE id = ?", customer.id, id);
-  audit({ actorType: 'human', actorId: actor, action: 'intel.record_targeted', subjectType: 'intelRecord', subjectId: id, payload: { customerId: customer.id, name: r.name } });
-  return { record: one('SELECT * FROM intel_records WHERE id = ?', id), customer };
-}
-
-/** Excel-compatible CSV (UTF-8 BOM → Arabic renders correctly in Excel). */
-export function exportIntelCsv({ queryId = null, segmentId = null, actor }) {
-  let records, label;
-  if (segmentId) {
-    records = q('SELECT r.* FROM intel_records r JOIN segment_members m ON m.record_id = r.id WHERE m.segment_id = ? ORDER BY r.name', segmentId);
-    label = `segment-${segmentId}`;
-  } else if (queryId) {
-    records = q('SELECT * FROM intel_records WHERE query_id = ? ORDER BY confidence DESC', queryId);
-    label = `query-${queryId}`;
-  } else {
-    records = q('SELECT * FROM intel_records ORDER BY id');
-    label = 'all';
-  }
-  const cols = [
-    ['Name', 'name'], ['الاسم', 'name_ar'], ['Kind', 'kind'], ['Sector', 'sector'],
-    ['Country', 'country'], ['City', 'city'], ['Profile', 'profile'], ['Website', 'website'],
-    ['Email', 'email'], ['Phone', 'phone'], ['Address', 'address'],
-    ['Source', 'source'], ['Confidence', 'confidence'], ['Verification', 'verification'], ['State', 'state'],
-  ];
-  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = '﻿'
-    + cols.map(([h]) => cell(h)).join(',') + '\r\n'
-    + records.map((r) => cols.map(([, k]) => cell(r[k])).join(',')).join('\r\n');
-
-  fs.mkdirSync(INTEL_DIR, { recursive: true });
-  const file = `intel-${label}-${Date.now().toString(36)}.csv`;
-  fs.writeFileSync(path.join(INTEL_DIR, file), csv, 'utf8');
-  archiveItem({
-    title: `Intel export (${label}) — ${records.length} records`, kind: 'intel-export',
-    subjectType: segmentId ? 'segment' : 'intelQuery', subjectId: segmentId || queryId || 'all',
-    snapshot: { count: records.length, names: records.slice(0, 50).map((r) => r.name) },
-    fileRef: `_intel/${file}`, actor,
-  });
-  audit({ actorType: 'human', actorId: actor, action: 'intel.exported', subjectType: 'artifact', subjectId: `_intel/${file}`, payload: { count: records.length } });
-  return { csv, filename: file, count: records.length };
 }
 
 // ---------- Segmentation ----------
@@ -140,11 +51,32 @@ export function createSegment({ name, description = null, source = 'manual', act
   return id;
 }
 
-export function listSegments() {
-  return q('SELECT * FROM segments ORDER BY id DESC LIMIT 100').map((s) => ({
+export function getSegment(id) {
+  const s = one('SELECT * FROM segments WHERE id = ?', id);
+  if (!s) return null;
+  const members = q(`SELECT r.* FROM intel_records r JOIN segment_members m ON m.record_id = r.id
+                     WHERE m.segment_id = ? ORDER BY r.completeness DESC`, id);
+  return {
     ...s,
-    members: q('SELECT r.id, r.name, r.country, r.state, r.verification FROM intel_records r JOIN segment_members m ON m.record_id = r.id WHERE m.segment_id = ?', s.id),
-  }));
+    criteria: s.criteria ? JSON.parse(s.criteria) : null,
+    campaign: s.campaign_id ? one('SELECT id, name, state, channel FROM campaigns WHERE id = ?', s.campaign_id) : null,
+    members,
+    stats: {
+      size: members.length,
+      contactable: members.filter((m) => m.email || m.phone).length,
+      withEmail: members.filter((m) => m.email).length,
+      withPhone: members.filter((m) => m.phone).length,
+      verified: members.filter((m) => m.verification === 'verified').length,
+      targeted: members.filter((m) => m.customer_id).length,
+      avgCompleteness: members.length ? Math.round((members.reduce((a, m) => a + m.completeness, 0) / members.length) * 100) : 0,
+      countries: [...new Set(members.map((m) => m.country).filter(Boolean))].slice(0, 6),
+      sectors: [...new Set(members.map((m) => m.sector).filter(Boolean))].slice(0, 6),
+    },
+  };
+}
+
+export function listSegments() {
+  return q('SELECT id FROM segments ORDER BY id DESC LIMIT 100').map((s) => getSegment(s.id));
 }
 
 export function addToSegment(segmentId, recordId, actor) {
@@ -154,12 +86,58 @@ export function addToSegment(segmentId, recordId, actor) {
   audit({ actorType: 'human', actorId: actor, action: 'segment.member_added', subjectType: 'segment', subjectId: segmentId, payload: { recordId } });
 }
 
+export function removeFromSegment(segmentId, recordId, actor) {
+  exec('DELETE FROM segment_members WHERE segment_id = ? AND record_id = ?', segmentId, recordId);
+  audit({ actorType: 'human', actorId: actor, action: 'segment.member_removed', subjectType: 'segment', subjectId: segmentId, payload: { recordId } });
+}
+
+/** Build a segment from live filters — the fast path from intel to targeting. */
+export function buildSegment({ name, description = null, country = null, sector = null, minCompleteness = null, contactableOnly = false, verifiedOnly = false, queryId = null, actor }) {
+  let sql = 'SELECT id FROM intel_records WHERE 1=1';
+  const p = [];
+  if (queryId) { sql += ' AND query_id = ?'; p.push(queryId); }
+  if (country) { sql += ' AND country LIKE ?'; p.push(`%${country}%`); }
+  if (sector) { sql += ' AND sector LIKE ?'; p.push(`%${sector}%`); }
+  if (minCompleteness) { sql += ' AND completeness >= ?'; p.push(Number(minCompleteness)); }
+  if (contactableOnly) sql += ' AND (email IS NOT NULL OR phone IS NOT NULL)';
+  if (verifiedOnly) sql += " AND verification = 'verified'";
+  const rows = q(sql, ...p);
+  if (!rows.length) throw new Error('no records match those filters');
+  const criteria = { country, sector, minCompleteness, contactableOnly, verifiedOnly, queryId };
+  const id = createSegment({ name, description, source: 'filter', actor });
+  exec('UPDATE segments SET criteria = ? WHERE id = ?', JSON.stringify(criteria), id);
+  for (const r of rows) exec('INSERT OR IGNORE INTO segment_members (segment_id, record_id) VALUES (?,?)', id, r.id);
+  audit({ actorType: 'human', actorId: actor, action: 'segment.built', subjectType: 'segment', subjectId: id, payload: { criteria, members: rows.length } });
+  return getSegment(id);
+}
+
+/** Cross-link: hand a segment to Marketing as a real campaign. */
+export function segmentToCampaign(segmentId, { name = null, channel = 'email', budgetUsd = 0, actor }) {
+  const s = getSegment(segmentId);
+  if (!s) throw new Error('segment not found');
+  if (s.campaign_id) throw new Error(`already linked to campaign #${s.campaign_id}`);
+  if (!s.members.length) throw new Error('segment is empty');
+  const brief = [
+    `Audience: the "${s.name}" segment — ${s.stats.size} organizations, ${s.stats.contactable} contactable.`,
+    s.stats.countries.length ? `Geography: ${s.stats.countries.join(', ')}.` : null,
+    s.stats.sectors.length ? `Sectors: ${s.stats.sectors.join(', ')}.` : null,
+    s.description ? `Segment note: ${s.description}` : null,
+    `Sample members: ${s.members.slice(0, 8).map((m) => m.name).join('; ')}.`,
+    'Write copy that speaks to this specific audience. No invented claims about them.',
+  ].filter(Boolean).join('\n');
+  const campaign = createCampaign({ name: name || `Campaign — ${s.name}`, channel, budgetUsd, brief, actor });
+  exec('UPDATE segments SET campaign_id = ? WHERE id = ?', campaign.id, segmentId);
+  audit({ actorType: 'human', actorId: actor, action: 'segment.to_campaign', subjectType: 'segment', subjectId: segmentId, payload: { campaignId: campaign.id } });
+  notify({ level: 'info', source: 'segments', message: `Segment "${s.name}" handed to Marketing as campaign #${campaign.id} — copy drafting now.`, subjectType: 'campaign', subjectId: campaign.id });
+  return campaign;
+}
+
 /** AI segmentation over a query's records. */
 export function autoSegment(queryId, actor) {
-  const iq = getIntelQuery(queryId);
-  if (!iq) throw new Error('query not found');
-  if (!iq.records.length) throw new Error('query has no records');
-  const listText = iq.records.map((r) => `#${r.id} ${r.name} | ${r.sector || '?'} | ${r.country || '?'} ${r.city || ''} | ${(r.profile || '').slice(0, 100)}`).join('\n');
+  if (!one('SELECT id FROM intel_queries WHERE id = ?', queryId)) throw new Error('query not found');
+  const records = q('SELECT * FROM intel_records WHERE query_id = ? ORDER BY completeness DESC, id', queryId);
+  if (!records.length) throw new Error('query has no records');
+  const listText = records.map((r) => `#${r.id} ${r.name} | ${r.sector || '?'} | ${r.country || '?'} ${r.city || ''} | contactable: ${r.email || r.phone ? 'yes' : 'no'} | ${(r.profile || '').slice(0, 90)}`).join('\n');
   const runId = enqueueRun({
     agentId: 'AGT-INT-001',
     taskType: `segment:${queryId}`,
@@ -180,17 +158,88 @@ const OPS = {
   'extract-entities': 'Extract every company/organization/person entity from this data as intel records. Output JSON: {"records":[{"name":"","nameAr":null,"kind":"company","sector":null,"country":null,"city":null,"profile":"","website":null,"email":null,"phone":null,"address":null,"source":"dataset","confidence":0.0}],"summary":""}',
 };
 
-export function createDataset({ name, raw, actor }) {
+export function createDataset({ name, raw, sourceKind = 'manual', sourceRef = null, actor }) {
   if (!name?.trim() || !raw?.trim()) throw new Error('name and raw data required');
-  exec('INSERT INTO datasets (name, raw, created_by) VALUES (?,?,?)', name.trim(), raw, actor);
+  exec('INSERT INTO datasets (name, raw, created_by, source_kind, source_ref) VALUES (?,?,?,?,?)', name.trim(), raw, actor, sourceKind, sourceRef);
   const id = one('SELECT last_insert_rowid() AS id').id;
-  archiveItem({ title: `Dataset stored: ${name}`, kind: 'dataset', subjectType: 'dataset', subjectId: id, snapshot: { chars: raw.length }, actor });
-  audit({ actorType: 'human', actorId: actor, action: 'dataset.created', subjectType: 'dataset', subjectId: id, payload: { name, chars: raw.length } });
+  archiveItem({ title: `Dataset stored: ${name}`, kind: 'dataset', subjectType: 'dataset', subjectId: id, snapshot: { chars: raw.length, sourceKind }, actor });
+  audit({ actorType: actor.startsWith('human') ? 'human' : 'system', actorId: actor, action: 'dataset.created', subjectType: 'dataset', subjectId: id, payload: { name, chars: raw.length, sourceKind } });
   return one('SELECT * FROM datasets WHERE id = ?', id);
 }
 
+/**
+ * Pull a dataset straight out of another department — the data division
+ * shouldn't need copy-paste to analyze the company's own material.
+ */
+const INTERNAL_SOURCES = {
+  tickets: {
+    label: 'Support tickets (voice of customer)',
+    build: () => {
+      const rows = q('SELECT id, customer, category, subject, body, state FROM tickets ORDER BY id DESC LIMIT 200');
+      return { text: rows.map((t) => `#${t.id} [${t.category}/${t.state}] ${t.customer}: ${t.subject}\n${t.body}`).join('\n---\n'), n: rows.length };
+    },
+  },
+  'intel-records': {
+    label: 'Intelligence records',
+    build: () => {
+      const rows = q('SELECT name, sector, country, city, email, phone, profile FROM intel_records ORDER BY completeness DESC LIMIT 300');
+      return { text: rows.map((r) => `${r.name} | ${r.sector || ''} | ${r.city || ''} ${r.country || ''} | ${r.email || ''} ${r.phone || ''} | ${r.profile || ''}`).join('\n'), n: rows.length };
+    },
+  },
+  incidents: {
+    label: 'Incident history',
+    build: () => {
+      const rows = q('SELECT id, sev, title, state, timeline, postmortem FROM incidents ORDER BY id DESC LIMIT 100');
+      return { text: rows.map((i) => `#${i.id} ${i.sev} ${i.title} (${i.state})\n${i.postmortem || i.timeline}`).join('\n---\n'), n: rows.length };
+    },
+  },
+  customers: {
+    label: 'CRM customers',
+    build: () => {
+      const rows = q('SELECT id, name, company, plan, mrr_usd, state, notes FROM customers ORDER BY id DESC LIMIT 300');
+      return { text: rows.map((c) => `#${c.id} ${c.name} | ${c.company || ''} | ${c.plan} $${c.mrr_usd}/mo | ${c.state}\n${c.notes || ''}`).join('\n---\n'), n: rows.length };
+    },
+  },
+  interactions: {
+    label: 'Relationship interactions',
+    build: () => {
+      const rows = q('SELECT id, kind, summary, next_action, created_at FROM interactions ORDER BY id DESC LIMIT 300');
+      return { text: rows.map((i) => `${i.created_at.slice(0, 10)} [${i.kind}] ${i.summary}${i.next_action ? ` → next: ${i.next_action}` : ''}`).join('\n'), n: rows.length };
+    },
+  },
+  'social-metrics': {
+    label: 'Published posts & engagement',
+    build: () => {
+      const rows = q("SELECT id, kind, draft, metrics, published_at FROM posts WHERE state = 'published' ORDER BY id DESC LIMIT 200");
+      return { text: rows.map((p) => `#${p.id} [${p.kind}] ${p.published_at || ''} metrics=${p.metrics}\n${p.draft}`).join('\n---\n'), n: rows.length };
+    },
+  },
+  audit: {
+    label: 'Audit trail (last 500 events)',
+    build: () => {
+      const rows = q('SELECT occurred_at, actor_type, actor_id, action, subject_type, subject_id FROM audit_log ORDER BY seq DESC LIMIT 500');
+      return { text: rows.map((a) => `${a.occurred_at} ${a.actor_type}:${a.actor_id} ${a.action} ${a.subject_type || ''}#${a.subject_id || ''}`).join('\n'), n: rows.length };
+    },
+  },
+};
+
+export function listInternalSources() {
+  return Object.entries(INTERNAL_SOURCES).map(([id, s]) => ({ id, label: s.label, rows: s.build().n }));
+}
+
+export function datasetFromSource({ source, name = null, actor }) {
+  const src = INTERNAL_SOURCES[source];
+  if (!src) throw new Error(`source must be one of: ${Object.keys(INTERNAL_SOURCES).join(', ')}`);
+  const { text, n } = src.build();
+  if (!text.trim()) throw new Error(`${src.label} is empty — nothing to analyze yet`);
+  return createDataset({
+    name: name || `${src.label} — ${new Date().toISOString().slice(0, 10)} (${n} rows)`,
+    raw: text, sourceKind: source, sourceRef: String(n), actor,
+  });
+}
+
 export function listDatasets() {
-  return q('SELECT id, name, kind, op, state, parent_id, created_by, created_at, LENGTH(raw) AS raw_chars FROM datasets ORDER BY id DESC LIMIT 100');
+  return q('SELECT id, name, kind, op, state, parent_id, source_kind, source_ref, created_by, created_at, LENGTH(raw) AS raw_chars FROM datasets ORDER BY id DESC LIMIT 100');
 }
 
 export function getDataset(id) { return one('SELECT * FROM datasets WHERE id = ?', id); }
@@ -211,37 +260,8 @@ export function transformDataset(id, { op, actor }) {
 }
 
 // ---------- Sync tick: fold finished AI runs back into the division ----------
-function insertRecords(records, queryId) {
-  let n = 0;
-  for (const r of records || []) {
-    if (!r?.name) continue;
-    exec(`INSERT INTO intel_records (query_id, name, name_ar, kind, sector, country, city, profile, website, email, phone, address, source, confidence)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      queryId, String(r.name).slice(0, 200), r.nameAr || null, r.kind || 'company', r.sector || null,
-      r.country || null, r.city || null, r.profile || null, r.website || null, r.email || null,
-      r.phone || null, r.address || null, r.source || 'model-knowledge',
-      typeof r.confidence === 'number' ? r.confidence : null);
-    n += 1;
-  }
-  return n;
-}
-
+// (Intelligence campaigns have their own multi-stage tick in intel.js.)
 export function syncDataRuns() {
-  // Intel queries
-  for (const iq of q("SELECT * FROM intel_queries WHERE state = 'collecting' AND run_id IS NOT NULL")) {
-    const run = one('SELECT * FROM runs WHERE id = ?', iq.run_id);
-    if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
-    if ((run.state === 'done' || run.state === 'awaiting_human') && parsed?.records) {
-      const n = insertRecords(parsed.records, iq.id);
-      exec("UPDATE intel_queries SET state = 'ready', summary = ? WHERE id = ?", parsed.summary || null, iq.id);
-      archiveItem({ title: `Intel collected: ${iq.question.slice(0, 80)} (${n} records)`, kind: 'intel-export', subjectType: 'intelQuery', subjectId: iq.id, snapshot: { count: n }, actor: 'system:intel' });
-      notify({ level: 'info', source: 'intel', message: `Intel query #${iq.id} ready: ${n} records (all unverified — model knowledge).`, subjectType: 'intelQuery', subjectId: iq.id });
-    } else if (['failed', 'cancelled'].includes(run.state) || parsed === null) {
-      exec("UPDATE intel_queries SET state = 'failed' WHERE id = ?", iq.id);
-      notify({ level: 'warn', source: 'intel', message: `Intel query #${iq.id} failed — see the run.`, subjectType: 'intelQuery', subjectId: iq.id });
-    }
-  }
   // AI segmentation results
   for (const run of q("SELECT * FROM runs WHERE task_type LIKE 'segment:%' AND state IN ('done','awaiting_human') AND id NOT IN (SELECT COALESCE(subject_id,'') FROM audit_log WHERE action = 'segment.auto_applied')")) {
     const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
@@ -265,11 +285,32 @@ export function syncDataRuns() {
     if ((run.state === 'done' || run.state === 'awaiting_human') && parsed) {
       exec("UPDATE datasets SET state = 'done', result = ? WHERE id = ?", JSON.stringify(parsed), d.id);
       if (d.op === 'extract-entities' && parsed.records) {
-        exec('INSERT INTO intel_queries (question, state, summary, created_by) VALUES (?,?,?,?)',
-          `[from dataset #${d.id}] ${d.name}`, 'ready', parsed.summary || null, d.created_by);
+        // Entities extracted from a dataset enter the intel pipeline as a
+        // campaign in 'enriching' — their sites get harvested like any other.
+        exec("INSERT INTO intel_queries (question, state, summary, created_by, target_count) VALUES (?,?,?,?,?)",
+          `[from dataset #${d.id}] ${d.name}`, 'enriching', parsed.summary || null, d.created_by, parsed.records.length);
         const qid = one('SELECT last_insert_rowid() AS id').id;
-        const n = insertRecords(parsed.records, qid);
-        notify({ level: 'info', source: 'intel', message: `Dataset #${d.id} extraction → ${n} intel records (query #${qid}).`, subjectType: 'intelQuery', subjectId: qid });
+        let n = 0;
+        for (const r of parsed.records) {
+          if (!r?.name) continue;
+          const domain = r.website || r.domain ? String(r.website || r.domain).replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase() : null;
+          exec(`INSERT INTO intel_records (query_id, name, name_ar, kind, sector, country, city, profile, domain, website, source, confidence, enrichment)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'pending')`,
+            qid, String(r.name).slice(0, 200), r.nameAr || null, r.kind || 'company', r.sector || null,
+            r.country || null, r.city || null, r.profile || null, domain, domain ? `https://${domain}` : null,
+            'dataset', typeof r.confidence === 'number' ? r.confidence : null);
+          n += 1;
+        }
+        notify({ level: 'info', source: 'intel', message: `Dataset #${d.id} extraction → ${n} intel records (campaign #${qid}) — enrichment starting.`, subjectType: 'intelQuery', subjectId: qid });
+      }
+      // Cross-link Data → Knowledge: a summary becomes organizational memory,
+      // entering unverified so a human still owns what becomes company truth.
+      if (d.op === 'summarize' && parsed.summary) {
+        exec('INSERT INTO memory_entries (layer, classification, content, source_ref, created_by) VALUES (?,?,?,?,?)',
+          'org', 'internal',
+          `[${d.name}] ${parsed.summary}${parsed.keyFacts?.length ? `\nKey facts: ${parsed.keyFacts.join(' · ')}` : ''}${parsed.anomalies?.length ? `\nAnomalies: ${parsed.anomalies.join(' · ')}` : ''}`.slice(0, 4000),
+          `dataset:${d.id}`, 'agent:AGT-INT-001');
+        notify({ level: 'info', source: 'data', message: `Dataset "${d.name}" summarized → knowledge entry (unverified — a human confirms it).`, subjectType: 'dataset', subjectId: d.id });
       }
       archiveItem({ title: `Dataset ${d.op}: ${d.name}`, kind: 'dataset', subjectType: 'dataset', subjectId: d.id, snapshot: { op: d.op }, actor: 'system:data' });
     } else if (['failed', 'cancelled'].includes(run.state)) {

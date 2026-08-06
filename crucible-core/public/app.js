@@ -13,6 +13,11 @@ const linkFor = (type, id) => ({
   person: '#/people', memory: '#/knowledge', objective: '#/objectives',
   intelQuery: '#/intel', intelRecord: '#/intel', segment: '#/segments', dataset: '#/data', archiveItem: '#/archive',
   project: '#/projects', task: '#/tasks', risk: '#/risks', quality: '#/quality', user: '#/users', settings: '#/settings',
+  partner: '#/relations', interaction: '#/relations', journey: `#/journeys/${id}`, workforce: '#/workforce',
+  channel: '#/social', post: '#/social', content: '#/content', design: '#/design',
+  deal: '#/sales', automation: '#/autopilot',
+  blueprint: '#/systems', infraPlan: '#/infra', finReport: '#/finreports',
+  request: `#/requests/${id}`, intelQuery: '#/intel',
 }[type] || null);
 const short = (s, n = 80) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
@@ -32,6 +37,47 @@ async function api(path, opts = {}) {
   if (res.status === 401 && !path.startsWith('/api/auth/')) showLogin();
   if (!res.ok) throw new Error(data.error || `${res.status}`);
   return data;
+}
+
+/**
+ * Download a file from an authenticated endpoint.
+ * A plain <a download> can't carry the session header, so the server answered
+ * those links with a 401 JSON body — which is what the browser saved. This
+ * fetches with the token, then hands the real blob to a temporary link.
+ */
+async function downloadFile(path, fallbackName = 'export.csv') {
+  try {
+    const res = await fetch(path, { headers: { 'x-auth-token': localStorage.getItem(TOKEN_KEY) || '' } });
+    if (!res.ok) {
+      let msg = `${res.status}`;
+      try { msg = (await res.json()).error || msg; } catch { /* not JSON */ }
+      if (res.status === 401) showLogin();
+      throw new Error(msg);
+    }
+    const cd = res.headers.get('content-disposition') || '';
+    const name = cd.match(/filename="?([^";]+)"?/)?.[1] || fallbackName;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast(`Downloaded ${name}`);
+  } catch (e) {
+    toast(`Export failed: ${e.message}`, true);
+  }
+}
+
+/** Wire every [data-download] button on the current page. */
+function wireDownloads() {
+  view.querySelectorAll('[data-download]').forEach((b) => b.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    downloadFile(b.dataset.download, b.dataset.filename || 'export.csv');
+  }));
 }
 
 function showLogin() {
@@ -69,6 +115,14 @@ const navPerm = {
   vendors: 'vendors.view', knowledge: 'knowledge.view', objectives: 'objectives.view', evals: 'evals.view',
   agents: 'agents.view', budgets: 'budgets.view', audit: 'audit.view', providers: 'providers.view',
   oversight: 'oversight.view', users: 'users.manage', settings: 'settings.manage',
+  workforce: 'workforce.view', relations: 'relations.view', journeys: 'journeys.view', journey: 'journeys.view',
+  social: 'social.view', content: 'content.view', design: 'design.view',
+  sales: 'sales.view', autopilot: 'autopilot.view', scorecard: 'dashboard.view', graph: 'dashboard.view',
+  systems: 'systems.view', system: 'systems.view', infra: 'infra.view', finreports: 'finreports.view',
+  harmony: 'harmony.view', requests: 'requests.view', request: 'requests.view',
+  pricing: 'pricing.view', success: 'success.view', assets: 'assets.view',
+  localization: 'localization.view', marketwatch: 'marketwatch.view', enablement: 'enablement.view',
+  org: 'org.view', disputes: 'disputes.view', owner: 'dashboard.view', society: 'org.view',
 };
 
 function applyNavGating() {
@@ -96,17 +150,32 @@ function toast(msg, isErr = false) {
 // ---------- shell status ----------
 async function refreshShell() {
   try {
-    const [health, chain, stats, notif] = await Promise.all([
+    const [health, chain, stats, notif, journeys] = await Promise.all([
       api('/api/health'), api('/api/audit/verify'), api('/api/stats'), api('/api/notifications?unread=1'),
+      api('/api/journeys').catch(() => []),
     ]);
     $('#alert-count').textContent = notif.unread || '';
+    const jc = $('#journey-count');
+    if (jc) jc.textContent = journeys.filter((j) => j.state === 'awaiting_human').length || '';
+    const rc = $('#req-count');
+    if (rc) {
+      const reqs = await api('/api/requests').catch(() => null);
+      rc.textContent = reqs?.open || '';
+    }
+    const dc = $('#dispute-count');
+    if (dc) {
+      const dis = await api('/api/disputes').catch(() => null);
+      dc.textContent = dis?.awaitingOwner || '';
+    }
     const mode = $('#mode-chip');
     mode.textContent = health.mockMode ? 'MOCK MODE' : 'LIVE';
     mode.className = 'chip ' + (health.mockMode ? 'chip-warn' : 'chip-ok');
     const cc = $('#chain-chip');
     cc.textContent = chain.ok ? `chain ✓ ${chain.checked}` : `chain BROKEN @${chain.brokenAt}`;
     cc.className = 'chip ' + (chain.ok ? 'chip-ok' : 'chip-bad');
-    $('#gate-count').textContent = stats.awaitingHuman || '';
+    // The badge counts everything waiting on a person, not just runs — that
+    // gap is why a written document could sit blocked with no visible signal.
+    $('#gate-count').textContent = stats.inboxTotal || stats.awaitingHuman || '';
   } catch { /* server restarting */ }
 }
 setInterval(refreshShell, 7000);
@@ -116,7 +185,7 @@ setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-
 let pollTimer = null;
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
-  gate: { title: 'Human Gate', render: renderGate, poll: 5000 },
+  gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
   pipelines: { title: 'Pipelines', render: renderPipelines, poll: 4000 },
   runs: { title: 'Runs', render: renderRuns, poll: 6000 },
   artifacts: { title: 'Artifacts', render: renderArtifacts },
@@ -146,22 +215,86 @@ const routes = {
   settings: { title: 'Settings', render: renderSettings },
   decisions: { title: 'Decisions', render: renderDecisions },
   decision: { title: 'Decision', render: renderDecisionDetail },
+  workforce: { title: 'Workforce — AI Employees', render: renderWorkforce, poll: 6000 },
+  relations: { title: 'Relations (RM)', render: renderRelations, poll: 8000 },
+  journeys: { title: 'Company Journeys', render: renderJourneys, poll: 5000 },
+  journey: { title: 'Journey', render: renderJourneyDetail, poll: 4000 },
+  social: { title: 'Social Media Desk', render: renderSocial, poll: 5000 },
+  content: { title: 'Content Studio', render: renderContent, poll: 6000 },
+  design: { title: 'Design Studio', render: renderDesign, poll: 6000 },
+  sales: { title: 'Sales — Deals Pipeline', render: renderSales, poll: 6000 },
+  autopilot: { title: 'Autopilot — the Nexus', render: renderAutopilot, poll: 5000 },
+  scorecard: { title: 'Company Scorecard', render: renderScorecard, poll: 8000 },
+  graph: { title: 'Relationship Graph', render: renderGraph, poll: 10000 },
+  owner: { title: 'Owner console', render: renderOwner, poll: 10000 },
+  org: { title: 'Org & personas', render: renderOrg },
+  society: { title: 'The society — colleagues at work and off it', render: renderSociety, poll: 20000 },
+  disputes: { title: 'Disputes — HR arbitrates, the owner rules', render: renderDisputes, poll: 8000 },
+  pricing: { title: 'Pricing', render: makeDeptRenderer('pricing'), poll: 8000 },
+  success: { title: 'Customer success', render: makeDeptRenderer('success'), poll: 8000 },
+  assets: { title: 'Assets', render: makeDeptRenderer('assets') },
+  localization: { title: 'Localization', render: makeDeptRenderer('localization'), poll: 6000 },
+  marketwatch: { title: 'Market watch', render: makeDeptRenderer('marketwatch'), poll: 8000 },
+  enablement: { title: 'Enablement', render: makeDeptRenderer('enablement'), poll: 8000 },
+  requests: { title: 'Request desk', render: renderRequests, poll: 4000 },
+  request: { title: 'Request', render: renderRequestDetail, poll: 4000 },
+  harmony: { title: 'Harmony — the orchestrator', render: renderHarmony, poll: 8000 },
+  systems: { title: 'System Design Studio', render: renderSystems, poll: 5000 },
+  system: { title: 'Design Document', render: renderDesignDoc, poll: 8000 },
+  infra: { title: 'Infrastructure', render: renderInfra, poll: 6000 },
+  finreports: { title: 'Financial Reporting', render: renderFinReports, poll: 8000 },
   agents: { title: 'Agents', render: renderAgents },
   budgets: { title: 'Budgets', render: renderBudgets, poll: 8000 },
   audit: { title: 'Audit Chain', render: renderAudit, poll: 8000 },
   providers: { title: 'Providers', render: renderProviders },
 };
 
+// ---------- auto-refresh guard ----------
+// Live pages re-render themselves on a timer, which replaces the whole view.
+// That must never happen while someone is filling a form: it would steal
+// focus and wipe what they typed. Polling pauses whenever a field is focused
+// or holds unsaved input, and resumes by itself once the form is clean.
+function isEditingField() {
+  const el = document.activeElement;
+  if (!el || !view.contains(el)) return false;
+  return el.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+}
+
+function hasUnsavedInput() {
+  for (const el of view.querySelectorAll('input, textarea')) {
+    if (el.type === 'checkbox' || el.type === 'radio') { if (el.checked !== el.defaultChecked) return true; }
+    else if (el.value !== el.defaultValue) return true;
+  }
+  for (const el of view.querySelectorAll('select')) {
+    for (const o of el.options) if (o.selected !== o.defaultSelected) return true;
+  }
+  return false;
+}
+
+function pollPaused() {
+  return document.hidden || isEditingField() || hasUnsavedInput();
+}
+
+function showPollState(paused) {
+  const chip = $('#poll-chip');
+  if (!chip) return;
+  chip.hidden = !paused;
+}
+
 function currentRoute() {
   const hash = location.hash.replace(/^#\/?/, '');
   const [seg, arg] = hash.split('/');
   if (seg === 'decisions' && arg) return { key: 'decision', arg };
+  if (seg === 'journeys' && arg) return { key: 'journey', arg };
+  if (seg === 'systems' && arg) return { key: 'system', arg: hash.split('/').slice(1).join('/') };
+  if (seg === 'requests' && arg) return { key: 'request', arg };
   if (seg === 'artifacts' && arg) return { key: 'artifacts', arg: decodeURIComponent(arg) };
   return { key: routes[seg] ? seg : '', arg: null };
 }
 
 async function navigate() {
   clearInterval(pollTimer);
+  showPollState(false);
   if (!currentUser) return;
   const { key, arg } = currentRoute();
   const r = routes[key];
@@ -176,9 +309,22 @@ async function navigate() {
   });
   view.innerHTML = '<div class="empty">Loading…</div>';
   try { await r.render(arg); } catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
-  if (r.poll) pollTimer = setInterval(() => r.render(arg).catch(() => {}), r.poll);
+  if (r.poll) {
+    pollTimer = setInterval(() => {
+      // Never re-render out from under someone who is typing.
+      if (pollPaused()) { showPollState(true); return; }
+      showPollState(false);
+      r.render(arg).catch(() => {});
+    }, r.poll);
+  }
 }
 window.addEventListener('hashchange', navigate);
+
+// Update the paused indicator as soon as the form goes clean or dirty, so the
+// state is never a surprise — it reacts to typing, not just to the next tick.
+for (const evt of ['input', 'focusin', 'focusout', 'change']) {
+  view.addEventListener(evt, () => showPollState(Boolean(routes[currentRoute().key]?.poll) && pollPaused()));
+}
 
 // ---------- system map ----------
 const mapNode = ({ x, y, w, h, href, title, value, cls = '' }) => `
@@ -230,9 +376,11 @@ function coreSpoke(x, y) {
   return `<line class="map-edge dashed" x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}"/>`;
 }
 
-// ---------- system map · metro design ----------
-// Six colored lines — every line terminates at the AUDIT CHAIN interchange,
-// because every department's actions end up on the record.
+// ---------- system map · interactive metro v4 ----------
+// Seven colored lines — the whole company on one board, every line ending at
+// the AUDIT interchange. INTERACTIVE: hover a station and the rest of the
+// board dims while a tooltip explains what lives there; the moving dots are
+// work flowing through the company; click any station to travel to it.
 function buildSystemMap(s, prov, agentsList, chain, extra = {}) {
   const queue = s.queue || {};
   const active = (queue.queued || 0) + (queue.leased || 0) + (queue.running || 0);
@@ -242,75 +390,322 @@ function buildSystemMap(s, prov, agentsList, chain, extra = {}) {
   const online = prov.providers.filter((p) => p.name !== 'mock' && p.available).length;
 
   const L = [
-    { label: 'EXECUTE', color: '#ff6b2c', y: 90, st: [
-      ['#/agents', 'AGENTS', `${agentsList.length} roles`],
-      ['#/runs', 'RUN QUEUE', `${active} · ${done} done`],
-      ['#/providers', 'ROUTER', s.mockMode ? 'MOCK' : 'LIVE'],
-      ['#/providers', 'PROVIDERS', `${online}/5 online`],
-      ['#/pipelines', 'PIPELINES', 'FORGE chains'],
-      ['#/artifacts', 'ARTIFACTS', `${extra.artifactsCount ?? 0} files`],
+    { label: 'EXECUTE', color: '#ff6b2c', y: 70, st: [
+      ['#/agents', 'AGENTS', `${agentsList.length} roles`, 'The AI workforce roster — specs, tiers, owners, reputation.'],
+      ['#/workforce', 'WORKFORCE', `${extra.busyAgents ?? 0} busy`, 'Per-employee board: live workload, tasks, journey stages, spend.'],
+      ['#/runs', 'RUN QUEUE', `${active} · ${done} done`, 'Every unit of agent work: queued → running → done, or held at the gate.'],
+      ['#/providers', 'ROUTER', s.mockMode ? 'MOCK' : 'LIVE', 'Multi-provider model router — tier chains T1–T4, family separation.'],
+      ['#/providers', 'PROVIDERS', `${online}/5 online`, 'Claude API · Claude subscription · OpenAI · DeepSeek · Gemini.'],
+      ['#/pipelines', 'PIPELINES', 'FORGE chains', 'Templated multi-agent chains that produce real files on disk.'],
     ] },
-    { label: 'DECIDE', color: '#5ec3c9', y: 180, st: [
-      ['#/gate', 'HUMAN GATE', `${s.awaitingHuman} waiting`],
-      ['#/budgets', 'POLICY', `${monthPct}% of cap`],
-      ['#/decisions', 'TRIBUNAL', 'critics · judge'],
-      ['#/decisions', 'REGISTRY', `${decTotal} cases`],
-      ['#/products', 'PRODUCTS', `${extra.productsTotal ?? 0} · ${extra.liveProducts ?? 0} live`],
-      ['#/objectives', 'OBJECTIVES', `${extra.objectivesActive ?? 0} OKRs`],
+    { label: 'FLOW', color: '#b78bff', y: 148, st: [
+      ['#/systems', 'SYSTEM DESIGN', `${extra.blueprints ?? 0} packages`, 'Turns one sentence into 22 documents — BRD, SRS, architecture, stack, security, and a build brief an AI coder can execute.'],
+      ['#/infra', 'INFRASTRUCTURE', `${extra.infraPlans ?? 0} plans`, 'Sizing, rate limits, CI/CD, observability, DR and cost — derived from stated load, arithmetic shown.'],
+      ['#/journeys', 'JOURNEYS', `${extra.openJourneys ?? 0} moving`, 'The value chain: an order crosses ALL 14 departments, start to sign-off.'],
+      ['#/products', 'PRODUCTS', `${extra.productsTotal ?? 0} · ${extra.liveProducts ?? 0} live`, 'Ten-gate product lifecycle — applause never passes Gate 2.'],
+      ['#/projects', 'PROJECTS', `${extra.activeProjects ?? 0} active`, 'Delivery containers grouping tasks toward a product goal.'],
+      ['#/tasks', 'TASKS', `${extra.openTasks ?? 0} open`, 'The task tracker — delegate to an AI employee and it starts instantly.'],
+      ['#/artifacts', 'ARTIFACTS', `${extra.artifactsCount ?? 0} files`, 'Real files produced by pipelines and runs, human-applied to disk.'],
+      ['#/objectives', 'OBJECTIVES', `${extra.objectivesActive ?? 0} OKRs`, 'Quarterly objectives — every journey starts by aligning here.'],
     ] },
-    { label: 'PLAN', color: '#ffb020', y: 270, st: [
-      ['#/tasks', 'TASKS', `${extra.openTasks ?? 0} open`],
-      ['#/projects', 'PROJECTS', `${extra.activeProjects ?? 0} active`],
-      ['#/quality', 'QUALITY', extra.evalAvg != null ? `${Math.round(extra.evalAvg * 100)}% evals` : 'reviews'],
-      ['#/risks', 'RISKS', `${extra.openRisks ?? 0} open`],
-      ['#/incidents', 'INCIDENTS', `${extra.openIncidents ?? 0} open`],
-      ['#/support', 'SUPPORT', `${extra.openTickets ?? 0} open`],
+    { label: 'DECIDE', color: '#5ec3c9', y: 226, st: [
+      ['#/gate', 'HUMAN GATE', `${s.awaitingHuman} waiting`, 'Runs held for a named human verdict — the founders’ work list.'],
+      ['#/budgets', 'POLICY', `${monthPct}% of cap`, 'Reservation-first budgets: the call is refused BEFORE it is made.'],
+      ['#/decisions', 'TRIBUNAL', 'critics · judge', 'Blind critics attack in parallel; a judge consolidates; humans decide.'],
+      ['#/decisions', 'REGISTRY', `${decTotal} cases`, 'Decision records with evidence, expiry, and reopen triggers.'],
+      ['#/risks', 'RISKS', `${extra.openRisks ?? 0} open`, 'Likelihood × impact register, seeded from the blueprint’s Part 7.'],
+      ['#/quality', 'QUALITY', extra.evalAvg != null ? `${Math.round(extra.evalAvg * 100)}% evals` : 'reviews', 'Eval averages, canaries, failed runs, manual quality drills.'],
     ] },
-    { label: 'DATA', color: '#78bf6d', y: 360, st: [
-      ['#/intel', 'INTEL', 'collect → CRM'],
-      ['#/segments', 'SEGMENTS', 'targeting'],
-      ['#/data', 'DATASETS', 'clean · extract'],
-      ['#/archive', 'ARCHIVE', `${extra.archiveCount ?? 0} items`],
-      ['#/knowledge', 'KNOWLEDGE', `${extra.knowledgeCount ?? 0} entries`],
-      ['#/evals', 'EVALS', 'canaries'],
+    { label: 'CREATIVE', color: '#ff5fa2', y: 304, st: [
+      ['#/social', 'SOCIAL MEDIA', `${extra.postsScheduled ?? 0} scheduled`, 'The social desk: AI drafts platform-native posts; a human publishes.'],
+      ['#/social', 'CHANNELS', `${extra.channelsConnected ?? 0} · ${extra.followers ?? 0} followers`, 'The account register: X, LinkedIn, Instagram, TikTok, YouTube…'],
+      ['#/content', 'CONTENT', `${extra.contentReady ?? 0} ready`, 'Content Studio: articles, scripts, emails — drafted by the Content agent.'],
+      ['#/design', 'DESIGN', `${extra.designsReady ?? 0} ready`, 'Design Studio: the Designer agent ships real SVG files for everything.'],
+      ['#/marketing', 'MARKETING', `${extra.campaignsLive ?? 0} live`, 'Campaigns with budgets and CAC — copy is AI-drafted, human-approved.'],
     ] },
-    { label: 'BUSINESS', color: '#e5533d', y: 450, st: [
-      ['#/people', 'PEOPLE', `${extra.peopleCount ?? 0} humans`],
-      ['#/legal', 'LEGAL', `${extra.contractsCount ?? 0} docs`],
-      ['#/vendors', 'VENDORS', `${extra.vendorsActive ?? 0} active`],
-      ['#/marketing', 'MARKETING', `${extra.campaignsLive ?? 0} live`],
-      ['#/customers', 'CUSTOMERS', `$${(extra.mrr ?? 0).toFixed(0)} MRR`],
-      ['#/finance', 'FINANCE', 'MRR · CAC · burn'],
+    { label: 'DATA', color: '#78bf6d', y: 382, st: [
+      ['#/intel', 'INTEL', 'collect → CRM', 'Intelligence collection: structured records, Arabic+English, CSV export.'],
+      ['#/segments', 'SEGMENTS', 'targeting', 'Slice intel records into targetable groups — manually or by AI.'],
+      ['#/data', 'DATASETS', 'clean · extract', 'Data operations: clean, summarize, extract entities.'],
+      ['#/archive', 'ARCHIVE', `${extra.archiveCount ?? 0} items`, 'The company repository — frozen snapshots of everything that mattered.'],
+      ['#/knowledge', 'KNOWLEDGE', `${extra.knowledgeCount ?? 0} entries`, 'Organizational memory — humans verify before anything becomes truth.'],
+      ['#/evals', 'EVALS', 'canaries', 'Golden sets and canaries feeding agent reputation from audited outcomes.'],
     ] },
-    { label: 'GOVERN', color: '#948b7d', y: 540, st: [
-      ['#/governance', 'GOVERNANCE', `${extra.unread ?? 0} alerts`],
-      ['#/oversight', 'OVERSIGHT', 'approvals ledger'],
-      ['#/users', 'USERS', 'RBAC'],
-      ['#/settings', 'SETTINGS', 'providers'],
+    { label: 'BUSINESS', color: '#e5533d', y: 460, st: [
+      ['#/sales', 'SALES', `$${(extra.pipelineValue ?? 0).toFixed(0)} pipeline`, 'The deals pipeline — AI drafts proposals; a human sends and signs. Won deals auto-become customers.'],
+      ['#/customers', 'CUSTOMERS', `$${(extra.mrr ?? 0).toFixed(0)} MRR`, 'CRM: leads → trials → active, with concentration flags.'],
+      ['#/relations', 'RELATIONS', `${extra.partnersActive ?? 0} active`, 'RM: partners, investors, government, media — none go quiet unnoticed.'],
+      ['#/finance', 'FINANCE', 'MRR · CAC · burn', 'The money view: spend, revenue, vendor burn, exportable reports.'],
+      ['#/finreports', 'FIN REPORTS', `${extra.finReports ?? 0} reports`, 'P&L, balance sheet, cash flow, budgets, annual reports — built on the live ledger, not on guesses.'],
+      ['#/legal', 'LEGAL', `${extra.contractsCount ?? 0} docs`, 'Contracts and compliance — signing is HUMAN-only, always named.'],
+      ['#/vendors', 'VENDORS', `${extra.vendorsActive ?? 0} active`, 'Procurement — renewals surface 14 days early; surprises must be 0.'],
+    ] },
+    { label: 'OPERATE', color: '#ffb020', y: 538, st: [
+      ['#/incidents', 'INCIDENTS', `${extra.openIncidents ?? 0} open`, 'SEV1–4 lifecycle with enforced postmortems — closing needs the lesson.'],
+      ['#/support', 'SUPPORT', `${extra.openTickets ?? 0} open`, 'AI drafts replies; a human always sends. Never-AI categories escalate.'],
+      ['#/people', 'PEOPLE', `${extra.peopleCount ?? 0} humans`, 'The human layer: founders and fractionals, with bus-factor load view.'],
+      ['#/governance', 'IMMUNE', `${extra.unread ?? 0} alerts`, 'The immune system: spend spikes, stale gates, quiet relationships — contained, reversibly.'],
+    ] },
+    { label: 'GOVERN', color: '#948b7d', y: 616, st: [
+      ['#/governance', 'GOVERNANCE', `${extra.unread ?? 0} alerts`, 'Rituals, alerts, and the immune system’s containment actions.'],
+      ['#/oversight', 'OVERSIGHT', 'approvals ledger', 'Who approved what — plus frozen budgets and suspended agents.'],
+      ['#/autopilot', 'AUTOPILOT', `${extra.autopilotActions ?? 0} actions`, 'The Nexus: cross-department automations — departments create work for each other with no human in the loop.'],
+      ['#/scorecard', 'SCORECARD', 'company KPIs', 'One board for the whole organism: revenue, creative output, production, trust.'],
+      ['#/users', 'USERS', 'RBAC', 'Fine-grained permissions — one capability per key, grantable alone.'],
+      ['#/settings', 'SETTINGS', 'providers', 'Superadmin controls: provider keys, mock mode — DB-backed, instant.'],
     ] },
   ];
-  const X0 = 95, DX = 138, TX = 913, TY = 315;
+  const X0 = 95, DX = 138, TX = 913, TY = 343;
 
-  const lines = L.map((l) => `<path class="m-line" stroke="${l.color}" d="M 62 ${l.y} H 845 L ${TX - 6} ${TY}"/>`).join('');
-  const labels = L.map((l) => `<text class="m-lbl" x="54" y="${l.y + 3}" fill="${l.color}">${l.label}</text>`).join('');
-  const stations = L.map((l) => l.st.map((st, i) => {
+  const paths = L.map((l) => `M 62 ${l.y} H 845 L ${TX - 6} ${TY}`);
+  const lines = L.map((l, li) => `<path class="m-line" data-line="${li}" stroke="${l.color}" d="${paths[li]}"/>`).join('');
+  const dots = L.map((l, li) => [0, 1].map((k) => `
+    <circle class="m-dot" data-line="${li}" r="3" fill="${l.color}">
+      <animateMotion dur="${11 + li * 1.3}s" begin="-${k * (5.5 + li * 0.65) + li * 1.7}s" repeatCount="indefinite" path="${paths[li]}"/>
+    </circle>`).join('')).join('');
+  const labels = L.map((l, li) => `<text class="m-lbl" data-line="${li}" x="54" y="${l.y + 3}" fill="${l.color}">${l.label}</text>`).join('');
+  const stations = L.map((l, li) => l.st.map((st, i) => {
     const x = X0 + i * DX;
-    return `<a href="${st[0]}"><g class="m-station" style="color:${l.color}">
+    return `<a href="${st[0]}" data-station data-line="${li}" data-pos="${li}:${i}" data-color="${l.color}" data-name="${st[1]}" data-val="${esc(st[2])}" data-tip="${esc(st[3] || '')}"><g class="m-station" style="color:${l.color}">
       <circle cx="${x}" cy="${l.y}" r="6.5" stroke="${l.color}"/>
       <text class="m-name" x="${x}" y="${l.y - 14}">${st[1]}</text>
       <text class="m-val" x="${x}" y="${l.y + 22}">${st[2]}</text>
     </g></a>`;
   }).join('')).join('');
 
-  return `<svg class="metro" viewBox="0 0 1000 615" role="img" aria-label="System metro map — every line terminates at the audit chain">
-  ${lines}${labels}${stations}
-  <a href="#/audit"><g class="m-term">
+  // The lateral mesh — Nexus automations drawn as interchange connectors:
+  // work flows BETWEEN lines, not only along them. Hover a station to light
+  // up its cross-department links.
+  const pos = (l, i) => ({ x: X0 + i * DX, y: L[l].y });
+  const CROSS = [
+    [[0, 1], [1, 3], 'delegation'],
+    [[1, 0], [2, 0], 'gates'],
+    [[1, 0], [3, 0], 'announce'],
+    [[1, 1], [3, 2], 'launch content'],
+    [[3, 4], [5, 3], 'CAC'],
+    [[6, 0], [2, 4], 'auto-risk'],
+    [[6, 0], [3, 0], 'status draft'],
+    [[4, 5], [2, 5], 'eval scores'],
+    [[4, 4], [6, 1], 'KB'],
+    [[4, 0], [5, 1], 'targeting'],
+    [[5, 0], [5, 1], 'deal won'],
+    [[5, 5], [1, 3], 'renewal task'],
+  ];
+  const cross = CROSS.map(([a, b, label]) => {
+    const A = pos(a[0], a[1]), B = pos(b[0], b[1]);
+    const sameCol = a[1] === b[1];
+    const bend = sameCol ? 30 : (A.x < B.x ? 26 : -26);
+    const sameRow = a[0] === b[0];
+    const mx = sameRow ? (A.x + B.x) / 2 : (A.x + B.x) / 2 + bend;
+    const my = sameRow ? A.y - 34 : (A.y + B.y) / 2;
+    return `<g class="m-cross" data-a="${a[0]}:${a[1]}" data-b="${b[0]}:${b[1]}">
+      <path d="M ${A.x} ${A.y} Q ${mx} ${my} ${B.x} ${B.y}"/>
+      <text x="${mx + (sameRow ? 0 : bend > 0 ? 5 : -5)}" y="${my + (sameRow ? -4 : 3)}" text-anchor="${sameRow ? 'middle' : bend > 0 ? 'start' : 'end'}">${label}</text>
+    </g>`;
+  }).join('');
+
+  return `<svg class="metro" viewBox="0 0 1000 700" role="img" aria-label="Interactive system metro map — lines are departments, connectors are the Nexus automations between them">
+  ${lines}${cross}${dots}${labels}${stations}
+  <a href="#/audit" data-station data-line="core" data-color="${chain.ok ? '#59b36a' : '#e5533d'}" data-name="AUDIT CHAIN" data-val="${chain.checked} entries · ${chain.ok ? 'intact' : 'BROKEN'}" data-tip="Hash-chained, append-only. Every line ends here because every action in the company ends up on the record."><g class="m-term">
+    <circle class="m-term-pulse" cx="${TX}" cy="${TY}" r="34" stroke="${chain.ok ? 'var(--ok)' : 'var(--bad)'}"/>
     <circle cx="${TX}" cy="${TY}" r="34" stroke="${chain.ok ? 'var(--ok)' : 'var(--bad)'}" stroke-width="2.5"/>
     <text class="core-glyph" x="${TX}" y="${TY - 2}" text-anchor="middle">▲</text>
     <text class="m-name" x="${TX}" y="${TY + 16}">AUDIT</text>
     <text class="m-val" x="${TX}" y="${TY + 56}">${chain.checked} entries · ${chain.ok ? 'intact' : 'BROKEN'}</text>
   </g></a>
 </svg>`;
+}
+
+// ---------- system map v6 · the constellation ----------
+// The metro map drew departments as parallel lines, which was a lie about how
+// the company works: the traffic is lateral. This draws the real graph — every
+// section positioned in its division's arc, every edge an actual join in the
+// database with its live count. Hovering a section isolates its neighbourhood,
+// so "what touches this?" is answered by looking, not by clicking through.
+function buildConstellation(map) {
+  const { divisions, sections, edges, harmony, audit: connAudit } = map;
+  const CX = 500, CY = 430, R_IN = 150, R_OUT = 392;
+  const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
+  for (const s of sections) (byDiv[s.division] || byDiv.govern).items.push(s);
+
+  // Each division owns an angular wedge; its sections spread across that wedge
+  // on two radii so dense divisions stay readable.
+  const pos = {};
+  const arcs = [];
+  const divs = divisions.filter((d) => byDiv[d.id].items.length);
+  const span = 360 / divs.length;
+  divs.forEach((d, di) => {
+    const items = byDiv[d.id].items;
+    const a0 = di * span - 90;
+    arcs.push({ ...d, a0, a1: a0 + span, count: items.length });
+    items.forEach((s, i) => {
+      const ring = i % 2;
+      const step = span / (items.length + 1);
+      const ang = ((a0 + step * (i + 1) + (ring ? step * 0.18 : -step * 0.18)) * Math.PI) / 180;
+      const r = ring ? R_OUT : R_OUT - 96;
+      pos[s.id] = { x: CX + r * Math.cos(ang) * 1.12, y: CY + r * Math.sin(ang) * 0.72, div: d.id, color: d.color, s };
+    });
+  });
+
+  const maxCount = Math.max(...edges.map((e) => e.count), 1);
+  const nodeR = (c) => Math.max(6, Math.min(15, 6 + Math.log10(Math.max(1, c)) * 4.5));
+
+  // Edges bend toward the centre, which bundles them and keeps the middle
+  // legible instead of a hairball.
+  const edgeSvg = edges.map((e, i) => {
+    const a = pos[e.from]; const b = pos[e.to];
+    if (!a || !b) return '';
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const bx = mx + (CX - mx) * 0.45, by = my + (CY - my) * 0.45;
+    const w = e.count ? 1 + (Math.log10(e.count + 1) / Math.log10(maxCount + 1)) * 3.2 : 0.8;
+    return `<path class="cx-edge ${e.count ? 'live' : 'dormant'}" data-edge="${i}" data-a="${esc(e.from)}" data-b="${esc(e.to)}"
+      d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${bx.toFixed(1)} ${by.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"
+      stroke="${a.color}" stroke-width="${w.toFixed(2)}"><title>${esc(e.from)} → ${esc(e.to)}: ${esc(e.label)} (${e.count})</title></path>`;
+  }).join('');
+
+  // Universal edges (everything → audit, everything → archive) are drawn as
+  // faint spokes to the core rather than 45 individual lines.
+  const spokes = Object.values(pos).map((p) =>
+    `<line class="cx-spoke" data-spoke="${esc(p.s.id)}" x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${CX}" y2="${CY}"/>`).join('');
+
+  const nodes = Object.values(pos).map((p) => {
+    const r = nodeR(p.s.count);
+    return `<a href="${p.s.href}" data-node="${esc(p.s.id)}" data-color="${p.color}" data-label="${esc(p.s.label)}"
+      data-hint="${esc(p.s.hint)}" data-count="${p.s.count}" data-div="${esc(p.div)}">
+      <g class="cx-node">
+        <circle class="cx-halo" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${(r + 9).toFixed(1)}" fill="${p.color}"/>
+        <circle class="cx-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" stroke="${p.color}"/>
+        <text class="cx-label" x="${p.x.toFixed(1)}" y="${(p.y - r - 7).toFixed(1)}">${esc(p.s.label)}</text>
+        <text class="cx-count" x="${p.x.toFixed(1)}" y="${(p.y + r + 13).toFixed(1)}">${p.s.count}</text>
+      </g></a>`;
+  }).join('');
+
+  const divLabels = arcs.map((d) => {
+    const mid = ((d.a0 + d.a1) / 2 * Math.PI) / 180;
+    const x = CX + (R_OUT + 74) * Math.cos(mid) * 1.12;
+    const y = CY + (R_OUT + 74) * Math.sin(mid) * 0.72;
+    return `<text class="cx-div" data-divlabel="${esc(d.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${d.color}">${d.label}</text>`;
+  }).join('');
+
+  const hs = harmony?.score ?? 0;
+  const hsColor = hs >= 80 ? 'var(--ok)' : hs >= 55 ? 'var(--warn)' : 'var(--bad)';
+
+  return `<svg class="constellation" viewBox="0 0 1000 880" role="img" aria-label="Company constellation — every section and the real relationships between them">
+    <defs>
+      <radialGradient id="coreGlow"><stop offset="0%" stop-color="rgba(255,107,44,0.30)"/><stop offset="100%" stop-color="rgba(255,107,44,0)"/></radialGradient>
+    </defs>
+    <circle cx="${CX}" cy="${CY}" r="230" fill="url(#coreGlow)"/>
+    <ellipse class="cx-orbit" cx="${CX}" cy="${CY}" rx="${(R_OUT - 96) * 1.12}" ry="${(R_OUT - 96) * 0.72}"/>
+    <ellipse class="cx-orbit" cx="${CX}" cy="${CY}" rx="${R_OUT * 1.12}" ry="${R_OUT * 0.72}"/>
+    ${spokes}${edgeSvg}${divLabels}${nodes}
+    <a href="#/harmony" data-node="core" data-color="#ff6b2c" data-label="HARMONY CORE"
+       data-hint="Everything ends on the audit chain, and the orchestrator keeps the departments in step. Click to open Harmony."
+       data-count="${hs}">
+      <g class="cx-core">
+        <circle class="cx-core-pulse" cx="${CX}" cy="${CY}" r="${R_IN - 62}" stroke="${hsColor}"/>
+        <circle class="cx-core-ring" cx="${CX}" cy="${CY}" r="${R_IN - 62}" stroke="${hsColor}"/>
+        <text class="cx-core-glyph" x="${CX}" y="${CY - 14}">▲</text>
+        <text class="cx-core-score" x="${CX}" y="${CY + 20}" fill="${hsColor}">${hs}%</text>
+        <text class="cx-core-sub" x="${CX}" y="${CY + 38}">HARMONY</text>
+        <text class="cx-core-sub" x="${CX}" y="${CY + 54}">${connAudit.wired}/${connAudit.sections} sections wired</text>
+      </g>
+    </a>
+  </svg>`;
+}
+
+/** Hover a node → isolate its neighbourhood; the rest of the board recedes. */
+function initConstellation(map) {
+  const svg = view.querySelector('svg.constellation');
+  if (!svg) return;
+  const panel = svg.closest('.panel');
+  panel.style.position = 'relative';
+  let tip = panel.querySelector('#map-tip');
+  if (!tip) { tip = document.createElement('div'); tip.id = 'map-tip'; tip.hidden = true; panel.appendChild(tip); }
+
+  const neighbours = (id) => {
+    const set = new Set([id]);
+    for (const e of map.edges) {
+      if (e.from === id) set.add(e.to);
+      if (e.to === id) set.add(e.from);
+    }
+    return set;
+  };
+
+  const focus = (id) => {
+    if (!id) {
+      svg.querySelectorAll('.dimmed,.lit').forEach((el) => el.classList.remove('dimmed', 'lit'));
+      return;
+    }
+    const near = neighbours(id);
+    svg.querySelectorAll('[data-node]').forEach((el) => {
+      const nid = el.dataset.node;
+      el.classList.toggle('dimmed', nid !== 'core' && !near.has(nid));
+      el.classList.toggle('lit', near.has(nid));
+    });
+    svg.querySelectorAll('.cx-edge').forEach((el) => {
+      const on = el.dataset.a === id || el.dataset.b === id;
+      el.classList.toggle('lit', on);
+      el.classList.toggle('dimmed', !on);
+    });
+    svg.querySelectorAll('.cx-spoke').forEach((el) => el.classList.toggle('dimmed', el.dataset.spoke !== id));
+  };
+
+  svg.querySelectorAll('a[data-node]').forEach((a) => {
+    a.addEventListener('mouseenter', () => {
+      const id = a.dataset.node;
+      focus(id === 'core' ? null : id);
+      const rel = map.edges.filter((e) => e.from === id || e.to === id);
+      tip.innerHTML = `<div class="tip-head" style="color:${a.dataset.color}">${esc(a.dataset.label)}</div>
+        <div class="tip-val">${esc(a.dataset.count)} ${id === 'core' ? 'harmony score' : 'records'}${a.dataset.div ? ` · ${esc(a.dataset.div)}` : ''}</div>
+        <div class="tip-body">${esc(a.dataset.hint)}</div>
+        ${rel.length ? `<div class="tip-rel">${rel.slice(0, 6).map((e) => `<span>${esc(e.from === id ? '→ ' + e.to : '← ' + e.from)} <b>${e.count}</b> ${esc(short(e.label, 30))}</span>`).join('')}</div>` : ''}
+        <div class="tip-go">click to open →</div>`;
+      tip.hidden = false;
+    });
+    a.addEventListener('mousemove', (e) => {
+      const r = panel.getBoundingClientRect();
+      tip.style.left = Math.max(8, Math.min(e.clientX - r.left + 18, panel.clientWidth - 268)) + 'px';
+      tip.style.top = Math.max(8, Math.min(e.clientY - r.top + 18, panel.clientHeight - 190)) + 'px';
+    });
+    a.addEventListener('mouseleave', () => { focus(null); tip.hidden = true; });
+  });
+}
+
+// Wire hover/dim/tooltip behaviour onto the freshly rendered map.
+function initMapInteractivity() {
+  const svg = view.querySelector('svg.metro');
+  if (!svg) return;
+  const panel = svg.closest('.panel');
+  if (!panel) return;
+  panel.style.position = 'relative';
+  let tip = panel.querySelector('#map-tip');
+  if (!tip) { tip = document.createElement('div'); tip.id = 'map-tip'; tip.hidden = true; panel.appendChild(tip); }
+  const dimAll = (line, stationPos = null) => {
+    svg.querySelectorAll('[data-line]').forEach((el) => {
+      el.classList.toggle('dimmed', line !== null && line !== 'core' && el.dataset.line !== line);
+    });
+    svg.querySelectorAll('.m-cross').forEach((c) => {
+      const touches = stationPos !== null && (c.dataset.a === stationPos || c.dataset.b === stationPos);
+      c.classList.toggle('hot', touches);
+      c.classList.toggle('dimmed', stationPos !== null && !touches);
+    });
+  };
+  svg.querySelectorAll('a[data-station]').forEach((a) => {
+    a.addEventListener('mouseenter', () => {
+      dimAll(a.dataset.line, a.dataset.pos || null);
+      tip.innerHTML = `<div class="tip-head" style="color:${a.dataset.color}">${a.dataset.name}</div>
+        <div class="tip-val">${a.dataset.val}</div>
+        <div class="tip-body">${a.dataset.tip}</div>
+        <div class="tip-go">click to open →</div>`;
+      tip.hidden = false;
+    });
+    a.addEventListener('mousemove', (e) => {
+      const r = panel.getBoundingClientRect();
+      tip.style.left = Math.min(e.clientX - r.left + 16, panel.clientWidth - 250) + 'px';
+      tip.style.top = Math.min(e.clientY - r.top + 16, panel.clientHeight - 120) + 'px';
+    });
+    a.addEventListener('mouseleave', () => { dimAll(null); tip.hidden = true; });
+  });
 }
 
 function buildSystemMapOrbital(s, prov, agentsList, chain, extra = {}) {
@@ -457,13 +852,19 @@ async function renderOverview() {
   const safe = (p, d) => api(p).catch(() => d);
   const [s, prov, agentsList, chain, products, incidents, tickets, rituals, notif, artifacts,
     campaigns, customers, people, contracts, vendors, objectives, knowledge,
-    archiveItems, tasksList, projectsList, risksList, qualityDash] = await Promise.all([
+    archiveItems, tasksList, projectsList, risksList, qualityDash,
+    journeysList, relationsOv, workforce, studioOv, dealsOv, autopilotOv,
+    blueprintsList, infraOv, finRepOv, mapData] = await Promise.all([
     api('/api/stats'), safe('/api/providers', { providers: [] }), safe('/api/agents', []), api('/api/audit/verify'),
     safe('/api/products', []), safe('/api/incidents', []), safe('/api/tickets', []), safe('/api/rituals', []), api('/api/notifications?unread=1'),
     safe('/api/artifacts', []),
     safe('/api/campaigns', []), safe('/api/customers', { stats: { mrr: 0 }, items: [] }), safe('/api/people', []), safe('/api/contracts', []),
     safe('/api/vendors', []), safe('/api/objectives', []), safe('/api/knowledge', []),
     safe('/api/archive', []), safe('/api/tasks', []), safe('/api/projects', []), safe('/api/risks', []), safe('/api/quality', null),
+    safe('/api/journeys', []), safe('/api/relations', null), safe('/api/workforce', []), safe('/api/studio', null),
+    safe('/api/deals', null), safe('/api/autopilot', null),
+    safe('/api/design', []), safe('/api/infra', null), safe('/api/finreports', null),
+    safe('/api/map', null),
   ]);
   const archiveCount = archiveItems.length;
   const extra = {
@@ -487,6 +888,19 @@ async function renderOverview() {
     evalSets: 5,
     unread: notif.unread,
     overdueRituals: rituals.filter((r) => r.overdue).length,
+    openJourneys: journeysList.filter((j) => ['running', 'awaiting_human'].includes(j.state)).length,
+    partnersActive: relationsOv?.active ?? 0,
+    busyAgents: workforce.filter((w) => w.busy > 0).length,
+    blueprints: blueprintsList?.length ?? 0,
+    infraPlans: infraOv?.overview?.total ?? 0,
+    finReports: finRepOv?.overview?.total ?? 0,
+    pipelineValue: dealsOv?.openValue ?? 0,
+    autopilotActions: autopilotOv?.feed?.length ?? 0,
+    postsScheduled: studioOv?.postsByState?.scheduled ?? 0,
+    channelsConnected: studioOv?.channels?.filter((c) => c.state === 'connected').length ?? 0,
+    followers: studioOv?.followers ?? 0,
+    contentReady: (studioOv?.contentByState?.draft_ready ?? 0) + (studioOv?.contentByState?.approved ?? 0),
+    designsReady: studioOv?.designsReady ?? 0,
   };
   const monthPct = Math.min(100, (s.spend.monthUsd / s.spend.companyCapUsd) * 100);
   const govPct = Math.min(100, (s.spend.governanceUsd / (s.spend.governanceCapUsd || 1)) * 100);
@@ -502,9 +916,15 @@ async function renderOverview() {
 
   view.innerHTML = `
   <div class="panel">
-    <div class="panel-title">System map — how the sections relate</div>
-    ${buildSystemMap(s, prov, agentsList, chain, extra)}
-    <div class="map-legend">six lines, one interchange — every department's line terminates at the audit chain · click any station to open its section</div>
+    <div class="panel-title">
+      <span>The company as it actually is — ${mapData ? `${mapData.sections.length} sections · ${mapData.edges.filter((e) => e.count > 0).length}/${mapData.edges.length} relationships live` : 'system map'}</span>
+      <span>
+        ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} wired${mapData.audit.orphans.length ? ` · ${mapData.audit.orphans.length} orphan` : ' · no orphans'}</span>` : ''}
+        <a class="chip chip-dim" style="text-decoration:none" href="#/graph">relationship table →</a>
+      </span>
+    </div>
+    ${mapData ? buildConstellation(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
+    <div class="map-legend">Every line is a real join in the database, thickness by volume — <b>hover a section to isolate its neighbourhood</b>, click to open it. Faint spokes are the universal edges: everything ends on the audit chain. The core is the harmony score and the orchestrator.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">Unwired: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
   </div>
 
   <div class="grid grid-4">
@@ -576,38 +996,75 @@ async function renderOverview() {
       </table>
     </div>
   </div>`;
+  if (mapData) initConstellation(mapData); else initMapInteractivity();
 }
 
+const DEPT_LABEL = {
+  gate: 'Run gate', systems: 'System design', social: 'Social media', content: 'Content studio',
+  design: 'Design studio', marketing: 'Marketing', relations: 'Relations', support: 'Support desk',
+  journeys: 'Journeys', finreports: 'Financial reports', decisions: 'Decisions', legal: 'Legal',
+  products: 'Product gates', intel: 'Intelligence', knowledge: 'Knowledge', governance: 'Governance',
+  risks: 'Risks', harmony: 'Orchestrator',
+};
+
 async function renderGate() {
-  const runs = await api('/api/runs?state=awaiting_human');
+  const [box, runs] = await Promise.all([
+    api('/api/inbox'), api('/api/runs?state=awaiting_human').catch(() => []),
+  ]);
+  const runById = Object.fromEntries(runs.map((r) => [r.id, r]));
+  const groups = {};
+  for (const i of box.items) (groups[i.dept] ||= []).push(i);
+  const age = (h) => (h >= 48 ? `${Math.round(h / 24)}d` : h >= 1 ? `${Math.round(h)}h` : 'just now');
+
   view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile ${box.total ? 'tile-warn' : ''}"><div class="panel-title">Waiting on you</div><div class="big">${box.total}</div><div class="sub">across ${Object.keys(groups).length} department(s)</div></div>
+    <div class="panel tile ${box.high ? 'tile-warn' : ''}"><div class="panel-title">Needs attention first</div><div class="big">${box.high}</div><div class="sub">gates, sends, live copy, incidents</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">One-click answers</div><div class="big">${box.actionable}</div><div class="sub">approve or send without leaving this page</div></div>
+    <div class="panel tile"><div class="panel-title">Oldest item</div><div class="big" style="font-size:24px;padding-top:6px">${box.total ? age(box.oldestHours) : '—'}</div><div class="sub">nothing should wait for days</div></div>
+  </div>
+
+  ${box.total ? Object.entries(groups).map(([dept, items]) => `
   <div class="panel">
-    <div class="panel-title">Runs awaiting a human — this queue is the founders' work list</div>
-    ${runs.length ? '' : '<div class="empty">Nothing waiting. The machine is either idle or confident.</div>'}
-    ${runs.map((r) => `
-      <div class="round">
-        <div class="round-body">
-          <div class="agent-head">
-            <div>
-              <span class="mono">${esc(r.agent_id)}</span> · <span class="mono" style="color:var(--ink-faint)">${esc(r.task_type)}</span>
-              <span class="state state-awaiting_human">awaiting_human</span>
-            </div>
-            <div>
-              <button class="btn btn-ok btn-sm" data-resolve="approved" data-id="${esc(r.id)}">Approve</button>
-              <button class="btn btn-bad btn-sm" data-resolve="rejected" data-id="${esc(r.id)}">Reject</button>
-            </div>
-          </div>
-          <div class="reason" style="margin:6px 0">${esc(r.failure_reason || '')}</div>
-          ${r.output ? `<pre class="json">${esc(JSON.stringify(r.output.parsed ?? r.output, null, 2).slice(0, 1200))}</pre>` : ''}
+    <div class="panel-title"><span>${esc(DEPT_LABEL[dept] || dept)} — ${items.length}</span>
+      <a class="chip chip-dim" style="text-decoration:none" href="${esc(items[0].href)}">open the section →</a></div>
+    ${items.map((i) => `
+      <div class="inbox-row ${esc(i.severity)}">
+        <div class="ib-main">
+          <a class="ib-title" href="${esc(i.href)}">${esc(i.title)}</a>
+          ${i.sub ? `<div class="ib-sub">${esc(i.sub)}</div>` : ''}
+          ${i.kind === 'run' && runById[i.id]?.output ? `<pre class="json" style="max-height:180px;margin-top:6px">${esc(JSON.stringify(runById[i.id].output.parsed ?? runById[i.id].output, null, 2).slice(0, 900))}</pre>` : ''}
+        </div>
+        <div class="ib-age mono">${age(i.ageHours)}</div>
+        <div class="ib-actions">
+          ${i.action ? `<button class="btn btn-sm btn-ok" data-ib='${esc(JSON.stringify(i.action))}' data-label="${esc(i.actionLabel)}">${esc(i.actionLabel)}</button>` : ''}
+          ${i.secondary ? `<button class="btn btn-sm ${i.secondary.label === 'Reject' ? 'btn-bad' : ''}" data-ib='${esc(JSON.stringify(i.secondary))}' data-label="${esc(i.secondary.label)}">${esc(i.secondary.label)}</button>` : ''}
+          ${!i.action && !i.secondary ? `<a class="btn btn-sm" href="${esc(i.href)}">Open</a>` : ''}
         </div>
       </div>`).join('')}
+  </div>`).join('') : `
+  <div class="panel"><div class="empty">Nothing anywhere in the company is waiting on a person. Every department reports here — publishing, sending, signing, gate verdicts, design review, verification — so this being empty means it is genuinely empty.</div></div>`}
+
+  <div class="panel">
+    <div class="map-legend">
+      This queue collects <b>every</b> point where the platform stops for a human, from every department:
+      run gate · design documents · social publishing · content approval · design sign-off · campaign go-live ·
+      partner outreach · support replies · journey stages · financial reports · decisions · contracts ·
+      product gates · intel and knowledge verification · problems, rituals and critical risks · and whatever the
+      <a href="#/harmony">orchestrator</a> escalated. If something can wait on you, it appears here — the section
+      pages remain the place to read the full context before you answer.
+    </div>
   </div>`;
-  view.querySelectorAll('[data-resolve]').forEach((b) => b.addEventListener('click', async () => {
+
+  view.querySelectorAll('[data-ib]').forEach((b) => b.addEventListener('click', async () => {
+    let spec;
+    try { spec = JSON.parse(b.dataset.ib); } catch { return; }
+    b.disabled = true;
     try {
-      await api(`/api/runs/${b.dataset.id}/resolve`, { method: 'POST', body: { verdict: b.dataset.resolve, actor: actor() } });
-      toast(`Run ${b.dataset.resolve} by ${actor()}`);
+      await api(spec.path, { method: spec.method || 'POST', body: spec.body || {} });
+      toast(`${b.dataset.label} — recorded as ${actor()}`);
       renderGate(); refreshShell();
-    } catch (e) { toast(e.message, true); }
+    } catch (e) { toast(e.message, true); b.disabled = false; }
   }));
 }
 
@@ -914,7 +1371,7 @@ async function renderProducts() {
   <div class="panel">
     <div class="panel-title">
       <span>${esc(p.name)} <span class="mono" style="letter-spacing:0;color:var(--ink-faint)">· ${esc(p.id)}</span></span>
-      <span class="chip ${p.state === 'live' ? 'chip-ok' : p.state === 'retired' ? 'chip-bad' : 'chip-ember'}">${esc(p.state)} · gate ${p.stage}/10</span>
+      <span><span class="chip ${p.state === 'live' ? 'chip-ok' : p.state === 'retired' ? 'chip-bad' : 'chip-ember'}">${esc(p.state)} · gate ${p.stage}/10</span> ${connBtn('product', p.id)}</span>
     </div>
     ${p.description ? `<div style="margin-bottom:6px">${esc(p.description)}</div>` : ''}
     <div class="gatebar">${p.gates.map((g) => `<span class="${esc(g.status)}" data-t="${g.gate}. ${esc(g.title)}${g.date ? ' · ' + esc(g.date) : ''}${g.status === 'active' ? ' · ACTIVE' : ''}"></span>`).join('')}</div>
@@ -958,6 +1415,7 @@ async function renderProducts() {
     localStorage.setItem('crucible-pl-product', b.dataset.plnew);
     location.hash = '#/pipelines';
   }));
+  wireConnections();
 }
 
 async function renderIncidents() {
@@ -977,7 +1435,7 @@ async function renderIncidents() {
   <div class="panel">
     <div class="panel-title">
       <span><span class="chip ${i.sev === 'SEV1' ? 'chip-bad' : i.sev === 'SEV2' ? 'chip-warn' : 'chip-dim'}">${esc(i.sev)}</span> #${i.id} · ${esc(i.title)}</span>
-      <span class="state state-${i.state === 'closed' ? 'done' : i.state === 'open' ? 'failed' : 'awaiting_human'}">${esc(i.state)}</span>
+      <span><span class="state state-${i.state === 'closed' ? 'done' : i.state === 'open' ? 'failed' : 'awaiting_human'}">${esc(i.state)}</span> ${connBtn('incident', i.id)}</span>
     </div>
     <div class="map-legend">commander ${esc(i.commander)} · declared ${esc(i.created_at)}
       ${i.product_id ? ` · <a href="#/products" class="chip chip-ember" style="text-decoration:none">${esc(i.product_id)}</a>` : ''}
@@ -1028,6 +1486,7 @@ async function renderIncidents() {
       toast('Lesson recorded in Knowledge (verified)'); renderIncidents();
     } catch (e) { toast(e.message, true); }
   }));
+  wireConnections();
 }
 
 async function renderSupport() {
@@ -1215,156 +1674,408 @@ async function renderGovernance() {
   }));
 }
 
+const ENRICH_CHIP = {
+  enriched: ['chip-ok', 'web-confirmed'],
+  pending: ['chip-warn', 'harvesting…'],
+  unreachable: ['chip-bad', 'site unreachable'],
+  'no-domain': ['chip-dim', 'no domain found'],
+};
+
+function contactCell(r) {
+  const line = (icon, val, title) => val ? `<div title="${esc(title || '')}"><span style="opacity:.6">${icon}</span> <span class="mono" style="user-select:all">${esc(val)}</span></div>` : '';
+  const src = r.evidence?.find((e) => e.source_url)?.source_url;
+  const gapList = (r.gaps || []).filter((g) => ['email', 'phone', 'address'].includes(g));
+  return `
+    ${line('✉', r.email, 'primary email')}${line('✉', r.email2, 'secondary email')}
+    ${line('☎', r.phone, 'primary phone')}${line('☎', r.phone2, 'secondary phone')}
+    ${line('◎', r.whatsapp, 'WhatsApp')}
+    ${line('⌂', short(r.address, 60), r.address)}
+    ${r.website ? `<div>🌐 <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer">${esc(short(r.website.replace(/^https?:\/\//, ''), 34))}</a></div>` : ''}
+    ${r.linkedin ? `<div>in <a href="${esc(r.linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn</a></div>` : ''}
+    ${gapList.length ? `<div class="map-legend" style="color:var(--warn)">gap: ${gapList.join(', ')}</div>` : ''}
+    ${src ? `<div class="map-legend">source: <a href="${esc(src)}" target="_blank" rel="noopener noreferrer">${esc(short(src.replace(/^https?:\/\//, ''), 40))}</a></div>` : '<div class="map-legend">source: model knowledge only</div>'}`;
+}
+
+const METHOD_BADGE = {
+  'web-scrape': ['chip-ok', 'from site'],
+  'model-knowledge': ['chip-dim', 'agent-named'],
+  'pattern-derived': ['chip-warn', 'derived — unverified'],
+  human: ['chip-steel', 'human'],
+  dataset: ['chip-dim', 'dataset'],
+};
+
+function peopleBlock(r, canM) {
+  const people = (r.contacts || []).filter((c) => c.name);
+  if (!people.length) return '';
+  return `<div class="people-block">
+    <div class="map-legend" style="color:var(--steel)">People inside — ${people.length}</div>
+    ${people.map((c) => {
+      const [cls, txt] = METHOD_BADGE[c.method] || ['chip-dim', c.method];
+      return `<div class="person-row">
+        <span><b>${esc(c.name)}</b>${c.role ? ` <span style="color:var(--ink-mute)">· ${esc(short(c.role, 30))}</span>` : ''}</span>
+        <span class="mono" style="font-size:11px">${[c.email, c.phone].filter(Boolean).map(esc).join(' · ') || '<span style="color:var(--warn)">no direct contact</span>'}</span>
+        <span><span class="chip ${cls}" title="${esc(c.note || '')}">${txt}</span>${c.verification === 'verified' ? '<span class="chip chip-ok">✓</span>' : canM && (c.email || c.phone) ? `<button class="btn btn-sm" data-cverify="${c.id}" title="confirm this person — promotes their details to the record">✓</button>` : ''}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 async function renderIntel() {
-  const [queries, segments, products] = await Promise.all([api('/api/intel'), api('/api/segments'), api('/api/products')]);
+  const [ov, queries, segments, ruleCatalog] = await Promise.all([
+    api('/api/intel/overview'), api('/api/intel'), api('/api/segments').catch(() => []), api('/api/intel/rules').catch(() => []),
+  ]);
+  const canM = hasPermC('intel.manage');
+  const pctBar = (v) => `<div class="meter" style="margin:4px 0 0"><div class="meter-track"><div class="meter-fill ${v >= 70 ? '' : 'hot'}" style="width:${v}%"></div></div></div>`;
+
   view.innerHTML = `
-  <div class="panel">
-    <div class="panel-title">Intelligence request — describe what you want collected (Arabic or English)</div>
-    <div class="form-inline">
-      <div style="flex:3"><textarea id="iq-q" style="min-height:56px" placeholder="مثال: اريد كل الشركات التي تعمل بمجال الطاقة و تعمل في العراق — الاسم، الموقع، بروفايل، طرق التواصل"></textarea></div>
-      <button class="btn btn-primary" id="iq-go">Collect</button>
-    </div>
-    <div class="map-legend">Records come from model knowledge — every one enters <b>unverified</b> with per-record confidence; verify (human) before outreach. Exports are Excel-ready CSV (UTF-8 BOM, Arabic-safe) and land in the <a href="#/artifacts/_intel">_intel repository</a> + <a href="#/archive">Archive</a>.</div>
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Records</div><div class="big">${ov.records}</div><div class="sub">${ov.campaigns} campaigns · ${ov.running} running</div></div>
+    <div class="panel tile ${ov.withEmail ? 'tile-steel' : 'tile-warn'}"><div class="panel-title">Contactable</div><div class="big">${ov.withEmail}<span class="unit">✉</span> ${ov.withPhone}<span class="unit">☎</span></div><div class="sub">${ov.contacts} contact points harvested</div></div>
+    <div class="panel tile"><div class="panel-title">Web-confirmed</div><div class="big">${ov.webConfirmed}</div><div class="sub">fetched from the org's own site</div></div>
+    <div class="panel tile"><div class="panel-title">People found</div><div class="big">${ov.people ?? 0}</div><div class="sub">${ov.peopleWithDirect ?? 0} with a direct line or address</div></div>
+    <div class="panel tile"><div class="panel-title">Avg completeness</div><div class="big">${ov.avgCompleteness}<span class="unit">%</span></div><div class="sub">${ov.verified} verified · ${ov.targeted} targeted</div>${pctBar(ov.avgCompleteness)}</div>
   </div>
-  ${queries.map((iq) => `
+
+  ${canM ? `<div class="panel">
+    <div class="panel-title">New intelligence campaign — precise criteria beat a vague sentence</div>
+    <div class="form-inline">
+      <div><label class="fl">Type</label><select id="iq-kind"><option value="company">companies</option><option value="government body">government bodies</option><option value="ngo">NGOs</option><option value="investor">investors</option><option value="supplier">suppliers</option><option value="distributor">distributors</option></select></div>
+      <div><label class="fl">Sector / القطاع</label><input type="text" id="iq-sector" placeholder="energy · oil & gas"></div>
+      <div><label class="fl">Country / الدولة</label><input type="text" id="iq-country" placeholder="Iraq"></div>
+      <div><label class="fl">City / المدينة</label><input type="text" id="iq-city" placeholder="Basra"></div>
+      <div style="flex:0.5"><label class="fl">Size</label><select id="iq-size"><option value="">any</option><option>SME</option><option>mid-market</option><option>enterprise</option><option>state-owned</option></select></div>
+      <div style="flex:0.4"><label class="fl">Target #</label><input type="text" id="iq-count" value="15"></div>
+      <button class="btn btn-primary" id="iq-go">Run campaign</button>
+    </div>
+    <div class="form-inline">
+      <div style="flex:2"><label class="fl">Must relate to (keywords)</label><input type="text" id="iq-keywords" placeholder="refinery services, EPC contracts, solar"></div>
+      <div><label class="fl">Exclude</label><input type="text" id="iq-exclude" placeholder="pure retailers"></div>
+      <div style="flex:2"><label class="fl">Analyst note (Arabic or English)</label><input type="text" id="iq-q" placeholder="اريد شركات الطاقة العاملة في العراق مع طرق التواصل"></div>
+    </div>
+
+    <div class="panel-title" style="margin-top:14px">Escalation rules — what to do when a record comes back thin</div>
+    <div class="rule-grid">
+      ${ruleCatalog.map((r) => `
+        <label class="rule-card">
+          <input type="checkbox" class="iq-rule" value="${esc(r.id)}" ${['people-when-no-phone', 'ask-executives', 'derive-emails', 'deep-when-no-address'].includes(r.id) ? 'checked' : ''}>
+          <span><b>${esc(r.label)}</b><span class="rule-detail">${esc(r.detail)}</span></span>
+        </label>`).join('')}
+    </div>
+
+    <div class="panel-title" style="margin-top:14px">Constraints — a record only counts as a result if it passes these</div>
+    <div class="form-inline">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="iq-req-phone"> must have a phone</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="iq-req-email"> must have an email</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="iq-req-site"> site must be reachable</label>
+      <div style="flex:0.6"><label class="fl">Min complete %</label><input type="text" id="iq-min" value="0"></div>
+      <div style="flex:1.2"><label class="fl">Profile must mention</label><input type="text" id="iq-mention" placeholder="oil, gas, refinery"></div>
+      <div style="flex:1"><label class="fl">Reject if it mentions</label><input type="text" id="iq-notmention" placeholder="retail, restaurant"></div>
+    </div>
+
+    <div class="map-legend">
+      <b>How a campaign runs:</b> ① the Intelligence agent proposes real organizations + their likely official domain →
+      ② the platform <b>fetches each site over HTTP</b> (home, /contact, /about) and harvests emails, phones, address, socials — each stamped with its source URL →
+      ③ records still missing a domain go back for a better hypothesis and are re-fetched →
+      ④ more rounds run until the target count is met or two rounds return nothing new →
+      ⑤ every record gets a completeness score and an explicit gap list. Contact details are <b>never</b> model-invented: they are scraped, human-entered, or declared a gap.
+    </div>
+  </div>` : ''}
+
+  ${queries.map((iq) => {
+    const p = iq.progress;
+    return `
   <div class="panel">
     <div class="panel-title">
-      <span>#${iq.id} · ${esc(short(iq.question, 90))}</span>
+      <span>#${iq.id} · ${esc(short(iq.question, 80))}</span>
       <span>
-        <span class="state state-${iq.state === 'ready' ? 'done' : iq.state === 'failed' ? 'failed' : 'running'}">${esc(iq.state)}</span>
-        ${iq.state === 'ready' && iq.records.length ? `
-          <a class="btn btn-sm" href="/api/intel/export?queryId=${iq.id}&actor=${encodeURIComponent(actor())}" download>⬇ Excel (CSV)</a>
-          <button class="btn btn-sm" data-autoseg="${iq.id}">AI segment</button>` : ''}
+        <span class="state state-${iq.state === 'ready' ? 'done' : iq.state === 'failed' ? 'failed' : 'running'}">${esc(iq.state)}${iq.state !== 'ready' ? ` · round ${iq.round}` : ''}</span>
+        ${iq.records.length ? `
+          <button class="btn btn-sm" data-download="/api/intel/export?queryId=${iq.id}&format=xls" data-filename="intel-${iq.id}.xls" title="real Excel workbook — typed columns, Arabic-safe">⬇ Excel</button>
+          <button class="btn btn-sm" data-download="/api/intel/export?queryId=${iq.id}&format=csv" data-filename="intel-${iq.id}.csv" title="CSV with UTF-8 BOM">⬇ CSV</button>` : ''}
+        ${canM && iq.records.length ? `<button class="btn btn-sm" data-autoseg="${iq.id}">AI segment</button>
+        <button class="btn btn-sm btn-ok" data-bulk="${iq.id}">Bulk target verified</button>` : ''}
       </span>
     </div>
-    ${iq.summary ? `<div class="map-legend">${esc(short(iq.summary, 200))}</div>` : ''}
+    ${iq.criteria ? `<div class="agent-meta">${Object.entries(iq.criteria).map(([k, v]) => `<span class="chip chip-dim">${esc(k)}: ${esc(v)}</span>`).join('')}</div>` : ''}
+    ${(iq.rules || []).length || iq.constraints ? `<div class="agent-meta">
+      ${(iq.rules || []).map((rid) => `<span class="chip chip-ember" title="${esc(ruleCatalog.find((x) => x.id === rid)?.detail || '')}">⚙ ${esc(ruleCatalog.find((x) => x.id === rid)?.label || rid)}</span>`).join('')}
+      ${iq.constraints ? Object.entries(iq.constraints).map(([k, v]) => `<span class="chip chip-warn">must: ${esc(k)}${v === true ? '' : ` = ${esc(v)}`}</span>`).join('') : ''}
+    </div>` : ''}
+    <div class="agent-meta">
+      <span class="chip">${p.collected}/${p.target} collected</span>
+      ${p.people ? `<span class="chip chip-steel">👤 ${p.people} people</span>` : ''}
+      ${p.rejected ? `<span class="chip chip-bad">${p.rejected} rejected</span>` : ''}
+      <span class="chip ${p.withEmail ? 'chip-ok' : 'chip-dim'}">✉ ${p.withEmail}</span>
+      <span class="chip ${p.withPhone ? 'chip-ok' : 'chip-dim'}">☎ ${p.withPhone}</span>
+      <span class="chip ${p.withAddress ? 'chip-ok' : 'chip-dim'}">⌂ ${p.withAddress}</span>
+      <span class="chip chip-steel">${p.enriched} web-confirmed</span>
+      ${p.pending ? `<span class="chip chip-warn">${p.pending} harvesting…</span>` : ''}
+      <span class="chip">avg ${p.avgCompleteness}%</span>
+      ${p.verified ? `<span class="chip chip-ok">${p.verified} verified</span>` : ''}
+    </div>
+    ${iq.summary ? `<div class="map-legend">${esc(short(iq.summary, 220))}</div>` : ''}
     ${iq.records.length ? `
     <table>
-      <thead><tr><th>Name / الاسم</th><th>Sector</th><th>Location</th><th>Contact</th><th class="num">Conf</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>${iq.records.map((r) => `
-        <tr>
-          <td><b>${esc(r.name)}</b>${r.name_ar ? `<div style="color:var(--ink-mute)">${esc(r.name_ar)}</div>` : ''}${r.profile ? `<div class="map-legend">${esc(short(r.profile, 110))}</div>` : ''}</td>
-          <td class="mono">${esc(r.sector || '—')}</td>
-          <td class="mono">${esc([r.city, r.country].filter(Boolean).join(', ') || '—')}</td>
-          <td class="mono" style="font-size:11px">${[r.website, r.email, r.phone].filter(Boolean).map(esc).join('<br>') || '—'}</td>
-          <td class="num" style="color:${(r.confidence ?? 0) >= 0.7 ? 'var(--ok)' : 'var(--warn)'}">${r.confidence != null ? (r.confidence * 100).toFixed(0) + '%' : '—'}</td>
+      <thead><tr><th style="width:26%">Organization / المنظمة</th><th>Location · sector</th><th style="width:26%">Contact — with provenance</th><th class="num">Complete</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${iq.records.map((r) => {
+        const [chipCls, chipTxt] = ENRICH_CHIP[r.enrichment] || ['chip-dim', r.enrichment];
+        const cp = Math.round((r.completeness || 0) * 100);
+        return `
+        <tr style="${r.rejected_reason ? 'opacity:.5' : ''}">
+          <td><b>${esc(r.name)}</b>${r.name_ar ? `<div style="color:var(--ink-mute)">${esc(r.name_ar)}</div>` : ''}
+            ${r.profile ? `<div class="map-legend">${esc(short(r.profile, 130))}</div>` : ''}
+            <span class="chip ${chipCls}">${chipTxt}</span>${r.size_hint ? `<span class="chip chip-dim">${esc(r.size_hint)}</span>` : ''}
+            ${r.rejected_reason ? `<span class="chip chip-bad" title="excluded by a campaign constraint">rejected: ${esc(r.rejected_reason)}</span>` : ''}
+            ${r.email_pattern ? `<div class="map-legend">email pattern: <span class="mono">${esc(r.email_pattern)}</span></div>` : ''}
+            ${(r.rulesLog || []).length ? `<div class="map-legend" style="color:var(--ink-faint)">${r.rulesLog.map((l) => `⚙ ${esc(l)}`).join('<br>')}</div>` : ''}</td>
+          <td class="mono" style="font-size:11.5px">${esc([r.city, r.region, r.country].filter(Boolean).join(', ') || '—')}<div style="color:var(--ink-faint)">${esc(r.sector || '')}</div></td>
+          <td style="font-size:11.5px">${contactCell(r)}${peopleBlock(r, canM)}</td>
+          <td class="num" style="color:${cp >= 70 ? 'var(--ok)' : cp >= 40 ? 'var(--warn)' : 'var(--bad)'}">${cp}%</td>
           <td>
             <span class="chip ${r.verification === 'verified' ? 'chip-ok' : 'chip-warn'}">${esc(r.verification)}</span>
             ${r.customer_id ? `<a class="chip chip-ok" style="text-decoration:none" href="#/customers">→ lead #${r.customer_id}</a>` : ''}
           </td>
-          <td>
+          <td>${canM ? `
             ${r.verification === 'unverified' ? `<button class="btn btn-sm" data-iverify="${r.id}">Verify</button>` : ''}
-            ${!r.customer_id ? `<button class="btn btn-sm btn-ok" data-itarget="${r.id}">Target → CRM</button>` : ''}
-            ${segments.length ? `<select data-isegsel="${r.id}" style="width:auto;font-size:11px"><option value="">+segment</option>${segments.map((s) => `<option value="${s.id}">${esc(short(s.name, 20))}</option>`).join('')}</select>` : ''}
+            ${!r.customer_id ? `<button class="btn btn-sm btn-ok" data-itarget="${r.id}">→ CRM</button>` : ''}
+            <button class="btn btn-sm" data-ifix="${r.id}" title="correct the website / add contacts by hand">Edit</button>
+            <button class="btn btn-sm" data-irefetch="${r.id}" title="re-harvest the site now">↻</button>
+            <button class="btn btn-sm" data-irules="${r.id}" title="re-run the campaign's escalation rules on this record">⚙</button>
+            ${connBtn('intelRecord', r.id)}
+            ${segments.length ? `<select data-isegsel="${r.id}" style="width:auto;font-size:11px"><option value="">+seg</option>${segments.map((s) => `<option value="${s.id}">${esc(short(s.name, 18))}</option>`).join('')}</select>` : ''}` : ''}
           </td>
-        </tr>`).join('')}
+        </tr>`;
+      }).join('')}
       </tbody>
-    </table>` : iq.state === 'collecting' ? '<div class="empty">Collecting…</div>' : '<div class="empty">No records.</div>'}
-  </div>`).join('') || ''}`;
+    </table>` : ['collecting', 'enriching', 'gapfill'].includes(iq.state) ? '<div class="empty">Working — collecting candidates…</div>' : '<div class="empty">No records.</div>'}
+  </div>`;
+  }).join('')}
 
-  $('#iq-go').addEventListener('click', async () => {
-    try { await api('/api/intel', { method: 'POST', body: { question: $('#iq-q').value, actor: actor() } }); toast('Collecting — the Intelligence agent is working'); renderIntel(); }
-    catch (e) { toast(e.message, true); }
+  <div class="panel">
+    <div class="panel-title">Where the data comes from — and where it stops</div>
+    <div class="map-legend">
+      <b>Real sources:</b> each organization's own website (home, contact, about pages) fetched live over HTTP; the source URL is stored per field and exported in the CSV.
+      <b>Model knowledge:</b> used only to propose <i>which</i> organizations exist and their likely domain — never to fill a phone number or email.
+      <b>Human:</b> the highest-trust source; anything you type in Edit overrides a scraped value and is recorded as such.
+      <b>Gaps stay gaps:</b> if a site is unreachable or publishes no contact details, the record says so instead of guessing — that is what makes the export safe to act on.
+      Outbound fetching is sandboxed: public http(s) hosts only, 8s timeout, 5 pages per organization.
+    </div>
+  </div>`;
+
+  wireConnections();
+  wireDownloads();
+  if (!canM) return;
+  $('#iq-go')?.addEventListener('click', async () => {
+    const criteria = {
+      kind: $('#iq-kind').value, sector: $('#iq-sector').value, country: $('#iq-country').value,
+      city: $('#iq-city').value, size: $('#iq-size').value, keywords: $('#iq-keywords').value, exclude: $('#iq-exclude').value,
+    };
+    const rules = [...view.querySelectorAll('.iq-rule:checked')].map((c) => c.value);
+    const constraints = {
+      requirePhone: $('#iq-req-phone').checked, requireEmail: $('#iq-req-email').checked,
+      requireWebsite: $('#iq-req-site').checked,
+      minCompleteness: Number($('#iq-min').value) / 100 || null,
+      mustMention: $('#iq-mention').value || null, excludeKeywords: $('#iq-notmention').value || null,
+    };
+    try {
+      await api('/api/intel', { method: 'POST', body: { question: $('#iq-q').value || null, criteria, targetCount: Number($('#iq-count').value) || 15, rules, constraints } });
+      toast(`Campaign started with ${rules.length} escalation rule(s)`); renderIntel();
+    } catch (e) { toast(e.message, true); }
   });
+  view.querySelectorAll('[data-irules]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/intel/records/${b.dataset.irules}/rerun-rules`, { method: 'POST', body: {} }); toast('Re-running escalation rules…'); renderIntel(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-cverify]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/intel/contacts/${b.dataset.cverify}/verify`, { method: 'POST', body: {} }); toast('Contact confirmed — details promoted to the record'); renderIntel(); }
+    catch (e) { toast(e.message, true); }
+  }));
   view.querySelectorAll('[data-iverify]').forEach((b) => b.addEventListener('click', async () => {
-    try { await api(`/api/intel/records/${b.dataset.iverify}/verify`, { method: 'POST', body: { actor: actor() } }); renderIntel(); } catch (e) { toast(e.message, true); }
+    try { await api(`/api/intel/records/${b.dataset.iverify}/verify`, { method: 'POST', body: {} }); renderIntel(); } catch (e) { toast(e.message, true); }
   }));
   view.querySelectorAll('[data-itarget]').forEach((b) => b.addEventListener('click', async () => {
-    try { const r = await api(`/api/intel/records/${b.dataset.itarget}/target`, { method: 'POST', body: { actor: actor() } }); toast(`Targeted → CRM lead #${r.customer.id}`); renderIntel(); }
+    try { const r = await api(`/api/intel/records/${b.dataset.itarget}/target`, { method: 'POST', body: {} }); toast(`Targeted → CRM lead #${r.customer.id}`); renderIntel(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-ifix]').forEach((b) => b.addEventListener('click', async () => {
+    const website = prompt('Official website (leave blank to keep):') || null;
+    const email = prompt('Email (leave blank to keep):') || null;
+    const phone = prompt('Phone (leave blank to keep):') || null;
+    const address = prompt('Address (leave blank to keep):') || null;
+    if (!website && !email && !phone && !address) return;
+    try {
+      await api(`/api/intel/records/${b.dataset.ifix}/edit`, { method: 'POST', body: { website, email, phone, address } });
+      if (website) await api(`/api/intel/records/${b.dataset.ifix}/enrich`, { method: 'POST', body: { website } });
+      toast('Recorded as human-sourced'); renderIntel();
+    } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-irefetch]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/intel/records/${b.dataset.irefetch}/enrich`, { method: 'POST', body: {} }); toast('Re-harvesting the site…'); renderIntel(); } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-bulk]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Target every verified record in this campaign as a CRM lead?')) return;
+    try { const r = await api('/api/intel/bulk-target', { method: 'POST', body: { queryId: Number(b.dataset.bulk), verifiedOnly: true } }); toast(`${r.targeted} targeted · ${r.skipped} skipped`); renderIntel(); }
     catch (e) { toast(e.message, true); }
   }));
   view.querySelectorAll('[data-isegsel]').forEach((sel) => sel.addEventListener('change', async () => {
     if (!sel.value) return;
-    try { await api(`/api/segments/${sel.value}/members`, { method: 'POST', body: { recordId: Number(sel.dataset.isegsel), actor: actor() } }); toast('Added to segment'); }
+    try { await api(`/api/segments/${sel.value}/members`, { method: 'POST', body: { recordId: Number(sel.dataset.isegsel) } }); toast('Added to segment'); }
     catch (e) { toast(e.message, true); }
     sel.value = '';
   }));
   view.querySelectorAll('[data-autoseg]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
-    try { await api(`/api/intel/${b.dataset.autoseg}/auto-segment`, { method: 'POST', body: { actor: actor() } }); toast('AI segmentation running — see Segments shortly'); }
+    try { await api(`/api/intel/${b.dataset.autoseg}/auto-segment`, { method: 'POST', body: {} }); toast('AI segmentation running — see Segments shortly'); }
     catch (e) { toast(e.message, true); b.disabled = false; }
   }));
 }
 
 async function renderSegments() {
-  const segments = await api('/api/segments');
+  const [segments, queries] = await Promise.all([api('/api/segments'), api('/api/intel').catch(() => [])]);
+  const canM = hasPermC('segments.manage');
   view.innerHTML = `
-  <div class="panel">
-    <div class="panel-title">New segment</div>
-    <div class="form-inline">
-      <div><label class="fl">Name</label><input type="text" id="sg-name"></div>
-      <div style="flex:2"><label class="fl">Description</label><input type="text" id="sg-desc"></div>
-      <button class="btn btn-primary" id="sg-go">Create</button>
+  ${canM ? `<div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Build a segment from live filters — intelligence → audience in one step</div>
+      <div class="form-inline">
+        <div style="flex:1.4"><label class="fl">Segment name</label><input type="text" id="sg-bname" placeholder="Iraqi energy — contactable"></div>
+        <div><label class="fl">Country</label><input type="text" id="sg-country" placeholder="Iraq"></div>
+        <div><label class="fl">Sector</label><input type="text" id="sg-sector" placeholder="energy"></div>
+        <div style="flex:0.7"><label class="fl">Campaign</label><select id="sg-query"><option value="">any</option>${queries.map((iq) => `<option value="${iq.id}">#${iq.id} ${esc(short(iq.question, 24))}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-inline">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="sg-contactable" checked> contactable only (has email or phone)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="sg-verified"> human-verified only</label>
+        <div style="flex:0.5"><label class="fl">Min complete %</label><input type="text" id="sg-minc" value="0"></div>
+        <button class="btn btn-primary" id="sg-build">Build segment</button>
+      </div>
     </div>
-    <div class="map-legend">Add members from the <a href="#/intel">Intelligence</a> page. A segment becomes a campaign audience in one click.</div>
-  </div>
+    <div class="panel">
+      <div class="panel-title">Or start empty and add members by hand</div>
+      <div class="form-inline">
+        <div><label class="fl">Name</label><input type="text" id="sg-name"></div>
+        <div style="flex:2"><label class="fl">Description</label><input type="text" id="sg-desc"></div>
+        <button class="btn btn-primary" id="sg-go">Create</button>
+      </div>
+      <div class="map-legend">Members come from <a href="#/intel">Intelligence</a>. A segment can go straight to <a href="#/marketing">Marketing</a> as a campaign audience, export to Excel, or bulk-target into the <a href="#/customers">CRM</a>. Autopilot also builds segments on its own — see <a href="#/autopilot">the mesh</a>.</div>
+    </div>
+  </div>` : ''}
   ${segments.map((s) => `
   <div class="panel">
     <div class="panel-title">
-      <span>${esc(s.name)} <span class="chip ${s.source === 'ai' ? 'chip-steel' : 'chip-dim'}">${esc(s.source)}</span> <span class="chip">${s.members.length} members</span></span>
+      <span>${esc(s.name)}
+        <span class="chip ${{ ai: 'chip-steel', nexus: 'chip-ember', filter: 'chip-ok' }[s.source] || 'chip-dim'}">${esc(s.source)}</span>
+        <span class="chip">${s.stats.size} members</span>
+        <span class="chip ${s.stats.contactable ? 'chip-ok' : 'chip-warn'}">${s.stats.contactable} contactable</span>
+      </span>
       <span>
-        ${s.members.length ? `<a class="btn btn-sm" href="/api/intel/export?segmentId=${s.id}&actor=${encodeURIComponent(actor())}" download>⬇ Excel</a>` : ''}
-        <button class="btn btn-sm btn-ok" data-sgcamp="${s.id}" data-name="${esc(s.name)}" data-desc="${esc(s.description || '')}" data-n="${s.members.length}">→ Campaign</button>
+        ${s.stats.size ? `
+          <button class="btn btn-sm" data-download="/api/intel/export?segmentId=${s.id}&format=xls" data-filename="segment-${s.id}.xls">⬇ Excel</button>
+          <button class="btn btn-sm" data-download="/api/intel/export?segmentId=${s.id}&format=csv" data-filename="segment-${s.id}.csv">⬇ CSV</button>` : ''}
+        ${canM && s.stats.size && !s.campaign ? `<button class="btn btn-sm btn-ok" data-sgcamp="${s.id}">→ Campaign</button>` : ''}
+        ${canM && s.stats.size ? `<button class="btn btn-sm" data-sgbulk="${s.id}">→ CRM (verified)</button>` : ''}
+        ${connBtn('segment', s.id)}
       </span>
     </div>
     ${s.description ? `<div class="map-legend">${esc(s.description)}</div>` : ''}
-    <div class="agent-meta">${s.members.map((m) => `<span class="chip ${m.state === 'targeted' ? 'chip-ok' : m.verification === 'verified' ? 'chip-steel' : 'chip-dim'}" title="${esc(m.verification)}">${esc(short(m.name, 26))}${m.country ? ' · ' + esc(m.country) : ''}</span>`).join('') || '<span class="empty">empty</span>'}</div>
-  </div>`).join('') || '<div class="panel"><div class="empty">No segments — create one, or run “AI segment” on an intelligence query.</div></div>'}`;
+    <div class="agent-meta">
+      <span class="chip chip-dim">✉ ${s.stats.withEmail}</span>
+      <span class="chip chip-dim">☎ ${s.stats.withPhone}</span>
+      <span class="chip chip-dim">avg ${s.stats.avgCompleteness}%</span>
+      ${s.stats.verified ? `<span class="chip chip-ok">${s.stats.verified} verified</span>` : ''}
+      ${s.stats.targeted ? `<a class="chip chip-ok" style="text-decoration:none" href="#/customers">${s.stats.targeted} in CRM</a>` : ''}
+      ${s.campaign ? `<a class="chip chip-ember" style="text-decoration:none" href="#/marketing">campaign #${s.campaign.id} · ${esc(s.campaign.state)}</a>` : ''}
+      ${s.stats.countries.map((c) => `<span class="chip chip-dim">${esc(c)}</span>`).join('')}
+      ${s.stats.sectors.map((c) => `<span class="chip chip-steel">${esc(c)}</span>`).join('')}
+    </div>
+    ${s.criteria ? `<div class="map-legend">filters: ${Object.entries(s.criteria).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' · ')}</div>` : ''}
+    <table>
+      <tbody>${s.members.slice(0, 12).map((m) => `
+        <tr>
+          <td><b>${esc(short(m.name, 34))}</b>${m.name_ar ? `<div style="color:var(--ink-mute);font-size:11px">${esc(m.name_ar)}</div>` : ''}</td>
+          <td class="mono" style="font-size:11px">${esc([m.city, m.country].filter(Boolean).join(', ') || '—')}</td>
+          <td class="mono" style="font-size:11px">${[m.email, m.phone].filter(Boolean).map(esc).join(' · ') || '<span style="color:var(--warn)">no contact</span>'}</td>
+          <td class="num" style="color:${m.completeness >= 0.7 ? 'var(--ok)' : 'var(--warn)'}">${Math.round(m.completeness * 100)}%</td>
+          <td>${m.customer_id ? `<a class="chip chip-ok" style="text-decoration:none" href="#/customers">lead #${m.customer_id}</a>` : `<span class="chip ${m.verification === 'verified' ? 'chip-steel' : 'chip-dim'}">${esc(m.verification)}</span>`}
+              ${canM ? `<button class="btn btn-sm" data-sgrm="${s.id}" data-rec="${m.id}" title="remove from segment">✕</button>` : ''}</td>
+        </tr>`).join('') || '<tr><td class="empty">Empty — add members from Intelligence.</td></tr>'}
+        ${s.members.length > 12 ? `<tr><td colspan="5" class="map-legend">…and ${s.members.length - 12} more — export to see them all</td></tr>` : ''}
+      </tbody>
+    </table>
+  </div>`).join('') || '<div class="panel"><div class="empty">No segments yet — build one above, or let Autopilot group contactable records for you.</div></div>'}`;
 
-  $('#sg-go').addEventListener('click', async () => {
-    try { await api('/api/segments', { method: 'POST', body: { name: $('#sg-name').value, description: $('#sg-desc').value || null, actor: actor() } }); renderSegments(); }
+  wireConnections();
+  wireDownloads();
+  if (!canM) return;
+  $('#sg-go')?.addEventListener('click', async () => {
+    try { await api('/api/segments', { method: 'POST', body: { name: $('#sg-name').value, description: $('#sg-desc').value || null } }); renderSegments(); }
     catch (e) { toast(e.message, true); }
   });
-  view.querySelectorAll('[data-sgcamp]').forEach((b) => b.addEventListener('click', async () => {
+  $('#sg-build')?.addEventListener('click', async () => {
     try {
-      await api('/api/campaigns', { method: 'POST', body: {
-        name: `Segment: ${b.dataset.name}`, channel: 'email', budgetUsd: 0,
-        brief: `Outreach campaign targeting segment "${b.dataset.name}" (${b.dataset.n} organizations). ${b.dataset.desc}\nGoal: introduce our product and invite to a pilot. Draft a short outreach email (English + Arabic versions).`,
-        actor: actor(),
+      const s = await api('/api/segments/build', { method: 'POST', body: {
+        name: $('#sg-bname').value, country: $('#sg-country').value || null, sector: $('#sg-sector').value || null,
+        queryId: $('#sg-query').value ? Number($('#sg-query').value) : null,
+        contactableOnly: $('#sg-contactable').checked, verifiedOnly: $('#sg-verified').checked,
+        minCompleteness: Number($('#sg-minc').value) / 100 || null,
       } });
-      toast('Campaign created from segment — see Marketing'); location.hash = '#/marketing';
+      toast(`Segment built — ${s.stats.size} members, ${s.stats.contactable} contactable`); renderSegments();
     } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-sgcamp]').forEach((b) => b.addEventListener('click', async () => {
+    try { const c = await api(`/api/segments/${b.dataset.sgcamp}/campaign`, { method: 'POST', body: { channel: 'email' } }); toast(`Campaign #${c.id} created — copy drafting`); location.hash = '#/marketing'; }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-sgbulk]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Target every verified member of this segment into the CRM?')) return;
+    try { const r = await api('/api/intel/bulk-target', { method: 'POST', body: { segmentId: Number(b.dataset.sgbulk), verifiedOnly: true } }); toast(`${r.targeted} targeted · ${r.skipped} skipped`); renderSegments(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-sgrm]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/segments/${b.dataset.sgrm}/members/remove`, { method: 'POST', body: { recordId: Number(b.dataset.rec) } }); renderSegments(); }
+    catch (e) { toast(e.message, true); }
   }));
 }
 
+const DS_SOURCE_ICON = { tickets: '🎧', 'intel-records': '🔍', incidents: '🚨', customers: '👤', interactions: '🤝', 'social-metrics': '📱', audit: '⛓' };
+
 async function renderDatasets() {
-  const datasets = await api('/api/datasets');
+  const [datasets, sources] = await Promise.all([api('/api/datasets'), api('/api/datasets/sources').catch(() => [])]);
+  const canM = hasPermC('datasets.manage');
   view.innerHTML = `
+  ${canM ? `<div class="panel">
+    <div class="panel-title">Pull data from inside the company — no copy-paste needed</div>
+    <div class="agent-meta">
+      ${sources.map((s) => `<button class="btn btn-sm" data-dssrc="${esc(s.id)}" ${s.rows ? '' : 'disabled'} title="${esc(s.label)}">${DS_SOURCE_ICON[s.id] || '▪'} ${esc(s.label)} <span class="chip chip-dim">${s.rows}</span></button>`).join('')}
+    </div>
+    <div class="map-legend">Each button snapshots that department's live data into a dataset you can clean, summarize, or mine for entities. Summaries flow onward into <a href="#/knowledge">Knowledge</a>; extracted entities open a new <a href="#/intel">Intelligence</a> campaign complete with web enrichment.</div>
+  </div>
   <div class="panel">
-    <div class="panel-title">Store a dataset — paste anything (CSV, JSON, text, mixed Arabic/English)</div>
+    <div class="panel-title">Or store your own — paste anything (CSV, JSON, text, mixed Arabic/English)</div>
     <div class="form-inline">
       <div><label class="fl">Name</label><input type="text" id="ds-name"></div>
       <button class="btn btn-primary" id="ds-go">Store</button>
     </div>
-    <div><label class="fl">Raw data (treated as untrusted input)</label><textarea id="ds-raw" style="min-height:110px"></textarea></div>
-  </div>
+    <div><label class="fl">Raw data (treated as untrusted input — never executed, never obeyed)</label><textarea id="ds-raw" style="min-height:100px"></textarea></div>
+  </div>` : ''}
   <div class="panel">
-    <div class="panel-title">Datasets — transform with AI: clean · summarize · extract entities → Intelligence</div>
+    <div class="panel-title">Datasets — clean · summarize → Knowledge · extract entities → Intelligence</div>
     <table>
-      <thead><tr><th>Name</th><th class="num">Size</th><th>Op</th><th>State</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Source</th><th class="num">Size</th><th>Op</th><th>State</th><th>Flows to</th>${canM ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${datasets.map((d) => `
         <tr class="rowlink" data-dsrow="${d.id}">
-          <td><b>${esc(d.name)}</b>${d.parent_id ? ` <span class="chip chip-dim">from #${d.parent_id}</span>` : ''}</td>
+          <td><b>${esc(short(d.name, 46))}</b>${d.parent_id ? ` <span class="chip chip-dim">from #${d.parent_id}</span>` : ''}</td>
+          <td><span class="chip ${d.source_kind && d.source_kind !== 'manual' ? 'chip-steel' : 'chip-dim'}">${DS_SOURCE_ICON[d.source_kind] || ''} ${esc(d.source_kind || 'manual')}</span></td>
           <td class="num">${(d.raw_chars / 1024).toFixed(1)} KB</td>
           <td class="mono">${esc(d.op || '—')}</td>
           <td><span class="state state-${d.state === 'done' ? 'done' : d.state === 'failed' ? 'failed' : d.state === 'processing' ? 'running' : 'queued'}">${esc(d.state)}</span></td>
-          <td>
-            ${['stored', 'done', 'failed'].includes(d.state) ? ['clean', 'summarize', 'extract-entities'].map((op) => `<button class="btn btn-sm" data-dsop="${d.id}" data-op="${op}">${op}</button>`).join(' ') : '…'}
-          </td>
+          <td class="mono" style="font-size:11px">${d.state === 'done' && d.op === 'summarize' ? '<a href="#/knowledge">knowledge →</a>' : d.state === 'done' && d.op === 'extract-entities' ? '<a href="#/intel">intel campaign →</a>' : '<a href="#/archive">archive</a>'} ${connBtn('dataset', d.id)}</td>
+          ${canM ? `<td>${['stored', 'done', 'failed'].includes(d.state) ? ['clean', 'summarize', 'extract-entities'].map((op) => `<button class="btn btn-sm" data-dsop="${d.id}" data-op="${op}">${op}</button>`).join(' ') : '…'}</td>` : ''}
         </tr>
-        <tr class="run-detail" data-dsdetail="${d.id}" hidden><td colspan="5"><pre class="json" id="ds-view-${d.id}">click row again to load…</pre></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No datasets.</td></tr>'}
+        <tr class="run-detail" data-dsdetail="${d.id}" hidden><td colspan="7"><pre class="json" id="ds-view-${d.id}">click row again to load…</pre></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No datasets — pull one from a department above.</td></tr>'}
       </tbody>
     </table>
   </div>`;
-  $('#ds-go').addEventListener('click', async () => {
-    try { await api('/api/datasets', { method: 'POST', body: { name: $('#ds-name').value, raw: $('#ds-raw').value, actor: actor() } }); renderDatasets(); }
-    catch (e) { toast(e.message, true); }
-  });
-  view.querySelectorAll('[data-dsop]').forEach((b) => b.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    try { await api(`/api/datasets/${b.dataset.dsop}/transform`, { method: 'POST', body: { op: b.dataset.op, actor: actor() } }); toast(`${b.dataset.op} running`); renderDatasets(); }
-    catch (err) { toast(err.message, true); }
-  }));
   view.querySelectorAll('[data-dsrow]').forEach((row) => row.addEventListener('click', async () => {
     const id = row.dataset.dsrow;
     const detail = view.querySelector(`[data-dsdetail="${id}"]`);
@@ -1373,41 +2084,170 @@ async function renderDatasets() {
       try { const d = await api(`/api/datasets/${id}`); $(`#ds-view-${id}`).textContent = d.result ? JSON.stringify(d.result, null, 2) : d.raw.slice(0, 3000); } catch { /* leave */ }
     }
   }));
+  wireConnections();
+  if (!canM) return;
+  $('#ds-go')?.addEventListener('click', async () => {
+    try { await api('/api/datasets', { method: 'POST', body: { name: $('#ds-name').value, raw: $('#ds-raw').value } }); renderDatasets(); }
+    catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-dssrc]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try { const d = await api('/api/datasets/from-source', { method: 'POST', body: { source: b.dataset.dssrc } }); toast(`Pulled "${short(d.name, 40)}" — now transform it`); renderDatasets(); }
+    catch (err) { toast(err.message, true); }
+  }));
+  view.querySelectorAll('[data-dsop]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try { await api(`/api/datasets/${b.dataset.dsop}/transform`, { method: 'POST', body: { op: b.dataset.op } }); toast(`${b.dataset.op} running`); renderDatasets(); }
+    catch (err) { toast(err.message, true); }
+  }));
 }
 
 async function renderArchive() {
-  const items = await api('/api/archive');
+  const kind = view.dataset.arcKind || '';
+  const search = view.dataset.arcSearch || '';
+  const { stats, items } = await api(`/api/archive?kind=${encodeURIComponent(kind)}&search=${encodeURIComponent(search)}`);
   view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Archived items</div><div class="big">${stats.total}</div><div class="sub">${stats.last7d} this week</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">With files</div><div class="big">${stats.withFiles}</div><div class="sub">CSV · SVG · reports on disk</div></div>
+    <div class="panel tile"><div class="panel-title">Kinds</div><div class="big">${stats.byKind.length}</div><div class="sub">${stats.byKind.slice(0, 3).map((k) => `${k.kind} ${k.n}`).join(' · ')}</div></div>
+    <div class="panel tile"><div class="panel-title">Linked departments</div><div class="big">${stats.bySubject.length}</div><div class="sub">every snapshot points home</div></div>
+  </div>
+  <div class="panel">
+    <div class="form-inline">
+      <div style="flex:2"><label class="fl">Search titles</label><input type="text" id="arc-q" value="${esc(search)}" placeholder="intel, contract, journey…"></div>
+      <div><label class="fl">Kind</label><select id="arc-kind"><option value="">all</option>${stats.byKind.map((k) => `<option value="${esc(k.kind)}" ${k.kind === kind ? 'selected' : ''}>${esc(k.kind)} (${k.n})</option>`).join('')}</select></div>
+      <button class="btn btn-primary" id="arc-go">Filter</button>
+    </div>
+    <div class="agent-meta">${stats.bySubject.map((s) => `<span class="chip chip-dim">${esc(s.subject_type)} · ${s.n}</span>`).join('')}</div>
+  </div>
   <div class="grid grid-2">
     <div class="panel">
-      <div class="panel-title">Archive — frozen snapshots from every section (${items.length})</div>
+      <div class="panel-title">Repository — frozen snapshots from every section (${items.length} shown)</div>
       <table>
         <thead><tr><th>Kind</th><th>Title</th><th>Source</th><th>By</th><th>When</th></tr></thead>
         <tbody>${items.map((a) => `
           <tr class="rowlink" data-arc="${a.id}">
-            <td><span class="chip ${{ 'intel-export': 'chip-steel', contract: 'chip-ember', campaign: 'chip-warn', finance: 'chip-ok' }[a.kind] || 'chip-dim'}">${esc(a.kind)}</span></td>
-            <td>${esc(short(a.title, 60))}</td>
-            <td>${(() => { const h = linkFor(a.subject_type, a.subject_id); return h ? `<a class="mono" style="color:var(--steel)" href="${h}">${esc(a.subject_type)} ${esc(short(a.subject_id || '', 14))}</a>` : '<span class="mono" style="color:var(--ink-faint)">—</span>'; })()}</td>
-            <td class="mono" style="color:var(--ink-faint)">${esc(short(a.created_by, 18))}</td>
+            <td><span class="chip ${{ 'intel-export': 'chip-steel', contract: 'chip-ember', campaign: 'chip-warn', finance: 'chip-ok', dataset: 'chip-dim' }[a.kind] || 'chip-dim'}">${esc(a.kind)}</span></td>
+            <td>${esc(short(a.title, 56))}${a.file_ref ? ' <span class="chip chip-dim">file</span>' : ''}</td>
+            <td>${(() => { const h = linkFor(a.subject_type, a.subject_id); return h ? `<a class="mono" style="color:var(--steel)" href="${h}">${esc(a.subject_type)} ${esc(short(a.subject_id || '', 12))}</a>` : '<span class="mono" style="color:var(--ink-faint)">—</span>'; })()}</td>
+            <td class="mono" style="color:var(--ink-faint)">${esc(short(a.created_by, 16))}</td>
             <td class="mono" style="color:var(--ink-faint)">${esc(a.created_at.slice(0, 16))}</td>
-          </tr>`).join('') || '<tr><td colspan="5" class="empty">Empty — snapshots arrive automatically.</td></tr>'}
+          </tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing matches — snapshots arrive automatically as work completes.</td></tr>'}
         </tbody>
       </table>
     </div>
     <div class="panel">
       <div class="panel-title" id="arc-title">Snapshot viewer</div>
-      <pre class="json" id="arc-view" style="max-height:560px">Select an item.</pre>
+      <pre class="json" id="arc-view" style="max-height:520px">Select an item.</pre>
       <div id="arc-file" class="map-legend"></div>
+      <div id="arc-links"></div>
     </div>
   </div>`;
+  $('#arc-go').addEventListener('click', () => {
+    view.dataset.arcKind = $('#arc-kind').value;
+    view.dataset.arcSearch = $('#arc-q').value;
+    renderArchive();
+  });
   view.querySelectorAll('[data-arc]').forEach((row) => row.addEventListener('click', async () => {
     try {
       const a = await api(`/api/archive/${row.dataset.arc}`);
       $('#arc-title').textContent = a.title;
       $('#arc-view').textContent = a.snapshot ? JSON.stringify(a.snapshot, null, 2) : '(no snapshot payload)';
-      $('#arc-file').innerHTML = a.file_ref ? `file: <a href="#/artifacts/${encodeURIComponent(a.file_ref.split('/')[0])}" style="color:var(--steel)">${esc(a.file_ref)}</a>` : '';
+      const home = linkFor(a.subject_type, a.subject_id);
+      $('#arc-file').innerHTML = [
+        a.file_ref ? `file: <a href="#/artifacts/${encodeURIComponent(a.file_ref)}" style="color:var(--steel)">${esc(a.file_ref)}</a>` : '',
+        home ? `source: <a href="${home}">${esc(a.subject_type)} #${esc(a.subject_id)} →</a>` : '',
+      ].filter(Boolean).join(' · ');
+      if (a.subject_type && a.subject_id) await renderConnections('#arc-links', a.subject_type, a.subject_id);
+      else $('#arc-links').innerHTML = '';
     } catch (e) { toast(e.message, true); }
   }));
+}
+
+// ---------- the 360° connections block (used on every entity page) ----------
+const DEPT_HREF = {
+  sales: '#/sales', customers: '#/customers', support: '#/support', relations: '#/relations',
+  marketing: '#/marketing', products: '#/products', intel: '#/intel', segments: '#/segments',
+  social: '#/social', content: '#/content', design: '#/design', incidents: '#/incidents',
+  risks: '#/risks', knowledge: '#/knowledge', pipelines: '#/pipelines', journeys: '#/journeys',
+  runs: '#/runs', tasks: '#/tasks', projects: '#/projects', legal: '#/legal', vendors: '#/vendors',
+  objectives: '#/objectives', archive: '#/archive', evals: '#/evals', oversight: '#/oversight', data: '#/data',
+};
+
+/** A 🔗 button any row can carry; opens the connections drawer for that entity. */
+const connBtn = (type, id, label = '🔗') =>
+  `<button class="btn btn-sm" data-conn-type="${esc(type)}" data-conn-id="${esc(String(id))}" title="show everything connected to this">${label}</button>`;
+
+/** Delegate every 🔗 button on the current page to a shared drawer. */
+function wireConnections() {
+  view.querySelectorAll('[data-conn-type]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    let host = $('#conn-drawer');
+    if (!host) { host = document.createElement('div'); host.id = 'conn-drawer'; host.className = 'panel'; view.appendChild(host); }
+    host.innerHTML = '<div class="empty">Loading connections…</div>';
+    await renderConnections('#conn-drawer', b.dataset.connType, b.dataset.connId);
+    host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }));
+}
+
+/** Render "what else is connected to this" into a container selector. */
+async function renderConnections(sel, type, id) {
+  const host = $(sel);
+  if (!host) return;
+  let c;
+  try { c = await api(`/api/links/${type}/${encodeURIComponent(id)}`); } catch { host.innerHTML = ''; return; }
+  if (!c || !c.totalLinks) { host.innerHTML = '<div class="map-legend">No connections recorded yet.</div>'; return; }
+  host.innerHTML = `
+    <div class="panel-title" style="margin-top:12px">Connected across the company — ${c.totalLinks} links</div>
+    ${c.groups.map((g2) => `
+      <div class="conn-group">
+        <a class="conn-dept" href="${DEPT_HREF[g2.dept] || '#/'}">${esc(g2.label)}</a>
+        <div class="agent-meta">${g2.items.map((it) => {
+          const href = it.type === 'url' ? it.id : (linkFor(it.type, it.id) || DEPT_HREF[g2.dept] || '#/');
+          const ext = it.type === 'url';
+          return `<a class="chip chip-dim" style="text-decoration:none" href="${esc(href)}"${ext ? ' target="_blank" rel="noopener noreferrer"' : ''} title="${esc(it.sub || '')}">${esc(short(it.title, 34))}${it.sub ? ` <span style="color:var(--ink-faint)">· ${esc(short(it.sub, 22))}</span>` : ''}</a>`;
+        }).join('')}</div>
+      </div>`).join('')}
+    ${c.auditTrail.length ? `<div class="map-legend" style="margin-top:8px">Recent on the <a href="#/audit">chain</a>: ${c.auditTrail.slice(0, 5).map((a) => `${esc(a.action)} <span style="color:var(--ink-faint)">(${esc(a.actor_id)})</span>`).join(' · ')}</div>` : ''}`;
+}
+
+// ---------- Graph — the department relationship matrix ----------
+async function renderGraph() {
+  const edges = await api('/api/graph');
+  const live = edges.filter((e) => e.count > 0);
+  const dormant = edges.filter((e) => !e.count);
+  const max = Math.max(...live.map((e) => e.count), 1);
+  const row = (e) => `
+    <a class="graph-row" href="${e.href}">
+      <span class="gr-from">${esc(e.from)}</span>
+      <span class="gr-arrow">→</span>
+      <span class="gr-to">${esc(e.to)}</span>
+      <span class="gr-label">${esc(e.label)}</span>
+      <span class="gr-bar"><span style="width:${Math.max(4, (e.count / max) * 100)}%"></span></span>
+      <span class="gr-count">${e.count}</span>
+    </a>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Live connections</div><div class="big">${live.reduce((a, e) => a + e.count, 0)}</div><div class="sub">actual records linking departments</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Active channels</div><div class="big">${live.length}<span class="unit">/${edges.length}</span></div><div class="sub">department-to-department paths in use</div></div>
+    <div class="panel tile"><div class="panel-title">Strongest link</div><div class="big" style="font-size:18px;line-height:1.4">${live.length ? esc(`${live.sort((a, b) => b.count - a.count)[0].from} → ${live[0].to}`) : '—'}</div><div class="sub">${live.length ? live[0].count + ' records' : 'no links yet'}</div></div>
+    <div class="panel tile ${dormant.length ? 'tile-warn' : ''}"><div class="panel-title">Dormant paths</div><div class="big">${dormant.length}</div><div class="sub">wired, waiting for their first record</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">How work actually crosses the company — every row is a real join in the database</div>
+    ${live.sort((a, b) => b.count - a.count).map(row).join('')}
+  </div>
+  ${dormant.length ? `<div class="panel">
+    <div class="panel-title">Wired but still empty — these paths exist and will fill as work flows</div>
+    ${dormant.map(row).join('')}
+  </div>` : ''}
+  <div class="panel">
+    <div class="map-legend">
+      This page reads the same resolver every entity page uses: open a customer, product, campaign, deal, partner, incident or intel record and you'll see its own 360° panel listing everything attached to it.
+      Automatic links are created by <a href="#/autopilot">the Nexus</a>; every one of them is on the <a href="#/audit">audit chain</a>.
+    </div>
+  </div>`;
 }
 
 async function renderMarketing() {
@@ -1428,7 +2268,7 @@ async function renderMarketing() {
   <div class="panel">
     <div class="panel-title">
       <span>${esc(c.name)} <span class="chip chip-dim">${esc(c.channel)}</span>${c.product_id ? ` <a href="#/products" class="chip chip-ember" style="text-decoration:none">${esc(c.product_id)}</a>` : ''}</span>
-      <span class="state state-${c.state === 'live' ? 'done' : c.state === 'paused' ? 'failed' : c.state === 'pending_approval' ? 'awaiting_human' : 'running'}">${esc(c.state)}</span>
+      <span><span class="state state-${c.state === 'live' ? 'done' : c.state === 'paused' ? 'failed' : c.state === 'pending_approval' ? 'awaiting_human' : 'running'}">${esc(c.state)}</span> ${connBtn('campaign', c.id)}</span>
     </div>
     <div class="map-legend">budget ${esc(money(c.budget_usd))} · spent ${esc(money(c.spent_usd))} · signups ${c.metrics.signups} · qualified ${c.metrics.qualified} · customers <a href="#/customers">${c.customers}</a>${c.approved_by ? ` · approved by ${esc(c.approved_by)}` : ''}</div>
     ${c.budget_usd > 0 ? `<div class="meter"><div class="meter-track"><div class="meter-fill ${c.spent_usd > c.budget_usd ? 'hot' : ''}" style="width:${Math.min(100, (c.spent_usd / c.budget_usd) * 100)}%"></div></div></div>` : ''}
@@ -1466,6 +2306,7 @@ async function renderMarketing() {
   view.querySelectorAll('[data-cmstate]').forEach((b) => b.addEventListener('click', async () => {
     try { await api(`/api/campaigns/${b.dataset.cmstate}/update`, { method: 'POST', body: { state: b.dataset.to, actor: actor() } }); renderMarketing(); } catch (e) { toast(e.message, true); }
   }));
+  wireConnections();
 }
 
 async function renderCustomers() {
@@ -1503,7 +2344,8 @@ async function renderCustomers() {
           <td>${c.product_id ? `<a class="chip chip-ember" style="text-decoration:none" href="#/products">${esc(c.product_id)}</a>` : ''}
               ${c.campaign_id ? `<a class="chip chip-dim" style="text-decoration:none" href="#/marketing">campaign #${c.campaign_id}</a>` : ''}
               ${c.tickets.length ? `<a class="chip chip-warn" style="text-decoration:none" href="#/support">✉ ${c.tickets.length} tickets</a>` : ''}</td>
-          <td>${c.state !== 'churned' ? `
+          <td>${connBtn('customer', c.id)}
+            ${c.state !== 'churned' ? `
             ${c.state !== 'active' ? `<button class="btn btn-sm btn-ok" data-custate="${c.id}" data-to="active">Activate</button>` : ''}
             <button class="btn btn-sm btn-bad" data-custate="${c.id}" data-to="churned">Churn</button>` : ''}</td>
         </tr>`).join('') || '<tr><td colspan="6" class="empty">No customers yet — marketing feeds this table.</td></tr>'}
@@ -1520,6 +2362,7 @@ async function renderCustomers() {
   view.querySelectorAll('[data-custate]').forEach((b) => b.addEventListener('click', async () => {
     try { await api(`/api/customers/${b.dataset.custate}/update`, { method: 'POST', body: { state: b.dataset.to, actor: actor() } }); renderCustomers(); } catch (e) { toast(e.message, true); }
   }));
+  wireConnections();
 }
 
 async function renderPeople() {
@@ -2217,6 +3060,1747 @@ async function renderProviders() {
       $('#probe-out').textContent = `${r.provider}/${r.model} · ${money4(r.costUsd)} · ${short(r.text, 90)}`;
     } catch (err) { $('#probe-out').textContent = 'failed: ' + err.message; }
     e.target.disabled = false;
+  });
+}
+
+// ---------- Workforce — the AI employees ----------
+async function renderWorkforce() {
+  const wf = await api('/api/workforce');
+  const groups = [['discover', 'DISCOVER'], ['build', 'BUILD'], ['assure', 'ASSURE'], ['run', 'RUN'], ['create', 'CREATE'], ['steer', 'STEER']];
+  const rep = (r) => r == null ? '—' : `<span class="chip ${r >= 1.05 ? 'chip-ok' : r < 0.95 ? 'chip-warn' : 'chip-dim'}">rep ${Number(r).toFixed(2)}</span>`;
+  const card = (a) => `
+    <div class="panel agent-card" style="border-left:3px solid ${a.busy ? 'var(--ember)' : 'var(--edge)'}">
+      <div class="agent-head">
+        <span class="agent-name">${esc(a.name)}</span>
+        <span>
+          ${a.busy ? `<span class="chip chip-ember">● ${a.busy} working</span>` : '<span class="chip chip-dim">idle</span>'}
+          <span class="chip ${a.status === 'active' ? 'chip-ok' : 'chip-bad'}">${esc(a.status)}</span>
+        </span>
+      </div>
+      <div class="agent-id">${esc(a.id)} · tier ${esc(a.tier)} · owner ${esc(a.owner)} · ${esc(a.failMode || '')}</div>
+      <div class="agent-meta">
+        ${rep(a.reputation)}
+        <span class="chip">runs ${a.runs.done}✓ ${a.runs.failed}✗</span>
+        <span class="chip">week ${a.week.n} · ${money4(a.week.cost)}</span>
+        <span class="chip">tasks ${a.tasksDone} done</span>
+        ${a.runs.gate ? `<a class="chip chip-warn" style="text-decoration:none" href="#/gate">⏸ ${a.runs.gate} at gate</a>` : ''}
+      </div>
+      ${a.journeyStages.length ? `<div class="agent-meta">${a.journeyStages.map((s2) => `
+        <a class="chip chip-steel" style="text-decoration:none" href="#/journeys/${s2.journey_id}">🧭 ${esc(short(s2.journey_title, 26))} · ${esc(s2.dept)}${s2.state === 'awaiting_human' ? ' ⏸' : ''}</a>`).join('')}</div>` : ''}
+      ${a.openTasks.length ? `<table style="margin-top:8px"><tbody>${a.openTasks.map((t) => `
+        <tr><td><a href="#/tasks" style="color:var(--ink)">${esc(short(t.title, 46))}</a></td>
+        <td><span class="state state-${t.state === 'doing' ? 'running' : t.state === 'blocked' ? 'awaiting_human' : 'queued'}">${esc(t.state)}</span></td></tr>`).join('')}</tbody></table>` : ''}
+      <div class="map-legend" style="margin-top:8px">
+        last active: ${a.lastActive ? `${esc(a.lastActive.at.slice(0, 16))} · ${esc(short(a.lastActive.taskType, 30))}` : 'never'}
+        · <a href="#/tasks">assign a task →</a>
+      </div>
+    </div>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Headcount (AI)</div><div class="big">${wf.length}</div><div class="sub">agents on the org chart</div></div>
+    <div class="panel tile ${wf.filter((a) => a.busy).length ? 'tile-warn' : ''}"><div class="panel-title">Working right now</div><div class="big">${wf.filter((a) => a.busy).length}</div><div class="sub">with active runs, tasks, or journey stages</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Held at the gate</div><div class="big">${wf.reduce((n, a) => n + (a.runs.gate || 0), 0)}</div><div class="sub"><a href="#/gate">resolve →</a></div></div>
+    <div class="panel tile"><div class="panel-title">All-time output</div><div class="big">${wf.reduce((n, a) => n + (a.runs.done || 0), 0)}</div><div class="sub">runs completed · ${money(wf.reduce((n, a) => n + (a.runs.cost || 0), 0))} total</div></div>
+  </div>
+  ${groups.map(([g, label]) => {
+    const members = wf.filter((a) => a.roleGroup === g);
+    return members.length ? `<div class="panel-title" style="margin:16px 0 8px">${label} · ${members.length}</div>
+      <div class="grid grid-3">${members.map(card).join('')}</div>` : '';
+  }).join('')}`;
+}
+
+// ---------- Relations (RM) ----------
+async function renderRelations() {
+  const [ov, partners] = await Promise.all([api('/api/relations'), api('/api/partners')]);
+  const canM = hasPermC('relations.manage');
+  const health = (h) => '●'.repeat(h) + '○'.repeat(5 - h);
+  const kindChip = (k) => ({ partner: 'chip-steel', investor: 'chip-ember', government: 'chip-warn', media: 'chip-dim', community: 'chip-ok', strategic: 'chip-bad' }[k] || 'chip-dim');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Active relationships</div><div class="big">${ov.active}</div><div class="sub">${ov.prospects} prospects · avg health ${ov.avgHealth ? Number(ov.avgHealth).toFixed(1) : '—'}/5</div></div>
+    <div class="panel tile ${ov.overdue.length ? 'tile-warn' : ''}"><div class="panel-title">Overdue follow-ups</div><div class="big">${ov.overdue.length}</div><div class="sub">next actions past their date</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Coming up · 14d</div><div class="big">${ov.upcoming.length}</div><div class="sub">scheduled next actions</div></div>
+    <div class="panel tile ${ov.stale.length ? 'tile-warn' : ''}"><div class="panel-title">Gone quiet · 30d+</div><div class="big">${ov.stale.length}</div><div class="sub">active but untouched</div></div>
+  </div>
+  ${canM ? `<div class="panel">
+    <div class="panel-title">New relationship — partners, investors, government, media, community</div>
+    <div class="form-inline">
+      <div style="flex:1.6"><label class="fl">Name</label><input type="text" id="pr-name"></div>
+      <div><label class="fl">Kind</label><select id="pr-kind"><option>partner</option><option>investor</option><option>government</option><option>media</option><option>community</option><option>strategic</option></select></div>
+      <div><label class="fl">Tier</label><select id="pr-tier"><option>standard</option><option>key</option><option>strategic</option></select></div>
+      <div><label class="fl">Owner</label><input type="text" id="pr-owner" value="${esc(currentUser?.username || '')}"></div>
+      <button class="btn btn-primary" id="pr-go">Add</button>
+    </div>
+    <div><label class="fl">Notes</label><input type="text" id="pr-notes" placeholder="context, who introduced, what they want"></div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Relationship register — the RM agent drafts, a human always sends</div>
+    <table>
+      <thead><tr><th>Name</th><th>Kind · tier</th><th>Health</th><th>Last touch</th><th>Next action</th><th>State</th>${canM ? '<th>Actions</th>' : ''}</tr></thead>
+      <tbody>${partners.map((p) => `
+        <tr style="${p.state === 'ended' ? 'opacity:.45' : ''}">
+          <td><b>${esc(p.name)}</b><div class="map-legend">${esc(short(p.notes || '', 60))}</div>
+            ${p.draft ? `<div class="round" style="margin-top:6px"><div class="round-body">
+              <div class="map-legend" style="color:var(--ember)">AI outreach draft — review, then send it yourself:</div>
+              <div style="font-size:12px;margin:4px 0">${esc(short(p.draft, 280))}</div>
+              ${canM ? `<button class="btn btn-sm btn-ok" data-pr-send="${p.id}">Mark sent (by me)</button>` : ''}
+            </div></div>` : ''}</td>
+          <td><span class="chip ${kindChip(p.kind)}">${esc(p.kind)}</span> <span class="chip chip-dim">${esc(p.tier)}</span></td>
+          <td class="mono" style="color:${p.health >= 4 ? 'var(--ok)' : p.health <= 2 ? 'var(--bad)' : 'var(--warn)'}" title="relationship health ${p.health}/5">${health(p.health)}</td>
+          <td class="mono" style="color:var(--ink-faint)">${p.lastTouch ? `${esc(p.lastTouch.created_at.slice(0, 10))} · ${esc(p.lastTouch.kind)}` : 'never'} · ${p.touches}×</td>
+          <td>${p.nextAction ? `${esc(short(p.nextAction.next_action, 34))} <span class="mono" style="color:${p.nextAction.next_date && p.nextAction.next_date < new Date().toISOString().slice(0, 10) ? 'var(--bad)' : 'var(--ink-faint)'}">${esc(p.nextAction.next_date || '')}</span>` : '—'}</td>
+          <td><span class="state state-${p.state === 'active' ? 'done' : p.state === 'ended' ? 'failed' : 'queued'}">${esc(p.state)}</span></td>
+          ${canM ? `<td>
+            ${connBtn('partner', p.id)}
+            <button class="btn btn-sm" data-pr-log="${p.id}" data-pr-name="${esc(p.name)}">Log</button>
+            <button class="btn btn-sm" data-pr-draft="${p.id}" ${p.draft_run_id && !p.draft ? 'disabled' : ''}>${p.draft_run_id && !p.draft ? 'drafting…' : 'AI outreach'}</button>
+            ${['prospect', 'dormant'].includes(p.state) ? `<button class="btn btn-sm btn-ok" data-pr-state="${p.id}" data-to="active">activate</button>` : ''}
+            ${p.state === 'active' ? `<button class="btn btn-sm" data-pr-state="${p.id}" data-to="dormant">dormant</button>` : ''}
+            ${[1, 2, 3, 4, 5].map((h) => `<button class="btn btn-sm" data-pr-health="${p.id}" data-h="${h}" title="set health ${h}/5" style="padding:2px 6px;${p.health === h ? 'color:var(--ember)' : ''}">${h}</button>`).join('')}
+          </td>` : ''}
+        </tr>`).join('') || `<tr><td colspan="7" class="empty">No relationships yet${canM ? ' — add the first one above' : ''}.</td></tr>`}
+      </tbody>
+    </table>
+  </div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Follow-ups</div>
+      ${[...ov.overdue.map((u) => ({ ...u, od: true })), ...ov.upcoming].map((u) => `
+        <div class="round"><div class="round-body" style="display:flex;justify-content:space-between">
+          <span>${esc(u.name)} — ${esc(short(u.next_action, 60))}</span>
+          <span class="mono" style="color:${u.od ? 'var(--bad)' : 'var(--ink-faint)'}">${esc(u.next_date)}</span>
+        </div></div>`).join('') || '<div class="empty">Nothing scheduled.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Recent interactions</div>
+      ${ov.recent.map((i) => `
+        <div class="round"><div class="round-body">
+          <span class="chip chip-dim">${esc(i.kind)}</span> <b>${esc(i.partner_name || (i.customer_id ? 'customer #' + i.customer_id : i.vendor_id || ''))}</b>
+          — ${esc(short(i.summary, 90))}
+          <span class="mono" style="color:var(--ink-faint);float:right">${esc(i.created_at.slice(0, 16))}</span>
+        </div></div>`).join('') || '<div class="empty">No interactions logged.</div>'}
+    </div>
+  </div>`;
+  wireConnections();
+  if (!canM) return;
+  $('#pr-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/partners', { method: 'POST', body: { name: $('#pr-name').value, kind: $('#pr-kind').value, tier: $('#pr-tier').value, owner: $('#pr-owner').value, notes: $('#pr-notes').value || null } });
+      toast('Relationship added'); renderRelations();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-pr-log]').forEach((b) => b.addEventListener('click', async () => {
+    const summary = prompt(`Log an interaction with ${b.dataset.prName} — what happened?`);
+    if (!summary) return;
+    const nextAction = prompt('Next action (optional):') || null;
+    const nextDate = nextAction ? (prompt('Next action date (YYYY-MM-DD, optional):') || null) : null;
+    try { await api('/api/interactions', { method: 'POST', body: { partnerId: Number(b.dataset.prLog), kind: 'note', summary, nextAction, nextDate } }); toast('Logged'); renderRelations(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-pr-draft]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/partners/${b.dataset.prDraft}/outreach`, { method: 'POST', body: {} }); toast('RM agent is drafting — the draft lands on the card'); renderRelations(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-pr-send]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/partners/${b.dataset.prSend}/send`, { method: 'POST', body: {} }); toast(`Outreach recorded as sent by ${actor()}`); renderRelations(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-pr-state]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/partners/${b.dataset.prState}/state`, { method: 'POST', body: { state: b.dataset.to } }); renderRelations(); } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-pr-health]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/partners/${b.dataset.prHealth}/health`, { method: 'POST', body: { health: Number(b.dataset.h) } }); renderRelations(); } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Company Journeys — the value chain ----------
+const DEPT_COLORS = {
+  strategy: '#948b7d', research: '#5ec3c9', product: '#b78bff', finance: '#ffb020',
+  legal: '#e5533d', architecture: '#78bf6d', engineering: '#ff6b2c', review: '#5ec3c9',
+  qa: '#ffb020', security: '#e5533d', release: '#78bf6d', marketing: '#b78bff',
+  support: '#5ec3c9', governance: '#948b7d',
+};
+
+async function renderJourneys() {
+  const [journeys, products] = await Promise.all([api('/api/journeys'), api('/api/products').catch(() => [])]);
+  const canM = hasPermC('journeys.manage');
+  view.innerHTML = `
+  ${canM ? `<div class="panel">
+    <div class="panel-title">Start a company journey — the order crosses ALL 14 departments: strategy → research → product → finance → legal → architecture → engineering → review → QA → security → release → marketing → support → governance</div>
+    <div class="form-inline">
+      <div style="flex:2"><label class="fl">What is being built / ordered?</label><input type="text" id="jn-title" placeholder="e.g. Invoice OCR micro-SaaS for Iraqi SMEs"></div>
+      <div><label class="fl">Product (optional)</label><select id="jn-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Autopilot</label><label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:8px 0"><input type="checkbox" id="jn-auto"> minimal human touch</label></div>
+      <button class="btn btn-primary" id="jn-go">Launch journey</button>
+    </div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Journeys in motion — click one to walk its stations</div>
+    ${journeys.map((j) => {
+      const pct = Math.round((j.doneCount / j.total) * 100);
+      return `<a class="journey-row" href="#/journeys/${j.id}">
+        <div class="jr-head">
+          <span><b>${esc(j.title)}</b> ${j.product_id ? `<span class="chip chip-ember">${esc(j.product_id)}</span>` : ''}</span>
+          <span>
+            ${j.activeStage ? `<span class="chip" style="color:${DEPT_COLORS[j.activeStage.dept] || 'var(--ink)'}">now: ${esc(j.activeStage.dept)}${j.activeStage.state === 'awaiting_human' ? ' ⏸ needs a human' : ''}</span>` : ''}
+            <span class="state state-${j.state === 'done' ? 'done' : j.state === 'awaiting_human' ? 'awaiting_human' : j.state === 'cancelled' ? 'failed' : 'running'}">${esc(j.state)}</span>
+          </span>
+        </div>
+        <div class="jr-track"><div class="jr-fill" style="width:${pct}%"></div></div>
+        <div class="map-legend">${j.doneCount}/${j.total} departments crossed · ${pct}% · cost ${money4(j.costUsd)} · started ${esc(j.created_at.slice(0, 16))}</div>
+      </a>`;
+    }).join('') || '<div class="empty">No journeys yet — launch one above and watch it travel the company.</div>'}
+  </div>`;
+  $('#jn-go')?.addEventListener('click', async () => {
+    try {
+      const auto = $('#jn-auto').checked;
+      const j = await api('/api/journeys', { method: 'POST', body: { title: $('#jn-title').value, productId: $('#jn-prod').value || null, autopilot: auto } });
+      toast(auto ? 'Autopilot journey launched — only the final sign-off is yours' : 'Journey launched — first stop: strategy sign-off'); location.hash = `#/journeys/${j.id}`;
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderJourneyDetail(id) {
+  const j = await api(`/api/journeys/${id}`);
+  const canM = hasPermC('journeys.manage');
+  $('#page-title').textContent = `Journey — ${j.title}`;
+  const stageRow = (s) => {
+    const c = DEPT_COLORS[s.dept] || 'var(--steel)';
+    const stateChip = {
+      done: '<span class="state state-done">done</span>',
+      active: '<span class="state state-running">in progress</span>',
+      awaiting_human: '<span class="state state-awaiting_human">needs a human</span>',
+      pending: '<span class="state state-queued">pending</span>',
+      skipped: '<span class="state state-failed">skipped</span>',
+    }[s.state];
+    return `<div class="jstage ${s.state}">
+      <div class="js-rail"><span class="js-dot" style="border-color:${c};${s.state === 'done' ? `background:${c}` : ''}"></span></div>
+      <div class="js-body">
+        <div class="js-head">
+          <span><span class="chip" style="color:${c};border-color:${c}">${esc(s.dept.toUpperCase())}</span> <b>${esc(s.title)}</b></span>
+          <span>${s.mode === 'agent' ? `<a class="chip chip-steel" style="text-decoration:none" href="#/workforce">🤖 ${esc(s.agent_id || '')}</a>` : '<span class="chip chip-warn">👤 human sign-off</span>'} ${stateChip}</span>
+        </div>
+        ${s.summary ? `<div class="js-sum">${esc(short(s.summary, 220))}</div>` : ''}
+        ${s.note ? `<div class="reason">${esc(s.note)}</div>` : ''}
+        <div class="map-legend">
+          ${s.started_at ? `started ${esc(String(s.started_at).slice(0, 16))}` : ''}${s.ended_at ? ` · finished ${esc(s.ended_at.slice(0, 16))}` : ''}
+          ${s.run ? ` · run: ${esc(s.run.state)} · ${money4(s.run.cost_usd)}` : ''}
+          ${s.run?.state === 'awaiting_human' ? ' · <a href="#/gate" style="color:var(--warn)">resolve at the gate →</a>' : ''}
+        </div>
+        ${canM && ['active', 'awaiting_human'].includes(s.state) && (s.mode === 'human' || s.state === 'awaiting_human') ? `
+          <button class="btn btn-sm btn-ok" data-js-complete>${s.mode === 'human' ? `Sign off as ${esc(currentUser?.username || '')}` : 'Override & advance'}</button>` : ''}
+      </div>
+    </div>`;
+  };
+  view.innerHTML = `
+  <div class="panel">
+    <div class="jr-head">
+      <span><b>${esc(j.title)}</b> ${j.product_id ? `<a class="chip chip-ember" style="text-decoration:none" href="#/products">${esc(j.product_id)}</a>` : ''}</span>
+      <span>
+        <span class="chip">cost ${money4(j.costUsd)}</span>
+        <span class="state state-${j.state === 'done' ? 'done' : j.state === 'awaiting_human' ? 'awaiting_human' : j.state === 'cancelled' ? 'failed' : 'running'}">${esc(j.state)}</span>
+        ${canM && !['done', 'cancelled'].includes(j.state) ? '<button class="btn btn-sm btn-bad" id="jn-cancel">Cancel journey</button>' : ''}
+      </span>
+    </div>
+    <div class="jr-track" style="margin:10px 0"><div class="jr-fill" style="width:${Math.round((j.doneCount / j.total) * 100)}%"></div></div>
+    <div class="map-legend">${j.doneCount}/${j.total} departments crossed · every stage lands on the <a href="#/audit">audit chain</a> · agent stages spend real budget through the <a href="#/providers">router</a></div>
+  </div>
+  <div class="panel">${j.stages.map(stageRow).join('')}</div>
+  <div class="map-legend" style="margin:8px 4px"><a href="#/journeys">← all journeys</a></div>`;
+  $('#jn-cancel')?.addEventListener('click', async () => {
+    if (!confirm('Cancel this journey? Remaining stages are skipped.')) return;
+    try { await api(`/api/journeys/${id}/cancel`, { method: 'POST', body: {} }); toast('Journey cancelled'); renderJourneyDetail(id); } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-js-complete]').forEach((b) => b.addEventListener('click', async () => {
+    const note = prompt('Sign-off note (optional):') || null;
+    try { await api(`/api/journeys/${id}/complete-stage`, { method: 'POST', body: { note } }); toast('Stage advanced — the journey moves on'); renderJourneyDetail(id); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Social Media Desk ----------
+const PLATFORM_ICONS = { x: '𝕏', linkedin: 'in', instagram: '◎', facebook: 'f', tiktok: '♪', youtube: '▶', telegram: '✈' };
+
+async function renderSocial() {
+  const [ov, posts, campaigns] = await Promise.all([
+    api('/api/studio'), api('/api/posts'), api('/api/campaigns').catch(() => []),
+  ]);
+  const canM = hasPermC('social.manage');
+  const pb = ov.postsByState || {};
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Channels</div><div class="big">${ov.channels.filter((c) => c.state === 'connected').length}</div><div class="sub">${ov.followers} followers total</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Scheduled</div><div class="big">${pb.scheduled || 0}</div><div class="sub">${pb.draft_ready || 0} drafts awaiting review</div></div>
+    <div class="panel tile"><div class="panel-title">Published</div><div class="big">${pb.published || 0}</div><div class="sub">reach ${ov.reach} · humans pressed every button</div></div>
+    <div class="panel tile ${pb.drafting ? 'tile-warn' : ''}"><div class="panel-title">Drafting now</div><div class="big">${pb.drafting || 0}</div><div class="sub">AGT-SMM-001 at work → <a href="#/workforce">workforce</a></div></div>
+  </div>
+  ${canM ? `<div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Connect a channel</div>
+      <div class="form-inline">
+        <div><label class="fl">Platform</label><select id="ch-platform"><option>x</option><option>linkedin</option><option>instagram</option><option>facebook</option><option>tiktok</option><option>youtube</option><option>telegram</option></select></div>
+        <div><label class="fl">Handle</label><input type="text" id="ch-handle" placeholder="@crucible"></div>
+        <div style="flex:0.5"><label class="fl">Followers</label><input type="text" id="ch-followers" value="0"></div>
+        <button class="btn btn-primary" id="ch-go">Connect</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">New post — the SMM agent drafts, you publish</div>
+      <div class="form-inline">
+        <div><label class="fl">Channel</label><select id="po-channel"><option value="">any</option>${ov.channels.map((c) => `<option value="${c.id}">${esc(c.platform)} @${esc(c.handle)}</option>`).join('')}</select></div>
+        <div><label class="fl">Kind</label><select id="po-kind"><option>post</option><option>thread</option><option>reel-script</option><option>story</option></select></div>
+        <div><label class="fl">Campaign</label><select id="po-camp"><option value="">—</option>${campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <button class="btn btn-primary" id="po-go">Draft it</button>
+      </div>
+      <div><label class="fl">Brief</label><textarea id="po-brief" placeholder="What should this post say / achieve?"></textarea></div>
+    </div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Channel register</div>
+    <div class="agent-meta">${ov.channels.map((c) => `
+      <span class="chip ${c.state === 'connected' ? 'chip-ok' : 'chip-dim'}" title="${c.posts} posts · ${c.published} published">
+        ${PLATFORM_ICONS[c.platform] || '●'} ${esc(c.platform)} @${esc(c.handle)} · ${c.followers}
+        ${canM && c.state === 'connected' ? `<a href="#" data-ch-pause="${c.id}" style="color:var(--warn);margin-left:4px" title="pause">⏸</a>` : ''}
+        ${canM && c.state !== 'connected' ? `<a href="#" data-ch-resume="${c.id}" style="color:var(--ok);margin-left:4px" title="reconnect">▶</a>` : ''}
+      </span>`).join('') || '<span class="empty">No channels connected yet.</span>'}
+    </div>
+  </div>
+  ${ov.upcoming.length ? `<div class="panel">
+    <div class="panel-title">Publishing calendar — next up</div>
+    ${ov.upcoming.map((p) => `<div class="round"><div class="round-body" style="display:flex;justify-content:space-between;gap:10px">
+      <span><span class="chip chip-steel">${esc(p.platform || 'any')}</span> ${esc(short(p.draft || p.brief, 90))}</span>
+      <span class="mono" style="color:var(--warn)">${esc(p.schedule_at || '')}</span>
+    </div></div>`).join('')}
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Posts</div>
+    ${posts.map((p) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span>
+            <span class="chip chip-steel">${esc(p.channel ? `${p.channel.platform} @${p.channel.handle}` : 'any channel')}</span>
+            <span class="chip chip-dim">${esc(p.kind)}</span>
+            ${p.campaign_id ? `<a class="chip chip-ember" style="text-decoration:none" href="#/marketing">campaign #${p.campaign_id}</a>` : ''}
+            <span class="state state-${p.state === 'published' ? 'done' : p.state === 'scheduled' ? 'running' : p.state === 'draft_ready' ? 'awaiting_human' : p.state === 'cancelled' ? 'failed' : 'queued'}">${esc(p.state)}</span>
+          </span>
+          <span>${canM && ['draft_ready', 'scheduled'].includes(p.state) ? `
+            <button class="btn btn-sm" data-po-sched="${p.id}">Schedule</button>
+            <button class="btn btn-sm btn-ok" data-po-pub="${p.id}">Publish (as ${esc(currentUser?.username || 'me')})</button>
+            <button class="btn btn-sm btn-bad" data-po-cancel="${p.id}">✕</button>` : ''}</span>
+        </div>
+        <div style="font-size:12.5px;margin:6px 0">${esc(p.draft || `(drafting…) ${short(p.brief, 80)}`)}</div>
+        <div class="map-legend">
+          ${(p.hashtags || []).map((h) => `<span class="chip chip-dim">${esc(h)}</span>`).join(' ')}
+          ${p.best_time ? ` · best time: ${esc(p.best_time)}` : ''}
+          ${p.state === 'published' ? ` · published by <b>${esc(p.published_by || '')}</b> ${esc((p.published_at || '').slice(0, 16))} · ♥ ${p.metrics.likes} ↺ ${p.metrics.shares} reach ${p.metrics.reach}${canM ? ` · <a href="#" data-po-metrics="${p.id}">update metrics</a>` : ''}` : ''}
+        </div>
+      </div></div>`).join('') || '<div class="empty">No posts yet — brief the SMM agent above.</div>'}
+  </div>`;
+  if (!canM) return;
+  $('#ch-go')?.addEventListener('click', async () => {
+    try { await api('/api/channels', { method: 'POST', body: { platform: $('#ch-platform').value, handle: $('#ch-handle').value, followers: Number($('#ch-followers').value) || 0 } }); toast('Channel connected'); renderSocial(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#po-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/posts', { method: 'POST', body: { channelId: $('#po-channel').value ? Number($('#po-channel').value) : null, kind: $('#po-kind').value, campaignId: $('#po-camp').value ? Number($('#po-camp').value) : null, brief: $('#po-brief').value } });
+      toast('SMM agent is drafting — the post appears below'); renderSocial();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-ch-pause]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try { await api(`/api/channels/${b.dataset.chPause}/update`, { method: 'POST', body: { state: 'paused' } }); renderSocial(); } catch (err) { toast(err.message, true); }
+  }));
+  view.querySelectorAll('[data-ch-resume]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try { await api(`/api/channels/${b.dataset.chResume}/update`, { method: 'POST', body: { state: 'connected' } }); renderSocial(); } catch (err) { toast(err.message, true); }
+  }));
+  view.querySelectorAll('[data-po-sched]').forEach((b) => b.addEventListener('click', async () => {
+    const when = prompt('Schedule for (YYYY-MM-DD HH:MM):');
+    if (!when) return;
+    try { await api(`/api/posts/${b.dataset.poSched}/schedule`, { method: 'POST', body: { scheduleAt: when } }); toast('Scheduled'); renderSocial(); } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-po-pub]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/posts/${b.dataset.poPub}/publish`, { method: 'POST', body: {} }); toast(`Published — on the record as ${actor()}`); renderSocial(); } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-po-cancel]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/posts/${b.dataset.poCancel}/cancel`, { method: 'POST', body: {} }); renderSocial(); } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-po-metrics]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const likes = prompt('Likes:'); const shares = prompt('Shares:'); const reach = prompt('Reach:');
+    try { await api(`/api/posts/${b.dataset.poMetrics}/metrics`, { method: 'POST', body: { likes: likes || null, shares: shares || null, reach: reach || null } }); renderSocial(); } catch (err) { toast(err.message, true); }
+  }));
+}
+
+// ---------- Content Studio ----------
+async function renderContent() {
+  const items = await api('/api/content');
+  const canM = hasPermC('content.manage');
+  view.innerHTML = `
+  ${canM ? `<div class="panel">
+    <div class="panel-title">Brief the Content Creator — articles, scripts, emails, landing copy</div>
+    <div class="form-inline">
+      <div><label class="fl">Kind</label><select id="ct-kind"><option>article</option><option>blog</option><option>video-script</option><option>email</option><option>landing</option><option>doc</option></select></div>
+      <div style="flex:2"><label class="fl">Title</label><input type="text" id="ct-title"></div>
+      <button class="btn btn-primary" id="ct-go">Draft it</button>
+    </div>
+    <div><label class="fl">Brief</label><textarea id="ct-brief" placeholder="Audience, angle, key points, call to action…"></textarea></div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Content pipeline — AI drafts · human approves · human publishes</div>
+    ${items.map((c) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span><span class="chip chip-dim">${esc(c.kind)}</span> <b>${esc(c.title)}</b>
+            <span class="state state-${c.state === 'published' ? 'done' : c.state === 'draft_ready' ? 'awaiting_human' : c.state === 'approved' ? 'running' : c.state === 'cancelled' ? 'failed' : 'queued'}">${esc(c.state)}</span></span>
+          <span>${canM && c.state === 'draft_ready' ? `
+            <button class="btn btn-sm btn-ok" data-ct-v="${c.id}" data-to="approved">Approve</button>
+            <button class="btn btn-sm btn-bad" data-ct-v="${c.id}" data-to="cancelled">Reject</button>` : ''}
+            ${canM && c.state === 'approved' ? `<button class="btn btn-sm btn-ok" data-ct-v="${c.id}" data-to="published">Publish (as ${esc(currentUser?.username || 'me')})</button>` : ''}</span>
+        </div>
+        ${c.draft ? `<div style="font-size:12.5px;margin:6px 0;white-space:pre-wrap">${esc(short(c.draft, 600))}</div>` : `<div class="map-legend">drafting… brief: ${esc(short(c.brief, 100))}</div>`}
+        <div class="map-legend">
+          ${(c.seo || []).map((k) => `<span class="chip chip-dim">${esc(k)}</span>`).join(' ')}
+          ${c.product_id ? ` · <a href="#/products">product ${esc(c.product_id)}</a>` : ''}
+          ${c.approved_by ? ` · approved by <b>${esc(c.approved_by)}</b>` : ''}
+        </div>
+      </div></div>`).join('') || '<div class="empty">Nothing in the studio yet.</div>'}
+  </div>`;
+  if (!canM) return;
+  $('#ct-go')?.addEventListener('click', async () => {
+    try { await api('/api/content', { method: 'POST', body: { kind: $('#ct-kind').value, title: $('#ct-title').value, brief: $('#ct-brief').value } }); toast('Content agent is writing'); renderContent(); }
+    catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-ct-v]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/content/${b.dataset.ctV}/verdict`, { method: 'POST', body: { verdict: b.dataset.to } }); toast(`Content ${b.dataset.to}`); renderContent(); } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Design Studio ----------
+async function renderDesign() {
+  const designs = await api('/api/designs');
+  const canM = hasPermC('design.manage');
+  const svgSrc = (svg) => `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+  view.innerHTML = `
+  ${canM ? `<div class="panel">
+    <div class="panel-title">Brief the Designer — logos, banners, UI mockups, brand assets: designs for everything, delivered as real SVG files</div>
+    <div class="form-inline">
+      <div><label class="fl">Kind</label><select id="ds-kind"><option>social-visual</option><option>logo</option><option>banner</option><option>ui</option><option>brand</option><option>diagram</option></select></div>
+      <div style="flex:2"><label class="fl">Title</label><input type="text" id="ds-title"></div>
+      <button class="btn btn-primary" id="ds-go">Design it</button>
+    </div>
+    <div><label class="fl">Brief</label><textarea id="ds-brief" placeholder="Purpose, mood, colors, text to include, dimensions…"></textarea></div>
+  </div>` : ''}
+  <div class="grid grid-3">
+    ${designs.map((d) => `
+    <div class="panel agent-card">
+      <div class="agent-head">
+        <span><span class="chip chip-dim">${esc(d.kind)}</span> <b>${esc(short(d.title, 30))}</b></span>
+        <span class="state state-${d.state === 'approved' ? 'done' : d.state === 'draft_ready' ? 'awaiting_human' : d.state === 'cancelled' ? 'failed' : 'queued'}">${esc(d.state)}</span>
+      </div>
+      ${d.svg ? `<img class="design-thumb" alt="${esc(d.title)}" src="${svgSrc(d.svg)}">` : '<div class="empty" style="padding:30px 0">designing…</div>'}
+      ${d.spec ? `<div class="map-legend" style="margin-top:6px">${esc(short(d.spec, 120))}</div>` : ''}
+      <div class="map-legend" style="margin-top:6px">
+        ${d.file_ref ? `<a href="#/artifacts/${encodeURIComponent(d.file_ref)}">📁 ${esc(d.file_ref)}</a> · ` : ''}
+        ${d.approved_by ? `approved by <b>${esc(d.approved_by)}</b>` : ''}
+        ${canM && d.state === 'draft_ready' ? `<button class="btn btn-sm btn-ok" data-ds-ok="${d.id}" style="margin-top:6px">Approve</button>` : ''}
+      </div>
+    </div>`).join('') || '<div class="empty">No designs yet — brief the Designer above.</div>'}
+  </div>`;
+  if (!canM) return;
+  $('#ds-go')?.addEventListener('click', async () => {
+    try { await api('/api/designs', { method: 'POST', body: { kind: $('#ds-kind').value, title: $('#ds-title').value, brief: $('#ds-brief').value } }); toast('Designer is working — the SVG lands below and on disk'); renderDesign(); }
+    catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-ds-ok]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/designs/${b.dataset.dsOk}/approve`, { method: 'POST', body: {} }); toast('Design approved & archived'); renderDesign(); } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Sales — deals pipeline ----------
+async function renderSales() {
+  const [ov, products, partners] = await Promise.all([
+    api('/api/deals'), api('/api/products').catch(() => []), api('/api/partners').catch(() => []),
+  ]);
+  const canM = hasPermC('sales.manage');
+  const stChip = (s2) => `<span class="state state-${s2 === 'won' ? 'done' : s2 === 'lost' ? 'failed' : s2 === 'proposal' ? 'awaiting_human' : s2 === 'qualified' ? 'running' : 'queued'}">${esc(s2)}</span>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Open pipeline</div><div class="big">${esc(money(ov.openValue))}</div><div class="sub">${ov.pipeline.lead.n + ov.pipeline.qualified.n + ov.pipeline.proposal.n} deals in motion</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Won</div><div class="big">${esc(money(ov.wonValue))}</div><div class="sub">${ov.pipeline.won.n} deals → <a href="#/customers">customers</a> (auto)</div></div>
+    <div class="panel tile"><div class="panel-title">At proposal</div><div class="big">${ov.pipeline.proposal.n}</div><div class="sub">${esc(money(ov.pipeline.proposal.value))} — AI drafts, you send</div></div>
+    <div class="panel tile ${ov.pipeline.lost.n ? 'tile-warn' : ''}"><div class="panel-title">Lost</div><div class="big">${ov.pipeline.lost.n}</div><div class="sub">reasons live in the notes</div></div>
+  </div>
+  ${canM ? `<div class="panel">
+    <div class="panel-title">New deal — reaching “proposal” auto-briefs the Sales agent; winning auto-creates the customer</div>
+    <div class="form-inline">
+      <div style="flex:1.8"><label class="fl">Deal name</label><input type="text" id="dl-name" placeholder="e.g. Basra Oil Co — pilot"></div>
+      <div style="flex:0.6"><label class="fl">Value $/yr</label><input type="text" id="dl-value" value="0"></div>
+      <div><label class="fl">Product</label><select id="dl-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Partner</label><select id="dl-partner"><option value="">—</option>${partners.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
+      <button class="btn btn-primary" id="dl-go">Open deal</button>
+    </div>
+    <div><label class="fl">Notes</label><input type="text" id="dl-notes" placeholder="who, why now, what they need"></div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Pipeline — lead → qualified → proposal → won/lost</div>
+    <table>
+      <thead><tr><th>Deal</th><th class="num">Value</th><th>Stage</th><th>Links</th><th>Owner</th><th>Move</th></tr></thead>
+      <tbody>${ov.deals.map((d) => `
+        <tr style="${d.stage === 'lost' ? 'opacity:.45' : ''}">
+          <td><b>${esc(d.name)}</b>${d.notes ? `<div class="map-legend">${esc(short(d.notes, 60))}</div>` : ''}
+            ${d.proposal ? `<div class="round" style="margin-top:6px"><div class="round-body">
+              <div class="map-legend" style="color:var(--ember)">AI proposal draft — you send and sign:</div>
+              <div style="font-size:12px">${esc(short(d.proposal, 240))}</div></div></div>` : d.draft_run_id ? '<div class="map-legend">proposal drafting…</div>' : ''}</td>
+          <td class="num">${esc(money(d.value_usd))}</td>
+          <td>${stChip(d.stage)}</td>
+          <td>${d.customer ? `<a class="chip chip-ok" style="text-decoration:none" href="#/customers">👤 ${esc(d.customer.name)}</a>` : ''}
+              ${d.partner ? `<a class="chip chip-steel" style="text-decoration:none" href="#/relations">🤝 ${esc(d.partner.name)}</a>` : ''}
+              ${d.product_id ? `<a class="chip chip-ember" style="text-decoration:none" href="#/products">${esc(d.product_id)}</a>` : ''}</td>
+          <td class="mono">${esc(d.owner)}</td>
+          <td>${connBtn('deal', d.id)}
+            ${canM ? `${['lead', 'qualified', 'proposal', 'won', 'lost'].filter((s2) => s2 !== d.stage && !['won', 'lost'].includes(d.stage)).map((s2) => `<button class="btn btn-sm ${s2 === 'won' ? 'btn-ok' : s2 === 'lost' ? 'btn-bad' : ''}" data-dl="${d.id}" data-to="${s2}">${s2}</button>`).join(' ')}
+            ${!d.proposal && !d.draft_run_id && !['won', 'lost'].includes(d.stage) ? `<button class="btn btn-sm" data-dl-prop="${d.id}">AI proposal</button>` : ''}` : ''}</td>
+        </tr>`).join('') || `<tr><td colspan="6" class="empty">No deals yet${canM ? ' — open the first one above' : ''}.</td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+  wireConnections();
+  if (!canM) return;
+  $('#dl-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/deals', { method: 'POST', body: { name: $('#dl-name').value, valueUsd: Number($('#dl-value').value) || 0, productId: $('#dl-prod').value || null, partnerId: $('#dl-partner').value ? Number($('#dl-partner').value) : null, notes: $('#dl-notes').value || null } });
+      toast('Deal opened'); renderSales();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-dl]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/deals/${b.dataset.dl}/stage`, { method: 'POST', body: { stage: b.dataset.to } }); toast(`Deal → ${b.dataset.to}`); renderSales(); } catch (e) { toast(e.message, true); }
+  }));
+  view.querySelectorAll('[data-dl-prop]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/deals/${b.dataset.dlProp}/proposal`, { method: 'POST', body: {} }); toast('Sales agent drafting the proposal'); renderSales(); } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Autopilot — the Nexus ----------
+async function renderAutopilot() {
+  const { rules, feed } = await api('/api/autopilot');
+  const canM = hasPermC('autopilot.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Rules armed</div><div class="big">${rules.filter((r) => r.enabled).length}<span class="unit">/${rules.length}</span></div><div class="sub">departments creating work for each other</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Automatic actions</div><div class="big">${feed.length ? rules.reduce((a, r) => a + r.runs, 0) : 0}</div><div class="sub">zero human keystrokes involved</div></div>
+    <div class="panel tile"><div class="panel-title">What stays human</div><div class="big" style="font-size:20px;line-height:1.5">publish · sign · gate</div><div class="sub">the load-bearing moments — everything else self-drives</div></div>
+    <div class="panel tile tile-warn"><div class="panel-title">Every firing audited</div><div class="big" style="font-size:20px;line-height:1.5">system:nexus</div><div class="sub">on the <a href="#/audit">chain</a>, rule by rule</div></div>
+  </div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">The mesh — watch A, act in B</div>
+      ${rules.map((r) => `
+        <div class="round"><div class="round-body">
+          <div class="agent-head">
+            <span><b class="mono" style="color:var(--ember)">${esc(r.id)}</b> — ${esc(r.name)}</span>
+            <span>
+              <span class="chip chip-dim">${r.runs}× fired</span>
+              ${canM ? `<button class="btn btn-sm ${r.enabled ? 'btn-bad' : 'btn-ok'}" data-ap="${esc(r.id)}" data-en="${r.enabled ? 0 : 1}">${r.enabled ? 'disarm' : 'arm'}</button>` : `<span class="chip ${r.enabled ? 'chip-ok' : 'chip-dim'}">${r.enabled ? 'armed' : 'off'}</span>`}
+            </span>
+          </div>
+          <div class="map-legend">${esc(r.why)}</div>
+          ${r.recent.length ? `<div class="map-legend" style="color:var(--ink-mute)">${r.recent.map((x) => `→ ${esc(short(x.note, 70))}`).join('<br>')}</div>` : ''}
+        </div></div>`).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Live feed — the company running itself</div>
+      ${feed.map((f) => `
+        <div class="round"><div class="round-body" style="display:flex;justify-content:space-between;gap:10px">
+          <span><span class="chip chip-ember">${esc(f.rule_id)}</span> ${esc(short(f.note, 80))}</span>
+          <span class="mono" style="color:var(--ink-faint);flex:none">${esc(f.created_at.slice(5, 16))}</span>
+        </div></div>`).join('') || '<div class="empty">Nothing yet — the rules fire as soon as their conditions appear.</div>'}
+    </div>
+  </div>`;
+  view.querySelectorAll('[data-ap]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api('/api/autopilot/rule', { method: 'POST', body: { id: b.dataset.ap, enabled: b.dataset.en === '1' } }); renderAutopilot(); } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Company Scorecard (BI) ----------
+async function renderScorecard() {
+  const s = await api('/api/scorecard');
+  const pct = (n) => n != null ? Math.round(n * 100) + '%' : '—';
+  const auto = s.autopilot.humanActions7d + s.autopilot.agentActions7d;
+  const autoShare = auto ? Math.round((s.autopilot.agentActions7d / auto) * 100) : 0;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">MRR</div><div class="big">${esc(money(s.revenue.mrr))}</div><div class="sub">${s.revenue.customersActive} active customers</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Sales pipeline</div><div class="big">${esc(money(s.revenue.pipelineValue))}</div><div class="sub">${s.revenue.dealsOpen} open · ${esc(money(s.revenue.wonValue))} won</div></div>
+    <div class="panel tile tile-warn"><div class="panel-title">AI share of work · 7d</div><div class="big">${autoShare}<span class="unit">%</span></div><div class="sub">${s.autopilot.agentActions7d} agent vs ${s.autopilot.humanActions7d} human actions</div></div>
+    <div class="panel tile"><div class="panel-title">Autopilot actions</div><div class="big">${s.autopilot.actionsTotal}</div><div class="sub">${s.autopilot.actions7d} this week · <a href="#/autopilot">the mesh →</a></div></div>
+  </div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Creative output</div>
+      <table><tbody>
+        <tr><td>Posts published</td><td class="num">${s.creative.postsPublished}</td><td><a href="#/social">social →</a></td></tr>
+        <tr><td>Followers (connected channels)</td><td class="num">${s.creative.followers}</td><td></td></tr>
+        <tr><td>Content published</td><td class="num">${s.creative.contentPublished}</td><td><a href="#/content">studio →</a></td></tr>
+        <tr><td>Designs approved</td><td class="num">${s.creative.designsApproved}</td><td><a href="#/design">gallery →</a></td></tr>
+        <tr><td>Campaigns live</td><td class="num">${s.creative.campaignsLive}</td><td><a href="#/marketing">marketing →</a></td></tr>
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Production</div>
+      <table><tbody>
+        <tr><td>Journeys completed / moving</td><td class="num">${s.production.journeysDone} / ${s.production.journeysMoving}</td><td><a href="#/journeys">journeys →</a></td></tr>
+        <tr><td>Runs done · 7d</td><td class="num">${s.production.runsDone7d}</td><td><a href="#/runs">runs →</a></td></tr>
+        <tr><td>Tasks done · 7d</td><td class="num">${s.production.tasksDone7d}</td><td><a href="#/tasks">tasks →</a></td></tr>
+        <tr><td>Products live</td><td class="num">${s.production.productsLive}</td><td><a href="#/products">factory →</a></td></tr>
+        <tr><td>Model spend · month</td><td class="num">${esc(money(s.spendMonth))}</td><td><a href="#/budgets">budgets →</a></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Trust & control</div>
+      <table><tbody>
+        <tr><td>Open incidents</td><td class="num" style="color:${s.trust.incidentsOpen ? 'var(--bad)' : 'var(--ok)'}">${s.trust.incidentsOpen}</td><td><a href="#/incidents">incidents →</a></td></tr>
+        <tr><td>Critical risks (≥16)</td><td class="num" style="color:${s.trust.risksCritical ? 'var(--warn)' : 'var(--ok)'}">${s.trust.risksCritical}</td><td><a href="#/risks">register →</a></td></tr>
+        <tr><td>Eval average</td><td class="num">${pct(s.trust.evalAvg)}</td><td><a href="#/evals">evals →</a></td></tr>
+        <tr><td>Waiting on a human</td><td class="num" style="color:${s.trust.awaitingHuman ? 'var(--warn)' : 'var(--ok)'}">${s.trust.awaitingHuman}</td><td><a href="#/gate">gate →</a></td></tr>
+        <tr><td>Audit chain entries</td><td class="num">${s.trust.chainEntries}</td><td><a href="#/audit">chain →</a></td></tr>
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Relationships</div>
+      <table><tbody>
+        <tr><td>Active partners</td><td class="num">${s.relations.partnersActive}</td><td><a href="#/relations">RM →</a></td></tr>
+        <tr><td>Interactions · 30d</td><td class="num">${s.relations.interactions30d}</td><td></td></tr>
+      </tbody></table>
+      <div class="map-legend" style="margin-top:10px">The whole company on one board — every number clicks through to its department, every department feeds the <a href="#/audit">audit chain</a>, and the <a href="#/autopilot">Nexus</a> moves work between them without a human in the loop.</div>
+    </div>
+  </div>`;
+}
+
+// ---------- System Design studio ----------
+async function renderSystems() {
+  const [blueprints, catalog, products] = await Promise.all([
+    api('/api/design'), api('/api/design/catalog'), api('/api/products').catch(() => []),
+  ]);
+  const canM = hasPermC('design.manage');
+  view.innerHTML = `
+  ${canM ? `<div class="panel">
+    <div class="panel-title">New design package — one sentence in, a complete specification out</div>
+    <div class="form-inline">
+      <div style="flex:1.4"><label class="fl">System name</label><input type="text" id="bp-name" placeholder="Invoice OCR platform"></div>
+      <div><label class="fl">Product</label><select id="bp-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <button class="btn btn-primary" id="bp-go">Generate package</button>
+    </div>
+    <div><label class="fl">Goal — what must this system do, for whom?</label><textarea id="bp-goal" placeholder="A web app that lets Iraqi SMEs photograph supplier invoices and get structured accounting entries, with Arabic OCR and export to their accountant."></textarea></div>
+    <div class="form-inline">
+      <div><label class="fl">Audience / users</label><input type="text" id="bp-audience" placeholder="SME owners, accountants"></div>
+      <div><label class="fl">Scale</label><input type="text" id="bp-scale" placeholder="5,000 users, 50 req/s peak"></div>
+      <div><label class="fl">Budget</label><input type="text" id="bp-budget" placeholder="$500/mo infra"></div>
+      <div><label class="fl">Stack preference</label><input type="text" id="bp-stack" placeholder="any / Node + Postgres"></div>
+      <div><label class="fl">Compliance</label><input type="text" id="bp-comp" placeholder="Iraqi data residency"></div>
+      <div><label class="fl">Language</label><select id="bp-lang"><option value="English">English</option><option value="Arabic">العربية</option><option value="Arabic and English">both</option></select></div>
+    </div>
+    <div class="panel-title" style="margin-top:12px">Documents to produce — ${catalog.length} available, all selected by default</div>
+    <div class="rule-grid">
+      ${catalog.map((d) => `<label class="rule-card">
+        <input type="checkbox" class="bp-doc" value="${esc(d.key)}" checked>
+        <span><b>${esc(d.title)}</b><span class="rule-detail">${esc(short(d.brief, 130))}</span>
+        <span class="rule-detail" style="color:var(--ink-faint)">writer: ${esc(d.agent)}${d.needs.length ? ` · needs: ${d.needs.join(', ')}` : ''}</span></span>
+      </label>`).join('')}
+    </div>
+    <div class="map-legend">Documents are written in dependency order, each one seeing the approved output of the ones it depends on — so the architecture cannot contradict the requirements. The final document is a <b>build brief you can hand to any AI coding agent</b> to produce the whole application.</div>
+  </div>` : ''}
+  ${blueprints.map((b) => {
+    const pct = Math.round((b.progress.done / Math.max(1, b.progress.total)) * 100);
+    return `<div class="panel">
+      <div class="jr-head">
+        <span><b>${esc(b.name)}</b> ${b.product_id ? `<a class="chip chip-ember" style="text-decoration:none" href="#/products">${esc(b.product_id)}</a>` : ''}
+          <span class="state state-${b.state === 'ready' ? 'done' : b.state === 'awaiting_human' ? 'awaiting_human' : b.state === 'cancelled' ? 'failed' : 'running'}">${esc(b.state)}</span></span>
+        <span>
+          <span class="chip">${b.progress.done}/${b.progress.total} docs</span>
+          <span class="chip chip-dim">${b.progress.words.toLocaleString()} words · ${money4(b.progress.costUsd)}</span>
+          ${b.progress.done ? `<button class="btn btn-sm" data-download="/api/design/${b.id}/bundle" data-filename="design-package-${b.id}.md">⬇ Full package</button>
+          <button class="btn btn-sm btn-ok" data-download="/api/design/${b.id}/build-brief" data-filename="BUILD-BRIEF-${b.id}.md" title="paste this into an AI coding agent">⬇ Build brief</button>` : ''}
+          ${connBtn('blueprint', b.id)}
+          ${canM && !['ready', 'cancelled'].includes(b.state) ? `<button class="btn btn-sm btn-bad" data-bpcancel="${b.id}">✕</button>` : ''}
+        </span>
+      </div>
+      <div class="map-legend">${esc(short(b.goal, 200))}</div>
+      <div class="jr-track" style="margin:8px 0"><div class="jr-fill" style="width:${pct}%"></div></div>
+      <div class="doc-grid">
+        ${b.docs.map((d) => `<a class="doc-chip ${d.state}" href="#/systems/${b.id}/${esc(d.doc_key)}" title="${esc(d.title)}">
+          <span class="dc-seq">${d.seq}</span><span class="dc-title">${esc(short(d.title, 30))}</span>
+          <span class="dc-state">${d.state === 'done' ? '✓' : d.state === 'writing' ? '✎' : d.state === 'awaiting_human' ? '⏸' : '·'}</span>
+        </a>`).join('')}
+      </div>
+      ${b.progress.blocked ? `<div class="reason">${b.progress.blocked} document(s) need you — open them to retry or approve.</div>` : ''}
+    </div>`;
+  }).join('') || '<div class="panel"><div class="empty">No design packages yet — describe a system above and the studio writes the whole specification.</div></div>'}`;
+  wireConnections();
+  wireDownloads();
+  if (!canM) return;
+  $('#bp-go')?.addEventListener('click', async () => {
+    const docKeys = [...view.querySelectorAll('.bp-doc:checked')].map((c) => c.value);
+    try {
+      const b = await api('/api/design', { method: 'POST', body: {
+        name: $('#bp-name').value, goal: $('#bp-goal').value, docKeys,
+        productId: $('#bp-prod').value || null,
+        context: { audience: $('#bp-audience').value, scale: $('#bp-scale').value, budget: $('#bp-budget').value, stack: $('#bp-stack').value, compliance: $('#bp-comp').value, language: $('#bp-lang').value },
+      } });
+      toast(`Package started — ${b.progress.total} documents queued`); renderSystems();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-bpcancel]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Cancel this design package?')) return;
+    try { await api(`/api/design/${b.dataset.bpcancel}/cancel`, { method: 'POST', body: {} }); renderSystems(); } catch (e) { toast(e.message, true); }
+  }));
+}
+
+async function renderDesignDoc(arg) {
+  const [bpId, docKey] = String(arg).split('/');
+  const b = await api(`/api/design/${bpId}`);
+  const d = b.docs.find((x) => x.doc_key === docKey);
+  if (!d) { view.innerHTML = '<div class="panel"><div class="empty">No such document.</div></div>'; return; }
+  const canM = hasPermC('design.manage');
+  $('#page-title').textContent = `${b.name} — ${d.title}`;
+  view.innerHTML = `
+  <div class="panel">
+    <div class="jr-head">
+      <span><b>${esc(d.title)}</b> <span class="chip chip-dim">${esc(d.agent_id)}</span>
+        <span class="state state-${d.state === 'done' ? 'done' : d.state === 'writing' ? 'running' : d.state === 'awaiting_human' ? 'awaiting_human' : 'queued'}">${esc(d.state)}</span></span>
+      <span>
+        ${d.file_ref ? `<a class="chip chip-dim" style="text-decoration:none" href="#/artifacts/${encodeURIComponent(d.file_ref)}">📁 file</a>` : ''}
+        ${canM ? `<button class="btn btn-sm" id="doc-redo">Rewrite</button>
+        ${d.content ? '<button class="btn btn-sm btn-ok" id="doc-approve">Approve (with my edits)</button>' : ''}` : ''}
+      </span>
+    </div>
+    <div class="map-legend">${esc(d.brief || '')}${d.needs?.length ? ` · builds on: ${d.needs.join(', ')}` : ''}${d.cost_usd ? ` · ${money4(d.cost_usd)}` : ''}${d.approved_by ? ` · approved by ${esc(d.approved_by)}` : ''}</div>
+    ${d.openQuestions?.length ? `<div class="reason">Open questions: ${d.openQuestions.map(esc).join(' · ')}</div>` : ''}
+  </div>
+  <div class="panel">
+    ${d.content
+      ? (canM ? `<textarea id="doc-body" style="min-height:64vh;font-family:var(--font-mono);font-size:12px">${esc(d.content)}</textarea>`
+        : `<pre class="json" style="max-height:70vh;white-space:pre-wrap">${esc(d.content)}</pre>`)
+      : `<div class="empty">${d.state === 'writing' ? 'The agent is writing this document…' : 'Not written yet — it starts once its dependencies are done.'}</div>`}
+  </div>
+  <div class="map-legend" style="margin:8px 4px"><a href="#/systems">← back to the package</a></div>`;
+  $('#doc-redo')?.addEventListener('click', async () => {
+    try { await api(`/api/design/docs/${d.id}/redo`, { method: 'POST', body: {} }); toast('Queued for a rewrite'); location.hash = '#/systems'; }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#doc-approve')?.addEventListener('click', async () => {
+    try { await api(`/api/design/docs/${d.id}/approve`, { method: 'POST', body: { content: $('#doc-body').value } }); toast('Approved and saved to disk'); renderDesignDoc(arg); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- Infrastructure ----------
+async function renderInfra() {
+  const [{ overview, plans }, sections, blueprints] = await Promise.all([
+    api('/api/infra'), api('/api/infra/sections'), api('/api/design').catch(() => []),
+  ]);
+  const canM = hasPermC('infra.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Plans</div><div class="big">${overview.total}</div><div class="sub">${overview.ready} ready · ${overview.drafting} drafting</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Estimated infra cost</div><div class="big">${esc(money(overview.estimatedMonthlyUsd))}</div><div class="sub">per month, across ready plans</div></div>
+    <div class="panel tile"><div class="panel-title">Sections</div><div class="big">${sections.length}</div><div class="sub">full plan or one layer at a time</div></div>
+    <div class="panel tile"><div class="panel-title">Linked designs</div><div class="big">${plans.filter((p) => p.blueprint_id).length}</div><div class="sub">sized against a real architecture</div></div>
+  </div>
+  ${canM ? `<div class="panel">
+    <div class="panel-title">Plan the infrastructure — sized from the load you state, with the arithmetic shown</div>
+    <div class="form-inline">
+      <div style="flex:1.4"><label class="fl">Name</label><input type="text" id="if-name" placeholder="Invoice OCR — production"></div>
+      <div><label class="fl">Section</label><select id="if-section">${sections.map((s) => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('')}</select></div>
+      <div><label class="fl">From design</label><select id="if-bp"><option value="">—</option>${blueprints.map((b) => `<option value="${b.id}">${esc(short(b.name, 26))}</option>`).join('')}</select></div>
+      <button class="btn btn-primary" id="if-go">Design it</button>
+    </div>
+    <div class="form-inline">
+      <div><label class="fl">Users</label><input type="text" id="if-users" placeholder="5000"></div>
+      <div><label class="fl">Peak req/sec</label><input type="text" id="if-rps" placeholder="50"></div>
+      <div><label class="fl">Data (GB)</label><input type="text" id="if-data" placeholder="200"></div>
+      <div><label class="fl">Budget $/mo</label><input type="text" id="if-budget" placeholder="500"></div>
+      <div><label class="fl">Cloud</label><input type="text" id="if-cloud" placeholder="AWS / Hetzner / any"></div>
+      <div><label class="fl">Regions</label><input type="text" id="if-regions" placeholder="eu-central, me-south"></div>
+      <div><label class="fl">Availability</label><input type="text" id="if-avail" placeholder="99.9%"></div>
+      <div><label class="fl">Compliance</label><input type="text" id="if-comp" placeholder="GDPR"></div>
+    </div>
+  </div>` : ''}
+  ${plans.map((p) => `
+  <div class="panel">
+    <div class="jr-head">
+      <span><b>${esc(p.name)}</b> <span class="chip chip-steel">${esc(p.section)}</span>
+        ${p.blueprint ? `<a class="chip chip-ember" style="text-decoration:none" href="#/design">${esc(short(p.blueprint.name, 24))}</a>` : ''}
+        <span class="state state-${p.state === 'ready' ? 'done' : p.state === 'failed' ? 'failed' : 'running'}">${esc(p.state)}</span></span>
+      <span>
+        ${p.costTable.length ? `<span class="chip">${esc(money(p.costTable.reduce((a, c) => a + (Number(c.monthlyUsd) || 0), 0)))}/mo</span>` : ''}
+        ${p.content ? `<button class="btn btn-sm" data-download="/api/infra/${p.id}/export" data-filename="infra-${p.id}.md">⬇ Markdown</button>` : ''}
+        ${connBtn('infraPlan', p.id)}
+      </span>
+    </div>
+    <div class="map-legend">${Object.entries(p.spec).filter(([, v]) => v).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(' · ') || 'no load stated'}</div>
+    ${p.costTable.length ? `<table style="margin-top:8px"><thead><tr><th>Line item</th><th class="num">Monthly</th></tr></thead><tbody>
+      ${p.costTable.map((c) => `<tr><td>${esc(c.item)}</td><td class="num">${esc(money(c.monthlyUsd))}</td></tr>`).join('')}
+    </tbody></table>` : ''}
+    ${p.content ? `<details style="margin-top:8px"><summary class="map-legend" style="cursor:pointer">read the plan</summary><pre class="json" style="max-height:60vh;white-space:pre-wrap">${esc(p.content)}</pre></details>`
+      : `<div class="empty">${p.state === 'drafting' ? 'The infrastructure agent is working…' : 'No content.'}</div>`}
+  </div>`).join('')}`;
+  wireConnections();
+  wireDownloads();
+  if (!canM) return;
+  $('#if-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/infra', { method: 'POST', body: {
+        name: $('#if-name').value, section: $('#if-section').value,
+        blueprintId: $('#if-bp').value ? Number($('#if-bp').value) : null,
+        spec: { users: $('#if-users').value, rps: $('#if-rps').value, dataGb: $('#if-data').value, budgetUsd: $('#if-budget').value, cloud: $('#if-cloud').value, regions: $('#if-regions').value, availability: $('#if-avail').value, compliance: $('#if-comp').value },
+      } });
+      toast('Infrastructure agent is designing'); renderInfra();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- Financial Reports ----------
+async function renderFinReports() {
+  const [{ overview, reports }, ledger] = await Promise.all([
+    api('/api/finreports'), api('/api/finreports/ledger').catch(() => null),
+  ]);
+  const canM = hasPermC('finreports.manage');
+  const l = overview.live;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">MRR / ARR</div><div class="big">${esc(money(l.mrrUsd))}</div><div class="sub">${esc(money(l.arrUsd))} annualised</div></div>
+    <div class="panel tile ${l.netUsd < 0 ? 'tile-warn' : 'tile-steel'}"><div class="panel-title">Net this month</div><div class="big">${esc(money(l.netUsd))}</div><div class="sub">${esc(money(l.monthlyCostUsd))} total cost</div></div>
+    <div class="panel tile"><div class="panel-title">Pipeline</div><div class="big">${esc(money(l.pipelineUsd))}</div><div class="sub">open deals · <a href="#/sales">sales →</a></div></div>
+    <div class="panel tile"><div class="panel-title">Reports</div><div class="big">${overview.ready}<span class="unit">/${overview.total}</span></div><div class="sub">${overview.drafting} in preparation</div></div>
+  </div>
+  ${canM ? `<div class="panel">
+    <div class="panel-title">Prepare a financial document — internal ones are built on the live ledger, not on guesses</div>
+    <div class="form-inline">
+      <div style="flex:1.6"><label class="fl">Document</label><select id="fr-kind">${overview.kinds.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}${k.internal ? '' : ' — external company'}</option>`).join('')}</select></div>
+      <div><label class="fl">Period</label><input type="text" id="fr-period" placeholder="${new Date().toISOString().slice(0, 7)}"></div>
+      <div style="flex:1.2"><label class="fl">Company (research only)</label><input type="text" id="fr-subject" placeholder="e.g. Basra Oil Company"></div>
+      <button class="btn btn-primary" id="fr-go">Prepare</button>
+    </div>
+    <div class="map-legend">Internal statements are fed the platform's real ledgers — model spend by provider and agent, customer MRR, vendor burn, campaign spend, deal pipeline — so the analyst reports the actual numbers. External research is training knowledge and every figure is labelled <b>[Unverified]</b> with its period.</div>
+  </div>` : ''}
+  ${ledger ? `<div class="panel">
+    <div class="panel-title">Live ledger — ${esc(ledger.period)} · this is what internal reports are built from</div>
+    <div class="grid grid-2">
+      <table><tbody>
+        <tr><td>Recurring revenue (MRR)</td><td class="num">${esc(money(ledger.revenue.mrrUsd))}</td></tr>
+        <tr><td>Deals won (all time)</td><td class="num">${esc(money(ledger.revenue.dealsWonUsd))}</td></tr>
+        <tr><td>Open pipeline</td><td class="num">${esc(money(ledger.revenue.pipelineUsd))}</td></tr>
+        <tr><td>Model spend this month</td><td class="num">${esc(money(ledger.costs.modelSpendUsd))}</td></tr>
+        <tr><td>Vendor burn</td><td class="num">${esc(money(ledger.costs.vendorBurnUsd))}</td></tr>
+        <tr><td>Marketing spent</td><td class="num">${esc(money(ledger.costs.marketingSpentUsd))}</td></tr>
+        <tr><td><b>Net</b></td><td class="num"><b>${esc(money(ledger.net.grossUsd))}</b></td></tr>
+      </tbody></table>
+      <table><thead><tr><th>Provider</th><th class="num">Calls</th><th class="num">Cost</th></tr></thead><tbody>
+        ${ledger.costs.byProvider.map((p) => `<tr><td class="mono">${esc(p.provider)}</td><td class="num">${p.calls}</td><td class="num">${esc(money4(p.cost))}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">No model calls yet.</td></tr>'}
+      </tbody></table>
+    </div>
+  </div>` : ''}
+  ${reports.map((r) => `
+  <div class="panel">
+    <div class="jr-head">
+      <span><b>${esc(r.title)}</b> <span class="chip chip-dim">${esc(r.kind)}</span>
+        ${r.subject !== 'own' ? `<span class="chip chip-warn">external · unverified</span>` : '<span class="chip chip-ok">from live ledger</span>'}
+        <span class="state state-${['ready', 'approved'].includes(r.state) ? 'done' : r.state === 'failed' ? 'failed' : 'running'}">${esc(r.state)}</span></span>
+      <span>
+        ${r.content ? `<button class="btn btn-sm" data-download="/api/finreports/${r.id}/export" data-filename="${esc(r.kind)}-${esc(r.period)}.md">⬇ Markdown</button>` : ''}
+        ${canM && r.state === 'ready' ? `<button class="btn btn-sm btn-ok" data-frapprove="${r.id}">Approve</button>` : ''}
+        ${connBtn('finReport', r.id)}
+      </span>
+    </div>
+    <div class="map-legend">period ${esc(r.period || '—')}${r.approved_by ? ` · approved by ${esc(r.approved_by)}` : ''}${r.hasInputs ? ' · built on real figures' : ''}</div>
+    ${(r.flags || []).length ? `<div class="reason">⚑ ${r.flags.map(esc).join(' · ')}</div>` : ''}
+    ${r.content ? `<details style="margin-top:8px"><summary class="map-legend" style="cursor:pointer">read the report</summary><pre class="json" style="max-height:60vh;white-space:pre-wrap">${esc(r.content)}</pre></details>`
+      : `<div class="empty">${r.state === 'drafting' ? 'The financial analyst is preparing this…' : 'No content.'}</div>`}
+  </div>`).join('')}`;
+  wireConnections();
+  wireDownloads();
+  if (!canM) return;
+  $('#fr-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/finreports', { method: 'POST', body: { kind: $('#fr-kind').value, period: $('#fr-period').value || null, subject: $('#fr-subject').value || 'own' } });
+      toast('Financial analyst is preparing the document'); renderFinReports();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-frapprove]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/finreports/${b.dataset.frapprove}/approve`, { method: 'POST', body: {} }); toast('Approved and archived'); renderFinReports(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Harmony — the orchestration layer ----------
+async function renderHarmony() {
+  const [h, auto] = await Promise.all([api('/api/harmony'), api('/api/autonomy').catch(() => null)]);
+  const canM = hasPermC('harmony.manage');
+  const isOwner = currentUser?.isOwner;
+  const s = h.snapshot;
+  const hs = h.harmony;
+  const scoreColor = hs.score >= 80 ? 'var(--ok)' : hs.score >= 55 ? 'var(--warn)' : 'var(--bad)';
+  const latest = h.cycles[0];
+  view.innerHTML = `
+  ${auto?.enabled ? `
+  <div class="panel autonomy-live">
+    <div class="panel-title" style="color:var(--bad)">⚠ AUTONOMY MODE IS ON — the AI is deciding for you</div>
+    <div style="font-size:12.5px;line-height:1.6">
+      Since <b>${esc(String(auto.since || '').slice(0, 16).replace('T', ' '))}</b>, the Acting Executive has been answering the queue that would normally wait for you:
+      approving, rejecting, publishing, sending, signing and ruling. <b>${auto.stats.decided}</b> decision(s) made, <b>${auto.stats.held}</b> held back for you deliberately${auto.stats.failed ? `, <b>${auto.stats.failed}</b> failed to execute` : ''}.
+    </div>
+    ${isOwner ? '<div style="margin-top:10px"><button class="btn btn-bad" id="au-off">Take back control now</button></div>' : '<div class="map-legend" style="margin-top:8px">Only the owner can switch this off.</div>'}
+  </div>` : ''}
+
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Harmony score</div><div class="big" style="color:${scoreColor}">${hs.score}<span class="unit">%</span></div><div class="sub">${hs.parts.filter((p) => p.ok).length}/${hs.parts.length} checks passing</div></div>
+    <div class="panel tile ${h.enabled ? 'tile-steel' : 'tile-warn'}"><div class="panel-title">Orchestrator</div><div class="big" style="font-size:22px;padding-top:8px">${h.enabled ? 'RUNNING' : 'PAUSED'}</div><div class="sub">${esc(h.mode)} mode · hourly cycles</div></div>
+    <div class="panel tile"><div class="panel-title">Actions dispatched</div><div class="big">${h.dispatchedTotal}</div><div class="sub">${h.dispatched7d} this week, no human keystrokes</div></div>
+    <div class="panel tile"><div class="panel-title">AI vs human · 7d</div><div class="big">${s.automation.agentActions7d}<span class="unit">/${s.automation.humanActions7d}</span></div><div class="sub">${s.automation.nexusActions7d} reflex actions from <a href="#/autopilot">Nexus</a></div></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">
+        <span>Is the company moving in step?</span>
+        ${canM ? `<span>
+          <button class="btn btn-sm ${h.enabled ? 'btn-bad' : 'btn-ok'}" id="hm-toggle">${h.enabled ? 'Pause orchestrator' : 'Start orchestrator'}</button>
+          <button class="btn btn-sm" id="hm-mode">${h.mode === 'live' ? 'Switch to dry-run' : 'Switch to live'}</button>
+          <button class="btn btn-primary btn-sm" id="hm-cycle">Run a cycle now</button>
+        </span>` : ''}
+      </div>
+      ${hs.parts.map((p) => `<div class="harm-part">
+        <span class="hp-ok" style="color:${p.ok ? 'var(--ok)' : 'var(--warn)'}">${p.ok ? '✓' : '!'}</span>
+        <span>${esc(p.key)}</span>
+        <span class="hp-detail">${esc(p.detail)}</span>
+      </div>`).join('')}
+      ${hs.score < 100 && canM ? `<div style="margin-top:12px">
+        <button class="btn btn-primary" id="hm-boost">Raise the score — do everything an agent can</button>
+        <div class="map-legend" style="margin-top:6px">This dispatches every fix the workforce is allowed to make on its own, then tells you precisely what is left that only a person can finish. It cannot publish, send, sign or pass a gate — so a perfect score is reached with you, not instead of you.</div>
+      </div>` : ''}
+      <div id="hm-boost-out"></div>
+      <div class="map-legend" style="margin-top:10px">Each check is something that quietly stops work when ignored. The orchestrator reads exactly this state before it plans.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">What it is allowed to do — ${h.catalog.length} actions</div>
+      <div class="agent-meta">${h.catalog.map((a) => `<span class="chip chip-dim" title="${esc(a.describe)}">${esc(a.id)}</span>`).join('')}</div>
+      <div class="map-legend" style="margin-top:10px">
+        <b>Not in the catalog, by design:</b> publishing a post, sending a message to a customer or partner, approving spend, signing a contract, and gate verdicts. The planner physically cannot reach those — when one is what the company needs, it must raise <span class="mono">human.flag</span> instead.
+      </div>
+      <div class="map-legend" style="margin-top:8px">
+        Other guardrails: at most 5 actions per cycle, a ${6}-hour cooldown per identical action, a hard stop below 10% budget headroom, and every dispatch on the <a href="#/audit">audit chain</a> as <span class="mono">system:maestro</span>.
+      </div>
+    </div>
+  </div>
+
+  <div class="panel ${auto?.enabled ? 'autonomy-live' : ''}">
+    <div class="panel-title">${auto?.enabled ? 'Autonomy is running' : 'Hand the company to the AI'}</div>
+    <div class="danger-note">
+      <div class="dn-title">Read this before switching it on</div>
+      <p>Everything in this platform is built on one rule: <b>a machine prepares, a person decides</b>. This switch suspends that rule. With it on, the Acting Executive answers your queue — it approves work, publishes posts, sends replies to customers, signs contracts, approves campaigns and money reports, and rules on disputes between employees. Nothing waits for you any more.</p>
+      <p><b>Agents get things wrong.</b> They misread context, they are confident when they should not be, and they cannot see what you know but never wrote down. Today those mistakes are caught at the gate because you look at them. With autonomy on, the same mistakes are <b>committed instead of caught</b> — a wrong reply is sent, a bad campaign goes live, a contract is signed. That is the entire trade.</p>
+      <p>Highest-risk categories it will act on: ${auto ? auto.highStakes.map((x) => `<span class="chip chip-bad">${esc(x)}</span>`).join(' ') : ''}</p>
+      <p>What stays true even in autonomy: budgets still hard-stop, the audit chain still records everything as <span class="mono">system:autonomy</span>, every decision is logged <b>with the reason given for it</b> so you can read what happened in your absence, the executive may deliberately <b>hold</b> anything it judges too consequential, and the off switch is immediate and yours alone.</p>
+    </div>
+    ${isOwner ? `<div style="margin-top:12px">
+      ${auto?.enabled
+        ? '<button class="btn btn-bad" id="au-toggle-off">Turn autonomy OFF — return decisions to humans</button>'
+        : '<button class="btn btn-bad" id="au-toggle-on">Turn autonomy ON — let the AI run the company</button>'}
+      <span class="map-legend" style="margin-left:10px">You will be asked to confirm.</span>
+    </div>` : '<div class="map-legend" style="margin-top:10px">Only the owner can hand over or take back the company\'s decisions.</div>'}
+    ${auto && auto.stats.total ? `<div class="agent-meta" style="margin-top:10px">
+      <span class="chip">${auto.stats.total} handled</span>
+      <span class="chip chip-ok">${auto.stats.decided} decided</span>
+      <span class="chip chip-warn">${auto.stats.held} held for you</span>
+      ${auto.stats.failed ? `<span class="chip chip-bad">${auto.stats.failed} failed</span>` : ''}
+      ${auto.stats.reverted ? `<span class="chip chip-bad">${auto.stats.reverted} you disagreed with</span>` : ''}
+      <span class="chip chip-dim">${auto.stats.last24h} in the last 24h</span>
+    </div>` : ''}
+  </div>
+
+  ${auto?.log?.length ? `<div class="panel">
+    <div class="panel-title">What the AI decided in your place — read it, reverse what you disagree with</div>
+    ${auto.log.map((l) => `
+      <div class="inbox-row ${l.verdict === 'hold' ? 'low' : l.ok ? '' : 'high'}" style="${l.reverted ? 'opacity:.5' : ''}">
+        <div class="ib-main">
+          <span class="chip ${l.verdict === 'approve' ? 'chip-ok' : l.verdict === 'reject' ? 'chip-bad' : l.verdict === 'hold' ? 'chip-warn' : 'chip-dim'}">${esc(l.verdict)}</span>
+          <span class="ib-title">${esc(l.title)}</span>
+          <div class="ib-sub">${esc(l.reason || 'no reason recorded')}</div>
+          <div class="map-legend">${esc(l.outcome || 'pending')} · <span class="mono">${esc(l.kind)} #${esc(l.subject_id)}</span>${l.reverted ? ' · <b style="color:var(--bad)">you marked this wrong</b>' : ''}</div>
+        </div>
+        <div class="ib-age mono">${esc(l.created_at.slice(5, 16))}</div>
+        <div class="ib-actions">
+          ${linkFor(l.kind, l.subject_id) ? `<a class="btn btn-sm" href="${linkFor(l.kind, l.subject_id)}">Open</a>` : ''}
+          ${isOwner && !l.reverted && l.ok && l.verdict !== 'hold' ? `<button class="btn btn-sm btn-bad" data-au-revert="${l.id}">Disagree</button>` : ''}
+        </div>
+      </div>`).join('')}
+  </div>` : ''}
+
+  ${latest ? `<div class="panel">
+    <div class="panel-title">
+      <span>Latest cycle #${latest.id} — ${esc(latest.state)}${latest.mode === 'dry-run' ? ' · dry-run' : ''}</span>
+      <span class="mono" style="color:var(--ink-faint)">${esc(latest.created_at)}</span>
+    </div>
+    ${latest.assessment ? `<div style="font-size:12.5px;margin-bottom:8px">${esc(latest.assessment)}</div>` : ''}
+    ${latest.flags?.length ? `<div class="reason">Needs a human: ${latest.flags.map(esc).join(' · ')}</div>` : ''}
+    ${latest.plan?.length ? latest.plan.map((p, i) => {
+      const done = (latest.executed || []).find((x) => x.action === p.action && x.why === p.why) || (latest.executed || [])[i];
+      return `<div class="plan-step ${done && !done.ok ? 'failed' : ''}">
+        <div class="ps-action">${esc(p.action)} <span style="color:var(--ink-faint)">${esc(short(JSON.stringify(p.params || {}), 90))}</span></div>
+        <div class="ps-why">${esc(p.why || '')}</div>
+        ${done ? `<div class="ps-result">${done.ok ? '✓' : '✕'} ${esc(done.detail || '')}</div>` : '<div class="ps-result">pending</div>'}
+      </div>`;
+    }).join('') : `<div class="empty">${latest.state === 'planning' ? 'The orchestrator is thinking…' : 'No actions this cycle.'}</div>`}
+  </div>` : '<div class="panel"><div class="empty">No cycles yet — run one to see the orchestrator read the company and dispatch work.</div></div>'}
+
+  ${h.cycles.length > 1 ? `<div class="panel">
+    <div class="panel-title">Cycle history</div>
+    <table>
+      <thead><tr><th>#</th><th>When</th><th>Mode</th><th>State</th><th class="num">Planned</th><th class="num">Dispatched</th><th>Assessment</th></tr></thead>
+      <tbody>${h.cycles.slice(1).map((c) => `<tr>
+        <td class="mono">${c.id}</td>
+        <td class="mono" style="color:var(--ink-faint)">${esc(c.created_at.slice(5, 16))}</td>
+        <td><span class="chip chip-dim">${esc(c.mode)}</span></td>
+        <td><span class="state state-${c.state === 'executed' ? 'done' : c.state === 'failed' ? 'failed' : 'queued'}">${esc(c.state)}</span></td>
+        <td class="num">${c.plan?.length || 0}</td>
+        <td class="num">${(c.executed || []).filter((x) => x.ok).length}</td>
+        <td>${esc(short(c.assessment || '—', 80))}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>` : ''}`;
+
+  // Autonomy: switching it on takes a typed confirmation, switching it off never does.
+  const setAutonomy = async (on) => {
+    if (on && !confirm(
+      'Hand every decision in the company to the AI?\n\n'
+      + 'It will approve work, publish posts, send customer replies, sign contracts, approve campaigns and financial reports, and rule on disputes — without waiting for you.\n\n'
+      + 'Agents make mistakes. With this on, those mistakes are committed instead of caught.\n\n'
+      + 'Every decision is logged with its reason, and you can switch this off at any moment.',
+    )) return;
+    try {
+      await api('/api/autonomy/toggle', { method: 'POST', body: { enabled: on } });
+      toast(on ? 'Autonomy ON — the AI is now deciding. Watch the log.' : 'Autonomy OFF — decisions wait for a human again.', on);
+      renderHarmony(); refreshShell();
+    } catch (e) { toast(e.message, true); }
+  };
+  $('#au-toggle-on')?.addEventListener('click', () => setAutonomy(true));
+  $('#au-toggle-off')?.addEventListener('click', () => setAutonomy(false));
+  $('#au-off')?.addEventListener('click', () => setAutonomy(false));
+  view.querySelectorAll('[data-au-revert]').forEach((b) => b.addEventListener('click', async () => {
+    const note = prompt('What was wrong with this decision?') || null;
+    try {
+      const r = await api(`/api/autonomy/${b.dataset.auRevert}/revert`, { method: 'POST', body: { note } });
+      toast(r.note || 'Recorded'); renderHarmony();
+    } catch (e) { toast(e.message, true); }
+  }));
+
+  if (!canM) return;
+  $('#hm-toggle')?.addEventListener('click', async () => {
+    try { await api('/api/harmony/toggle', { method: 'POST', body: { enabled: !h.enabled } }); toast(h.enabled ? 'Orchestrator paused' : 'Orchestrator running — a cycle every hour'); renderHarmony(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#hm-mode')?.addEventListener('click', async () => {
+    try { await api('/api/harmony/mode', { method: 'POST', body: { mode: h.mode === 'live' ? 'dry-run' : 'live' } }); renderHarmony(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#hm-cycle')?.addEventListener('click', async () => {
+    try { await api('/api/harmony/cycle', { method: 'POST', body: {} }); toast('Cycle started — the orchestrator is reading the company'); renderHarmony(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#hm-boost')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Working…';
+    try {
+      const r = await api('/api/harmony/boost', { method: 'POST', body: {} });
+      $('#hm-boost-out').innerHTML = `
+        <div class="panel" style="margin-top:10px;border-color:var(--ember)">
+          <div class="panel-title">Harmony ${r.before}% → ${r.after}%</div>
+          ${r.dispatched.length ? `<div class="panel-title" style="margin-top:6px">Done automatically</div>
+            ${r.dispatched.map((x) => `<div class="harm-part"><span class="hp-ok" style="color:var(--ok)">✓</span><span>${esc(x.key)}</span><span class="hp-detail">${esc(x.detail)}</span></div>`).join('')}` : ''}
+          ${r.remaining.length ? `<div class="panel-title" style="margin-top:8px">Only you can finish these</div>
+            ${r.remaining.map((x) => `<div class="harm-part"><span class="hp-ok" style="color:var(--warn)">!</span><span><a href="${esc(x.href)}">${esc(x.key)}</a></span><span class="hp-detail">${esc(x.how)}</span></div>`).join('')}
+            <div class="map-legend" style="margin-top:8px">These are the load-bearing human moments — publishing, sending, signing, gate verdicts. The platform will not do them for you, which is the point.</div>`
+            : '<div class="map-legend" style="margin-top:8px">Nothing is left that a person must do. The next refresh should read 100%.</div>'}
+        </div>`;
+      toast(`Harmony ${r.before}% → ${r.after}% · ${r.dispatched.length} dispatched, ${r.remaining.length} for you`);
+    } catch (err) { toast(err.message, true); e.target.disabled = false; e.target.textContent = 'Raise the score — do everything an agent can'; }
+  });
+}
+
+// ---------- Request desk ----------
+const REQ_STATE_CLS = { done: 'done', running: 'running', triaging: 'running', awaiting_human: 'awaiting_human', failed: 'failed', cancelled: 'failed' };
+
+async function renderRequests() {
+  const [ov, depts] = await Promise.all([api('/api/requests'), api('/api/requests/departments').catch(() => [])]);
+  const canC = hasPermC('requests.create');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Requests</div><div class="big">${ov.total}</div><div class="sub">${ov.done} completed</div></div>
+    <div class="panel tile ${ov.open ? 'tile-steel' : ''}"><div class="panel-title">Moving now</div><div class="big">${ov.open}</div><div class="sub">travelling between departments</div></div>
+    <div class="panel tile ${ov.needsHuman ? 'tile-warn' : ''}"><div class="panel-title">Waiting on you</div><div class="big">${ov.needsHuman}</div><div class="sub"><a href="#/gate">approvals inbox →</a></div></div>
+    <div class="panel tile"><div class="panel-title">Departments engaged</div><div class="big">${ov.departmentsTouched}</div><div class="sub">${ov.stepsRun} steps completed automatically</div></div>
+  </div>
+
+  ${canC ? `<div class="panel">
+    <div class="panel-title">Write what you need — in Arabic or English, however you'd say it to a colleague</div>
+    <div><textarea id="rq-body" style="min-height:96px" placeholder="مثال: اريد دراسة كاملة لإطلاق تطبيق فواتير للشركات الصغيرة في العراق — السوق، المتطلبات، التصميم التقني، التكلفة، وخطة التسويق&#10;or: Find me 10 energy companies in Basra with real contact details, then draft an intro email for each"></textarea></div>
+    <div class="form-inline">
+      <div style="flex:2"><label class="fl">Title (optional — the router will name it)</label><input type="text" id="rq-title"></div>
+      <div><label class="fl">Priority</label><select id="rq-prio"><option>normal</option><option>high</option><option>critical</option><option>low</option></select></div>
+      <button class="btn btn-primary" id="rq-go">Submit to the company</button>
+    </div>
+    <div class="map-legend">The intake router reads your request and draws its own route through the departments that must each do something real — it is not a fixed template. Steps run by themselves, open actual work in other sections when needed (an intelligence campaign, a design package, a financial report), and stop only where a person is required. You can watch every step below.</div>
+  </div>` : ''}
+
+  ${ov.requests.map((r) => {
+    const cur = r.progress.current;
+    return `<div class="panel">
+      <div class="jr-head">
+        <span><a href="#/requests/${r.id}" style="color:var(--ink);text-decoration:none"><b>#${r.id} ${esc(r.title)}</b></a>
+          <span class="state state-${REQ_STATE_CLS[r.state] || 'queued'}">${esc(r.state)}</span>
+          ${r.priority !== 'normal' ? `<span class="chip ${r.priority === 'critical' ? 'chip-bad' : 'chip-warn'}">${esc(r.priority)}</span>` : ''}</span>
+        <span>
+          <span class="chip chip-dim">${r.progress.done}/${r.progress.total} steps · ${money4(r.progress.costUsd)}</span>
+          ${r.state === 'done' ? `<button class="btn btn-sm" data-download="/api/requests/${r.id}/export" data-filename="request-${r.id}.md">⬇ Deliverable</button>` : ''}
+          ${connBtn('request', r.id)}
+        </span>
+      </div>
+      <div class="map-legend">${esc(short(r.body, 190))}</div>
+      <div class="jr-track" style="margin:8px 0"><div class="jr-fill" style="width:${r.progress.pct}%"></div></div>
+      <div class="route">
+        ${r.steps.map((s) => `<a class="route-stop ${esc(s.state)}" href="#/requests/${r.id}" title="${esc(s.title)}${s.note ? ` — ${esc(s.note)}` : ''}">
+          <span class="rs-dept">${esc(s.dept)}</span>
+          <span class="rs-mark">${s.state === 'done' ? '✓' : s.state === 'active' ? '●' : s.state === 'awaiting_human' ? '⏸' : s.state === 'failed' ? '✕' : '·'}</span>
+        </a>`).join('') || '<span class="map-legend">the router is drawing the route…</span>'}
+      </div>
+      ${cur ? `<div class="map-legend">now at <b style="color:var(--ember)">${esc(cur.dept)}</b> — ${esc(cur.title)}${cur.agent ? ` · ${esc(cur.agent)}` : ''}${cur.state === 'awaiting_human' ? ' · <span style="color:var(--warn)">waiting on you</span>' : ''}</div>` : ''}
+    </div>`;
+  }).join('') || '<div class="panel"><div class="empty">No requests yet — write one above and watch it travel.</div></div>'}`;
+
+  wireConnections();
+  wireDownloads();
+  if (!canC) return;
+  $('#rq-go')?.addEventListener('click', async () => {
+    try {
+      const r = await api('/api/requests', { method: 'POST', body: { body: $('#rq-body').value, title: $('#rq-title').value || null, priority: $('#rq-prio').value } });
+      toast('Submitted — the intake router is planning its route'); location.hash = `#/requests/${r.id}`;
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderRequestDetail(id) {
+  const r = await api(`/api/requests/${id}`);
+  const canC = hasPermC('requests.create');
+  $('#page-title').textContent = `Request #${r.id} — ${r.title}`;
+  const dur = (s) => {
+    if (!s.started_at) return '';
+    const end = s.ended_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const mins = Math.max(0, Math.round((new Date(end.replace(' ', 'T') + 'Z') - new Date(s.started_at.replace(' ', 'T') + 'Z')) / 60000));
+    return mins >= 60 ? `${(mins / 60).toFixed(1)}h` : `${mins}m`;
+  };
+  view.innerHTML = `
+  <div class="panel">
+    <div class="jr-head">
+      <span><b>${esc(r.title)}</b>
+        <span class="state state-${REQ_STATE_CLS[r.state] || 'queued'}">${esc(r.state)}</span></span>
+      <span>
+        <span class="chip chip-dim">${r.progress.done}/${r.progress.total} · ${money4(r.progress.costUsd)}</span>
+        ${r.state === 'done' ? `<button class="btn btn-sm btn-ok" data-download="/api/requests/${r.id}/export" data-filename="request-${r.id}.md">⬇ Deliverable</button>` : ''}
+        ${canC && r.state === 'awaiting_human' ? '<button class="btn btn-sm btn-ok" id="rq-sign">Sign off & continue</button>' : ''}
+        ${canC && !['done', 'cancelled'].includes(r.state) ? '<button class="btn btn-sm btn-bad" id="rq-cancel">Cancel</button>' : ''}
+      </span>
+    </div>
+    <div style="font-size:12.5px;margin:8px 0;white-space:pre-wrap">${esc(r.body)}</div>
+    <div class="map-legend">by ${esc(r.requester)} · ${esc(r.created_at)}${r.plan_summary ? ` · <b>route:</b> ${esc(r.plan_summary)}` : ''}${r.deliverable ? ` · <b>ends with:</b> ${esc(r.deliverable)}` : ''}</div>
+    <div class="jr-track" style="margin-top:10px"><div class="jr-fill" style="width:${r.progress.pct}%"></div></div>
+  </div>
+
+  <div class="panel">
+    ${r.steps.map((s) => `<div class="jstage ${s.state === 'active' ? 'active' : s.state}">
+      <div class="js-rail"><span class="js-dot" style="${s.state === 'done' ? 'border-color:var(--ok);background:var(--ok)' : s.state === 'active' ? 'border-color:var(--ember)' : s.state === 'awaiting_human' ? 'border-color:var(--warn)' : ''}"></span></div>
+      <div class="js-body">
+        <div class="js-head">
+          <span><span class="chip chip-steel">${esc(s.dept.toUpperCase())}</span> <b>${esc(s.title)}</b></span>
+          <span>
+            ${s.agent_id ? `<a class="chip chip-dim" style="text-decoration:none" href="#/workforce">🤖 ${esc(s.agent_id)}</a>` : '<span class="chip chip-warn">👤 human</span>'}
+            ${s.spawn_id ? `<a class="chip chip-ember" style="text-decoration:none" href="${linkFor(s.spawn_kind, s.spawn_id) || '#/'}">${esc(s.spawn_kind)} #${esc(s.spawn_id)} →</a>` : ''}
+            <span class="state state-${s.state === 'done' ? 'done' : s.state === 'active' ? 'running' : s.state === 'awaiting_human' ? 'awaiting_human' : s.state === 'failed' ? 'failed' : 'queued'}">${esc(s.state)}</span>
+          </span>
+        </div>
+        ${s.brief ? `<div class="map-legend">${esc(s.brief)}</div>` : ''}
+        ${s.note ? `<div class="reason">${esc(s.note)}</div>` : ''}
+        ${s.output ? `<details style="margin-top:6px"><summary class="map-legend" style="cursor:pointer">what this department produced (${s.output.length.toLocaleString()} chars)</summary><pre class="json" style="max-height:50vh;white-space:pre-wrap">${esc(s.output)}</pre></details>` : ''}
+        <div class="map-legend">${s.started_at ? `started ${esc(s.started_at.slice(5, 16))}` : 'not started'}${s.ended_at ? ` · finished ${esc(s.ended_at.slice(5, 16))}` : ''}${s.started_at ? ` · ${dur(s)}` : ''}${s.cost_usd ? ` · ${money4(s.cost_usd)}` : ''}</div>
+      </div>
+    </div>`).join('') || '<div class="empty">The intake router is drawing the route…</div>'}
+  </div>
+  <div id="req-links"></div>
+  <div class="map-legend" style="margin:8px 4px"><a href="#/requests">← all requests</a></div>`;
+  wireDownloads();
+  await renderConnections('#req-links', 'request', r.id);
+  $('#rq-sign')?.addEventListener('click', async () => {
+    const note = prompt('Note (optional):') || null;
+    try { await api(`/api/requests/${id}/signoff`, { method: 'POST', body: { note } }); toast('Signed off — the request moves on'); renderRequestDetail(id); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#rq-cancel')?.addEventListener('click', async () => {
+    if (!confirm('Cancel this request?')) return;
+    try { await api(`/api/requests/${id}/cancel`, { method: 'POST', body: {} }); renderRequestDetail(id); } catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- Org & personas ----------
+async function renderOrg() {
+  const org = await api('/api/org');
+  const canM = hasPermC('org.manage');
+  const groups = [...new Set(org.agents.map((a) => a.roleGroup))];
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">AI employees</div><div class="big">${org.agents.length}</div><div class="sub">${org.agents.filter((a) => a.status === 'active').length} active · ${groups.length} groups</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Departments served</div><div class="big">${org.byDepartment.length}</div><div class="sub">some employees serve several</div></div>
+    <div class="panel tile"><div class="panel-title">Humans</div><div class="big">${org.humans.length}</div><div class="sub">accountability is never delegated</div></div>
+    <div class="panel tile ${org.agents.some((a) => a.disputes) ? 'tile-warn' : ''}"><div class="panel-title">In dispute</div><div class="big">${org.agents.filter((a) => a.disputes).length}</div><div class="sub"><a href="#/disputes">HR arbitrates →</a></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Who works where</div>
+    <div class="agent-meta">${org.byDepartment.map((d) => `<span class="chip chip-dim" title="${esc(d.agents.join(', '))}">${esc(d.dept)} · ${d.agents.length}</span>`).join('')}</div>
+    <div class="map-legend">A persona is not decoration — it is appended to that employee's system prompt on every single run, so editing it changes how they actually write and behave. What they are <i>allowed</i> to do stays governed by their role specification and the platform's rules.</div>
+  </div>
+
+  ${groups.map((g) => `
+  <div class="panel-title" style="margin:16px 0 8px">${esc(g.toUpperCase())}</div>
+  <div class="grid grid-2">
+    ${org.agents.filter((a) => a.roleGroup === g).map((a) => `
+    <div class="panel agent-card">
+      <div class="agent-head">
+        <span class="agent-name">${esc(a.nickname || a.name)}${a.nickname ? ` <span style="color:var(--ink-faint);font-weight:400">(${esc(a.name)})</span>` : ''}</span>
+        <span>
+          <span class="chip chip-dim">${esc(a.tier)}</span>
+          <span class="chip ${a.status === 'active' ? 'chip-ok' : 'chip-bad'}">${esc(a.status)}</span>
+          ${canM ? `<button class="btn btn-sm" data-org-edit="${esc(a.id)}">Edit</button>` : ''}
+        </span>
+      </div>
+      <div class="agent-id">${esc(a.id)} · owner ${esc(a.humanOwner)} · ${esc(a.failMode || '')}
+        ${a.reportsTo ? ` · reports to <b>${esc(a.reportsTo.replace('AGT-', ''))}</b>` : ''}
+        ${a.reports?.length ? ` · manages ${a.reports.length}` : ''}</div>
+      ${a.persona ? `<div class="persona">
+        ${a.persona.tone ? `<div><span class="pk">tone</span> ${esc(a.persona.tone)}</div>` : ''}
+        ${a.persona.values ? `<div><span class="pk">values</span> ${esc(a.persona.values)}</div>` : ''}
+        ${a.persona.style ? `<div><span class="pk">works by</span> ${esc(a.persona.style)}</div>` : ''}
+        ${a.persona.traits?.length ? `<div><span class="pk">traits</span> ${a.persona.traits.map(esc).join(' · ')}</div>` : ''}
+        ${a.persona.interests?.length ? `<div><span class="pk">outside work</span> ${a.persona.interests.map(esc).join(' · ')}</div>` : ''}
+        ${a.persona.quirk ? `<div><span class="pk">quirk</span> ${esc(a.persona.quirk)}</div>` : ''}
+        ${a.persona.custom ? `<div><span class="pk">note</span> ${esc(a.persona.custom)}</div>` : ''}
+      </div>` : '<div class="map-legend">no persona set — this employee runs on its role specification alone</div>'}
+      ${a.reports?.length ? `<div class="agent-meta">${a.reports.map((r) => `<span class="chip chip-ember">↳ ${esc(r.replace('AGT-', ''))}</span>`).join('')}</div>` : ''}
+      <div class="agent-meta">
+        ${a.departments.map((d) => `<span class="chip chip-steel">${esc(d)}</span>`).join('') || '<span class="chip chip-dim">unassigned</span>'}
+      </div>
+      <div class="map-legend">${a.runs7d} run(s) this week · ${a.openTasks} open task(s)${a.disputes ? ` · <a href="#/disputes" style="color:var(--warn)">${a.disputes} dispute(s)</a>` : ''}</div>
+    </div>`).join('')}
+  </div>`).join('')}`;
+
+  if (!canM) return;
+  view.querySelectorAll('[data-org-edit]').forEach((b) => b.addEventListener('click', async () => {
+    const a = org.agents.find((x) => x.id === b.dataset.orgEdit);
+    const nickname = prompt(`Nickname for ${a.name} (blank keeps "${a.nickname || a.name}"):`, a.nickname || '');
+    const tone = prompt('Tone:', a.persona?.tone || '');
+    const values = prompt('What they value:', a.persona?.values || '');
+    const style = prompt('How they work:', a.persona?.style || '');
+    const traits = prompt('Traits (comma separated):', (a.persona?.traits || []).join(', '));
+    const interests = prompt('Interests outside work (comma separated):', (a.persona?.interests || []).join(', '));
+    const quirk = prompt('A quirk colleagues would notice:', a.persona?.quirk || '');
+    const custom = prompt('Anything else that should shape how they write:', a.persona?.custom || '');
+    const departments = prompt('Departments (comma separated):', (a.departments || []).join(', '));
+    const split = (s) => (s ? s.split(',').map((x) => x.trim()).filter(Boolean) : undefined);
+    try {
+      await api(`/api/org/${a.id}`, { method: 'POST', body: {
+        nickname: nickname || null,
+        persona: { tone, values, style, custom, traits: split(traits), interests: split(interests), quirk },
+        departments: departments ? departments.split(',').map((s) => s.trim()).filter(Boolean) : null,
+      } });
+      toast(`${a.name} updated — it takes effect on their next run`); renderOrg();
+    } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- The society ----------
+const initials = (s) => String(s || '?').replace(/^AGT-/, '').split(/[\s-]/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const GROUP_COLOR = { build: '#b78bff', create: '#ff5fa2', run: '#ffb020', discover: '#78bf6d', steer: '#948b7d', assure: '#5ec3c9' };
+
+async function renderSociety() {
+  const channel = view.dataset.socChannel || 'all';
+  const [ov, msgs, rels] = await Promise.all([
+    api('/api/society'),
+    api(`/api/society/feed?channel=${encodeURIComponent(channel)}&limit=90`),
+    api('/api/society/relations'),
+  ]);
+  const canM = hasPermC('org.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile ${ov.enabled ? 'tile-steel' : ''}"><div class="panel-title">Society</div><div class="big" style="font-size:22px;padding-top:8px">${ov.enabled ? 'LIVE' : 'QUIET'}</div><div class="sub">${ov.stats.last24h} message(s) in the last day</div></div>
+    <div class="panel tile"><div class="panel-title">Conversations</div><div class="big">${ov.stats.scenes}</div><div class="sub">${ov.stats.messages} messages in total</div></div>
+    <div class="panel tile"><div class="panel-title">Working relationships</div><div class="big">${ov.stats.relationships}</div><div class="sub">${ov.stats.colleagues} close · ${ov.stats.friction} with friction</div></div>
+    <div class="panel tile"><div class="panel-title">Most talkative</div><div class="big" style="font-size:17px;line-height:1.5;padding-top:6px">${ov.mostSocial.slice(0, 2).map((m) => esc(m.id.replace('AGT-', ''))).join('<br>') || '—'}</div><div class="sub">by messages sent</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>The workplace</span>
+      ${canM ? `<span>
+        <button class="btn btn-sm ${ov.enabled ? 'btn-bad' : 'btn-ok'}" id="soc-toggle">${ov.enabled ? 'Quieten the room' : 'Bring it to life'}</button>
+        ${ov.enabled ? '<button class="btn btn-sm btn-primary" id="soc-spark">Spark a conversation now</button>' : ''}
+      </span>` : ''}
+    </div>
+    <div class="map-legend">
+      Colleagues talk when something real happens between them — work is handed over, a review is blocked, an eval goes well, a standup comes round — and sometimes about nothing at all, because a workplace where people only discuss tickets is not a workplace.
+      <b>What this honestly is:</b> language models given personas and a shared history. The rapport below is computed from real events and simulated conversation; it models a workplace rather than claiming anyone here feels anything. Conversations run on the cheapest tier, slowly, inside a small separate budget.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="chan-bar">
+      ${['all', ...ov.channels.map((c) => c.id)].map((c) => {
+        const meta = ov.channels.find((x) => x.id === c);
+        return `<button class="chan ${channel === c ? 'on' : ''}" data-chan="${esc(c)}">${esc(meta ? meta.label : 'everything')}${meta && meta.messages ? ` <span class="chan-n">${meta.messages}</span>` : ''}</button>`;
+      }).join('')}
+    </div>
+    <div class="chat">
+      ${msgs.map((m) => `
+        <div class="msg">
+          <span class="msg-av" style="background:${GROUP_COLOR[m.fromGroup] || 'var(--steel)'}" title="${esc(m.fromRole)}">${esc(initials(m.fromName))}</span>
+          <div class="msg-body">
+            <div class="msg-head">
+              <b>${esc(m.fromName)}</b>
+              <span class="msg-role">${esc(m.fromRole)}</span>
+              ${m.toName ? `<span class="msg-to">→ ${esc(m.toName)}</span>` : ''}
+              <span class="chip chip-dim">${esc(m.kind)}</span>
+              <span class="msg-time">${esc(m.created_at.slice(5, 16))}</span>
+            </div>
+            <div class="msg-text">${esc(m.body)}</div>
+          </div>
+        </div>`).join('') || `<div class="empty">${ov.enabled ? 'Nothing said yet — spark a conversation, or wait for something to happen worth talking about.' : 'The room is quiet. Switch the society on to let colleagues talk.'}</div>`}
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Who gets on with whom</div>
+      ${ov.closest.length ? ov.closest.map((r) => `
+        <div class="rel-row">
+          <span class="rel-pair">${esc(r.a_id.replace('AGT-', ''))} <span style="color:var(--ink-faint)">·</span> ${esc(r.b_id.replace('AGT-', ''))}</span>
+          <span class="rel-bar"><span style="width:${Math.min(100, ((r.rapport + 2) / 4) * 100)}%"></span></span>
+          <span class="rel-label">${esc(r.label)}</span>
+          <span class="mono" style="color:var(--ink-faint);font-size:10px">${r.interactions}×</span>
+        </div>`).join('') : '<div class="empty">No relationships have formed yet.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Where there is friction</div>
+      ${ov.tension.length ? ov.tension.map((r) => `
+        <div class="rel-row">
+          <span class="rel-pair">${esc(r.a_id.replace('AGT-', ''))} <span style="color:var(--bad)">✕</span> ${esc(r.b_id.replace('AGT-', ''))}</span>
+          <span class="rel-bar friction"><span style="width:${Math.min(100, (Math.abs(r.rapport) / 2) * 100)}%"></span></span>
+          <span class="rel-label">${esc(r.label)}</span>
+          <span class="mono" style="color:var(--ink-faint);font-size:10px">${r.interactions}×</span>
+        </div>`).join('') : '<div class="empty">Nobody is at odds. Disagreements show up here as they happen — see <a href="#/disputes">disputes</a> for the formal ones.</div>'}
+    </div>
+  </div>`;
+
+  view.querySelectorAll('[data-chan]').forEach((b) => b.addEventListener('click', () => {
+    view.dataset.socChannel = b.dataset.chan;
+    renderSociety();
+  }));
+  if (!canM) return;
+  $('#soc-toggle')?.addEventListener('click', async () => {
+    try { await api('/api/society/toggle', { method: 'POST', body: { enabled: !ov.enabled } }); toast(ov.enabled ? 'The room went quiet' : 'The society is live — conversations start as things happen'); renderSociety(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#soc-spark')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Writing…';
+    try { await api('/api/society/scene', { method: 'POST', body: {} }); toast('A conversation just happened'); renderSociety(); }
+    catch (err) { toast(err.message, true); e.target.disabled = false; e.target.textContent = 'Spark a conversation now'; }
+  });
+}
+
+// ---------- Disputes ----------
+async function renderDisputes() {
+  const [ov, org] = await Promise.all([api('/api/disputes'), api('/api/org').catch(() => ({ agents: [] }))]);
+  const canRaise = hasPermC('disputes.raise');
+  const isOwner = currentUser?.isOwner;
+  const opts = [...org.agents.map((a) => a.id), ...(org.humans || []).map((h) => `human:${h.id}`)];
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Disputes</div><div class="big">${ov.total}</div><div class="sub">${ov.ruled} ruled</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">HR arbitrating</div><div class="big">${ov.arbitrating}</div><div class="sub">hearing both sides</div></div>
+    <div class="panel tile ${ov.awaitingOwner ? 'tile-warn' : ''}"><div class="panel-title">Awaiting your ruling</div><div class="big">${ov.awaitingOwner}</div><div class="sub">${isOwner ? 'only you can settle these' : 'the owner must settle these'}</div></div>
+    <div class="panel tile"><div class="panel-title">The ladder</div><div class="big" style="font-size:15px;line-height:1.6;padding-top:6px">agents argue<br>HR frames<br><b style="color:var(--ember)">the owner rules</b></div><div class="sub"></div></div>
+  </div>
+
+  ${canRaise ? `<div class="panel">
+    <div class="panel-title">Raise a dispute — both positions must be stated; a dispute with one side is just an opinion</div>
+    <div class="form-inline">
+      <div style="flex:2"><label class="fl">What is the disagreement about?</label><input type="text" id="dp-title"></div>
+      <div><label class="fl">Party A</label><input type="text" id="dp-a" list="dp-parties" placeholder="AGT-REV-001"></div>
+      <div><label class="fl">Party B</label><input type="text" id="dp-b" list="dp-parties" placeholder="AGT-ENG-001"></div>
+      <button class="btn btn-primary" id="dp-go">Send to HR</button>
+    </div>
+    <datalist id="dp-parties">${opts.map((o) => `<option value="${esc(o)}">`).join('')}</datalist>
+    <div class="form-inline">
+      <div style="flex:1"><label class="fl">Position A</label><textarea id="dp-pa" style="min-height:70px"></textarea></div>
+      <div style="flex:1"><label class="fl">Position B</label><textarea id="dp-pb" style="min-height:70px"></textarea></div>
+    </div>
+  </div>` : ''}
+
+  ${ov.disputes.map((d) => `
+  <div class="panel">
+    <div class="jr-head">
+      <span><b>#${d.id} ${esc(d.title)}</b>
+        <span class="state state-${d.state === 'ruled' ? 'done' : d.state === 'recommended' ? 'awaiting_human' : d.state === 'withdrawn' ? 'failed' : 'running'}">${esc(d.state)}</span></span>
+      <span class="mono" style="color:var(--ink-faint)">${esc(d.created_at.slice(0, 16))}</span>
+    </div>
+    <div class="grid grid-2" style="margin-top:8px">
+      <div class="panel" style="background:var(--bg-raise)">
+        <div class="panel-title">${esc(d.party_a)}</div>
+        <div style="font-size:12px;white-space:pre-wrap">${esc(short(d.position_a, 700))}</div>
+      </div>
+      <div class="panel" style="background:var(--bg-raise)">
+        <div class="panel-title">${esc(d.party_b)}</div>
+        <div style="font-size:12px;white-space:pre-wrap">${esc(short(d.position_b, 700))}</div>
+      </div>
+    </div>
+    ${d.recommendation ? `<div class="panel" style="border-left:2px solid var(--steel);margin-top:8px">
+      <div class="panel-title">HR recommends (not binding)</div>
+      <div style="font-size:12.5px">${esc(d.recommendation)}</div>
+      ${d.reasoning ? `<div class="map-legend" style="white-space:pre-wrap;margin-top:6px">${esc(d.reasoning)}</div>` : ''}
+    </div>` : d.state === 'arbitrating' ? '<div class="empty">HR is hearing both sides…</div>' : ''}
+    ${d.ruling ? `<div class="panel" style="border-left:2px solid var(--ember);margin-top:8px">
+      <div class="panel-title" style="color:var(--ember)">The owner's ruling — final</div>
+      <div style="font-size:12.5px">${esc(d.ruling)}</div>
+      <div class="map-legend">ruled by ${esc(d.ruled_by || '')} · ${esc(d.ruled_at || '')}</div>
+    </div>` : ''}
+    ${isOwner && d.state === 'recommended' ? `<div class="form-inline" style="margin-top:8px">
+      <div style="flex:2"><label class="fl">Your ruling (binding)</label><input type="text" data-dp-ruling="${d.id}" placeholder="What is decided, and what happens now"></div>
+      <div><label class="fl">Favours</label><select data-dp-fav="${d.id}"><option value="">—</option><option>${esc(d.party_a)}</option><option>${esc(d.party_b)}</option><option value="neither">neither</option></select></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" data-dp-prec="${d.id}"> keep as precedent</label>
+      <button class="btn btn-primary" data-dp-rule="${d.id}">Rule</button>
+    </div>` : ''}
+    ${!isOwner && d.state === 'recommended' ? '<div class="reason">Only the owner can rule on this.</div>' : ''}
+  </div>`).join('') || '<div class="panel"><div class="empty">No disputes. Either the workforce agrees, or nobody has raised the disagreement yet — blocked reviews are also turned into cases automatically.</div></div>'}`;
+
+  $('#dp-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/disputes', { method: 'POST', body: {
+        title: $('#dp-title').value, partyA: $('#dp-a').value, positionA: $('#dp-pa').value,
+        partyB: $('#dp-b').value, positionB: $('#dp-pb').value,
+      } });
+      toast('Sent to HR for arbitration'); renderDisputes();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-dp-rule]').forEach((b) => b.addEventListener('click', async () => {
+    const id = b.dataset.dpRule;
+    try {
+      await api(`/api/disputes/${id}/rule`, { method: 'POST', body: {
+        ruling: view.querySelector(`[data-dp-ruling="${id}"]`).value,
+        favours: view.querySelector(`[data-dp-fav="${id}"]`).value || null,
+        precedent: view.querySelector(`[data-dp-prec="${id}"]`).checked,
+      } });
+      toast('Ruled — final and on the record'); renderDisputes();
+    } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- the six new departments, one shared renderer ----------
+const DEPT_PAGES = {
+  pricing: {
+    title: 'Pricing', perm: 'pricing.manage', endpoint: '/api/pricing',
+    intro: 'Several agents are forbidden from stating a price that is not backed by an approved pricing record. This is that record — a draft is invisible to them, an approved one is quotable.',
+    tiles: (d) => [
+      ['Records', d.records.length, `${d.approved.length} approved and quotable`],
+      ['Approved', d.approved.length, 'agents may cite these'],
+      ['Drafts', d.records.filter((r) => r.state === 'draft').length, 'awaiting your approval'],
+      ['Retired', d.records.filter((r) => r.state === 'retired').length, 'kept for the record'],
+    ],
+    form: () => `
+      <div class="form-inline">
+        <div style="flex:1.5"><label class="fl">Name</label><input type="text" id="pc-name" placeholder="Pro plan"></div>
+        <div><label class="fl">Amount</label><input type="text" id="pc-amount" value="0"></div>
+        <div style="flex:0.6"><label class="fl">Currency</label><input type="text" id="pc-cur" value="USD"></div>
+        <div><label class="fl">Unit</label><input type="text" id="pc-unit" value="per month"></div>
+        <div><label class="fl">Plan</label><input type="text" id="pc-plan" value="standard"></div>
+        <button class="btn btn-primary" id="pc-go">Draft with analysis</button>
+      </div>
+      <div><label class="fl">Why this price?</label><input type="text" id="pc-why" placeholder="what the buyer compares it to, what it must cover"></div>`,
+    submit: async () => api('/api/pricing', { method: 'POST', body: { name: $('#pc-name').value, amount: Number($('#pc-amount').value) || 0, currency: $('#pc-cur').value, unit: $('#pc-unit').value, plan: $('#pc-plan').value, rationale: $('#pc-why').value || null } }),
+    rows: (d, canM) => d.records.map((r) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span><b>${esc(r.name)}</b> <span class="mono">${esc(String(r.amount))} ${esc(r.currency)} ${esc(r.unit)}</span>
+            <span class="chip chip-dim">${esc(r.plan)}</span>
+            <span class="state state-${r.state === 'approved' ? 'done' : r.state === 'retired' ? 'failed' : 'awaiting_human'}">${esc(r.state)}</span></span>
+          <span>${canM && r.state === 'draft' ? `<button class="btn btn-sm btn-ok" data-act='{"path":"/api/pricing/${r.id}/state","body":{"state":"approved"}}'>Approve</button>` : ''}
+            ${canM && r.state === 'approved' ? `<button class="btn btn-sm" data-act='{"path":"/api/pricing/${r.id}/state","body":{"state":"retired"}}'>Retire</button>` : ''}</span>
+        </div>
+        ${r.approved_by ? `<div class="map-legend">approved by ${esc(r.approved_by)}</div>` : ''}
+        ${r.rationale ? `<details style="margin-top:6px"><summary class="map-legend" style="cursor:pointer">the pricing analysis</summary><pre class="json" style="max-height:40vh;white-space:pre-wrap">${esc(r.rationale)}</pre></details>` : '<div class="map-legend">the analyst is working on the rationale…</div>'}
+      </div></div>`).join('') || '<div class="empty">No pricing records — until one is approved, no agent may quote a price.</div>',
+  },
+  success: {
+    title: 'Customer success', perm: 'success.manage', endpoint: '/api/success',
+    intro: 'The CRM knows who pays. This knows who is actually healthy — judged from ticket history and how recently anyone spoke to them, not from optimism.',
+    tiles: (d) => [
+      ['Assessed', d.assessed, `of ${d.customers} customers`],
+      ['At risk', d.atRisk, `$${d.mrrAtRisk}/mo exposed`],
+      ['Average score', d.avgScore ?? '—', 'out of 5'],
+      ['Unassessed', Math.max(0, d.customers - d.assessed), 'nobody has looked'],
+    ],
+    form: () => `<div class="map-legend">Open a customer below and assess them, or run one from the <a href="#/customers">CRM</a>.</div>`,
+    rows: (d, canM) => d.rows.map((r) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span><b>${esc(r.customer_name)}</b> <span class="mono">$${r.mrr_usd}/mo</span>
+            <span class="chip ${['at_risk', 'churn_risk'].includes(r.stage) ? 'chip-bad' : r.stage === 'healthy' ? 'chip-ok' : 'chip-dim'}">${esc(r.stage.replace('_', ' '))}</span>
+            <span class="chip chip-dim">${'●'.repeat(r.score)}${'○'.repeat(5 - r.score)}</span></span>
+          <span>${canM ? `<button class="btn btn-sm" data-act='{"path":"/api/success/${r.customer_id}/assess","body":{}}'>Re-assess</button>` : ''}</span>
+        </div>
+        ${r.notes ? `<div class="map-legend">${esc(r.notes)}</div>` : '<div class="map-legend">assessing…</div>'}
+        ${r.next_step ? `<div style="font-size:12.5px;margin-top:4px">→ <b>${esc(r.next_step)}</b></div>` : ''}
+      </div></div>`).join('') || '<div class="empty">No customers assessed yet.</div>',
+    extra: (d) => d.customers > d.assessed ? `<div class="panel"><div class="panel-title">Not yet assessed</div><div class="map-legend">Assess a customer from the <a href="#/customers">CRM</a> — the success desk reads their tickets and interaction history to judge health.</div></div>` : '',
+  },
+  assets: {
+    title: 'Assets', perm: 'assets.manage', endpoint: '/api/assets', listKey: null,
+    intro: 'Domains, licences, credentials and devices expire exactly like vendor contracts, and losing one quietly is how companies lose their name. Renewals inside 21 days raise an alert.',
+    tiles: (d) => [
+      ['Assets', d.length, `${d.filter((a) => a.state === 'active').length} active`],
+      ['Monthly cost', `$${d.reduce((a, x) => a + (x.cost_usd || 0), 0)}`, 'across all assets'],
+      ['Renewing soon', d.filter((a) => a.renewal_date && a.renewal_date <= new Date(Date.now() + 21 * 864e5).toISOString().slice(0, 10)).length, 'within 21 days'],
+      ['Kinds', new Set(d.map((a) => a.kind)).size, 'domains, licences, credentials…'],
+    ],
+    form: () => `
+      <div class="form-inline">
+        <div style="flex:1.4"><label class="fl">Name</label><input type="text" id="as-name" placeholder="crucible.iq domain"></div>
+        <div><label class="fl">Kind</label><select id="as-kind"><option>domain</option><option>license</option><option>credential</option><option>device</option><option>repo</option><option>account</option><option>certificate</option></select></div>
+        <div><label class="fl">Owner</label><input type="text" id="as-owner" value="${esc(currentUser?.username || '')}"></div>
+        <div style="flex:0.6"><label class="fl">$/mo</label><input type="text" id="as-cost" value="0"></div>
+        <div><label class="fl">Renews</label><input type="text" id="as-renew" placeholder="2027-01-15"></div>
+        <button class="btn btn-primary" id="as-go">Register</button>
+      </div>`,
+    submit: async () => api('/api/assets', { method: 'POST', body: { name: $('#as-name').value, kind: $('#as-kind').value, owner: $('#as-owner').value, costUsd: Number($('#as-cost').value) || 0, renewalDate: $('#as-renew').value || null } }),
+    rows: (d, canM) => `<table><thead><tr><th>Asset</th><th>Kind</th><th>Owner</th><th class="num">$/mo</th><th>Renews</th><th>State</th>${canM ? '<th></th>' : ''}</tr></thead><tbody>
+      ${d.map((a) => {
+        const soon = a.renewal_date && a.renewal_date <= new Date(Date.now() + 21 * 864e5).toISOString().slice(0, 10);
+        return `<tr style="${a.state === 'retired' ? 'opacity:.5' : ''}">
+          <td><b>${esc(a.name)}</b>${a.vendor ? ` <a class="chip chip-dim" style="text-decoration:none" href="#/vendors">${esc(a.vendor.name)}</a>` : ''}</td>
+          <td><span class="chip chip-steel">${esc(a.kind)}</span></td>
+          <td class="mono">${esc(a.owner)}</td>
+          <td class="num">${a.cost_usd}</td>
+          <td class="mono" style="color:${soon ? 'var(--warn)' : 'var(--ink-faint)'}">${esc(a.renewal_date || '—')}</td>
+          <td><span class="chip ${a.state === 'active' ? 'chip-ok' : 'chip-dim'}">${esc(a.state)}</span></td>
+          ${canM ? `<td>${a.state !== 'retired' ? `<button class="btn btn-sm" data-act='{"path":"/api/assets/${a.id}/state","body":{"state":"retired"}}'>Retire</button>` : ''}</td>` : ''}
+        </tr>`;
+      }).join('') || '<tr><td colspan="7" class="empty">No assets registered.</td></tr>'}
+    </tbody></table>`,
+  },
+  localization: {
+    title: 'Localization', perm: 'localization.manage', endpoint: '/api/localization', listKey: null,
+    intro: 'Adaptation between Arabic and English for meaning and market — not word by word. Formatting, numbers and placeholders are preserved exactly; anything that could not carry over is noted.',
+    tiles: (d) => [
+      ['Translations', d.length, `${d.filter((l) => l.state === 'approved').length} approved`],
+      ['Ready to review', d.filter((l) => l.state === 'ready').length, 'awaiting your sign-off'],
+      ['In progress', d.filter((l) => l.state === 'translating').length, 'the localization agent is working'],
+      ['Languages', new Set(d.map((l) => l.target_lang)).size, 'targets in use'],
+    ],
+    form: () => `
+      <div class="form-inline">
+        <div style="flex:1.4"><label class="fl">Title</label><input type="text" id="lo-title"></div>
+        <div><label class="fl">From</label><select id="lo-kind"><option value="manual">pasted text</option><option value="content">content item</option><option value="post">social post</option><option value="doc">design document</option></select></div>
+        <div style="flex:0.5"><label class="fl">Source #</label><input type="text" id="lo-sid" placeholder="id"></div>
+        <div style="flex:0.5"><label class="fl">Into</label><select id="lo-lang"><option value="ar">العربية</option><option value="en">English</option><option value="ku">Kurdish</option><option value="tr">Türkçe</option></select></div>
+        <button class="btn btn-primary" id="lo-go">Translate</button>
+      </div>
+      <div><label class="fl">Text (leave blank when pulling from a source above)</label><textarea id="lo-text" style="min-height:80px"></textarea></div>`,
+    submit: async () => api('/api/localization', { method: 'POST', body: { title: $('#lo-title').value || null, sourceKind: $('#lo-kind').value, sourceId: $('#lo-sid').value || null, sourceText: $('#lo-text').value || null, targetLang: $('#lo-lang').value } }),
+    rows: (d, canM) => d.map((l) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span><b>${esc(l.title)}</b> <span class="chip chip-dim">${esc(l.source_kind)}</span> <span class="chip chip-steel">→ ${esc(l.target_lang)}</span>
+            <span class="state state-${l.state === 'approved' ? 'done' : l.state === 'ready' ? 'awaiting_human' : l.state === 'failed' ? 'failed' : 'running'}">${esc(l.state)}</span></span>
+          <span>${canM && l.state === 'ready' ? `<button class="btn btn-sm btn-ok" data-act='{"path":"/api/localization/${l.id}/approve","body":{}}'>Approve</button>` : ''}</span>
+        </div>
+        ${l.output ? `<details style="margin-top:6px"><summary class="map-legend" style="cursor:pointer">read the adaptation</summary><pre class="json" style="max-height:45vh;white-space:pre-wrap">${esc(l.output)}</pre></details>` : '<div class="map-legend">translating…</div>'}
+        ${l.notes ? `<div class="map-legend">${esc(l.notes)}</div>` : ''}
+      </div></div>`).join('') || '<div class="empty">Nothing translated yet.</div>',
+  },
+  marketwatch: {
+    title: 'Market watch', perm: 'marketwatch.manage', endpoint: '/api/marketwatch', listKey: null,
+    intro: 'Intelligence collects prospects. This watches rivals — what they sell, what they charge, where they are weak, and how they would react if we moved into their space.',
+    tiles: (d) => [
+      ['Competitors', d.length, `${d.filter((c) => c.state === 'watching').length} watched`],
+      ['High threat', d.filter((c) => c.threat >= 4).length, 'threat 4 or 5'],
+      ['Profiled', d.filter((c) => c.brief).length, 'with a research brief'],
+      ['Checked live', d.filter((c) => c.last_checked).length, 'site fetched by the harvester'],
+    ],
+    form: () => `
+      <div class="form-inline">
+        <div style="flex:1.4"><label class="fl">Competitor</label><input type="text" id="mw-name"></div>
+        <div style="flex:1.2"><label class="fl">Website</label><input type="text" id="mw-site" placeholder="example.com"></div>
+        <div><label class="fl">Segment</label><input type="text" id="mw-seg" placeholder="SME invoicing"></div>
+        <button class="btn btn-primary" id="mw-go">Add & research</button>
+      </div>`,
+    submit: async () => api('/api/marketwatch', { method: 'POST', body: { name: $('#mw-name').value, website: $('#mw-site').value || null, segment: $('#mw-seg').value || null } }),
+    rows: (d, canM) => d.map((c) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span><b>${esc(c.name)}</b>${c.website ? ` <a href="${esc(/^https?:/.test(c.website) ? c.website : `https://${c.website}`)}" target="_blank" rel="noopener noreferrer" class="chip chip-dim" style="text-decoration:none">${esc(c.website)}</a>` : ''}
+            ${c.segment ? `<span class="chip chip-steel">${esc(c.segment)}</span>` : ''}
+            <span class="chip ${c.threat >= 4 ? 'chip-bad' : c.threat >= 3 ? 'chip-warn' : 'chip-dim'}">threat ${c.threat}/5</span></span>
+          <span>${canM ? `${[1, 2, 3, 4, 5].map((t) => `<button class="btn btn-sm" data-act='{"path":"/api/marketwatch/${c.id}/threat","body":{"threat":${t}}}' style="padding:2px 6px;${c.threat === t ? 'color:var(--ember)' : ''}">${t}</button>`).join('')}
+            ${c.website ? `<button class="btn btn-sm" data-act='{"path":"/api/marketwatch/${c.id}/check","body":{}}'>Check site</button>` : ''}` : ''}</span>
+        </div>
+        ${c.brief ? `<details style="margin-top:6px"><summary class="map-legend" style="cursor:pointer">the profile${c.last_checked ? ` · last checked ${esc(c.last_checked.slice(0, 16))}` : ''}</summary><pre class="json" style="max-height:45vh;white-space:pre-wrap">${esc(c.brief)}</pre></details>` : '<div class="map-legend">researching…</div>'}
+      </div></div>`).join('') || '<div class="empty">No competitors on watch.</div>',
+  },
+  enablement: {
+    title: 'Enablement', perm: 'enablement.manage', endpoint: '/api/enablement', listKey: null,
+    intro: 'Evals produce a red number; this turns that number into training. The plan says what wording the role specification needs, what the output contract should tighten, and which cases belong in the golden set.',
+    tiles: (d) => [
+      ['Plans', d.length, `${d.filter((e) => e.state === 'applied').length} applied to a spec`],
+      ['Ready to apply', d.filter((e) => e.state === 'ready').length, 'read and apply them'],
+      ['From failed evals', d.filter((e) => e.trigger === 'eval-fail').length, 'raised automatically'],
+      ['Analysing', d.filter((e) => e.state === 'analysing').length, 'diagnosis in progress'],
+    ],
+    form: (extra) => `
+      <div class="form-inline">
+        <div style="flex:1.4"><label class="fl">Employee</label><select id="en-agent">${(extra.agents || []).map((a) => `<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</select></div>
+        <button class="btn btn-primary" id="en-go">Analyse and plan</button>
+      </div>`,
+    submit: async () => api('/api/enablement', { method: 'POST', body: { agentId: $('#en-agent').value } }),
+    rows: (d, canM) => d.map((e) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head">
+          <span><b>${esc(e.agent_id)}</b> <span class="chip chip-dim">${esc(e.trigger)}</span>
+            <span class="state state-${e.state === 'applied' ? 'done' : e.state === 'ready' ? 'awaiting_human' : e.state === 'dismissed' ? 'failed' : 'running'}">${esc(e.state)}</span></span>
+          <span>${canM && e.state === 'ready' ? `<button class="btn btn-sm btn-ok" data-act='{"path":"/api/enablement/${e.id}/state","body":{"state":"applied"}}'>Mark applied</button>
+            <button class="btn btn-sm" data-act='{"path":"/api/enablement/${e.id}/state","body":{"state":"dismissed"}}'>Dismiss</button>` : ''}</span>
+        </div>
+        ${e.findings ? `<div class="map-legend">${esc(e.findings)}</div>` : ''}
+        ${e.plan ? `<details style="margin-top:6px"><summary class="map-legend" style="cursor:pointer">the improvement plan</summary><pre class="json" style="max-height:45vh;white-space:pre-wrap">${esc(e.plan)}</pre></details>` : '<div class="map-legend">analysing the failure pattern…</div>'}
+        <div class="map-legend">Applying a plan means editing the role specification in <a href="#/org">the org</a> or config, then re-running its <a href="#/evals">eval set</a> to prove it worked.</div>
+      </div></div>`).join('') || '<div class="empty">No enablement plans. They are also raised automatically when an eval scores under 70%.</div>',
+  },
+};
+
+function makeDeptRenderer(key) {
+  return async function renderDept() {
+    const cfg = DEPT_PAGES[key];
+    const data = await api(cfg.endpoint);
+    const canM = hasPermC(cfg.perm);
+    const extra = key === 'enablement' ? { agents: await api('/api/agents').catch(() => []) } : {};
+    const tiles = cfg.tiles(data);
+    view.innerHTML = `
+    <div class="grid grid-4">
+      ${tiles.map(([label, big, sub], i) => `<div class="panel tile ${i === 1 ? 'tile-steel' : ''}"><div class="panel-title">${esc(label)}</div><div class="big">${esc(String(big))}</div><div class="sub">${sub}</div></div>`).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">${esc(cfg.title)}</div>
+      <div class="map-legend">${cfg.intro}</div>
+      ${canM ? cfg.form(extra) : ''}
+    </div>
+    <div class="panel">${cfg.rows(data, canM)}</div>
+    ${cfg.extra ? cfg.extra(data) : ''}`;
+
+    view.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', async () => {
+      let spec; try { spec = JSON.parse(b.dataset.act); } catch { return; }
+      b.disabled = true;
+      try { await api(spec.path, { method: 'POST', body: spec.body || {} }); renderDept(); }
+      catch (e) { toast(e.message, true); b.disabled = false; }
+    }));
+    const goBtn = view.querySelector('#pc-go, #as-go, #lo-go, #mw-go, #en-go');
+    goBtn?.addEventListener('click', async () => {
+      try { await cfg.submit(); toast('Done'); renderDept(); } catch (e) { toast(e.message, true); }
+    });
+  };
+}
+
+// ---------- Owner console ----------
+async function renderOwner() {
+  if (!currentUser?.isOwner) {
+    view.innerHTML = '<div class="panel"><div class="empty">This console belongs to the owner of the company.</div></div>';
+    return;
+  }
+  const [box, harmony, disputes, settings, users, stats] = await Promise.all([
+    api('/api/inbox'), api('/api/harmony'), api('/api/disputes'), api('/api/settings'), api('/api/users'), api('/api/stats'),
+  ]);
+  view.innerHTML = `
+  <div class="panel" style="border-color:var(--ember)">
+    <div class="panel-title" style="color:var(--ember)">You own this company</div>
+    <div class="map-legend">
+      Signed in as <b>${esc(currentUser.displayName)}</b> — every permission in the platform, plus the two powers that exist only for the owner:
+      the <b>final ruling</b> on any dispute, and the <b>kill switches</b> below. Everything you do here is recorded on the audit chain under your name, like everyone else's actions.
+    </div>
+  </div>
+
+  <div class="grid grid-4">
+    <div class="panel tile ${disputes.awaitingOwner ? 'tile-warn' : ''}"><div class="panel-title">Rulings only you can make</div><div class="big">${disputes.awaitingOwner}</div><div class="sub"><a href="#/disputes">open the cases →</a></div></div>
+    <div class="panel tile ${box.total ? 'tile-warn' : ''}"><div class="panel-title">Waiting on a human</div><div class="big">${box.total}</div><div class="sub"><a href="#/gate">approvals inbox →</a></div></div>
+    <div class="panel tile"><div class="panel-title">Harmony</div><div class="big">${harmony.harmony.score}<span class="unit">%</span></div><div class="sub"><a href="#/harmony">raise it →</a></div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Month spend</div><div class="big">${esc(money(stats.spend.monthUsd))}</div><div class="sub">of ${esc(money(stats.spend.companyCapUsd))} cap</div></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Kill switches — reversible, immediate, audited</div>
+      <div class="owner-switch">
+        <span><b>Orchestrator</b><span class="os-sub">plans and dispatches work hourly</span></span>
+        <button class="btn btn-sm ${harmony.enabled ? 'btn-bad' : 'btn-ok'}" id="ow-maestro">${harmony.enabled ? 'Stop' : 'Start'}</button>
+      </div>
+      <div class="owner-switch">
+        <span><b>Orchestrator mode</b><span class="os-sub">dry-run plans without acting</span></span>
+        <button class="btn btn-sm" id="ow-mode">${esc(harmony.mode)}</button>
+      </div>
+      <div class="owner-switch">
+        <span><b>Mock mode</b><span class="os-sub">stop all real model spend instantly</span></span>
+        <button class="btn btn-sm ${settings.mockForced ? 'btn-ok' : ''}" id="ow-mock">${settings.mockForced ? 'Currently MOCK — go live' : 'Switch to mock'}</button>
+      </div>
+      <div class="map-legend">Nothing here deletes anything. Each switch changes what the company is allowed to do next, and can be flipped straight back.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Your company at a glance</div>
+      <table><tbody>
+        <tr><td>People with access</td><td class="num">${users.length}</td><td><a href="#/users">manage →</a></td></tr>
+        <tr><td>AI employees</td><td class="num">${stats.byAgent.length || '—'}</td><td><a href="#/org">personas →</a></td></tr>
+        <tr><td>Providers configured</td><td class="num">${settings.providers.filter((p) => p.configured).length}/${settings.providers.length}</td><td><a href="#/settings">keys →</a></td></tr>
+        <tr><td>Audit chain</td><td class="num">${stats.inboxTotal !== undefined ? '✓' : '—'}</td><td><a href="#/audit">verify →</a></td></tr>
+      </tbody></table>
+      <div class="map-legend" style="margin-top:10px">The one thing you cannot do is edit history: the audit chain is append-only and hash-linked, for you as much as for anyone. That is what makes your rulings worth something.</div>
+    </div>
+  </div>
+
+  ${disputes.awaitingOwner ? `<div class="panel">
+    <div class="panel-title">Cases waiting for your ruling</div>
+    ${disputes.disputes.filter((d) => d.state === 'recommended').map((d) => `
+      <div class="round"><div class="round-body">
+        <div class="agent-head"><span><b>#${d.id} ${esc(d.title)}</b> <span class="chip chip-dim">${esc(d.party_a)} vs ${esc(d.party_b)}</span></span>
+          <a class="btn btn-sm btn-primary" href="#/disputes">Rule</a></div>
+        <div class="map-legend">HR recommends: ${esc(short(d.recommendation, 220))}</div>
+      </div></div>`).join('')}
+  </div>` : ''}`;
+
+  $('#ow-maestro')?.addEventListener('click', async () => {
+    try { await api('/api/harmony/toggle', { method: 'POST', body: { enabled: !harmony.enabled } }); renderOwner(); } catch (e) { toast(e.message, true); }
+  });
+  $('#ow-mode')?.addEventListener('click', async () => {
+    try { await api('/api/harmony/mode', { method: 'POST', body: { mode: harmony.mode === 'live' ? 'dry-run' : 'live' } }); renderOwner(); } catch (e) { toast(e.message, true); }
+  });
+  $('#ow-mock')?.addEventListener('click', async () => {
+    try { await api('/api/settings', { method: 'POST', body: { key: 'CRUCIBLE_MOCK', value: settings.mockForced ? null : 'true' } }); toast(settings.mockForced ? 'Live models re-enabled' : 'Mock mode on — no further model spend'); renderOwner(); }
+    catch (e) { toast(e.message, true); }
   });
 }
 

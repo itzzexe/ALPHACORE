@@ -4,8 +4,46 @@
 // The prompt travels over stdin (never through a shell string), so no
 // injection surface; the argument list is static.
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const TIMEOUT_MS = 180_000;
+
+// The CLI is not always on PATH (Windows installs land in ~/.local/bin, and
+// service processes often inherit a trimmed PATH). Resolve it once: explicit
+// CLAUDE_CLI_PATH wins, then the known install locations, then bare `claude`.
+let resolved = null;
+function resolveCli() {
+  if (resolved) return resolved;
+  const win = process.platform === 'win32';
+  const home = os.homedir();
+  const candidates = [
+    process.env.CLAUDE_CLI_PATH?.trim(),
+    path.join(home, '.local', 'bin', win ? 'claude.exe' : 'claude'),
+    path.join(home, '.claude', 'local', win ? 'claude.cmd' : 'claude'),
+    win && process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'claude.cmd') : null,
+    win ? null : '/usr/local/bin/claude',
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+        // A real executable path is spawned directly — no shell, so spaces in
+        // the path are safe. Only .cmd/.bat shims need the shell.
+        resolved = { cmd: c, shell: /\.(cmd|bat)$/i.test(c) };
+        return resolved;
+      }
+    } catch { /* try the next candidate */ }
+  }
+  resolved = { cmd: 'claude', shell: win };
+  return resolved;
+}
+
+/** Where the adapter will look — surfaced in Settings so a bad path is visible. */
+export function cliLocation() {
+  const r = resolveCli();
+  return { path: r.cmd, resolved: r.cmd !== 'claude', fromEnv: Boolean(process.env.CLAUDE_CLI_PATH) };
+}
 
 export async function call({ model, system, prompt, maxTokens }) {
   const t0 = Date.now();
@@ -20,10 +58,10 @@ export async function call({ model, system, prompt, maxTokens }) {
     args.push('--model', model);
   }
 
+  const cli = resolveCli();
   const out = await new Promise((resolve, reject) => {
-    // shell:true is required on Windows for the `claude` .cmd shim.
-    const child = spawn('claude', args, {
-      shell: true,
+    const child = spawn(cli.cmd, args, {
+      shell: cli.shell,
       windowsHide: true,
     });
     let stdout = '';

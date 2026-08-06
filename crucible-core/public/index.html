@@ -23,16 +23,26 @@
     <nav id="nav">
       <div class="nav-sec">Steer</div>
       <a href="#/" data-route="">Overview</a>
+      <a href="#/requests" data-route="requests">Request desk <span class="nav-count" id="req-count"></span></a>
+      <a href="#/harmony" data-route="harmony">Harmony</a>
+      <a href="#/scorecard" data-route="scorecard">Scorecard</a>
+      <a href="#/graph" data-route="graph">Relationship Graph</a>
+      <a href="#/autopilot" data-route="autopilot">Autopilot</a>
       <a href="#/governance" data-route="governance">Governance <span class="nav-count" id="alert-count"></span></a>
       <div class="nav-sec">Decide</div>
-      <a href="#/gate" data-route="gate">Human Gate <span class="nav-count" id="gate-count"></span></a>
+      <a href="#/gate" data-route="gate">Approvals inbox <span class="nav-count" id="gate-count"></span></a>
       <a href="#/decisions" data-route="decisions">Decisions</a>
+      <div class="nav-sec">Engineer</div>
+      <a href="#/systems" data-route="systems">System Design</a>
+      <a href="#/infra" data-route="infra">Infrastructure</a>
       <div class="nav-sec">Produce</div>
+      <a href="#/journeys" data-route="journeys">Journeys <span class="nav-count" id="journey-count"></span></a>
       <a href="#/products" data-route="products">Products</a>
       <a href="#/pipelines" data-route="pipelines">Pipelines</a>
       <a href="#/runs" data-route="runs">Runs</a>
       <a href="#/artifacts" data-route="artifacts">Artifacts</a>
       <div class="nav-sec">Plan</div>
+      <a href="#/workforce" data-route="workforce">Workforce (AI)</a>
       <a href="#/projects" data-route="projects">Projects</a>
       <a href="#/tasks" data-route="tasks">Tasks</a>
       <a href="#/risks" data-route="risks">Risks</a>
@@ -45,17 +55,34 @@
       <a href="#/segments" data-route="segments">Segments</a>
       <a href="#/data" data-route="data">Datasets</a>
       <a href="#/archive" data-route="archive">Archive</a>
-      <div class="nav-sec">Commercial</div>
+      <div class="nav-sec">Creative</div>
+      <a href="#/social" data-route="social">Social Media</a>
+      <a href="#/content" data-route="content">Content Studio</a>
+      <a href="#/design" data-route="design">Design Studio</a>
+      <a href="#/localization" data-route="localization">Localization</a>
       <a href="#/marketing" data-route="marketing">Marketing</a>
+      <div class="nav-sec">Commercial</div>
+      <a href="#/sales" data-route="sales">Sales (Deals)</a>
       <a href="#/customers" data-route="customers">Customers</a>
+      <a href="#/success" data-route="success">Customer Success</a>
+      <a href="#/pricing" data-route="pricing">Pricing</a>
+      <a href="#/marketwatch" data-route="marketwatch">Market Watch</a>
+      <a href="#/relations" data-route="relations">Relations (RM)</a>
       <a href="#/finance" data-route="finance">Finance</a>
+      <a href="#/finreports" data-route="finreports">Financial Reports</a>
       <div class="nav-sec">Corporate</div>
+      <a href="#/org" data-route="org">Org &amp; Personas</a>
+      <a href="#/society" data-route="society">The Society</a>
+      <a href="#/disputes" data-route="disputes">Disputes <span class="nav-count" id="dispute-count"></span></a>
       <a href="#/people" data-route="people">People (HR)</a>
+      <a href="#/assets" data-route="assets">Assets</a>
+      <a href="#/enablement" data-route="enablement">Enablement</a>
       <a href="#/legal" data-route="legal">Legal</a>
       <a href="#/vendors" data-route="vendors">Vendors</a>
       <a href="#/knowledge" data-route="knowledge">Knowledge</a>
       <a href="#/objectives" data-route="objectives">Objectives</a>
       <div class="nav-sec">Admin</div>
+      <a href="#/owner" data-route="owner">Owner console</a>
       <a href="#/oversight" data-route="oversight">Oversight</a>
       <a href="#/users" data-route="users">Users &amp; Roles</a>
       <a href="#/settings" data-route="settings">Settings</a>
@@ -82,6 +109,7 @@
     <header class="topbar">
       <h1 id="page-title">Overview</h1>
       <div class="top-right">
+        <span id="poll-chip" class="chip chip-warn" title="This page normally refreshes itself; it is paused so your typing is not lost" hidden>✎ auto-refresh paused</span>
         <span id="chain-chip" class="chip chip-dim" title="Audit hash-chain integrity">chain —</span>
         <span id="clock" class="clock"></span>
       </div>

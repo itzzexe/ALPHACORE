@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Font ss:FontName="Calibri" ss:Size="11"/></Style>
+  <Style ss:ID="hdr"><Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1"/><Interior ss:Color="#F2E6DA" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/></Style>
+ </Styles>
+ <Worksheet ss:Name="Intel query-1">
+  <Table>
+   <Column ss:Width="180"/>
+   <Column ss:Width="150"/>
+   <Column ss:Width="70"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="170"/>
+   <Column ss:Width="150"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="220"/>
+   <Column ss:Width="180"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="320"/>
+   <Column ss:Width="80"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="100"/>
+   <Column ss:Width="100"/>
+   <Column ss:Width="240"/>
+   <Column ss:Width="80"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="80"/>
+   <Row ss:StyleID="hdr"><Cell><Data ss:Type="String">Name</Data></Cell><Cell><Data ss:Type="String">الاسم</Data></Cell><Cell><Data ss:Type="String">Kind</Data></Cell><Cell><Data ss:Type="String">Sector | القطاع</Data></Cell><Cell><Data ss:Type="String">Country | الدولة</Data></Cell><Cell><Data ss:Type="String">City | المدينة</Data></Cell><Cell><Data ss:Type="String">Region</Data></Cell><Cell><Data ss:Type="String">Email | البريد</Data></Cell><Cell><Data ss:Type="String">Email 2</Data></Cell><Cell><Data ss:Type="String">Phone | الهاتف</Data></Cell><Cell><Data ss:Type="String">Phone 2</Data></Cell><Cell><Data ss:Type="String">WhatsApp</Data></Cell><Cell><Data ss:Type="String">Address | العنوان</Data></Cell><Cell><Data ss:Type="String">Website | الموقع</Data></Cell><Cell><Data ss:Type="String">LinkedIn</Data></Cell><Cell><Data ss:Type="String">Social</Data></Cell><Cell><Data ss:Type="String">Profile | نبذة</Data></Cell><Cell><Data ss:Type="String">Size</Data></Cell><Cell><Data ss:Type="String">Completeness %</Data></Cell><Cell><Data ss:Type="String">Gaps | النواقص</Data></Cell><Cell><Data ss:Type="String">Source method</Data></Cell><Cell><Data ss:Type="String">Enrichment</Data></Cell><Cell><Data ss:Type="String">Source URLs</Data></Cell><Cell><Data ss:Type="String">Confidence</Data></Cell><Cell><Data ss:Type="String">Verification</Data></Cell><Cell><Data ss:Type="String">State</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">[mock] Sample Holding 35</Data></Cell><Cell/><Cell><Data ss:Type="String">company</Data></Cell><Cell/><Cell/><Cell/><Cell/><Cell><Data ss:Type="String">iana@iana.org</Data></Cell><Cell/><Cell><Data ss:Type="String">+14242545300</Data></Cell><Cell><Data ss:Type="String">+14242545033</Data></Cell><Cell/><Cell/><Cell><Data ss:Type="String">https://www.iana.org/</Data></Cell><Cell/><Cell/><Cell><Data ss:Type="String">[mock] Second placeholder candidate.</Data></Cell><Cell/><Cell><Data ss:Type="Number">70</Data></Cell><Cell><Data ss:Type="String">address city country linkedin</Data></Cell><Cell><Data ss:Type="String">web-scrape</Data></Cell><Cell><Data ss:Type="String">enriched</Data></Cell><Cell><Data ss:Type="String">https://www.iana.org/contact</Data></Cell><Cell><Data ss:Type="Number">0.25</Data></Cell><Cell><Data ss:Type="String">verified</Data></Cell><Cell><Data ss:Type="String">targeted</Data></Cell></Row><Row><Cell><Data ss:Type="String">[mock] Example Energy Services</Data></Cell><Cell><Data ss:Type="String">[تجريبي] شركة الطاقة</Data></Cell><Cell><Data ss:Type="String">company</Data></Cell><Cell><Data ss:Type="String">energy</Data></Cell><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell><Data ss:Type="String">https://example.com/</Data></Cell><Cell/><Cell/><Cell><Data ss:Type="String">[mock] Placeholder candidate — mock mode returns a structurally valid record so the pipeline is demoable. Connect a provider key for real candidates.</Data></Cell><Cell><Data ss:Type="String">SME</Data></Cell><Cell><Data ss:Type="Number">22</Data></Cell><Cell><Data ss:Type="String">email phone address city country linkedin</Data></Cell><Cell><Data ss:Type="String">web-scrape</Data></Cell><Cell><Data ss:Type="String">enriched</Data></Cell><Cell/><Cell><Data ss:Type="Number">0.3</Data></Cell><Cell><Data ss:Type="String">unverified</Data></Cell><Cell><Data ss:Type="String">new</Data></Cell></Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>

@@ -36,11 +36,31 @@ import {
   createCustomer, listCustomers, updateCustomer, crmStats,
 } from './commercial.js';
 import {
-  createIntelQuery, listIntelQueries, getIntelQuery, verifyIntelRecord, targetIntelRecord, exportIntelCsv,
-  createSegment, listSegments, addToSegment, autoSegment,
-  createDataset, listDatasets, getDataset, transformDataset,
-  listArchive, getArchiveItem, archiveItem,
+  createSegment, listSegments, getSegment, addToSegment, removeFromSegment, buildSegment, segmentToCampaign, autoSegment,
+  createDataset, listDatasets, getDataset, transformDataset, datasetFromSource, listInternalSources,
+  listArchive, getArchiveItem, archiveItem, archiveStats,
 } from './data.js';
+import { connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit } from './links.js';
+import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
+import {
+  createPricing, listPricing, setPricingState, approvedPricing,
+  assessCustomer, listCustomerHealth, successOverview,
+  createAsset, listAssets, setAssetState,
+  createLocalization, listLocalizations, approveLocalization,
+  addCompetitor, listCompetitors, setCompetitorThreat, checkCompetitorSite,
+  createEnablement, listEnablement, setEnablementState,
+} from './departments.js';
+import { orgDirectory, updateAgentProfile } from './org.js';
+import { raiseDispute, listDisputes, getDispute, ruleDispute, withdrawDispute, disputesOverview } from './disputes.js';
+import { societyOverview, feed as societyFeed, relations as societyRelations, relationsFor, setSociety, forceScene, CHANNELS } from './society.js';
+import { inboxSummary, inboxCount } from './inbox.js';
+import { autonomyOverview, setAutonomy, revertDecision } from './autonomy.js';
+import { DEPARTMENTS, createRequest, listRequests, getRequest, cancelRequest, signOffStep, requestDeliverable, requestsOverview } from './requests.js';
+import {
+  createIntelQuery, listIntelQueries, getIntelQuery, getIntelRecord, listIntelRecords,
+  verifyIntelRecord, editIntelRecord, reEnrichRecord, targetIntelRecord, bulkTarget,
+  exportIntelCsv, intelOverview, RULE_CATALOG, rerunRules, verifyContact,
+} from './intel.js';
 import {
   createContract, listContracts, setContractState,
   createVendor, listVendors, setVendorState,
@@ -48,6 +68,28 @@ import {
   listKnowledge, addKnowledge, setKnowledgeVerification, lessonFromIncident,
   createObjective, listObjectives, updateObjective,
 } from './corporate.js';
+import {
+  createPartner, listPartners, setPartnerState, setPartnerHealth,
+  logInteraction, listInteractions, relationsOverview,
+  draftOutreach, markOutreachSent,
+} from './relations.js';
+import { createJourney, listJourneys, getJourney, completeStage, cancelJourney, JOURNEY_STAGES } from './journey.js';
+import { workforceBoard } from './workforce.js';
+import {
+  createChannel, listChannels, updateChannel,
+  createPost, listPosts, schedulePost, publishPost, updatePostMetrics, cancelPost,
+  createContent, listContent, approveContent,
+  createDesign, listDesigns, approveDesign,
+  studioOverview,
+} from './studio.js';
+import { createDeal, listDeals, setDealStage, draftProposal } from './sales.js';
+import {
+  DOC_CATALOG, createBlueprint, listBlueprints, getBlueprint, cancelBlueprint,
+  redoDoc, approveDoc, buildBundle, buildAgentBrief,
+} from './systemdesign.js';
+import { INFRA_SECTIONS, createInfraPlan, listInfraPlans, getInfraPlan, infraOverview } from './infra.js';
+import { REPORT_KINDS, createFinReport, listFinReports, getFinReport, approveFinReport, finReportsOverview, ownFinancials } from './finreports.js';
+import { listAutomations, setAutomation, nexusFeed } from './nexus.js';
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -60,6 +102,9 @@ const need = (obj, key) => {
 // route table: [method, pattern, handler(params, body, url)]
 const routes = [
   ['GET', /^\/api\/health$/, () => ({ ok: true, mockMode: mockMode(), now: new Date().toISOString() })],
+
+  // Everything in the company that is waiting on a person, in one queue.
+  ['GET', /^\/api\/inbox$/, () => inboxSummary()],
 
   ['GET', /^\/api\/stats$/, () => {
     const month = new Date().toISOString().slice(0, 7);
@@ -83,6 +128,7 @@ const routes = [
       byProvider, byAgent, spendSeries,
       decisions: Object.fromEntries(decisions.map((r) => [r.status, r.n])),
       awaitingHuman: gate[0].n,
+      inboxTotal: inboxCount(),
       mockMode: mockMode(),
     };
   }],
@@ -267,35 +313,153 @@ const routes = [
     return settingsOverview();
   }],
 
-  // --- Data Division: Intelligence ---
+  // --- Data Division: Intelligence (multi-pass campaigns + web enrichment) ---
   ['GET', /^\/api\/intel$/, () => listIntelQueries()],
+  ['GET', /^\/api\/intel\/overview$/, () => intelOverview()],
+  ['GET', /^\/api\/intel\/rules$/, () => RULE_CATALOG],
+  ['GET', /^\/api\/intel\/records$/, (_p, _b, url) => listIntelRecords({
+    country: url.searchParams.get('country'), sector: url.searchParams.get('sector'),
+    minCompleteness: url.searchParams.get('minCompleteness'),
+    hasContact: url.searchParams.get('hasContact') === '1',
+    verified: url.searchParams.get('verified') === '1',
+  })],
+  ['GET', /^\/api\/intel\/records\/(\d+)$/, ([id]) => getIntelRecord(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
   ['GET', /^\/api\/intel\/(\d+)$/, ([id]) => getIntelQuery(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
-  ['POST', /^\/api\/intel$/, (_p, body) => createIntelQuery({ question: need(body, 'question'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/intel$/, (_p, body) => createIntelQuery({ question: body.question || null, criteria: body.criteria || null, targetCount: body.targetCount || 15, rules: body.rules || null, constraints: body.constraints || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/intel\/records\/(\d+)\/rerun-rules$/, ([id], body) => rerunRules(Number(id), need(body, 'actor'))],
+  ['POST', /^\/api\/intel\/contacts\/(\d+)\/verify$/, ([id], body) => verifyContact(Number(id), { verification: body.verification || 'verified', actor: need(body, 'actor') })],
   ['POST', /^\/api\/intel\/records\/(\d+)\/verify$/, ([id], body) => { verifyIntelRecord(Number(id), need(body, 'actor')); return { ok: true }; }],
+  ['POST', /^\/api\/intel\/records\/(\d+)\/edit$/, ([id], body) => editIntelRecord(Number(id), { email: body.email ?? null, phone: body.phone ?? null, address: body.address ?? null, website: body.website ?? null, linkedin: body.linkedin ?? null, notes: body.notes ?? null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/intel\/records\/(\d+)\/enrich$/, ([id], body) => reEnrichRecord(Number(id), { website: body.website || null, actor: need(body, 'actor') })],
   ['POST', /^\/api\/intel\/records\/(\d+)\/target$/, ([id], body) => targetIntelRecord(Number(id), { productId: body.productId || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/intel\/bulk-target$/, (_p, body) => bulkTarget({ queryId: body.queryId || null, segmentId: body.segmentId || null, minCompleteness: body.minCompleteness || 0, verifiedOnly: body.verifiedOnly !== false, productId: body.productId || null, actor: need(body, 'actor') })],
   ['GET', /^\/api\/intel\/export$/, (_p, _b, url) => {
     const r = exportIntelCsv({
       queryId: url.searchParams.get('queryId') ? Number(url.searchParams.get('queryId')) : null,
       segmentId: url.searchParams.get('segmentId') ? Number(url.searchParams.get('segmentId')) : null,
+      format: url.searchParams.get('format') || 'csv',
       actor: url.searchParams.get('actor') || 'human:admin',
     });
-    return { __raw: { contentType: 'text/csv; charset=utf-8', filename: r.filename, body: r.csv } };
+    return { __raw: { contentType: r.mime, filename: r.filename, body: r.body } };
   }],
 
   // --- Data Division: Segments ---
   ['GET', /^\/api\/segments$/, () => listSegments()],
+  ['GET', /^\/api\/segments\/(\d+)$/, ([id]) => getSegment(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
   ['POST', /^\/api\/segments$/, (_p, body) => ({ id: createSegment({ name: need(body, 'name'), description: body.description || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/segments\/build$/, (_p, body) => buildSegment({
+    name: need(body, 'name'), description: body.description || null, country: body.country || null, sector: body.sector || null,
+    minCompleteness: body.minCompleteness || null, contactableOnly: Boolean(body.contactableOnly), verifiedOnly: Boolean(body.verifiedOnly),
+    queryId: body.queryId || null, actor: need(body, 'actor'),
+  })],
   ['POST', /^\/api\/segments\/(\d+)\/members$/, ([id], body) => { addToSegment(Number(id), Number(need(body, 'recordId')), need(body, 'actor')); return { ok: true }; }],
+  ['POST', /^\/api\/segments\/(\d+)\/members\/remove$/, ([id], body) => { removeFromSegment(Number(id), Number(need(body, 'recordId')), need(body, 'actor')); return { ok: true }; }],
+  ['POST', /^\/api\/segments\/(\d+)\/campaign$/, ([id], body) => segmentToCampaign(Number(id), { name: body.name || null, channel: body.channel || 'email', budgetUsd: body.budgetUsd || 0, actor: need(body, 'actor') })],
   ['POST', /^\/api\/intel\/(\d+)\/auto-segment$/, ([id], body) => ({ runId: autoSegment(Number(id), need(body, 'actor')) })],
 
   // --- Data Division: Datasets ---
   ['GET', /^\/api\/datasets$/, () => listDatasets()],
+  ['GET', /^\/api\/datasets\/sources$/, () => listInternalSources()],
   ['GET', /^\/api\/datasets\/(\d+)$/, ([id]) => { const d = getDataset(Number(id)); if (!d) throw new HttpError(404, 'not found'); return { ...d, result: d.result ? JSON.parse(d.result) : null }; }],
   ['POST', /^\/api\/datasets$/, (_p, body) => createDataset({ name: need(body, 'name'), raw: need(body, 'raw'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/datasets\/from-source$/, (_p, body) => datasetFromSource({ source: need(body, 'source'), name: body.name || null, actor: need(body, 'actor') })],
   ['POST', /^\/api\/datasets\/(\d+)\/transform$/, ([id], body) => transformDataset(Number(id), { op: need(body, 'op'), actor: need(body, 'actor') })],
 
+  // --- Connections: what links to what, anywhere in the company ---
+  ['GET', /^\/api\/links\/([\w-]+)\/([\w.-]+)$/, ([type, id]) => connectionsFor(type, /^\d+$/.test(id) ? Number(id) : id) || (() => { throw new HttpError(404, 'no such entity type'); })()],
+  ['GET', /^\/api\/graph$/, () => relationshipMatrix()],
+  ['GET', /^\/api\/map$/, () => ({
+    divisions: DIVISIONS,
+    sections: sectionCatalog(),
+    edges: relationshipMatrix(),
+    audit: connectivityAudit(),
+    harmony: harmonyScore(),
+  })],
+
+  // --- Pricing: the record every other agent must cite ---
+  ['GET', /^\/api\/pricing$/, () => ({ records: listPricing(), approved: approvedPricing() })],
+  ['POST', /^\/api\/pricing$/, (_p, body) => createPricing({ name: need(body, 'name'), productId: body.productId || null, plan: body.plan || 'standard', currency: body.currency || 'USD', amount: body.amount || 0, unit: body.unit || 'per month', rationale: body.rationale || null, draftWithAi: body.draftWithAi !== false, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/pricing\/(\d+)\/state$/, ([id], body) => setPricingState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') })],
+
+  // --- Customer success ---
+  ['GET', /^\/api\/success$/, () => successOverview()],
+  ['POST', /^\/api\/success\/(\d+)\/assess$/, ([id], body) => assessCustomer(Number(id), { actor: need(body, 'actor') })],
+
+  // --- Assets ---
+  ['GET', /^\/api\/assets$/, () => listAssets()],
+  ['POST', /^\/api\/assets$/, (_p, body) => createAsset({ name: need(body, 'name'), kind: body.kind || 'license', owner: body.owner || need(body, 'actor'), vendorId: body.vendorId || null, costUsd: body.costUsd || 0, renewalDate: body.renewalDate || null, sensitivity: body.sensitivity || 'internal', notes: body.notes || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/assets\/(\d+)\/state$/, ([id], body) => { setAssetState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+
+  // --- Localization ---
+  ['GET', /^\/api\/localization$/, () => listLocalizations()],
+  ['POST', /^\/api\/localization$/, (_p, body) => createLocalization({ sourceKind: body.sourceKind || 'manual', sourceId: body.sourceId || null, title: body.title || null, sourceText: body.sourceText || null, targetLang: body.targetLang || 'ar', notes: body.notes || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/localization\/(\d+)\/approve$/, ([id], body) => approveLocalization(Number(id), { output: body.output ?? null, actor: need(body, 'actor') })],
+
+  // --- Market watch ---
+  ['GET', /^\/api\/marketwatch$/, () => listCompetitors()],
+  ['POST', /^\/api\/marketwatch$/, (_p, body) => addCompetitor({ name: need(body, 'name'), website: body.website || null, segment: body.segment || null, researchNow: body.researchNow !== false, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/marketwatch\/(\d+)\/threat$/, ([id], body) => { setCompetitorThreat(Number(id), { threat: need(body, 'threat'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/marketwatch\/(\d+)\/check$/, async ([id], body) => checkCompetitorSite(Number(id), need(body, 'actor'))],
+
+  // --- Enablement (training the workforce) ---
+  ['GET', /^\/api\/enablement$/, () => listEnablement()],
+  ['POST', /^\/api\/enablement$/, (_p, body) => createEnablement({ agentId: need(body, 'agentId'), trigger: body.trigger || 'manual', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/enablement\/(\d+)\/state$/, ([id], body) => { setEnablementState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+
+  // --- The org: who the employees are ---
+  ['GET', /^\/api\/org$/, () => orgDirectory()],
+  ['POST', /^\/api\/org\/([\w-]+)$/, ([id], body) => updateAgentProfile(id, { nickname: body.nickname ?? null, persona: body.persona ?? null, departments: body.departments ?? null, actor: need(body, 'actor') })],
+
+  // --- The society: colleagues, in and out of work ---
+  ['GET', /^\/api\/society$/, () => societyOverview()],
+  ['GET', /^\/api\/society\/channels$/, () => CHANNELS],
+  ['GET', /^\/api\/society\/feed$/, (_p, _b, url) => societyFeed({
+    channel: url.searchParams.get('channel'), agentId: url.searchParams.get('agent'), limit: Number(url.searchParams.get('limit')) || 80,
+  })],
+  ['GET', /^\/api\/society\/relations$/, () => societyRelations()],
+  ['GET', /^\/api\/society\/relations\/([\w-]+)$/, ([id]) => relationsFor(id)],
+  ['POST', /^\/api\/society\/toggle$/, (_p, body) => setSociety(Boolean(body.enabled), need(body, 'actor'))],
+  ['POST', /^\/api\/society\/scene$/, async (_p, body) => forceScene({ kind: body.kind || null, actor: need(body, 'actor') })],
+
+  // --- Disputes: HR frames, the owner rules ---
+  ['GET', /^\/api\/disputes$/, () => disputesOverview()],
+  ['GET', /^\/api\/disputes\/(\d+)$/, ([id]) => getDispute(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['POST', /^\/api\/disputes$/, (_p, body) => raiseDispute({ title: need(body, 'title'), partyA: need(body, 'partyA'), positionA: need(body, 'positionA'), partyB: need(body, 'partyB'), positionB: need(body, 'positionB'), subjectType: body.subjectType || null, subjectId: body.subjectId || null, context: body.context || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/disputes\/(\d+)\/rule$/, ([id], body) => ruleDispute(Number(id), { ruling: need(body, 'ruling'), favours: body.favours || null, precedent: Boolean(body.precedent), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/disputes\/(\d+)\/withdraw$/, ([id], body) => withdrawDispute(Number(id), need(body, 'actor'))],
+
+  // --- Request desk: write it once, the company routes it ---
+  ['GET', /^\/api\/requests$/, () => requestsOverview()],
+  ['GET', /^\/api\/requests\/departments$/, () => DEPARTMENTS],
+  ['GET', /^\/api\/requests\/(\d+)$/, ([id]) => getRequest(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['POST', /^\/api\/requests$/, (_p, body) => createRequest({ title: body.title || null, body: need(body, 'body'), priority: body.priority || 'normal', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/requests\/(\d+)\/signoff$/, ([id], body) => signOffStep(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/requests\/(\d+)\/cancel$/, ([id], body) => cancelRequest(Number(id), need(body, 'actor'))],
+  ['GET', /^\/api\/requests\/(\d+)\/export$/, ([id]) => {
+    const r = requestDeliverable(Number(id));
+    return { __raw: { contentType: 'text/markdown; charset=utf-8', filename: r.filename, body: r.body } };
+  }],
+
+  // --- Harmony (Maestro orchestration) ---
+  ['GET', /^\/api\/harmony$/, () => maestroOverview()],
+  ['GET', /^\/api\/harmony\/(\d+)$/, ([id]) => getCycle(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['GET', /^\/api\/harmony\/snapshot$/, () => assessCompany()],
+  ['POST', /^\/api\/harmony\/cycle$/, (_p, body) => startCycle({ trigger: 'manual', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/harmony\/toggle$/, (_p, body) => { setMaestro(Boolean(body.enabled), need(body, 'actor')); return { ok: true, enabled: Boolean(body.enabled) }; }],
+  ['POST', /^\/api\/harmony\/mode$/, (_p, body) => { setMaestroMode(need(body, 'mode'), need(body, 'actor')); return { ok: true }; }],
+  // --- Autonomy: the company decides for itself ---
+  ['GET', /^\/api\/autonomy$/, () => autonomyOverview()],
+  ['POST', /^\/api\/autonomy\/toggle$/, (_p, body) => setAutonomy(Boolean(body.enabled), need(body, 'actor'))],
+  ['POST', /^\/api\/autonomy\/(\d+)\/revert$/, ([id], body) => revertDecision(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
+
+  ['GET', /^\/api\/harmony\/remediations$/, () => remediations()],
+  ['POST', /^\/api\/harmony\/boost$/, async (_p, body) => boostHarmony({ actor: need(body, 'actor') })],
+
   // --- Data Division: Archive ---
-  ['GET', /^\/api\/archive$/, () => listArchive()],
+  ['GET', /^\/api\/archive$/, (_p, _b, url) => ({
+    stats: archiveStats(),
+    items: listArchive({ kind: url.searchParams.get('kind'), search: url.searchParams.get('search'), subjectType: url.searchParams.get('subjectType') }),
+  })],
   ['GET', /^\/api\/archive\/(\d+)$/, ([id]) => getArchiveItem(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
   ['POST', /^\/api\/archive$/, (_p, body) => ({ id: archiveItem({ title: need(body, 'title'), kind: 'manual', snapshot: body.snapshot || null, actor: need(body, 'actor') }) })],
 
@@ -335,6 +499,160 @@ const routes = [
   ['POST', /^\/api\/objectives$/, (_p, body) => createObjective({ title: need(body, 'title'), quarter: need(body, 'quarter'), owner: need(body, 'owner'), productId: body.productId || null, krs: body.krs || [], actor: need(body, 'actor') })],
   ['POST', /^\/api\/objectives\/([\w-]+)\/update$/, ([id], body) => updateObjective(id, { krs: body.krs ?? null, state: body.state ?? null, actor: need(body, 'actor') })],
 
+  // --- Relations (RM) ---
+  ['GET', /^\/api\/relations$/, () => relationsOverview()],
+  ['GET', /^\/api\/partners$/, () => listPartners()],
+  ['POST', /^\/api\/partners$/, (_p, body) => createPartner({ name: need(body, 'name'), kind: body.kind || 'partner', tier: body.tier || 'standard', owner: body.owner || need(body, 'actor'), notes: body.notes || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/partners\/(\d+)\/state$/, ([id], body) => { setPartnerState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/partners\/(\d+)\/health$/, ([id], body) => { setPartnerHealth(Number(id), { health: need(body, 'health'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/partners\/(\d+)\/outreach$/, ([id], body) => ({ runId: draftOutreach(Number(id), need(body, 'actor')) })],
+  ['POST', /^\/api\/partners\/(\d+)\/send$/, ([id], body) => markOutreachSent(Number(id), { body: body.body ?? null, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/interactions$/, (_p, _b, url) => listInteractions({
+    partnerId: url.searchParams.get('partnerId') ? Number(url.searchParams.get('partnerId')) : null,
+    customerId: url.searchParams.get('customerId') ? Number(url.searchParams.get('customerId')) : null,
+    vendorId: url.searchParams.get('vendorId') || null,
+  })],
+  ['POST', /^\/api\/interactions$/, (_p, body) => logInteraction({ partnerId: body.partnerId || null, customerId: body.customerId || null, vendorId: body.vendorId || null, kind: body.kind || 'note', summary: need(body, 'summary'), nextAction: body.nextAction || null, nextDate: body.nextDate || null, actor: need(body, 'actor') })],
+
+  // --- Company Journeys (the value chain) ---
+  ['GET', /^\/api\/journey-template$/, () => JOURNEY_STAGES],
+  ['GET', /^\/api\/journeys$/, () => listJourneys()],
+  ['GET', /^\/api\/journeys\/(\d+)$/, ([id]) => getJourney(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['POST', /^\/api\/journeys$/, (_p, body) => createJourney({ title: need(body, 'title'), productId: body.productId || null, autopilot: Boolean(body.autopilot), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/journeys\/(\d+)\/complete-stage$/, ([id], body) => completeStage(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/journeys\/(\d+)\/cancel$/, ([id], body) => cancelJourney(Number(id), need(body, 'actor'))],
+
+  // --- Workforce (agents as employees) ---
+  ['GET', /^\/api\/workforce$/, () => workforceBoard()],
+
+  // --- Creative: Social Media ---
+  ['GET', /^\/api\/studio$/, () => studioOverview()],
+  ['GET', /^\/api\/channels$/, () => listChannels()],
+  ['POST', /^\/api\/channels$/, (_p, body) => createChannel({ platform: need(body, 'platform'), handle: need(body, 'handle'), followers: body.followers || 0, notes: body.notes || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/channels\/(\d+)\/update$/, ([id], body) => { updateChannel(Number(id), { state: body.state ?? null, followers: body.followers ?? null, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/posts$/, () => listPosts()],
+  ['POST', /^\/api\/posts$/, (_p, body) => createPost({ channelId: body.channelId || null, kind: body.kind || 'post', brief: need(body, 'brief'), campaignId: body.campaignId || null, productId: body.productId || null, scheduleAt: body.scheduleAt || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/posts\/(\d+)\/schedule$/, ([id], body) => { schedulePost(Number(id), { scheduleAt: need(body, 'scheduleAt'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/posts\/(\d+)\/publish$/, ([id], body) => publishPost(Number(id), { body: body.body ?? null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/posts\/(\d+)\/metrics$/, ([id], body) => { updatePostMetrics(Number(id), { likes: body.likes ?? null, comments: body.comments ?? null, shares: body.shares ?? null, reach: body.reach ?? null, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/posts\/(\d+)\/cancel$/, ([id], body) => { cancelPost(Number(id), need(body, 'actor')); return { ok: true }; }],
+
+  // --- Creative: Content Studio ---
+  ['GET', /^\/api\/content$/, () => listContent()],
+  ['POST', /^\/api\/content$/, (_p, body) => createContent({ kind: body.kind || 'article', title: need(body, 'title'), brief: need(body, 'brief'), productId: body.productId || null, campaignId: body.campaignId || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/content\/(\d+)\/verdict$/, ([id], body) => approveContent(Number(id), { verdict: need(body, 'verdict'), body: body.body ?? null, actor: need(body, 'actor') })],
+
+  // --- Creative: Design Studio ---
+  ['GET', /^\/api\/designs$/, () => listDesigns()],
+  ['POST', /^\/api\/designs$/, (_p, body) => createDesign({ kind: body.kind || 'social-visual', title: need(body, 'title'), brief: need(body, 'brief'), productId: body.productId || null, campaignId: body.campaignId || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/designs\/(\d+)\/approve$/, ([id], body) => approveDesign(Number(id), { actor: need(body, 'actor') })],
+
+  // --- Sales (deals pipeline) ---
+  ['GET', /^\/api\/deals$/, () => listDeals()],
+  ['POST', /^\/api\/deals$/, (_p, body) => createDeal({ name: need(body, 'name'), valueUsd: body.valueUsd || 0, customerId: body.customerId || null, partnerId: body.partnerId || null, productId: body.productId || null, owner: body.owner || need(body, 'actor'), notes: body.notes || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/deals\/(\d+)\/stage$/, ([id], body) => setDealStage(Number(id), { stage: need(body, 'stage'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/deals\/(\d+)\/proposal$/, ([id], body) => ({ runId: draftProposal(Number(id), need(body, 'actor')) })],
+
+  // --- Autopilot (Nexus) ---
+  ['GET', /^\/api\/autopilot$/, () => ({ rules: listAutomations(), feed: nexusFeed() })],
+  ['POST', /^\/api\/autopilot\/rule$/, (_p, body) => { setAutomation(need(body, 'id'), { enabled: Boolean(body.enabled), actor: need(body, 'actor') }); return { ok: true }; }],
+
+  // --- Company scorecard (BI) ---
+  ['GET', /^\/api\/scorecard$/, () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const dealTotals = listDeals();
+    return {
+      revenue: {
+        mrr: one("SELECT COALESCE(SUM(mrr_usd),0) AS n FROM customers WHERE state = 'active'").n,
+        customersActive: one("SELECT COUNT(*) AS n FROM customers WHERE state = 'active'").n,
+        pipelineValue: dealTotals.openValue, wonValue: dealTotals.wonValue,
+        dealsOpen: dealTotals.pipeline.lead.n + dealTotals.pipeline.qualified.n + dealTotals.pipeline.proposal.n,
+      },
+      creative: {
+        postsPublished: one("SELECT COUNT(*) AS n FROM posts WHERE state = 'published'").n,
+        followers: one("SELECT COALESCE(SUM(followers),0) AS n FROM channels WHERE state = 'connected'").n,
+        contentPublished: one("SELECT COUNT(*) AS n FROM content_items WHERE state = 'published'").n,
+        designsApproved: one("SELECT COUNT(*) AS n FROM designs WHERE state = 'approved'").n,
+        campaignsLive: one("SELECT COUNT(*) AS n FROM campaigns WHERE state = 'live'").n,
+      },
+      production: {
+        journeysDone: one("SELECT COUNT(*) AS n FROM journeys WHERE state = 'done'").n,
+        journeysMoving: one("SELECT COUNT(*) AS n FROM journeys WHERE state IN ('running','awaiting_human')").n,
+        runsDone7d: one("SELECT COUNT(*) AS n FROM runs WHERE state = 'done' AND created_at >= datetime('now','-7 days')").n,
+        tasksDone7d: one("SELECT COUNT(*) AS n FROM tasks WHERE state = 'done' AND done_at >= datetime('now','-7 days')").n,
+        productsLive: one("SELECT COUNT(*) AS n FROM products WHERE state = 'live'").n,
+        artifactsNote: null,
+      },
+      trust: {
+        incidentsOpen: one("SELECT COUNT(*) AS n FROM incidents WHERE state != 'closed'").n,
+        risksCritical: one("SELECT COUNT(*) AS n FROM risks WHERE state = 'open' AND likelihood * impact >= 16").n,
+        evalAvg: one('SELECT AVG(score) AS s FROM (SELECT score FROM eval_runs ORDER BY id DESC LIMIT 10)')?.s ?? null,
+        awaitingHuman: one("SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'").n,
+        chainEntries: one('SELECT COUNT(*) AS n FROM audit_log').n,
+      },
+      autopilot: {
+        actions7d: one("SELECT COUNT(*) AS n FROM nexus_log WHERE created_at >= datetime('now','-7 days')").n,
+        actionsTotal: one('SELECT COUNT(*) AS n FROM nexus_log').n,
+        agentActions7d: one("SELECT COUNT(*) AS n FROM audit_log WHERE actor_type = 'agent' AND occurred_at >= datetime('now','-7 days')").n,
+        humanActions7d: one("SELECT COUNT(*) AS n FROM audit_log WHERE actor_type = 'human' AND occurred_at >= datetime('now','-7 days')").n,
+      },
+      relations: {
+        partnersActive: one("SELECT COUNT(*) AS n FROM partners WHERE state = 'active'").n,
+        interactions30d: one("SELECT COUNT(*) AS n FROM interactions WHERE created_at >= datetime('now','-30 days')").n,
+      },
+      spendMonth: one('SELECT COALESCE(SUM(cost_usd),0) AS n FROM model_calls WHERE created_at >= ?', `${month}-01`).n,
+    };
+  }],
+
+  // --- System Design studio ---
+  ['GET', /^\/api\/design\/catalog$/, () => DOC_CATALOG.map((d) => ({ key: d.key, title: d.title, agent: d.agent, needs: d.needs, brief: d.brief }))],
+  ['GET', /^\/api\/design$/, () => listBlueprints()],
+  ['GET', /^\/api\/design\/(\d+)$/, ([id]) => getBlueprint(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['POST', /^\/api\/design$/, (_p, body) => createBlueprint({
+    name: need(body, 'name'), goal: need(body, 'goal'), docKeys: body.docKeys || null,
+    productId: body.productId || null, projectId: body.projectId || null, context: body.context || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/design\/(\d+)\/cancel$/, ([id], body) => cancelBlueprint(Number(id), need(body, 'actor'))],
+  ['POST', /^\/api\/design\/docs\/(\d+)\/redo$/, ([id], body) => redoDoc(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/design\/docs\/(\d+)\/approve$/, ([id], body) => approveDoc(Number(id), { content: body.content ?? null, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/design\/(\d+)\/bundle$/, ([id]) => {
+    const r = buildBundle(Number(id));
+    return { __raw: { contentType: 'text/markdown; charset=utf-8', filename: r.filename, body: r.body } };
+  }],
+  ['GET', /^\/api\/design\/(\d+)\/build-brief$/, ([id]) => {
+    const r = buildAgentBrief(Number(id));
+    return { __raw: { contentType: 'text/markdown; charset=utf-8', filename: r.filename, body: r.body } };
+  }],
+
+  // --- Infrastructure ---
+  ['GET', /^\/api\/infra$/, () => ({ overview: infraOverview(), plans: listInfraPlans() })],
+  ['GET', /^\/api\/infra\/sections$/, () => Object.entries(INFRA_SECTIONS).map(([id, s]) => ({ id, label: s.label }))],
+  ['GET', /^\/api\/infra\/(\d+)$/, ([id]) => getInfraPlan(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['POST', /^\/api\/infra$/, (_p, body) => createInfraPlan({
+    name: need(body, 'name'), section: body.section || 'full', spec: body.spec || {},
+    blueprintId: body.blueprintId || null, productId: body.productId || null, actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/infra\/(\d+)\/export$/, ([id]) => {
+    const p = getInfraPlan(Number(id));
+    if (!p?.content) throw new HttpError(404, 'plan not ready');
+    return { __raw: { contentType: 'text/markdown; charset=utf-8', filename: `infra-plan-${id}.md`, body: p.content } };
+  }],
+
+  // --- Financial reporting ---
+  ['GET', /^\/api\/finreports$/, () => ({ overview: finReportsOverview(), reports: listFinReports() })],
+  ['GET', /^\/api\/finreports\/ledger$/, (_p, _b, url) => ownFinancials(url.searchParams.get('period'))],
+  ['GET', /^\/api\/finreports\/(\d+)$/, ([id]) => getFinReport(Number(id)) || (() => { throw new HttpError(404, 'not found'); })()],
+  ['POST', /^\/api\/finreports$/, (_p, body) => createFinReport({
+    kind: need(body, 'kind'), title: body.title || null, subject: body.subject || 'own',
+    period: body.period || null, inputs: body.inputs || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/finreports\/(\d+)\/approve$/, ([id], body) => approveFinReport(Number(id), { actor: need(body, 'actor') })],
+  ['GET', /^\/api\/finreports\/(\d+)\/export$/, ([id]) => {
+    const r = getFinReport(Number(id));
+    if (!r?.content) throw new HttpError(404, 'report not ready');
+    return { __raw: { contentType: 'text/markdown; charset=utf-8', filename: `${r.kind}-${r.period}.md`, body: r.content } };
+  }],
+
   ['GET', /^\/api\/memory$/, () => q('SELECT * FROM memory_entries ORDER BY id DESC LIMIT 200')],
   ['POST', /^\/api\/memory$/, (_p, body) => {
     exec('INSERT INTO memory_entries (layer, classification, content, source_ref, created_by) VALUES (?,?,?,?,?)',
@@ -346,7 +664,7 @@ const routes = [
 /** Path → permission key. One permission per capability; superadmin holds "*". */
 function permFor(m, path) {
   const is = (re) => re.test(path);
-  if (['/api/health', '/api/stats', '/api/audit/verify', '/api/notifications'].includes(path)) return 'dashboard.view';
+  if (['/api/health', '/api/stats', '/api/audit/verify', '/api/notifications', '/api/inbox'].includes(path)) return 'dashboard.view';
   if (path === '/api/notifications/read') return 'notifications.read';
   if (path === '/api/providers') return 'providers.view';
   if (path === '/api/providers/test') return 'providers.test';
@@ -396,6 +714,38 @@ function permFor(m, path) {
   if (path.startsWith('/api/tasks')) return m === 'GET' ? 'tasks.view' : 'tasks.manage';
   if (path.startsWith('/api/risks')) return m === 'GET' ? 'risks.view' : 'risks.manage';
   if (path.startsWith('/api/quality')) return m === 'GET' ? 'quality.view' : 'quality.manage';
+  if (path === '/api/workforce') return 'workforce.view';
+  // Exact prefix: /api/designs is the visual Design Studio, a different section.
+  if (path === '/api/design' || path.startsWith('/api/design/')) return m === 'GET' ? 'systems.view' : 'systems.manage';
+  if (path.startsWith('/api/infra')) return m === 'GET' ? 'infra.view' : 'infra.manage';
+  if (path.startsWith('/api/finreports')) return m === 'GET' ? 'finreports.view' : 'finreports.manage';
+  if (path === '/api/scorecard' || path === '/api/graph' || path === '/api/map' || path.startsWith('/api/links/')) return 'dashboard.view';
+  if (path.startsWith('/api/harmony')) return m === 'GET' ? 'harmony.view' : 'harmony.manage';
+  // Handing the company's decisions to the AI, and taking them back, is the
+  // owner's call alone — it is not a management permission.
+  if (path === '/api/autonomy') return 'harmony.view';
+  if (path.startsWith('/api/autonomy')) return 'owner.rule';
+  if (path.startsWith('/api/requests')) return m === 'GET' ? 'requests.view' : 'requests.create';
+  if (path.startsWith('/api/pricing')) return m === 'GET' ? 'pricing.view' : 'pricing.manage';
+  if (path.startsWith('/api/success')) return m === 'GET' ? 'success.view' : 'success.manage';
+  if (path.startsWith('/api/assets')) return m === 'GET' ? 'assets.view' : 'assets.manage';
+  if (path.startsWith('/api/localization')) return m === 'GET' ? 'localization.view' : 'localization.manage';
+  if (path.startsWith('/api/marketwatch')) return m === 'GET' ? 'marketwatch.view' : 'marketwatch.manage';
+  if (path.startsWith('/api/enablement')) return m === 'GET' ? 'enablement.view' : 'enablement.manage';
+  if (path.startsWith('/api/org')) return m === 'GET' ? 'org.view' : 'org.manage';
+  if (path.startsWith('/api/society')) return m === 'GET' ? 'org.view' : 'org.manage';
+  // A ruling is the owner's alone; raising a dispute is not.
+  if (/^\/api\/disputes\/\d+\/rule$/.test(path)) return 'owner.rule';
+  if (path.startsWith('/api/disputes')) return m === 'GET' ? 'disputes.view' : 'disputes.raise';
+  if (path === '/api/datasets/sources' || path === '/api/datasets/from-source') return m === 'GET' ? 'datasets.view' : 'datasets.manage';
+  if (path.startsWith('/api/segments') && /\/campaign$/.test(path)) return 'marketing.manage';
+  if (path.startsWith('/api/deals')) return m === 'GET' ? 'sales.view' : 'sales.manage';
+  if (path.startsWith('/api/autopilot')) return m === 'GET' ? 'autopilot.view' : 'autopilot.manage';
+  if (path === '/api/studio' || path.startsWith('/api/channels') || path.startsWith('/api/posts')) return m === 'GET' ? 'social.view' : 'social.manage';
+  if (path.startsWith('/api/content')) return m === 'GET' ? 'content.view' : 'content.manage';
+  if (path.startsWith('/api/designs')) return m === 'GET' ? 'design.view' : 'design.manage';
+  if (path.startsWith('/api/relations') || path.startsWith('/api/partners') || path.startsWith('/api/interactions')) return m === 'GET' ? 'relations.view' : 'relations.manage';
+  if (path === '/api/journey-template' || path.startsWith('/api/journeys')) return m === 'GET' ? 'journeys.view' : 'journeys.manage';
   if (path === '/api/perms' || path.startsWith('/api/users')) return 'users.manage';
   if (path.startsWith('/api/settings')) return 'settings.manage';
   return 'dashboard.view';
