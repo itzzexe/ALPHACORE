@@ -1,6 +1,23 @@
 # Crucible Systems — Complete Blueprint Package
 
-**Working name** (trademark search pending — Part 11 action 8) · An AI-native SaaS company operated by 2–3 human founders and ~12 specialized agent roles under the FORGE method.
+**Working name** (trademark search pending — Part 11 action 8) · An AI-native SaaS company operated by 2–3 human founders and a growing AI workforce under the FORGE method.
+
+<p align="center">
+  <img src="crucible-core/docs/mainboard.svg" alt="Crucible Core — the living mainboard: 12 divisions, 72 departments, humans hold the gates" width="100%">
+</p>
+
+```mermaid
+flowchart LR
+  BP["📘 The Blueprint<br/>Parts 1–11<br/>rules · roles · gates · finances"] --> CORE["⚙️ Crucible Core<br/>the running platform<br/>72 departments · 12 divisions"]
+  CORE --> OUT["📦 Real output on disk<br/>spec packages · designs<br/>intel exports · working code"]
+  HUM(["👤 Humans<br/>approve · publish · sign · hire"]) --- CORE
+  AUD[("🔗 Hash-chained<br/>audit log")] --- CORE
+  style BP fill:#5ec3c9,color:#14100c
+  style CORE fill:#ff6b2c,color:#14100c
+  style OUT fill:#78bf6d,color:#14100c
+  style HUM fill:#e8c547,color:#14100c
+  style AUD fill:#948b7d,color:#14100c
+```
 
 **Package status: complete draft, v0.1 — awaiting founder decisions.** Every document is ready for review; nothing is ratified until the Part 11 §2 seed decision (DR-0001) is signed and the M0 go/no-go passes. Labeling convention throughout: [Fact] · [Assumption] · [Recommendation] · [Experiment] · [Decision] · [Open question].
 
@@ -24,7 +41,15 @@
 
 ## Working Software
 
-**[crucible-core/](crucible-core/README.md)** — the running implementation of Part 3's platform: decision registry, reservation-first budgets, multi-provider model router (Claude API + Claude subscription + OpenAI + DeepSeek + Gemini, with a zero-cost mock mode), run queue with a human gate, blind-critic mini-tribunal, hash-chained audit log, and an operations dashboard. `npm install && npm run seed && npm start` → http://localhost:8484.
+**[crucible-core/](crucible-core/README.md)** — the platform, built from Part 3 and expanded far past it into a complete AI-native company:
+
+- **72 departments across 12 divisions** (Engine, Build, Decide, Data, Create, Commerce, Capital, Operate, Talent, Trust, Executive, Govern) — agents are the workforce, humans hold every gate.
+- **Login + fine-grained RBAC**: ~95 atomic permissions (a user can hold exactly one), superadmin console for users and provider keys, server-side identity on every audited action.
+- **A living map with four switchable designs** (Mainboard / Orbit / Metro / Flow): every relationship a real database join with a live count, click-to-open, right-click connection ledger with hop-by-hop flow tracing, and a real-time ticker — the map is a monitoring console.
+- **The engine room**: multi-provider router (Claude subscription first — zero marginal cost — then Claude API, OpenAI, DeepSeek, Gemini, or a $0 mock), reservation-first budgets, run queue with a first-class human gate, blind-critic tribunal, FORGE pipelines producing real files on disk, hash-chained append-only audit log, immune system, and cross-department autopilot reflexes.
+- **The company grows itself**: Recruiting drafts, trials, and — on a human "hire" — registers new AI employees; the Academy closes measured eval gaps; the Security SOC sweeps real runs; the weekly bulletin writes itself from the audit chain.
+
+**Run it:** double-click **`Start-Crucible.bat`** (checks Node ≥ 22.5, installs, seeds, opens the browser) or `cd crucible-core && npm install && npm start` → http://localhost:8484 — first sign-in `admin` / `crucible`, change it immediately.
 
 ## Reading Paths
 
