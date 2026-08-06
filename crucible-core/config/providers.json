@@ -90,6 +90,7 @@
       "chain": [
         { "provider": "claude-subscription", "model": "sonnet" },
         { "provider": "anthropic", "model": "claude-sonnet-5" },
+        { "provider": "claude-subscription", "model": "haiku" },
         { "provider": "openai", "model": "gpt-5-mini" },
         { "provider": "deepseek", "model": "deepseek-chat" }
       ],
@@ -97,9 +98,11 @@
     },
     "T3": {
       "purpose": "Reasoning, architecture, coding",
+      "_note": "Sonnet on the subscription sits between the Opus attempts and the external families: when an Opus window is exhausted, degrading within the subscription is far better than stopping the company, and the serving model is recorded on every run so the degrade is visible rather than silent.",
       "chain": [
         { "provider": "claude-subscription", "model": "opus" },
         { "provider": "anthropic", "model": "claude-opus-5" },
+        { "provider": "claude-subscription", "model": "sonnet" },
         { "provider": "openai", "model": "gpt-5.1" },
         { "provider": "google", "model": "gemini-3-pro-preview" }
       ],

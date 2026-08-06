@@ -8,6 +8,7 @@ import { q, one, exec, uuid } from './db.js';
 import { agentsConfig } from './env.js';
 import { audit } from './audit.js';
 import { route, parseAgentJson, RouterExhausted, BudgetExceeded } from './router.js';
+import { personaPrompt } from './org.js';
 
 const MAX_ATTEMPTS = 3;
 const LEASE_MINUTES = 10;
@@ -90,7 +91,9 @@ export async function executeRun(run) {
       agentId: run.agent_id,
       decisionId: decision,
       sensitivity: spec.sensitivity || 'internal',
-      system: spec.system,
+      // The persona is appended, never substituted: character shapes how the
+      // work reads, the role specification still governs what it may do.
+      system: spec.system + personaPrompt(run.agent_id),
       prompt,
       runId: run.id,
     };
