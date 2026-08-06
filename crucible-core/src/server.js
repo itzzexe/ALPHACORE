@@ -33,6 +33,7 @@ import { syncDisputes, ruleAutoDisputes } from './disputes.js';
 import { seedPersonas } from './org.js';
 import { autonomyTick } from './autonomy.js';
 import { societyTick } from './society.js';
+import { syncExpansion } from './expansion.js';
 import { handleApi } from './api.js';
 
 seedAgents();
@@ -57,6 +58,7 @@ setInterval(() => { autonomyTick().catch(() => { /* next tick retries */ }); }, 
 // The social layer runs slowly on purpose — a workplace does not talk constantly.
 setInterval(() => { societyTick().catch(() => { /* next tick retries */ }); }, 8 * 60_000).unref?.();
 setInterval(() => { try { advanceRequests(); } catch { /* next tick retries */ } }, 3000).unref?.();
+setInterval(() => { try { syncExpansion(); } catch { /* next tick retries */ } }, 3500).unref?.();
 setInterval(() => { try { syncDepartments(); syncDisputes(); } catch { /* next tick retries */ } }, 3000).unref?.();
 setInterval(() => { try { ruleAssetRenewals(); ruleEnablementFromEvals(); ruleAutoDisputes(); } catch { /* next tick retries */ } }, 6 * 3600 * 1000).unref?.();
 setInterval(() => { try { advanceJourneys(); } catch { /* next tick retries */ } }, 2500).unref?.();

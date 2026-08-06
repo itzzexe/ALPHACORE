@@ -8,6 +8,15 @@ echo   ^> CRUCIBLE CORE ^| operations console
 echo   -----------------------------------------
 echo.
 
+rem --- 0. Already running? Just open the dashboard. ---
+netstat -ano | findstr ":8484" | findstr "LISTENING" >nul 2>nul
+if not errorlevel 1 (
+    echo   [ok] Server already running - opening dashboard
+    start "" http://localhost:8484
+    ping -n 3 127.0.0.1 >nul
+    exit /b 0
+)
+
 rem --- 1. Check Node.js is installed and version is 22.5+ ---
 where node >nul 2>nul
 if errorlevel 1 (
@@ -16,10 +25,19 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-for /f "tokens=1 delims=." %%v in ('node -v') do set "NODEMAJOR=%%v"
+for /f "tokens=1,2 delims=." %%v in ('node -v') do (
+    set "NODEMAJOR=%%v"
+    set "NODEMINOR=%%w"
+)
 set "NODEMAJOR=%NODEMAJOR:v=%"
 if %NODEMAJOR% LSS 22 (
     echo   [ERROR] Node %NODEMAJOR% detected - Crucible Core needs Node 22.5 or newer.
+    echo.
+    pause
+    exit /b 1
+)
+if %NODEMAJOR% EQU 22 if %NODEMINOR% LSS 5 (
+    echo   [ERROR] Node 22.%NODEMINOR% detected - node:sqlite needs Node 22.5 or newer.
     echo.
     pause
     exit /b 1
@@ -46,12 +64,13 @@ if not exist data\crucible.db (
 echo   [ok] Database ready
 
 rem --- 4. Open the dashboard once the server is up ---
-start "" /b cmd /c "timeout /t 2 /nobreak >nul & start "" http://localhost:8484"
+start "" /b cmd /c "ping -n 3 127.0.0.1 >nul & start "" http://localhost:8484"
 
 echo.
 echo   Dashboard:  http://localhost:8484
+echo   First boot: sign in with admin / crucible - then change it
 echo   Stop:       press Ctrl+C in this window ^(or just close it^)
-echo   Live keys:  copy .env.example to .env, add keys, restart
+echo   Live keys:  paste provider keys in Settings, or copy .env.example to .env
 echo.
 
 rem --- 5. Run the server (this window stays open showing logs) ---

@@ -123,6 +123,10 @@ const navPerm = {
   pricing: 'pricing.view', success: 'success.view', assets: 'assets.view',
   localization: 'localization.view', marketwatch: 'marketwatch.view', enablement: 'enablement.view',
   org: 'org.view', disputes: 'disputes.view', owner: 'dashboard.view', society: 'org.view',
+  security: 'security.view', compliance: 'compliance.view', sustainability: 'sustainability.view',
+  capacity: 'capacity.view', lab: 'lab.view', releases: 'releases.view', pmo: 'pmo.view',
+  insights: 'insights.view', brand: 'brand.view', procurement: 'procurement.view', finops: 'finops.view',
+  recruiting: 'recruiting.view', academy: 'academy.view', board: 'board.view', ir: 'ir.view', comms: 'comms.view',
 };
 
 function applyNavGating() {
@@ -247,6 +251,22 @@ const routes = {
   budgets: { title: 'Budgets', render: renderBudgets, poll: 8000 },
   audit: { title: 'Audit Chain', render: renderAudit, poll: 8000 },
   providers: { title: 'Providers', render: renderProviders },
+  security: { title: 'Security Operations (SOC)', render: renderSecurity, poll: 8000 },
+  compliance: { title: 'Compliance', render: renderCompliance },
+  sustainability: { title: 'Sustainability', render: renderSustainability, poll: 15000 },
+  capacity: { title: 'Capacity planning', render: renderCapacity, poll: 5000 },
+  lab: { title: 'The Lab — A/B experiments', render: renderLab, poll: 5000 },
+  releases: { title: 'Releases', render: renderReleases, poll: 6000 },
+  pmo: { title: 'PMO — stage gates', render: renderPmo, poll: 8000 },
+  insights: { title: 'Insights', render: renderInsights, poll: 10000 },
+  brand: { title: 'Brand studio', render: renderBrand, poll: 6000 },
+  procurement: { title: 'Procurement', render: renderProcurement, poll: 8000 },
+  finops: { title: 'FinOps', render: renderFinops, poll: 10000 },
+  recruiting: { title: 'Recruiting — hire AI employees', render: renderRecruiting, poll: 5000 },
+  academy: { title: 'Academy', render: renderAcademy, poll: 8000 },
+  board: { title: 'Board room', render: renderBoard, poll: 8000 },
+  ir: { title: 'Investor relations', render: renderIr, poll: 8000 },
+  comms: { title: 'Internal comms', render: renderComms, poll: 8000 },
 };
 
 // ---------- auto-refresh guard ----------
@@ -708,6 +728,759 @@ function initMapInteractivity() {
   });
 }
 
+// ---------- system map v7 · the interactive atlas ----------
+// v6 drew the right graph but could overflow the screen and answered detail
+// only on hover. v7 fits the whole company on one screen — the SVG scales to
+// the viewport — and turns the graph into an instrument: drag to pan, wheel
+// to zoom, hover to isolate, click a section for its full connection ledger,
+// trace a flow end-to-end hop by hop, double-click to open the section.
+// Zoom, selection and traces survive the poll re-render.
+const atlasState = { vb: null, sel: null, traceFrom: null, divSel: null };
+
+// ---------- system map v8 · the mainboard ----------
+// The company drawn as the machine it literally is: every section a silicon
+// chip with an activity LED, every database join a copper trace routed PCB-
+// style (Manhattan runs, 45° chamfers, shared bus lanes around the CPU), and
+// data packets riding the busiest nets. The Harmony orchestrator is the CPU.
+// Same contract as the atlas — initAtlas drives all interactivity unchanged.
+// ---------- map style switcher ----------
+// Four ways to look at the same living company. Every style is driven by the
+// same /api/map data and shares one interaction engine (initAtlas): click
+// opens the department, right-click opens the connection ledger and trace,
+// drag/wheel pans and zooms, and the live ticker + pings work everywhere.
+const MAP_STYLES = [
+  ['board', 'Mainboard'],
+  ['orbit', 'Orbit'],
+  ['metro', 'Metro'],
+  ['flow', 'Flow'],
+];
+const mapStyle = () => localStorage.getItem('crucible-map-style') || 'board';
+function buildMap(m) {
+  const s = mapStyle();
+  if (atlasState.style !== s) {
+    atlasState.style = s;
+    atlasState.vb = null; atlasState.sel = null; atlasState.traceFrom = null; atlasState.divSel = null;
+  }
+  if (s === 'orbit') return buildAtlas(m);
+  if (s === 'metro') return buildMetro(m);
+  if (s === 'flow') return buildFlow(m);
+  return buildBoard(m);
+}
+
+// ---------- system map v9 · the metro ----------
+// Twelve coloured transit lines — one per division — each running its
+// sections as stations, all terminating at the HARMONY interchange. Cross-
+// division joins are the faint "transfer" arcs; hover or trace lights them.
+function buildMetro(map) {
+  const { divisions, sections, edges, harmony, audit: connAudit } = map;
+  const CW = 1560, CH = 980, CX = 780, CY = 490, RING = 86;
+  const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
+  for (const s of sections) (byDiv[s.division] || byDiv.govern).items.push(s);
+  const divs = divisions.filter((d) => byDiv[d.id].items.length);
+  const left = divs.slice(0, Math.ceil(divs.length / 2));
+  const right = divs.slice(Math.ceil(divs.length / 2));
+
+  const pos = {};
+  const lines = [];
+  const layoutSide = (list, isLeft) => {
+    const rows = list.length;
+    list.forEach((d, i) => {
+      const y = 110 + i * ((CH - 220) / Math.max(rows - 1, 1));
+      const items = byDiv[d.id].items;
+      const x0 = isLeft ? 90 : CW - 90;
+      const xEnd = isLeft ? 560 : CW - 560;
+      const step = (Math.abs(xEnd - x0) - 20) / Math.max(items.length - 1, 1);
+      items.forEach((s, k) => {
+        const x = isLeft ? x0 + 10 + k * step : x0 - 10 - k * step;
+        pos[s.id] = { x, y, div: d.id, color: d.color, s };
+      });
+      // terminate on the interchange ring at a per-line angle
+      const a = ((isLeft ? 225 - i * (90 / Math.max(rows - 1, 1)) : -45 + i * (90 / Math.max(rows - 1, 1))) * Math.PI) / 180;
+      const rx = CX + RING * Math.cos(a), ry = CY + RING * Math.sin(a);
+      lines.push({ d, path: `M ${x0} ${y} H ${xEnd} L ${rx.toFixed(1)} ${ry.toFixed(1)}`, x0, y, isLeft });
+    });
+  };
+  layoutSide(left, true);
+  layoutSide(right, false);
+
+  const maxCount = Math.max(...edges.map((e) => e.count), 1);
+  const edgeSvg = edges.map((e, i) => {
+    const a = pos[e.from]; const b = pos[e.to];
+    if (!a || !b) return '';
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const bx = mx + (CX - mx) * 0.35, by = my + (CY - my) * 0.35;
+    const w = e.count ? 1 + (Math.log10(e.count + 1) / Math.log10(maxCount + 1)) * 2.4 : 0.7;
+    const d = `M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${bx.toFixed(1)} ${by.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+    return `<path class="cx-edge ${e.count ? 'live' : 'dormant'}" data-edge="${i}" data-a="${esc(e.from)}" data-b="${esc(e.to)}" d="${d}" stroke="${a.color}" stroke-width="${w.toFixed(2)}"/>
+      <path class="cx-hit" data-edgehit="${i}" d="${d}"><title>${esc(e.from)} → ${esc(e.to)} · ${esc(e.label)} (${e.count})</title></path>`;
+  }).join('');
+
+  const lineSvg = lines.map((l) => `
+    <path class="mt-line" data-divlabel="${esc(l.d.id)}" d="${l.path}" stroke="${l.d.color}"/>
+    <text class="cx-div zlab" data-divlabel="${esc(l.d.id)}" x="${l.isLeft ? 36 : CW - 36}" y="${l.y - 14}"
+      ${l.isLeft ? '' : 'text-anchor="end"'} fill="${l.d.color}">${l.d.label} · ${byDiv[l.d.id].items.length}</text>`).join('');
+
+  const nodes = Object.values(pos).map((p) => `
+    <a href="${p.s.href}" data-node="${esc(p.s.id)}" data-color="${p.color}" data-label="${esc(p.s.label)}"
+      data-hint="${esc(p.s.hint)}" data-count="${p.s.count}" data-div="${esc(p.div)}" style="color:${p.color}">
+      <g class="mt-stn">
+        <circle class="mt-halo cx-halo" cx="${p.x.toFixed(1)}" cy="${p.y}" r="14" fill="${p.color}"/>
+        <circle class="mt-dot" cx="${p.x.toFixed(1)}" cy="${p.y}" r="7" stroke="${p.color}"/>
+        <text class="mt-lab" transform="translate(${(p.x + 3).toFixed(1)} ${p.y - 14}) rotate(-33)">${esc(p.s.label)}</text>
+        <text class="mt-cnt" x="${p.x.toFixed(1)}" y="${p.y + 22}">${p.s.count}</text>
+      </g></a>`).join('');
+
+  const hs = harmony?.score ?? 0;
+  const hsColor = hs >= 80 ? 'var(--ok)' : hs >= 55 ? 'var(--warn)' : 'var(--bad)';
+  return `<svg class="constellation atlas metroV9" viewBox="0 0 ${CW} ${CH}" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="Company metro — twelve division lines terminating at the Harmony interchange">
+    <circle cx="${CX}" cy="${CY}" r="220" fill="url(#coreGlow9)"/>
+    <defs><radialGradient id="coreGlow9"><stop offset="0%" stop-color="rgba(255,107,44,0.20)"/><stop offset="100%" stop-color="rgba(255,107,44,0)"/></radialGradient></defs>
+    ${edgeSvg}${lineSvg}${nodes}
+    <a href="#/harmony" data-node="core" data-color="#ff6b2c" data-label="HARMONY INTERCHANGE"
+       data-hint="Every line terminates here: the orchestrator and the audit chain. Click to open Harmony."
+       data-count="${hs}" style="color:#ff6b2c">
+      <g>
+        <circle class="cx-core-pulse" cx="${CX}" cy="${CY}" r="${RING}" stroke="${hsColor}" style="transform-origin:${CX}px ${CY}px"/>
+        <circle class="cx-core-ring" cx="${CX}" cy="${CY}" r="${RING}" stroke="${hsColor}"/>
+        <text class="cx-core-glyph" x="${CX}" y="${CY - 22}">▲</text>
+        <text class="cx-core-score" x="${CX}" y="${CY + 12}" fill="${hsColor}">${hs}%</text>
+        <text class="cx-core-sub" x="${CX}" y="${CY + 32}">HARMONY</text>
+        <text class="cx-core-sub" x="${CX}" y="${CY + 48}">${connAudit.wired}/${connAudit.sections} WIRED</text>
+      </g>
+    </a>
+  </svg>`;
+}
+
+// ---------- system map v10 · the flow line ----------
+// The value stream: divisions as columns in the order work actually moves —
+// intake to build to decision to market to governance — sections as pills,
+// every join a ribbon between columns. Reads left to right like the factory
+// the company is.
+function buildFlow(map) {
+  const { divisions, sections, edges, harmony } = map;
+  const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
+  for (const s of sections) (byDiv[s.division] || byDiv.govern).items.push(s);
+  const divs = divisions.filter((d) => byDiv[d.id].items.length);
+  const PW = 116, PH = 32, COL = 128, CW = 70 + divs.length * COL + 40, CH = 780, MIDY = 430;
+
+  const pos = {};
+  divs.forEach((d, ci) => {
+    const items = byDiv[d.id].items;
+    const x = 60 + ci * COL;
+    const y0 = MIDY - (items.length * 42) / 2;
+    items.forEach((s, i) => { pos[s.id] = { x, y: y0 + i * 42, div: d.id, color: d.color, s }; });
+  });
+
+  const maxCount = Math.max(...edges.map((e) => e.count), 1);
+  const edgeSvg = edges.map((e, i) => {
+    const a = pos[e.from]; const b = pos[e.to];
+    if (!a || !b) return '';
+    const x1 = a.x + PW, y1 = a.y + PH / 2, x2 = b.x, y2 = b.y + PH / 2;
+    const mx = (x1 + x2) / 2;
+    const w = e.count ? 1 + (Math.log10(e.count + 1) / Math.log10(maxCount + 1)) * 2.8 : 0.7;
+    const d = `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${mx.toFixed(1)} ${y1.toFixed(1)}, ${mx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    return `<path class="cx-edge ${e.count ? 'live' : 'dormant'}" data-edge="${i}" data-a="${esc(e.from)}" data-b="${esc(e.to)}" d="${d}" stroke="${a.color}" stroke-width="${w.toFixed(2)}"/>
+      <path class="cx-hit" data-edgehit="${i}" d="${d}"><title>${esc(e.from)} → ${esc(e.to)} · ${esc(e.label)} (${e.count})</title></path>`;
+  }).join('');
+
+  const headers = divs.map((d, ci) => {
+    const x = 60 + ci * COL + PW / 2;
+    return `<text class="cx-div" data-divlabel="${esc(d.id)}" x="${x}" y="70" fill="${d.color}">${d.label}</text>
+      <rect data-divlabel="${esc(d.id)}" x="${x - 26}" y="78" width="52" height="2.5" rx="1.2" fill="${d.color}" opacity="0.6" style="cursor:pointer"/>`;
+  }).join('');
+
+  const nodes = Object.values(pos).map((p) => `
+    <a href="${p.s.href}" data-node="${esc(p.s.id)}" data-color="${p.color}" data-label="${esc(p.s.label)}"
+      data-hint="${esc(p.s.hint)}" data-count="${p.s.count}" data-div="${esc(p.div)}" style="color:${p.color}">
+      <g class="fl-node">
+        <rect class="fl-pill" x="${p.x}" y="${p.y}" width="${PW}" height="${PH}" rx="9" stroke="${p.color}"/>
+        <rect x="${p.x + 3}" y="${p.y + 3}" width="3.4" height="${PH - 6}" rx="1.7" fill="${p.color}" opacity="0.85"/>
+        <text class="fl-lab" x="${p.x + 12}" y="${p.y + 13.5}">${esc(p.s.label)}</text>
+        <text class="fl-cnt" x="${p.x + 12}" y="${p.y + 26}">${p.s.count} rec</text>
+        <circle class="chip-led ${p.s.count > 0 ? 'on' : ''}" cx="${p.x + PW - 10}" cy="${p.y + 9}" r="2.4"/>
+      </g></a>`).join('');
+
+  const hs = harmony?.score ?? 0;
+  return `<svg class="constellation atlas flowV10" viewBox="0 0 ${CW} ${CH}" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="Company flow line — the value stream from intake to governance">
+    <text class="silk" x="60" y="36">VALUE STREAM — WORK ENTERS LEFT, GOVERNANCE SEALS RIGHT · HARMONY ${hs}%</text>
+    ${edgeSvg}${headers}${nodes}
+  </svg>`;
+}
+
+function buildBoard(map) {
+  const { divisions, sections, edges, harmony, audit: connAudit } = map;
+  const W = 128, H = 36, PX = 140, PY = 46;
+  const RING = { x1: 390, y1: 214, x2: 1370, y2: 724 };
+  const ZONES = {
+    engine: { x: 36, y: 56, cols: 2, side: 'left' },
+    talent: { x: 36, y: 286, cols: 2, side: 'left' },
+    create: { x: 36, y: 516, cols: 2, side: 'left' },
+    trust: { x: 36, y: 700, cols: 2, side: 'left' },
+    build: { x: 1440, y: 56, cols: 2, side: 'right' },
+    commerce: { x: 1440, y: 286, cols: 2, side: 'right' },
+    data: { x: 1440, y: 516, cols: 2, side: 'right' },
+    capital: { x: 1440, y: 700, cols: 2, side: 'right' },
+    decide: { x: 435, y: 64, cols: 4, side: 'top' },
+    exec: { x: 1047, y: 64, cols: 2, side: 'top' },
+    operate: { x: 365, y: 790, cols: 3, side: 'bottom' },
+    govern: { x: 837, y: 790, cols: 4, side: 'bottom' },
+  };
+  const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
+  for (const s of sections) (byDiv[s.division] || byDiv.govern).items.push(s);
+
+  // Chip placement: a grid inside each division's zone.
+  const chip = {};
+  const zoneRects = [];
+  for (const d of divisions) {
+    const z = ZONES[d.id];
+    const items = byDiv[d.id]?.items || [];
+    if (!z || !items.length) continue;
+    const rows = Math.ceil(items.length / z.cols);
+    zoneRects.push({
+      ...d, x: z.x - 14, y: z.y - 14, n: items.length,
+      w: Math.min(items.length, z.cols) * PX - 12 + 28, h: rows * PY - 10 + 28,
+    });
+    items.forEach((s, i) => {
+      chip[s.id] = { x: z.x + (i % z.cols) * PX, y: z.y + Math.floor(i / z.cols) * PY, side: z.side, color: d.color, div: d.id, s };
+    });
+  }
+
+  // --- PCB routing: chip → perpendicular run → bus lane around the CPU →
+  // perpendicular run → chip, with 45° chamfered corners. ---
+  const clampN = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const slots = new Map();
+  const takeSlot = (id) => { const k = slots.get(id) || 0; slots.set(id, k + 1); return k; };
+  const connector = (c, slot) => {
+    if (c.side === 'left') return { x: c.x + W, y: c.y + 8 + (slot % 3) * 10 };
+    if (c.side === 'right') return { x: c.x, y: c.y + 8 + (slot % 3) * 10 };
+    if (c.side === 'top') return { x: c.x + 16 + (slot % 7) * 16, y: c.y + H };
+    return { x: c.x + 16 + (slot % 7) * 16, y: c.y };
+  };
+  const approach = (c, P, R) => {
+    if (c.side === 'left') return [P, { x: R.x1, y: P.y }, { x: R.x1, y: clampN(P.y, R.y1, R.y2) }];
+    if (c.side === 'right') return [P, { x: R.x2, y: P.y }, { x: R.x2, y: clampN(P.y, R.y1, R.y2) }];
+    if (c.side === 'top') return [P, { x: P.x, y: R.y1 }, { x: clampN(P.x, R.x1, R.x2), y: R.y1 }];
+    return [P, { x: P.x, y: R.y2 }, { x: clampN(P.x, R.x1, R.x2), y: R.y2 }];
+  };
+  const perimeter = (R, p1, p2) => {
+    const w = R.x2 - R.x1, h = R.y2 - R.y1, P = 2 * (w + h);
+    const posOf = (pt) => pt.y === R.y1 ? pt.x - R.x1
+      : pt.x === R.x2 ? w + (pt.y - R.y1)
+      : pt.y === R.y2 ? w + h + (R.x2 - pt.x)
+      : w + h + w + (R.y2 - pt.y);
+    const corners = [
+      { t: 0, x: R.x1, y: R.y1 }, { t: w, x: R.x2, y: R.y1 },
+      { t: w + h, x: R.x2, y: R.y2 }, { t: w + h + w, x: R.x1, y: R.y2 },
+    ];
+    const t1 = posOf(p1), t2 = posOf(p2);
+    const fwd = ((t2 - t1) % P + P) % P;
+    const dir = fwd <= P - fwd ? 1 : -1;
+    const dist = dir === 1 ? fwd : P - fwd;
+    return corners
+      .map((c) => ({ ...c, d: (((c.t - t1) * dir) % P + P) % P }))
+      .filter((c) => c.d > 0.5 && c.d < dist - 0.5)
+      .sort((a, b) => a.d - b.d)
+      .map((c) => ({ x: c.x, y: c.y }));
+  };
+  const simplify = (pts) => {
+    const out = [];
+    for (const p of pts) {
+      const q = out[out.length - 1];
+      if (q && Math.abs(q.x - p.x) < 0.01 && Math.abs(q.y - p.y) < 0.01) continue;
+      out.push(p);
+    }
+    for (let i = out.length - 2; i > 0; i--) {
+      const a = out[i - 1], b = out[i], c = out[i + 1];
+      if ((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x) === 0) out.splice(i, 1);
+    }
+    return out;
+  };
+  const chamfer = (pts, cut = 10) => {
+    if (pts.length < 2) return '';
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const a = pts[i - 1], b = pts[i], e = pts[i + 1];
+      const l1 = Math.hypot(b.x - a.x, b.y - a.y) || 1, l2 = Math.hypot(e.x - b.x, e.y - b.y) || 1;
+      const k = Math.min(cut, l1 / 2, l2 / 2);
+      d += ` L ${(b.x - (b.x - a.x) / l1 * k).toFixed(1)} ${(b.y - (b.y - a.y) / l1 * k).toFixed(1)}`
+        + ` L ${(b.x + (e.x - b.x) / l2 * k).toFixed(1)} ${(b.y + (e.y - b.y) / l2 * k).toFixed(1)}`;
+    }
+    return d + ` L ${pts[pts.length - 1].x.toFixed(1)} ${pts[pts.length - 1].y.toFixed(1)}`;
+  };
+
+  const maxCount = Math.max(...edges.map((e) => e.count), 1);
+  const paths = [];
+  const edgeSvg = edges.map((e, i) => {
+    const a = chip[e.from], b = chip[e.to];
+    if (!a || !b) return '';
+    const off = 3.5 * (i % 8);
+    const R = { x1: RING.x1 - off, y1: RING.y1 - off, x2: RING.x2 + off, y2: RING.y2 + off };
+    const Pa = connector(a, takeSlot(e.from)), Pb = connector(b, takeSlot(e.to));
+    const inA = approach(a, Pa, R), inB = approach(b, Pb, R);
+    const pts = simplify([...inA, ...perimeter(R, inA[2], inB[2]), ...inB.reverse()]);
+    const d = chamfer(pts);
+    if (e.count) paths.push({ d, count: e.count, color: a.color });
+    const w2 = e.count ? 1 + (Math.log10(e.count + 1) / Math.log10(maxCount + 1)) * 3 : 0.8;
+    return `<path class="cx-edge ${e.count ? 'live' : 'dormant'}" data-edge="${i}" data-a="${esc(e.from)}" data-b="${esc(e.to)}"
+      d="${d}" stroke="${a.color}" stroke-width="${w2.toFixed(2)}"/>
+      <path class="cx-hit" data-edgehit="${i}" d="${d}"><title>${esc(e.from)} → ${esc(e.to)} · ${esc(e.label)} (${e.count})</title></path>`;
+  }).join('');
+
+  // Data packets ride the twelve busiest nets — the board is visibly alive.
+  const packets = paths.sort((x, y) => y.count - x.count).slice(0, 12).map((p, k) =>
+    `<circle class="cx-pkt" r="2.4" fill="${p.color}"><animateMotion dur="${(5 + k * 1.1).toFixed(1)}s" repeatCount="indefinite" path="${p.d}"/></circle>`).join('');
+
+  const zones = zoneRects.map((z) => `
+    <rect class="zone-rect" data-divlabel="${esc(z.id)}" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="9" stroke="${z.color}"/>
+    <text class="cx-div zlab" data-divlabel="${esc(z.id)}" x="${z.x + 2}" y="${z.y - 7}" fill="${z.color}">${z.label} · ${z.n}</text>`).join('');
+
+  const nodes = Object.values(chip).map((c) => {
+    const pins = [0, 1, 2, 3].map((k) =>
+      `<rect class="pin" x="${c.x + 20 + k * 26}" y="${c.y - 3}" width="5" height="3"/>
+       <rect class="pin" x="${c.x + 20 + k * 26}" y="${c.y + H}" width="5" height="3"/>`).join('');
+    return `<a href="${c.s.href}" data-node="${esc(c.s.id)}" data-color="${c.color}" data-label="${esc(c.s.label)}"
+      data-hint="${esc(c.s.hint)}" data-count="${c.s.count}" data-div="${esc(c.div)}" style="color:${c.color}">
+      <g class="chip">${pins}
+        <rect class="chip-body" x="${c.x}" y="${c.y}" width="${W}" height="${H}" rx="5" stroke="${c.color}"/>
+        <rect x="${c.x + 3}" y="${c.y + 3}" width="3.5" height="${H - 6}" rx="1.7" fill="${c.color}" opacity="0.85"/>
+        <text class="chip-name" x="${c.x + 12}" y="${c.y + 15}">${esc(c.s.label)}</text>
+        <text class="chip-count" x="${c.x + 12}" y="${c.y + 28}">${c.s.count} rec</text>
+        <circle class="chip-led ${c.s.count > 0 ? 'on' : ''}" cx="${c.x + 117}" cy="${c.y + 10}" r="2.6"/>
+      </g></a>`;
+  }).join('');
+
+  const hs = harmony?.score ?? 0;
+  const hsColor = hs >= 80 ? 'var(--ok)' : hs >= 55 ? 'var(--warn)' : 'var(--bad)';
+  const cpuPins = [...Array(9)].map((_, k) =>
+    `<rect class="pin" x="${788 + k * 23}" y="387" width="7" height="4"/><rect class="pin" x="${788 + k * 23}" y="547" width="7" height="4"/>`).join('')
+    + [...Array(6)].map((_, k) =>
+    `<rect class="pin" x="773" y="${404 + k * 23}" width="4" height="7"/><rect class="pin" x="983" y="${404 + k * 23}" width="4" height="7"/>`).join('');
+
+  return `<svg class="constellation atlas board" viewBox="0 0 1744 940" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="Company mainboard — every section a chip, every relationship a copper trace">
+    <defs>
+      <pattern id="bgrid" width="24" height="24" patternUnits="userSpaceOnUse">
+        <circle cx="12" cy="12" r="0.8" fill="rgba(255,255,255,0.035)"/>
+      </pattern>
+      <radialGradient id="coreGlow"><stop offset="0%" stop-color="rgba(255,107,44,0.22)"/><stop offset="100%" stop-color="rgba(255,107,44,0)"/></radialGradient>
+    </defs>
+    <rect class="cx-orbit b-bg" x="6" y="6" width="1732" height="928" rx="16" fill="url(#bgrid)"/>
+    <rect class="b-frame" x="6" y="6" width="1732" height="928" rx="16"/>
+    <circle class="hole" cx="26" cy="26" r="7"/><circle class="hole" cx="1718" cy="26" r="7"/>
+    <circle class="hole" cx="26" cy="914" r="7"/><circle class="hole" cx="1718" cy="914" r="7"/>
+    <circle cx="880" cy="469" r="250" fill="url(#coreGlow)"/>
+    ${zones}${edgeSvg}${packets}${nodes}
+    <a href="#/harmony" data-node="core" data-color="#ff6b2c" data-label="HARMONY CPU"
+       data-hint="The orchestrator socket: every department's clock signal. Everything ends on the audit chain. Click to open Harmony."
+       data-count="${hs}" style="color:#ff6b2c">
+      <g class="cpu">${cpuPins}
+        <rect class="cpu-pulse" x="780" y="394" width="200" height="150" rx="10" stroke="${hsColor}" style="transform-origin:880px 469px"/>
+        <rect class="cpu-body" x="780" y="394" width="200" height="150" rx="10" stroke="${hsColor}"/>
+        <text class="cx-core-glyph" x="880" y="442">▲</text>
+        <text class="cx-core-score" x="880" y="476" fill="${hsColor}">${hs}%</text>
+        <text class="cx-core-sub" x="880" y="496">HARMONY CPU</text>
+        <text class="cx-core-sub" x="880" y="512">${connAudit.wired}/${connAudit.sections} SECTIONS WIRED</text>
+      </g>
+    </a>
+    <text class="silk" x="36" y="929">CRUCIBLE CORE · MAINBOARD REV 9 · AI-NATIVE COMPANY · 12 DIVISIONS</text>
+    <text class="silk" x="1708" y="929" text-anchor="end">${sections.length} IC · ${edges.length} NETS · ${edges.filter((e) => e.count > 0).length} LIVE</text>
+  </svg>`;
+}
+
+function buildAtlas(map) {
+  const { divisions, sections, edges, harmony, audit: connAudit } = map;
+  const CX = 700, CY = 390, RX = 520, RY = 255, DIV_GAP = 1.6;
+  const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
+  for (const s of sections) (byDiv[s.division] || byDiv.govern).items.push(s);
+
+  // One ring, and each division's wedge is proportional to how many sections
+  // it holds — every node gets the same angular slot regardless of division
+  // size, and labels run radially outward like clock hands, so no two texts
+  // can ever sit on top of each other.
+  const pos = {};
+  const arcs = [];
+  const divs = divisions.filter((d) => byDiv[d.id].items.length);
+  const total = divs.reduce((n, d) => n + byDiv[d.id].items.length, 0);
+  const usable = 360 - DIV_GAP * divs.length;
+  let a0 = -90;
+  divs.forEach((d) => {
+    const items = byDiv[d.id].items;
+    const span = usable * (items.length / total);
+    arcs.push({ ...d, a0, a1: a0 + span });
+    items.forEach((s, i) => {
+      const ang = ((a0 + span * ((i + 0.5) / items.length)) * Math.PI) / 180;
+      pos[s.id] = { x: CX + RX * Math.cos(ang), y: CY + RY * Math.sin(ang), div: d.id, color: d.color, s };
+    });
+    a0 += span + DIV_GAP;
+  });
+
+  const maxCount = Math.max(...edges.map((e) => e.count), 1);
+  const nodeR = (c) => Math.max(6, Math.min(15, 6 + Math.log10(Math.max(1, c)) * 4.5));
+
+  // Every edge gets a visible curve plus an invisible wide twin that catches
+  // the pointer, so thin lines are hoverable and carry their own tooltip.
+  const edgeSvg = edges.map((e, i) => {
+    const a = pos[e.from]; const b = pos[e.to];
+    if (!a || !b) return '';
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const bx = mx + (CX - mx) * 0.45, by = my + (CY - my) * 0.45;
+    const w = e.count ? 1 + (Math.log10(e.count + 1) / Math.log10(maxCount + 1)) * 3.2 : 0.8;
+    const d = `M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${bx.toFixed(1)} ${by.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+    return `<path class="cx-edge ${e.count ? 'live' : 'dormant'}" data-edge="${i}" data-a="${esc(e.from)}" data-b="${esc(e.to)}"
+      d="${d}" stroke="${a.color}" stroke-width="${w.toFixed(2)}"/>
+      <path class="cx-hit" data-edgehit="${i}" d="${d}"><title>${esc(e.from)} → ${esc(e.to)} · ${esc(e.label)} (${e.count})</title></path>`;
+  }).join('');
+
+  const spokes = Object.values(pos).map((p) =>
+    `<line class="cx-spoke" data-spoke="${esc(p.s.id)}" x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${CX}" y2="${CY}"/>`).join('');
+
+  // Labels run along each node's own ray (flipped on the left half so the
+  // text still reads left-to-right), with a background halo for legibility
+  // where edges pass underneath. The live count rides on the same line.
+  const nodes = Object.values(pos).map((p) => {
+    const r = nodeR(p.s.count);
+    const phi = Math.atan2(p.y - CY, p.x - CX);
+    const deg = (phi * 180) / Math.PI;
+    const left = Math.cos(phi) < -0.001;
+    const lx = p.x + Math.cos(phi) * (r + 7);
+    const ly = p.y + Math.sin(phi) * (r + 7);
+    return `<a href="${p.s.href}" data-node="${esc(p.s.id)}" data-color="${p.color}" data-label="${esc(p.s.label)}"
+      data-hint="${esc(p.s.hint)}" data-count="${p.s.count}" data-div="${esc(p.div)}">
+      <g class="cx-node">
+        <circle class="cx-halo" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${(r + 9).toFixed(1)}" fill="${p.color}"/>
+        <circle class="cx-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" stroke="${p.color}"/>
+        <text class="cx-rlab" dy="0.34em" text-anchor="${left ? 'end' : 'start'}"
+          transform="translate(${lx.toFixed(1)} ${ly.toFixed(1)}) rotate(${(left ? deg + 180 : deg).toFixed(1)})">${esc(p.s.label)} <tspan class="cx-rcount">${p.s.count}</tspan></text>
+      </g></a>`;
+  }).join('');
+
+  // Division identity: a coloured arc hugging the inside of the ring plus a
+  // horizontal name at the wedge's midpoint, inside the ring where the radial
+  // labels cannot reach it.
+  const arcPath = (from, to, arx, ary) => {
+    const f = (from * Math.PI) / 180, t = (to * Math.PI) / 180;
+    return `M ${(CX + arx * Math.cos(f)).toFixed(1)} ${(CY + ary * Math.sin(f)).toFixed(1)} A ${arx} ${ary} 0 ${to - from > 180 ? 1 : 0} 1 ${(CX + arx * Math.cos(t)).toFixed(1)} ${(CY + ary * Math.sin(t)).toFixed(1)}`;
+  };
+  const divLabels = arcs.map((d) => {
+    const mid = ((d.a0 + d.a1) / 2 * Math.PI) / 180;
+    const x = CX + (RX - 76) * Math.cos(mid);
+    const y = CY + (RY - 76) * Math.sin(mid);
+    return `<path class="cx-arc" data-divlabel="${esc(d.id)}" d="${arcPath(d.a0 + 0.7, d.a1 - 0.7, RX - 27, RY - 27)}" stroke="${d.color}"/>
+      <text class="cx-div" data-divlabel="${esc(d.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${d.color}">${d.label}</text>`;
+  }).join('');
+
+  const hs = harmony?.score ?? 0;
+  const hsColor = hs >= 80 ? 'var(--ok)' : hs >= 55 ? 'var(--warn)' : 'var(--bad)';
+
+  return `<svg class="constellation atlas" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="Company atlas — every section, every real relationship, pan and zoom">
+    <defs>
+      <radialGradient id="coreGlow"><stop offset="0%" stop-color="rgba(255,107,44,0.30)"/><stop offset="100%" stop-color="rgba(255,107,44,0)"/></radialGradient>
+    </defs>
+    <circle cx="${CX}" cy="${CY}" r="210" fill="url(#coreGlow)"/>
+    <ellipse class="cx-orbit" cx="${CX}" cy="${CY}" rx="${RX}" ry="${RY}"/>
+    ${spokes}${edgeSvg}${divLabels}${nodes}
+    <a href="#/harmony" data-node="core" data-color="#ff6b2c" data-label="HARMONY CORE"
+       data-hint="Everything ends on the audit chain, and the orchestrator keeps the departments in step. Click to open Harmony."
+       data-count="${hs}">
+      <g class="cx-core">
+        <circle class="cx-core-pulse" cx="${CX}" cy="${CY}" r="86" stroke="${hsColor}" style="transform-origin:${CX}px ${CY}px"/>
+        <circle class="cx-core-ring" cx="${CX}" cy="${CY}" r="86" stroke="${hsColor}"/>
+        <text class="cx-core-glyph" x="${CX}" y="${CY - 16}">▲</text>
+        <text class="cx-core-score" x="${CX}" y="${CY + 16}" fill="${hsColor}">${hs}%</text>
+        <text class="cx-core-sub" x="${CX}" y="${CY + 34}">HARMONY</text>
+        <text class="cx-core-sub" x="${CX}" y="${CY + 50}">${connAudit.wired}/${connAudit.sections} sections wired</text>
+      </g>
+    </a>
+  </svg>`;
+}
+
+/** Pan/zoom, hover isolation, click-to-inspect, hop-by-hop flow tracing. */
+function initAtlas(map) {
+  const svg = view.querySelector('svg.constellation.atlas');
+  if (!svg) return;
+  const panel = svg.closest('.panel');
+  panel.style.position = 'relative';
+  let tip = panel.querySelector('#map-tip');
+  if (!tip) { tip = document.createElement('div'); tip.id = 'map-tip'; tip.hidden = true; panel.appendChild(tip); }
+  const ctl = document.createElement('div');
+  ctl.className = 'map-ctl';
+  ctl.innerHTML = `<button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Fit whole map">⤢</button>`;
+  panel.appendChild(ctl);
+  const side = document.createElement('div');
+  side.className = 'map-side';
+  side.hidden = true;
+  panel.appendChild(side);
+
+  const sec = Object.fromEntries(map.sections.map((s) => [s.id, s]));
+  const divColor = Object.fromEntries(map.divisions.map((d) => [d.id, d.color]));
+  const idxEdges = map.edges.map((e, i) => ({ ...e, i }));
+  const edgesFor = (id) => idxEdges.filter((e) => e.from === id || e.to === id);
+
+  // --- viewport: wheel zoom about the cursor, drag to pan ---
+  const vbAttr = (svg.getAttribute('viewBox') || '0 0 1744 940').split(/\s+/).map(Number);
+  const VB0 = { x: vbAttr[0], y: vbAttr[1], w: vbAttr[2], h: vbAttr[3] };
+  let vb = atlasState.vb ? { ...atlasState.vb } : { ...VB0 };
+  const applyVB = () => { svg.setAttribute('viewBox', `${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`); atlasState.vb = { ...vb }; };
+  if (atlasState.vb) applyVB();
+  const toSvg = (cx, cy) => { const pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy; return pt.matrixTransform(svg.getScreenCTM().inverse()); };
+  const zoomAt = (px, py, k) => {
+    const nw = Math.min(2600, Math.max(260, vb.w * k));
+    const nh = nw * (VB0.h / VB0.w);
+    vb = { x: px - (px - vb.x) * (nw / vb.w), y: py - (py - vb.y) * (nh / vb.h), w: nw, h: nh };
+    applyVB();
+  };
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const p = toSvg(e.clientX, e.clientY);
+    zoomAt(p.x, p.y, e.deltaY > 0 ? 1.2 : 1 / 1.2);
+  }, { passive: false });
+  ctl.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.z === 'fit') { vb = { ...VB0 }; applyVB(); return; }
+    zoomAt(vb.x + vb.w / 2, vb.y + vb.h / 2, b.dataset.z === 'in' ? 1 / 1.35 : 1.35);
+  }));
+  let drag = null;
+  svg.addEventListener('pointerdown', (e) => {
+    drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, moved: false };
+    try { svg.setPointerCapture(e.pointerId); } catch { /* touch quirks */ }
+  });
+  svg.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
+    if (!drag.moved) return;
+    const scale = vb.w / svg.getBoundingClientRect().width;
+    vb.x = drag.vx - dx * scale; vb.y = drag.vy - dy * scale; applyVB();
+  });
+  svg.addEventListener('pointerup', () => setTimeout(() => { drag = null; }, 0));
+
+  // --- highlighting ---
+  const clearFx = () => {
+    svg.querySelectorAll('.dimmed,.lit,.trace').forEach((el) => { el.classList.remove('dimmed', 'lit', 'trace'); el.style.animationDelay = ''; });
+  };
+  const focus = (id) => {
+    clearFx();
+    if (!id) return;
+    const near = new Set([id]);
+    for (const e of idxEdges) {
+      if (e.from === id) near.add(e.to);
+      if (e.to === id) near.add(e.from);
+    }
+    svg.querySelectorAll('[data-node]').forEach((el) => {
+      const nid = el.dataset.node;
+      el.classList.toggle('dimmed', nid !== 'core' && !near.has(nid));
+      el.classList.toggle('lit', near.has(nid));
+    });
+    svg.querySelectorAll('.cx-edge').forEach((el) => {
+      const on = el.dataset.a === id || el.dataset.b === id;
+      el.classList.toggle('lit', on);
+      el.classList.toggle('dimmed', !on);
+    });
+    svg.querySelectorAll('.cx-spoke').forEach((el) => el.classList.toggle('dimmed', el.dataset.spoke !== id));
+  };
+  const focusDiv = (divId) => {
+    clearFx();
+    if (!divId) return;
+    const inDiv = new Set(map.sections.filter((s) => s.division === divId).map((s) => s.id));
+    svg.querySelectorAll('[data-node]').forEach((el) => el.classList.toggle('dimmed', el.dataset.node !== 'core' && !inDiv.has(el.dataset.node)));
+    svg.querySelectorAll('.cx-edge').forEach((el) => {
+      const on = inDiv.has(el.dataset.a) || inDiv.has(el.dataset.b);
+      el.classList.toggle('lit', on);
+      el.classList.toggle('dimmed', !on);
+    });
+  };
+
+  // Full flow trace: breadth-first from one section across every declared
+  // relationship, lighting the graph hop by hop so the propagation is visible.
+  const runTrace = (start) => {
+    const depth = { [start]: 0 };
+    let frontier = [start];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier) {
+        for (const e of idxEdges) {
+          const other = e.from === id ? e.to : e.to === id ? e.from : null;
+          if (!other || other === 'all' || e.from === 'all' || e.to === 'all') continue;
+          if (!(other in depth)) { depth[other] = depth[id] + 1; next.push(other); }
+        }
+      }
+      frontier = next;
+    }
+    clearFx();
+    svg.querySelectorAll('[data-node]').forEach((el) => {
+      const d = depth[el.dataset.node];
+      el.classList.toggle('dimmed', d === undefined && el.dataset.node !== 'core');
+      el.classList.toggle('lit', d !== undefined);
+      if (d !== undefined) el.style.animationDelay = `${d * 0.12}s`;
+    });
+    svg.querySelectorAll('.cx-edge').forEach((el) => {
+      const da = depth[el.dataset.a], db = depth[el.dataset.b];
+      const on = da !== undefined && db !== undefined;
+      el.classList.toggle('trace', on);
+      el.classList.toggle('dimmed', !on);
+      if (on) el.style.animationDelay = `${Math.min(da, db) * 0.12}s`;
+    });
+    return depth;
+  };
+
+  // --- the connection ledger: click a section, read everything it touches ---
+  const closeSide = () => { atlasState.sel = null; atlasState.traceFrom = null; side.hidden = true; clearFx(); };
+  const select = (id) => {
+    atlasState.sel = id; atlasState.traceFrom = null; atlasState.divSel = null;
+    focus(id);
+    const s = sec[id];
+    if (!s) return;
+    const rel = edgesFor(id);
+    const out = rel.filter((e) => e.from === id);
+    const inn = rel.filter((e) => e.to === id);
+    const row = (e, dir) => {
+      const other = dir === 'out' ? e.to : e.from;
+      const oth = sec[other];
+      return `<div class="ms-row" data-jump="${esc(other)}">
+        <span class="ms-dir">${dir === 'out' ? '→' : '←'}</span>
+        <b style="color:${oth ? divColor[oth.division] : 'var(--ink)'}">${esc(oth?.label || other)}</b>
+        <span class="ms-cnt">${e.count}</span>
+        <div class="ms-lbl">${esc(e.label)}</div>
+      </div>`;
+    };
+    side.innerHTML = `
+      <div class="ms-head" style="color:${divColor[s.division]}">${esc(s.label)}</div>
+      <div class="ms-sub">${esc(s.division)} division · ${s.count} records</div>
+      <div class="ms-hint">${esc(s.hint)}</div>
+      <div class="ms-actions">
+        <button class="btn btn-sm btn-primary" data-ms="open">Open →</button>
+        <button class="btn btn-sm" data-ms="trace">Trace flow</button>
+        <button class="btn btn-sm" data-ms="close">✕</button>
+      </div>
+      ${out.length ? `<div class="ms-sec">Sends to · ${out.length}</div>${out.map((e) => row(e, 'out')).join('')}` : ''}
+      ${inn.length ? `<div class="ms-sec">Receives from · ${inn.length}</div>${inn.map((e) => row(e, 'in')).join('')}` : ''}
+      <div class="ms-sec">Universal</div>
+      <div class="ms-lbl">Every action here lands on the audit chain; produced items freeze into the archive.</div>`;
+    side.hidden = false;
+    side.querySelector('[data-ms="open"]').onclick = () => { location.hash = s.href; };
+    side.querySelector('[data-ms="close"]').onclick = closeSide;
+    side.querySelector('[data-ms="trace"]').onclick = () => {
+      atlasState.traceFrom = id;
+      const depth = runTrace(id);
+      const hops = {};
+      for (const [nid, d] of Object.entries(depth)) if (d > 0) (hops[d] ||= []).push(sec[nid]?.label || nid);
+      side.querySelector('.ms-trace')?.remove();
+      const box = document.createElement('div');
+      box.className = 'ms-trace';
+      box.innerHTML = `<div class="ms-sec">Flow trace — reaches ${Object.keys(depth).length - 1} sections</div>`
+        + Object.entries(hops).map(([d, list]) => `<div class="ms-lbl"><b>hop ${d}</b> · ${esc(list.join(', '))}</div>`).join('')
+        + `<div class="ms-lbl" style="margin-top:6px">Edges pulse outward in hop order — watch the map.</div>`;
+      side.appendChild(box);
+    };
+    side.querySelectorAll('[data-jump]').forEach((r) => r.addEventListener('click', () => select(r.dataset.jump)));
+  };
+
+  // --- pointer wiring ---
+  svg.querySelectorAll('a[data-node]').forEach((a) => {
+    // Click opens the section directly; right-click (or Ctrl+click) opens the
+    // connection ledger with the trace tools instead.
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (drag?.moved) return;
+      const id = a.dataset.node;
+      if ((e.ctrlKey || e.metaKey) && id !== 'core') { select(id); return; }
+      location.hash = a.getAttribute('href');
+    });
+    a.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (a.dataset.node !== 'core') select(a.dataset.node);
+    });
+    a.addEventListener('mouseenter', (e) => {
+      if (drag?.moved) return;
+      const id = a.dataset.node;
+      if (!atlasState.sel && !atlasState.traceFrom && id !== 'core') focus(id);
+      const rel = id === 'core' ? [] : edgesFor(id);
+      tip.innerHTML = `<div class="tip-head" style="color:${a.dataset.color}">${esc(a.dataset.label)}</div>
+        <div class="tip-val">${esc(a.dataset.count)} ${id === 'core' ? 'harmony score' : 'records'}${a.dataset.div ? ` · ${esc(a.dataset.div)}` : ''}</div>
+        <div class="tip-body">${esc(a.dataset.hint)}</div>
+        ${rel.length ? `<div class="tip-rel">${rel.slice(0, 6).map((e2) => `<span>${esc(e2.from === id ? '→ ' + e2.to : '← ' + e2.from)} <b>${e2.count}</b> ${esc(short(e2.label, 30))}</span>`).join('')}</div>` : ''}
+        <div class="tip-go">click to open · right-click for connections &amp; trace</div>`;
+      tip.hidden = false;
+    });
+    a.addEventListener('mousemove', (e) => {
+      const r = panel.getBoundingClientRect();
+      tip.style.left = Math.max(8, Math.min(e.clientX - r.left + 18, panel.clientWidth - 268)) + 'px';
+      tip.style.top = Math.max(8, Math.min(e.clientY - r.top + 18, panel.clientHeight - 190)) + 'px';
+    });
+    a.addEventListener('mouseleave', () => {
+      tip.hidden = true;
+      if (atlasState.traceFrom) runTrace(atlasState.traceFrom);
+      else if (atlasState.sel) focus(atlasState.sel);
+      else if (atlasState.divSel) focusDiv(atlasState.divSel);
+      else clearFx();
+    });
+  });
+  svg.querySelectorAll('.cx-hit').forEach((h) => {
+    h.addEventListener('mouseenter', () => svg.querySelector(`[data-edge="${h.dataset.edgehit}"]`)?.classList.add('lit'));
+    h.addEventListener('mouseleave', () => {
+      if (!atlasState.sel && !atlasState.traceFrom) svg.querySelector(`[data-edge="${h.dataset.edgehit}"]`)?.classList.remove('lit');
+    });
+  });
+  svg.querySelectorAll('[data-divlabel]').forEach((t) => t.addEventListener('click', () => {
+    const id = t.dataset.divlabel;
+    if (atlasState.divSel === id) { atlasState.divSel = null; clearFx(); return; }
+    atlasState.divSel = id; atlasState.sel = null; atlasState.traceFrom = null; side.hidden = true;
+    focusDiv(id);
+  }));
+  svg.addEventListener('click', (e) => {
+    if (drag?.moved) return;
+    if (e.target === svg || e.target.classList.contains('cx-orbit')) closeSide();
+  });
+
+  // Restore what the user was looking at across the poll re-render.
+  if (atlasState.traceFrom) { select(atlasState.traceFrom); side.querySelector('[data-ms="trace"]')?.click(); }
+  else if (atlasState.sel) select(atlasState.sel);
+  else if (atlasState.divSel) focusDiv(atlasState.divSel);
+
+  // --- the live layer: watch the company work ---
+  // Every few seconds the board asks the audit chain what happened. New events
+  // flash their section's chip and scroll through the ticker, so activity is
+  // visible the moment it lands on the chain.
+  const ticker = document.createElement('div');
+  ticker.className = 'map-ticker';
+  ticker.innerHTML = '<div class="tk-row tk-idle">listening for activity…</div>';
+  panel.appendChild(ticker);
+  const renderTicker = () => {
+    ticker.innerHTML = (atlasState.feed || []).map((ev) => `
+      <div class="tk-row">
+        <span class="tk-time">${esc(String(ev.at).slice(11, 19))}</span>
+        <span class="tk-act">${esc(ev.action)}</span>
+        <span class="tk-who">${esc(short(ev.actor || '', 18))}</span>
+      </div>`).join('') || '<div class="tk-row tk-idle">listening for activity…</div>';
+  };
+  renderTicker();
+  const pollActivity = async () => {
+    try {
+      const feed = await api(`/api/map/activity?since=${atlasState.lastSeq || 0}`);
+      if (Array.isArray(feed) && feed.length) {
+        const first = !atlasState.lastSeq;
+        atlasState.lastSeq = feed[0].seq;
+        atlasState.feed = [...feed, ...(atlasState.feed || [])].slice(0, 6);
+        if (!first) {
+          for (const ev of feed.slice(0, 10)) {
+            if (!ev.section) continue;
+            const node = svg.querySelector(`[data-node="${ev.section}"]`);
+            if (node) { node.classList.remove('ping'); void node.getBoundingClientRect(); node.classList.add('ping'); }
+          }
+        }
+        renderTicker();
+      }
+    } catch { /* a missed beat is fine — next poll catches up */ }
+  };
+  pollActivity();
+  const tickerTimer = setInterval(() => {
+    if (!document.body.contains(svg)) { clearInterval(tickerTimer); return; }
+    pollActivity();
+  }, 4000);
+}
+
 function buildSystemMapOrbital(s, prov, agentsList, chain, extra = {}) {
   const queue = s.queue || {};
   const active = (queue.queued || 0) + (queue.leased || 0) + (queue.running || 0);
@@ -919,12 +1692,14 @@ async function renderOverview() {
     <div class="panel-title">
       <span>The company as it actually is — ${mapData ? `${mapData.sections.length} sections · ${mapData.edges.filter((e) => e.count > 0).length}/${mapData.edges.length} relationships live` : 'system map'}</span>
       <span>
+        <span class="map-style-picker">${MAP_STYLES.map(([k, label]) =>
+          `<button data-mapstyle="${k}" class="${mapStyle() === k ? 'on' : ''}">${label}</button>`).join('')}</span>
         ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} wired${mapData.audit.orphans.length ? ` · ${mapData.audit.orphans.length} orphan` : ' · no orphans'}</span>` : ''}
         <a class="chip chip-dim" style="text-decoration:none" href="#/graph">relationship table →</a>
       </span>
     </div>
-    ${mapData ? buildConstellation(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
-    <div class="map-legend">Every line is a real join in the database, thickness by volume — <b>hover a section to isolate its neighbourhood</b>, click to open it. Faint spokes are the universal edges: everything ends on the audit chain. The core is the harmony score and the orchestrator.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">Unwired: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
+    ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
+    <div class="map-legend">The living mainboard: every chip is a department (LED = live records, flash = something just happened there), every copper trace a real database join, packets ride the busiest nets, the ticker narrates the audit chain in real time. <b>Click</b> a chip to open its department · <b>right-click</b> for its full connection ledger and hop-by-hop <b>Trace flow</b> · <b>drag / wheel</b> pans and zooms · click a zone name to isolate a division.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">Unwired: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
   </div>
 
   <div class="grid grid-4">
@@ -996,7 +1771,11 @@ async function renderOverview() {
       </table>
     </div>
   </div>`;
-  if (mapData) initConstellation(mapData); else initMapInteractivity();
+  if (mapData) initAtlas(mapData); else initMapInteractivity();
+  view.querySelectorAll('[data-mapstyle]').forEach((b) => b.addEventListener('click', () => {
+    localStorage.setItem('crucible-map-style', b.dataset.mapstyle);
+    renderOverview();
+  }));
 }
 
 const DEPT_LABEL = {
@@ -2901,7 +3680,28 @@ async function renderSettings() {
       <button class="btn btn-sm" id="s-probe">Test connectivity (T1)</button>
       <span id="s-probe-out" class="mono" style="color:var(--ink-mute)"></span>
     </div>
-  </div>`;
+  </div>
+  ${currentUser?.role === 'superadmin' ? `
+  <div class="panel" style="margin-top:16px;border-color:#e5533d">
+    <div class="panel-title" style="color:#e5533d">Danger zone — wipe all data</div>
+    <p style="color:var(--ink-mute);margin:0 0 10px;max-width:70ch">
+      Erases every record in the company — runs, decisions, pipelines, tickets, customers,
+      intelligence, projects, notifications, and the audit chain, which restarts with a genesis
+      entry naming who wiped it. Default agents, rituals, and registers are re-seeded so the
+      platform stays usable. <b>This cannot be undone.</b>
+    </p>
+    <label style="display:block;margin:4px 0"><input type="checkbox" id="wipe-full">
+      Full factory reset — also delete user accounts, sessions, and provider settings
+      (you will be signed out; <span class="mono">admin / crucible</span> is restored)</label>
+    <label style="display:block;margin:4px 0 12px"><input type="checkbox" id="wipe-ws">
+      Also delete produced workspace files (blueprints, designs, exports…)</label>
+    <div class="form-inline">
+      <input id="wipe-confirm" placeholder="Type: WIPE ALL DATA" style="width:200px">
+      <input id="wipe-pass" type="password" placeholder="Your password" autocomplete="current-password" style="width:170px">
+      <button class="btn btn-bad" id="wipe-go">Wipe all data</button>
+      <span id="wipe-out" class="mono" style="color:var(--ink-mute)"></span>
+    </div>
+  </div>` : ''}`;
   view.querySelectorAll('[data-ssave]').forEach((b) => b.addEventListener('click', async () => {
     const key = b.dataset.ssave;
     const el = view.querySelector(`[data-skey="${key}"]`);
@@ -2919,6 +3719,21 @@ async function renderSettings() {
     try { const r = await api('/api/providers/test', { method: 'POST', body: { tier: 'T1' } }); $('#s-probe-out').textContent = `${r.provider}/${r.model} · ${short(r.text, 60)}`; }
     catch (err) { $('#s-probe-out').textContent = 'failed: ' + err.message; }
     e.target.disabled = false;
+  });
+  $('#wipe-go')?.addEventListener('click', async (e) => {
+    const full = $('#wipe-full').checked;
+    e.target.disabled = true; $('#wipe-out').textContent = 'wiping…';
+    try {
+      const r = await api('/api/system/wipe', { method: 'POST', body: {
+        confirm: $('#wipe-confirm').value.trim(), password: $('#wipe-pass').value,
+        full, workspace: $('#wipe-ws').checked,
+      } });
+      if (full) { localStorage.removeItem(TOKEN_KEY); location.hash = '#/'; location.reload(); return; }
+      toast(`Wiped ${r.tablesCleared} tables — fresh company, chain restarted`);
+      location.hash = '#/'; location.reload();
+    } catch (err) {
+      $('#wipe-out').textContent = err.message; toast(err.message, true); e.target.disabled = false;
+    }
   });
 }
 
@@ -4725,6 +5540,428 @@ function makeDeptRenderer(key) {
       try { await cfg.submit(); toast('Done'); renderDept(); } catch (e) { toast(e.message, true); }
     });
   };
+}
+
+// ---------- Expansion wave: 16 departments across TRUST/CAPITAL/TALENT/EXEC ----------
+const xbtn = (path, body, label, cls = '') =>
+  `<button class="btn btn-sm ${cls}" data-xact="${encodeURIComponent(JSON.stringify({ path, body }))}">${esc(label)}</button>`;
+function wireXact(rerender) {
+  view.querySelectorAll('[data-xact]').forEach((b) => b.addEventListener('click', async () => {
+    let spec; try { spec = JSON.parse(decodeURIComponent(b.dataset.xact)); } catch { return; }
+    b.disabled = true;
+    try { await api(spec.path, { method: 'POST', body: spec.body || {} }); toast('Done'); rerender(); }
+    catch (e) { toast(e.message, true); b.disabled = false; }
+  }));
+}
+const preBody = (t) => `<div class="mono" style="white-space:pre-wrap;font-size:11px;color:var(--ink-mute);max-height:260px;overflow:auto;border-left:2px solid var(--edge);padding:6px 10px;margin-top:6px">${esc(t || '')}</div>`;
+const tile = (label, big, sub = '', cls = '') => `<div class="panel tile ${cls}"><div class="panel-title">${esc(label)}</div><div class="big">${big}</div><div class="sub">${sub}</div></div>`;
+
+async function renderSecurity() {
+  const d = await api('/api/security');
+  const canM = hasPermC('security.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Open findings', d.stats.open, 'need triage', d.stats.open ? 'tile-warn' : '')}
+    ${tile('High severity', d.stats.high, 'act now', d.stats.high ? 'tile-bad' : '')}
+    ${tile('All-time findings', d.stats.total, 'swept from real runs and configs')}
+    <div class="panel tile"><div class="panel-title">Sweep</div>
+      ${canM ? xbtn('/api/security/scan', {}, 'Run security sweep', 'btn-primary') : '<div class="sub">security.manage required</div>'}
+      <div class="sub" style="margin-top:6px">Checks run inputs for injection phrasing, outputs for secret-shaped strings, vendors for missing DPAs, users for over-broad grants.</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Findings</div>
+    <table><thead><tr><th>#</th><th>Kind</th><th>Sev</th><th>Summary</th><th>State</th><th></th></tr></thead><tbody>
+    ${d.events.map((e) => `<tr>
+      <td class="mono">${e.id}</td><td class="mono">${esc(e.kind)}</td>
+      <td><span class="chip ${e.severity === 'high' ? 'chip-bad' : e.severity === 'medium' ? 'chip-warn' : 'chip-dim'}">${esc(e.severity)}</span></td>
+      <td>${esc(e.summary)}</td><td class="mono">${esc(e.state)}</td>
+      <td>${canM && e.state === 'open' ? xbtn(`/api/security/${e.id}/state`, { state: 'triaged' }, 'Triage') : ''}
+          ${canM && e.state !== 'closed' ? xbtn(`/api/security/${e.id}/state`, { state: 'closed' }, 'Close', 'btn-ok') : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">No findings yet — run a sweep.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  wireXact(renderSecurity);
+}
+
+async function renderCompliance() {
+  const d = await api('/api/compliance');
+  const canM = hasPermC('compliance.manage');
+  view.innerHTML = `
+  <div class="grid grid-2">
+    <div class="panel"><div class="panel-title">Provider posture — from live config</div>
+      <table><thead><tr><th>Provider</th><th>DPA</th><th>No-training</th></tr></thead><tbody>
+      ${d.providers.map((p) => `<tr><td class="mono">${esc(p.name)}</td>
+        <td>${p.dpa ? '<span class="chip chip-ok">signed</span>' : '<span class="chip chip-bad">missing</span>'}</td>
+        <td>${p.noTraining ? '<span class="chip chip-ok">yes</span>' : '<span class="chip chip-warn">unknown</span>'}</td></tr>`).join('')}
+      </tbody></table></div>
+    <div class="panel"><div class="panel-title">Data processing register</div>
+      <table><thead><tr><th>Store</th><th>Contains</th><th>Basis</th></tr></thead><tbody>
+      ${d.dataRegister.map((r) => `<tr><td class="mono">${esc(r.store)}</td><td>${esc(r.contains)}</td><td class="mono">${esc(r.basis)}</td></tr>`).join('')}
+      </tbody></table></div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Attestations — human-signed, auditor-ready</div>
+    ${canM ? `<div class="form-inline">
+      <input id="cc-area" placeholder="area, e.g. access-control" style="width:200px">
+      <select id="cc-status" style="width:auto"><option value="ok">ok</option><option value="gap">gap</option><option value="na">n/a</option></select>
+      <input id="cc-note" placeholder="note" style="width:280px">
+      <button class="btn btn-sm btn-primary" id="cc-go">Record check</button></div>` : ''}
+    <table><thead><tr><th>Area</th><th>Status</th><th>Note</th><th>By</th><th>When</th></tr></thead><tbody>
+    ${d.checks.map((c) => `<tr><td class="mono">${esc(c.area)}</td>
+      <td><span class="chip ${c.status === 'ok' ? 'chip-ok' : c.status === 'gap' ? 'chip-bad' : 'chip-dim'}">${esc(c.status)}</span></td>
+      <td>${esc(c.note || '')}</td><td class="mono">${esc(c.checked_by)}</td><td class="mono">${esc(c.created_at.slice(0, 10))}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No attestations recorded yet.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  $('#cc-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/compliance/check', { method: 'POST', body: { area: $('#cc-area').value, status: $('#cc-status').value, note: $('#cc-note').value || null } });
+      toast('Recorded'); renderCompliance();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderSustainability() {
+  const d = await api('/api/sustainability');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Energy (est.)', `${d.totalKwh}<span class="unit">kWh</span>`, 'all model calls, all time')}
+    ${tile('Carbon (est.)', `${d.totalGco2}<span class="unit">g</span>`, 'at 400 g/kWh grid average')}
+    ${tile('Providers metered', d.byProvider.length, 'from the live token meters')}
+    <div class="panel tile"><div class="panel-title">Method</div><div class="sub">${esc(d.note)}</div></div>
+  </div>
+  <div class="panel"><div class="panel-title">By provider</div>
+    <table><thead><tr><th>Provider</th><th class="num">Tokens</th><th class="num">kWh</th><th class="num">gCO2</th><th class="num">Cost</th></tr></thead><tbody>
+    ${d.byProvider.map((p) => `<tr><td class="mono">${esc(p.provider)}</td><td class="num mono">${p.tokens}</td><td class="num mono">${p.kwh}</td><td class="num mono">${p.gco2}</td><td class="num mono">$${p.cost?.toFixed?.(4) ?? p.cost}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No model calls yet.</td></tr>'}
+    </tbody></table></div>
+  <div class="panel"><div class="panel-title">Efficiency playbook</div>
+    ${d.tips.map((t) => `<div class="map-legend">— ${esc(t)}</div>`).join('')}</div>`;
+}
+
+async function renderCapacity() {
+  const rows = await api('/api/capacity');
+  const sat = rows.filter((r) => r.saturated).length;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Active employees', rows.length, 'AI workforce on shift')}
+    ${tile('Saturated', sat, 'over 3 live runs or 80% daily budget', sat ? 'tile-warn' : '')}
+    ${tile('Live work items', rows.reduce((a, b) => a + b.active, 0), 'queued + leased + running')}
+    ${tile('Waiting on humans', rows.reduce((a, b) => a + b.waiting, 0), 'at the gate')}
+  </div>
+  <div class="panel"><div class="panel-title">Load board — live per employee</div>
+    <table><thead><tr><th>Agent</th><th>Group</th><th class="num">Active</th><th class="num">Gate</th><th class="num">Done 7d</th><th style="width:22%">Daily budget</th><th></th></tr></thead><tbody>
+    ${rows.map((r) => `<tr>
+      <td class="mono">${esc(r.id)}</td><td class="mono">${esc(r.role_group)}</td>
+      <td class="num">${r.active}</td><td class="num">${r.waiting}</td><td class="num">${r.done7}</td>
+      <td><div class="meter-track"><div class="meter-fill ${r.budgetPct > 80 ? 'hot' : ''}" style="width:${Math.min(100, r.budgetPct)}%"></div></div></td>
+      <td>${r.saturated ? '<span class="chip chip-warn">saturated</span>' : '<span class="chip chip-ok">ok</span>'}</td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+async function renderLab() {
+  const rows = await api('/api/lab');
+  const canM = hasPermC('lab.manage');
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title">New experiment — two prompts race, you judge the winner</div>
+    ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
+      <input id="lx-name" placeholder="name" style="width:180px">
+      <input id="lx-hypo" placeholder="hypothesis (optional)" style="width:260px">
+      <textarea id="lx-a" placeholder="variant A prompt" style="width:100%;height:56px"></textarea>
+      <textarea id="lx-b" placeholder="variant B prompt" style="width:100%;height:56px"></textarea>
+      <button class="btn btn-sm btn-primary" id="lx-go">Run A/B</button></div>` : '<div class="map-legend">lab.manage required to start experiments.</div>'}
+  </div>
+  ${rows.map((x) => `
+  <div class="panel">
+    <div class="panel-title"><span>#${x.id} ${esc(x.name)} <span class="chip ${x.state === 'concluded' ? 'chip-ok' : 'chip-warn'}">${esc(x.state)}</span>${x.winner ? ` <span class="chip chip-ember">winner: ${esc(x.winner)}</span>` : ''}</span>
+      <span>${canM && x.state === 'running' && x.result_a && x.result_b ? xbtn(`/api/lab/${x.id}/conclude`, { winner: 'a' }, 'A wins') + xbtn(`/api/lab/${x.id}/conclude`, { winner: 'b' }, 'B wins') + xbtn(`/api/lab/${x.id}/conclude`, { winner: 'inconclusive' }, 'Inconclusive') : ''}</span></div>
+    ${x.hypothesis ? `<div class="map-legend">${esc(x.hypothesis)}</div>` : ''}
+    <div class="grid grid-2">
+      <div><b style="font-size:12px">A</b>${preBody(x.result_a || '⏳ running…')}</div>
+      <div><b style="font-size:12px">B</b>${preBody(x.result_b || '⏳ running…')}</div>
+    </div>
+  </div>`).join('') || '<div class="panel"><div class="empty">No experiments yet.</div></div>'}`;
+  wireXact(renderLab);
+  $('#lx-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/lab', { method: 'POST', body: { name: $('#lx-name').value, hypothesis: $('#lx-hypo').value || null, variantA: $('#lx-a').value, variantB: $('#lx-b').value } });
+      toast('Experiment running'); renderLab();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderReleases() {
+  const rows = await api('/api/releases');
+  const canM = hasPermC('releases.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Draft a release — notes compile themselves from completed work</div>
+    ${canM ? `<div class="form-inline">
+      <input id="rl-ver" placeholder="version, e.g. 1.4.0" style="width:160px">
+      <button class="btn btn-sm btn-primary" id="rl-go">Draft notes</button></div>` : ''}
+  </div>
+  ${rows.map((r) => `
+  <div class="panel">
+    <div class="panel-title"><span>v${esc(r.version)} <span class="chip ${r.state === 'published' ? 'chip-ok' : 'chip-warn'}">${esc(r.state)}</span></span>
+      <span>${canM && r.state === 'draft' && r.notes ? xbtn(`/api/releases/${r.id}/publish`, {}, 'Publish', 'btn-ok') : ''}</span></div>
+    ${preBody(r.notes || '⏳ the agent is compiling the changelog…')}
+  </div>`).join('') || '<div class="panel"><div class="empty">No releases yet.</div></div>'}`;
+  wireXact(renderReleases);
+  $('#rl-go')?.addEventListener('click', async () => {
+    try { await api('/api/releases', { method: 'POST', body: { version: $('#rl-ver').value } }); toast('Drafting'); renderReleases(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderPmo() {
+  const [d, projects] = await Promise.all([api('/api/pmo'), api('/api/projects').catch(() => [])]);
+  const canM = hasPermC('pmo.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Pending gates', d.stats.pending, 'waiting for a human ruling', d.stats.pending ? 'tile-warn' : '')}
+    ${tile('Passed', d.stats.passed, 'crossings approved')}
+    ${tile('Failed', d.stats.failed, 'work sent back')}
+    <div class="panel tile"><div class="panel-title">New gate</div>
+      ${canM ? `<div class="form-inline" style="flex-direction:column;align-items:stretch;gap:6px">
+        <select id="pg-proj">${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+        <input id="pg-gate" placeholder="gate, e.g. Design freeze">
+        <button class="btn btn-sm btn-primary" id="pg-go">Create</button></div>` : '<div class="sub">pmo.manage required</div>'}</div>
+  </div>
+  <div class="panel"><div class="panel-title">Stage gates across all projects</div>
+    <table><thead><tr><th>#</th><th>Project</th><th>Gate</th><th>State</th><th>Approver</th><th></th></tr></thead><tbody>
+    ${d.gates.map((x) => `<tr>
+      <td class="mono">${x.id}</td><td>${esc(x.project_name || x.project_id)}</td><td>${esc(x.gate)}</td>
+      <td><span class="chip ${x.state === 'passed' ? 'chip-ok' : x.state === 'failed' ? 'chip-bad' : 'chip-warn'}">${esc(x.state)}</span></td>
+      <td class="mono">${esc(x.approver || '—')}</td>
+      <td>${canM && x.state === 'pending' ? xbtn(`/api/pmo/${x.id}/resolve`, { state: 'passed' }, 'Pass', 'btn-ok') + xbtn(`/api/pmo/${x.id}/resolve`, { state: 'failed' }, 'Fail', 'btn-bad') : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">No gates yet.</td></tr>'}
+    </tbody></table></div>`;
+  wireXact(renderPmo);
+  $('#pg-go')?.addEventListener('click', async () => {
+    try { await api('/api/pmo', { method: 'POST', body: { projectId: $('#pg-proj').value, gate: $('#pg-gate').value } }); toast('Gate created'); renderPmo(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderInsights() {
+  const d = await api('/api/insights');
+  const maxAct = Math.max(...d.activityByDay.map((x) => x.n), 1);
+  const maxSpend = Math.max(...d.spendByDay.map((x) => x.usd), 0.0001);
+  const bars = (rows, valKey, maxV, fmt) => `<div style="display:flex;align-items:flex-end;gap:4px;height:90px;padding-top:8px">
+    ${rows.map((r) => `<div title="${esc(r.day)}: ${fmt(r[valKey])}" style="flex:1;background:var(--ember);opacity:.75;border-radius:2px 2px 0 0;height:${Math.max(3, (r[valKey] / maxV) * 82)}px"></div>`).join('')}</div>`;
+  view.innerHTML = `
+  <div class="grid grid-2">
+    <div class="panel"><div class="panel-title">Company activity — audit events per day (14d)</div>${bars(d.activityByDay, 'n', maxAct, (v) => `${v} events`)}</div>
+    <div class="panel"><div class="panel-title">Model spend per day (14d)</div>${bars(d.spendByDay, 'usd', maxSpend, (v) => `$${v}`)}</div>
+  </div>
+  <div class="grid grid-3">
+    <div class="panel"><div class="panel-title">Runs by state</div>
+      <table><tbody>${d.runsByState.map((r) => `<tr><td class="mono">${esc(r.state)}</td><td class="num mono">${r.n}</td></tr>`).join('')}</tbody></table></div>
+    <div class="panel"><div class="panel-title">Busiest employees</div>
+      <table><tbody>${d.busiestAgents.map((r) => `<tr><td class="mono">${esc(r.agent_id)}</td><td class="num mono">${r.runs}</td></tr>`).join('')}</tbody></table></div>
+    <div class="panel"><div class="panel-title">Most-touched subjects</div>
+      <table><tbody>${d.topSubjects.map((r) => `<tr><td class="mono">${esc(r.subject_type)}</td><td class="num mono">${r.n}</td></tr>`).join('')}</tbody></table></div>
+  </div>`;
+}
+
+async function renderBrand() {
+  const rows = await api('/api/brand');
+  const canM = hasPermC('brand.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Brand studio — the identity every agent must obey</div>
+    ${canM ? `<div class="form-inline">
+      <select id="br-kind" style="width:auto"><option>voice</option><option>palette</option><option>logo-spec</option><option>boilerplate</option><option>guideline</option></select>
+      <input id="br-name" placeholder="asset name" style="width:220px">
+      <button class="btn btn-sm btn-primary" id="br-go">Draft with an agent</button></div>` : ''}
+  </div>
+  ${rows.map((a) => `
+  <div class="panel">
+    <div class="panel-title"><span>${esc(a.kind)} · ${esc(a.name)} <span class="chip ${a.state === 'approved' ? 'chip-ok' : 'chip-warn'}">${esc(a.state)}</span></span>
+      <span>${canM && a.state === 'draft' && a.content ? xbtn(`/api/brand/${a.id}/approve`, {}, 'Approve', 'btn-ok') : ''}</span></div>
+    ${preBody(a.content || '⏳ drafting…')}
+  </div>`).join('') || '<div class="panel"><div class="empty">No brand assets yet.</div></div>'}`;
+  wireXact(renderBrand);
+  $('#br-go')?.addEventListener('click', async () => {
+    try { await api('/api/brand', { method: 'POST', body: { kind: $('#br-kind').value, name: $('#br-name').value } }); toast('Drafting'); renderBrand(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderProcurement() {
+  const [rows, vendors] = await Promise.all([api('/api/procurement'), api('/api/vendors').catch(() => [])]);
+  const canM = hasPermC('procurement.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Purchase requests — human approval before money moves</div>
+    ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
+      <input id="pu-item" placeholder="item" style="width:220px">
+      <input id="pu-amt" type="number" placeholder="USD" style="width:90px">
+      <select id="pu-vendor" style="width:auto"><option value="">— vendor —</option>${vendors.map((v) => `<option value="${v.id}">${esc(v.name)}</option>`).join('')}</select>
+      <input id="pu-why" placeholder="justification" style="width:260px">
+      <button class="btn btn-sm btn-primary" id="pu-go">Request</button></div>` : ''}
+    <table><thead><tr><th>#</th><th>Item</th><th class="num">USD</th><th>Vendor</th><th>State</th><th>By / Approver</th><th></th></tr></thead><tbody>
+    ${rows.map((p) => `<tr>
+      <td class="mono">${p.id}</td><td>${esc(p.item)}${p.justification ? `<div class="map-legend">${esc(p.justification)}</div>` : ''}</td>
+      <td class="num mono">$${p.amount_usd}</td><td>${esc(p.vendor_name || '—')}</td>
+      <td><span class="chip ${p.state === 'approved' || p.state === 'ordered' ? 'chip-ok' : p.state === 'rejected' ? 'chip-bad' : 'chip-warn'}">${esc(p.state)}</span></td>
+      <td class="mono" style="font-size:10px">${esc(p.created_by)}${p.approver ? ` → ${esc(p.approver)}` : ''}</td>
+      <td>${canM && p.state === 'requested' ? xbtn(`/api/procurement/${p.id}/resolve`, { state: 'approved' }, 'Approve', 'btn-ok') + xbtn(`/api/procurement/${p.id}/resolve`, { state: 'rejected' }, 'Reject', 'btn-bad') : ''}
+          ${canM && p.state === 'approved' ? xbtn(`/api/procurement/${p.id}/resolve`, { state: 'ordered' }, 'Mark ordered') : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">No purchase requests yet.</td></tr>'}
+    </tbody></table></div>`;
+  wireXact(renderProcurement);
+  $('#pu-go')?.addEventListener('click', async () => {
+    try {
+      await api('/api/procurement', { method: 'POST', body: { item: $('#pu-item').value, amountUsd: Number($('#pu-amt').value) || 0, vendorId: $('#pu-vendor').value || null, justification: $('#pu-why').value || null } });
+      toast('Requested'); renderProcurement();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderFinops() {
+  const d = await api('/api/finops');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Wasted spend', `$${d.wasted.usd}`, `inside ${d.wasted.runs} failed/cancelled runs`, d.wasted.usd > 0 ? 'tile-warn' : '')}
+    ${tile('Transport retries', d.retries, 'failed calls that were retried')}
+    ${tile('Metered employees', d.byAgent.length, 'agents with recorded spend')}
+    ${tile('Costliest', d.byAgent[0] ? esc(d.byAgent[0].agent_id) : '—', d.byAgent[0] ? `$${d.byAgent[0].usd}` : '')}
+  </div>
+  <div class="panel"><div class="panel-title">Cost per employee</div>
+    <table><thead><tr><th>Agent</th><th class="num">Runs</th><th class="num">Tokens</th><th class="num">USD</th></tr></thead><tbody>
+    ${d.byAgent.map((a) => `<tr><td class="mono">${esc(a.agent_id)}</td><td class="num mono">${a.runs}</td><td class="num mono">${a.tokens}</td><td class="num mono">$${a.usd}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No metered spend yet.</td></tr>'}
+    </tbody></table></div>
+  <div class="panel"><div class="panel-title">Recommendations</div>
+    ${d.recommendations.map((r) => `<div class="map-legend">— ${esc(r)}</div>`).join('')}</div>`;
+}
+
+async function renderRecruiting() {
+  const rows = await api('/api/recruiting');
+  const canM = hasPermC('recruiting.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Open a role — an agent drafts the spec, a reviewer trials it, you decide</div>
+    ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
+      <input id="rc-role" placeholder="role, e.g. Localization QA" style="width:220px">
+      <input id="rc-brief" placeholder="what should this employee do?" style="width:380px">
+      <button class="btn btn-sm btn-primary" id="rc-go">Open role</button></div>` : ''}
+  </div>
+  ${rows.map((c) => `
+  <div class="panel">
+    <div class="panel-title"><span>#${c.id} ${esc(c.role_name)}
+      <span class="chip ${c.state === 'hired' ? 'chip-ok' : c.state === 'rejected' ? 'chip-bad' : 'chip-warn'}">${esc(c.state)}</span>
+      ${c.agent_id ? `<span class="chip chip-ember">${esc(c.agent_id)}</span>` : ''}</span>
+      <span>
+        ${canM && c.state === 'screening' ? xbtn(`/api/recruiting/${c.id}/trial`, {}, 'Send to trial') : ''}
+        ${canM && ['screening', 'trial'].includes(c.state) ? xbtn(`/api/recruiting/${c.id}/decide`, { verdict: 'hire' }, 'Hire', 'btn-ok') + xbtn(`/api/recruiting/${c.id}/decide`, { verdict: 'reject' }, 'Reject', 'btn-bad') : ''}
+      </span></div>
+    ${c.brief ? `<div class="map-legend">${esc(c.brief)}</div>` : ''}
+    <div class="grid grid-2">
+      <div><b style="font-size:12px">Drafted spec</b>${preBody(c.spec || '⏳ drafting…')}</div>
+      <div><b style="font-size:12px">Trial review</b>${preBody(c.trial_note || (c.state === 'trial' ? '⏳ reviewer working…' : '—'))}</div>
+    </div>
+  </div>`).join('') || '<div class="panel"><div class="empty">No candidates yet — the company grows its own workforce here.</div></div>'}`;
+  wireXact(renderRecruiting);
+  $('#rc-go')?.addEventListener('click', async () => {
+    try { await api('/api/recruiting', { method: 'POST', body: { roleName: $('#rc-role').value, brief: $('#rc-brief').value } }); toast('Role opened — spec drafting'); renderRecruiting(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderAcademy() {
+  const [d, agents] = await Promise.all([api('/api/academy'), api('/api/agents').catch(() => [])]);
+  const canM = hasPermC('academy.manage');
+  view.innerHTML = `
+  ${d.suggestions.length ? `<div class="panel"><div class="panel-title">Suggested training — from real eval gaps</div>
+    ${d.suggestions.map((s) => `<div class="form-inline" style="justify-content:space-between">
+      <span class="mono">${esc(s.agentId)} <span style="color:var(--ink-faint)">· ${esc(s.reason)}</span></span>
+      ${canM ? xbtn('/api/academy', { agentId: s.agentId, title: `Close eval gap — ${s.agentId}`, source: 'eval-fail' }, 'Create curriculum', 'btn-primary') : ''}
+    </div>`).join('')}</div>` : ''}
+  <div class="panel"><div class="panel-title">New curriculum</div>
+    ${canM ? `<div class="form-inline">
+      <select id="ac-agent">${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
+      <input id="ac-title" placeholder="curriculum title" style="width:280px">
+      <button class="btn btn-sm btn-primary" id="ac-go">Create</button></div>` : '<div class="map-legend">academy.manage required.</div>'}
+  </div>
+  <div class="panel"><div class="panel-title">Curricula — scores measured before and after</div>
+    <table><thead><tr><th>#</th><th>Agent</th><th>Title</th><th>Source</th><th>State</th><th class="num">Before</th><th class="num">After</th><th></th></tr></thead><tbody>
+    ${d.curricula.map((c) => `<tr>
+      <td class="mono">${c.id}</td><td class="mono">${esc(c.agent_id)}</td><td>${esc(c.title)}</td><td class="mono">${esc(c.source)}</td>
+      <td><span class="chip ${c.state === 'done' ? 'chip-ok' : c.state === 'active' ? 'chip-warn' : 'chip-dim'}">${esc(c.state)}</span></td>
+      <td class="num mono">${c.score_before?.toFixed?.(2) ?? '—'}</td><td class="num mono">${c.score_after?.toFixed?.(2) ?? '—'}</td>
+      <td>${canM && c.state === 'proposed' ? xbtn(`/api/academy/${c.id}/state`, { state: 'active' }, 'Start') : ''}
+          ${canM && c.state === 'active' ? xbtn(`/api/academy/${c.id}/state`, { state: 'done' }, 'Complete', 'btn-ok') : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">No curricula yet.</td></tr>'}
+    </tbody></table></div>`;
+  wireXact(renderAcademy);
+  $('#ac-go')?.addEventListener('click', async () => {
+    try { await api('/api/academy', { method: 'POST', body: { agentId: $('#ac-agent').value, title: $('#ac-title').value } }); toast('Created'); renderAcademy(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderIr() {
+  const rows = await api('/api/ir');
+  const canM = hasPermC('ir.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Investor updates — drafted from the live ledger, sent by you</div>
+    ${canM ? `<div class="form-inline">
+      <input id="ir-period" placeholder="period, e.g. 2026-08" style="width:140px">
+      <button class="btn btn-sm btn-primary" id="ir-go">Draft update</button></div>` : ''}
+  </div>
+  ${rows.map((u) => `
+  <div class="panel">
+    <div class="panel-title"><span>${esc(u.period)} <span class="chip ${u.state === 'sent' ? 'chip-ok' : 'chip-warn'}">${esc(u.state)}</span></span>
+      <span>${canM && u.state === 'draft' && u.body ? xbtn(`/api/ir/${u.id}/send`, {}, 'Mark sent', 'btn-ok') : ''}</span></div>
+    ${preBody(u.body || '⏳ drafting from live numbers…')}
+  </div>`).join('') || '<div class="panel"><div class="empty">No investor updates yet.</div></div>'}`;
+  wireXact(renderIr);
+  $('#ir-go')?.addEventListener('click', async () => {
+    try { await api('/api/ir', { method: 'POST', body: { period: $('#ir-period').value } }); toast('Drafting'); renderIr(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderBoard() {
+  const rows = await api('/api/board');
+  const canM = hasPermC('board.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Board room — the packet reads the company, the humans resolve</div>
+    ${canM ? `<div class="form-inline">
+      <input id="bd-period" placeholder="period, e.g. 2026-Q3" style="width:140px">
+      <button class="btn btn-sm btn-primary" id="bd-go">Prepare packet</button></div>` : ''}
+  </div>
+  ${rows.map((b) => `
+  <div class="panel">
+    <div class="panel-title">${esc(b.period)} <span class="chip ${b.state === 'held' ? 'chip-ok' : 'chip-warn'}">${esc(b.state)}</span></div>
+    ${preBody(b.packet || '⏳ preparing the packet…')}
+    ${b.state === 'held' ? `<div class="map-legend"><b>Resolutions:</b> ${esc(b.resolutions)}</div>`
+      : canM && b.packet ? `<div class="form-inline" style="margin-top:8px">
+          <input id="bd-res-${b.id}" placeholder="resolutions taken by the board" style="width:60%">
+          <button class="btn btn-sm btn-ok" data-hold="${b.id}">Record meeting held</button></div>` : ''}
+  </div>`).join('') || '<div class="panel"><div class="empty">No board records yet.</div></div>'}`;
+  wireXact(renderBoard);
+  $('#bd-go')?.addEventListener('click', async () => {
+    try { await api('/api/board', { method: 'POST', body: { period: $('#bd-period').value } }); toast('Preparing'); renderBoard(); }
+    catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-hold]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/board/${b.dataset.hold}/hold`, { method: 'POST', body: { resolutions: $(`#bd-res-${b.dataset.hold}`).value } }); toast('Recorded'); renderBoard(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+async function renderComms() {
+  const rows = await api('/api/comms');
+  const canM = hasPermC('comms.manage');
+  view.innerHTML = `
+  <div class="panel"><div class="panel-title">Internal comms — the bulletin writes itself from the week's real events</div>
+    ${canM ? xbtn('/api/comms', {}, 'Draft this week’s bulletin', 'btn-primary') : ''}
+  </div>
+  ${rows.map((b) => `
+  <div class="panel">
+    <div class="panel-title"><span>Week of ${esc(b.week)} <span class="chip ${b.state === 'published' ? 'chip-ok' : 'chip-warn'}">${esc(b.state)}</span></span>
+      <span>${canM && b.state === 'draft' && b.body ? xbtn(`/api/comms/${b.id}/publish`, {}, 'Publish', 'btn-ok') : ''}</span></div>
+    ${preBody(b.body || '⏳ the editor is reading the audit chain…')}
+  </div>`).join('') || '<div class="panel"><div class="empty">No bulletins yet.</div></div>'}`;
+  wireXact(renderComms);
 }
 
 // ---------- Owner console ----------

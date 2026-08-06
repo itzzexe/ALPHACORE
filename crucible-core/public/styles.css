@@ -516,6 +516,148 @@ pre.json {
 
 /* Constellation map v6 */
 .constellation { width: 100%; height: auto; display: block; }
+/* v7 atlas: the SVG scales to the viewport so the whole company is always on
+   screen; pan/zoom handles detail. */
+.constellation.atlas {
+  height: clamp(460px, calc(100vh - 235px), 900px);
+  touch-action: none; user-select: none; cursor: grab;
+}
+.constellation.atlas:active { cursor: grabbing; }
+.constellation .cx-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.constellation .cx-edge.trace {
+  opacity: 0.95; stroke-dasharray: 8 6;
+  animation: cx-flow 0.8s linear infinite;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+@keyframes cx-flow { to { stroke-dashoffset: -14; } }
+.constellation .cx-div { cursor: pointer; }
+.constellation .cx-div:hover { opacity: 1; text-decoration: underline; }
+/* Radial labels: every section name runs along its own ray, so texts cannot
+   collide; the stroke halo keeps them readable where edges pass underneath. */
+.constellation .cx-rlab {
+  fill: var(--ink); font-family: var(--font-ui); font-size: 10.5px; font-weight: 650;
+  letter-spacing: 0.04em; pointer-events: none;
+  paint-order: stroke; stroke: var(--bg-raise); stroke-width: 3.2px; stroke-linejoin: round;
+}
+.constellation .cx-rcount { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 400; }
+.constellation .cx-arc { fill: none; stroke-width: 1.7; opacity: 0.35; cursor: pointer; }
+.constellation .cx-arc:hover { opacity: 0.8; }
+.constellation .cx-arc.dimmed { opacity: 0.08; }
+/* v8 mainboard: chips, copper nets, bus lanes, packets, silkscreen. */
+.board .b-bg { stroke: none; }
+.board .b-frame { fill: none; stroke: var(--edge); stroke-width: 1.6; pointer-events: none; }
+.board .hole { fill: none; stroke: var(--edge); stroke-width: 1.5; pointer-events: none; }
+.board .silk {
+  fill: var(--ink-faint); font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.18em; opacity: 0.6; pointer-events: none;
+}
+.board .zone-rect { fill: none; stroke-width: 1; stroke-dasharray: 5 6; opacity: 0.35; cursor: pointer; }
+.board .zone-rect:hover { opacity: 0.85; }
+.board .cx-div.zlab { text-anchor: start; font-size: 9.5px; letter-spacing: 0.2em; }
+.board .cx-edge { opacity: 0.42; stroke-linecap: round; }
+.board .cx-edge.dormant { opacity: 0.1; }
+.board .cx-edge.lit { opacity: 1; }
+.board .chip-body { fill: var(--bg-raise); stroke-width: 1.3; }
+.board a:hover .chip-body { filter: drop-shadow(0 0 8px currentColor); stroke-width: 2; }
+.board [data-node].lit .chip-body { stroke-width: 2; filter: drop-shadow(0 0 7px currentColor); }
+.board .chip-name { fill: var(--ink); font-family: var(--font-ui); font-size: 10px; font-weight: 650; letter-spacing: 0.03em; pointer-events: none; }
+.board .chip-count { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 8.5px; pointer-events: none; }
+.board .pin { fill: var(--ink-faint); opacity: 0.45; pointer-events: none; }
+.board .chip-led { fill: var(--ink-faint); opacity: 0.3; }
+.board .chip-led.on { fill: var(--ok); opacity: 1; animation: led-blink 2.8s ease-in-out infinite; }
+@keyframes led-blink { 50% { opacity: 0.4; } }
+.board .cx-pkt { pointer-events: none; filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.5)); }
+.board .cpu-body { fill: var(--bg-raise); stroke-width: 2.2; }
+.board .cpu-pulse { fill: none; stroke-width: 1.4; opacity: 0.5; animation: term-pulse 3.4s ease-out infinite; }
+.board a[data-node="core"]:hover .cpu-body { filter: drop-shadow(0 0 12px currentColor); }
+/* live layer: chips flash when their section acts; the ticker narrates */
+.board [data-node].ping .chip-body { animation: chip-ping 1.8s ease-out; }
+@keyframes chip-ping {
+  0% { filter: drop-shadow(0 0 16px currentColor); stroke-width: 3.2; }
+  100% { filter: none; }
+}
+.map-ticker {
+  position: absolute; left: 12px; bottom: 36px; width: 330px; z-index: 4;
+  font-family: var(--font-mono); font-size: 9.5px; line-height: 1.5;
+  background: color-mix(in srgb, var(--bg-raise) 82%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  border: 1px solid var(--edge); border-radius: 8px; padding: 7px 10px;
+  pointer-events: none;
+}
+.map-ticker .tk-row { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+.map-ticker .tk-time { color: var(--ember); flex: none; }
+.map-ticker .tk-act { color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.map-ticker .tk-who { color: var(--ink-faint); margin-left: auto; flex: none; }
+.map-ticker .tk-idle { color: var(--ink-faint); }
+/* map style switcher — four ways to read the same company */
+.map-style-picker { display: inline-flex; gap: 0; margin-right: 8px; border: 1px solid var(--edge); border-radius: 7px; overflow: hidden; vertical-align: middle; }
+.map-style-picker button {
+  background: transparent; color: var(--ink-mute); border: none; cursor: pointer;
+  font-family: var(--font-mono); font-size: 10px; padding: 4px 10px; letter-spacing: 0.06em;
+}
+.map-style-picker button + button { border-left: 1px solid var(--edge); }
+.map-style-picker button:hover { color: var(--ink); }
+.map-style-picker button.on { background: var(--ember); color: #17110c; font-weight: 700; }
+/* v9 metro */
+.metroV9 .mt-line { fill: none; stroke-width: 5; stroke-linecap: round; opacity: 0.75; cursor: pointer; }
+.metroV9 .mt-line:hover { opacity: 1; }
+.metroV9 .mt-dot { fill: var(--bg-raise); stroke-width: 3; }
+.metroV9 a:hover .mt-dot { filter: drop-shadow(0 0 7px currentColor); }
+.metroV9 [data-node].lit .mt-dot { stroke-width: 4; filter: drop-shadow(0 0 7px currentColor); }
+.metroV9 [data-node].ping .mt-dot { animation: chip-ping 1.8s ease-out; }
+.metroV9 .mt-lab {
+  fill: var(--ink); font-family: var(--font-ui); font-size: 10.5px; font-weight: 650; pointer-events: none;
+  paint-order: stroke; stroke: var(--bg-raise); stroke-width: 3px; stroke-linejoin: round;
+}
+.metroV9 .mt-cnt { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 8.5px; text-anchor: middle; pointer-events: none; }
+.metroV9 .cx-edge { opacity: 0.14; }
+.metroV9 .cx-edge.lit, .metroV9 .cx-edge.trace { opacity: 1; }
+.metroV9 .cx-edge.dormant { opacity: 0.05; }
+/* v10 flow line */
+.flowV10 .fl-pill { fill: var(--bg-raise); stroke-width: 1.3; }
+.flowV10 a:hover .fl-pill { filter: drop-shadow(0 0 8px currentColor); stroke-width: 2; }
+.flowV10 [data-node].lit .fl-pill { stroke-width: 2; filter: drop-shadow(0 0 7px currentColor); }
+.flowV10 [data-node].ping .fl-pill { animation: chip-ping 1.8s ease-out; }
+.flowV10 .fl-lab { fill: var(--ink); font-family: var(--font-ui); font-size: 9.6px; font-weight: 650; pointer-events: none; }
+.flowV10 .fl-cnt { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 8px; pointer-events: none; }
+.flowV10 .cx-edge { opacity: 0.3; }
+.flowV10 .cx-edge.dormant { opacity: 0.08; }
+.flowV10 .chip-led { fill: var(--ink-faint); opacity: 0.3; }
+.flowV10 .chip-led.on { fill: var(--ok); opacity: 1; animation: led-blink 2.8s ease-in-out infinite; }
+.flowV10 .silk { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; opacity: 0.65; }
+.map-ctl { position: absolute; top: 44px; right: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }
+.map-ctl button {
+  width: 30px; height: 30px; border-radius: 6px; cursor: pointer;
+  background: var(--bg-raise); color: var(--ink); border: 1px solid var(--edge);
+  font-size: 15px; line-height: 1;
+}
+.map-ctl button:hover { border-color: var(--ember); color: var(--ember); }
+.map-side {
+  position: absolute; top: 44px; left: 12px; width: 296px;
+  max-height: calc(100% - 92px); overflow: auto; z-index: 6;
+  background: color-mix(in srgb, var(--bg-raise) 88%, transparent);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+  border: 1px solid var(--edge); border-radius: 10px; padding: 13px 14px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+}
+.map-side .ms-head { font-family: var(--font-ui); font-weight: 800; font-size: 15px; letter-spacing: 0.02em; }
+.map-side .ms-sub { color: var(--ink-mute); font-size: 11px; margin-top: 2px; text-transform: capitalize; }
+.map-side .ms-hint { color: var(--ink-faint); font-size: 11.5px; margin-top: 6px; line-height: 1.45; }
+.map-side .ms-actions { display: flex; gap: 6px; margin-top: 10px; }
+.map-side .ms-sec {
+  margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--edge);
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-mute);
+}
+.map-side .ms-row {
+  display: grid; grid-template-columns: 14px 1fr auto; gap: 1px 8px; align-items: baseline;
+  padding: 6px 4px; border-radius: 6px; cursor: pointer;
+}
+.map-side .ms-row:hover { background: rgba(255, 255, 255, 0.05); }
+.map-side .ms-row b { font-size: 12.5px; font-weight: 600; }
+.map-side .ms-dir { color: var(--ink-faint); }
+.map-side .ms-cnt { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+.map-side .ms-lbl { grid-column: 1 / -1; color: var(--ink-faint); font-size: 10.5px; line-height: 1.4; }
+.map-side .ms-trace .ms-lbl b { color: var(--ember); font-family: var(--font-mono); font-size: 10px; }
 .constellation .cx-orbit { fill: none; stroke: var(--edge); stroke-dasharray: 2 8; opacity: 0.4; }
 .constellation .cx-spoke { stroke: var(--ink-faint); stroke-width: 0.5; opacity: 0.13; transition: opacity 0.18s; }
 .constellation .cx-spoke.dimmed { opacity: 0.03; }
@@ -535,7 +677,11 @@ pre.json {
   letter-spacing: 0.06em; text-anchor: middle; pointer-events: none;
 }
 .constellation .cx-count { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 8.5px; text-anchor: middle; pointer-events: none; }
-.constellation .cx-div { font-family: var(--font-ui); font-size: 10px; font-weight: 800; letter-spacing: 0.26em; text-anchor: middle; opacity: 0.75; }
+.constellation .cx-div {
+  font-family: var(--font-ui); font-size: 10px; font-weight: 800; letter-spacing: 0.26em;
+  text-anchor: middle; opacity: 0.75;
+  paint-order: stroke; stroke: var(--bg-raise); stroke-width: 3.5px; stroke-linejoin: round;
+}
 .constellation .cx-core-ring { fill: var(--bg-raise); stroke-width: 2.5; }
 .constellation .cx-core-pulse { fill: none; stroke-width: 1.4; opacity: 0.5; transform-origin: 500px 430px; animation: term-pulse 3.4s ease-out infinite; }
 .constellation .cx-core-glyph { font-size: 26px; fill: var(--ember); text-anchor: middle; }
