@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" font-family="ui-monospace, 'Cascadia Code', Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="0.9" fill="#2b241c"/>
+    </pattern>
+    <radialGradient id="glow">
+      <stop offset="0%" stop-color="#ff6b2c" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ff6b2c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- board -->
+  <rect x="0" y="0" width="1200" height="680" rx="18" fill="#14100c"/>
+  <rect x="8" y="8" width="1184" height="664" rx="14" fill="url(#grid)" stroke="#2a241d" stroke-width="1.6"/>
+  <circle cx="30" cy="30" r="7" fill="none" stroke="#3a332a" stroke-width="1.5"/>
+  <circle cx="1170" cy="30" r="7" fill="none" stroke="#3a332a" stroke-width="1.5"/>
+  <circle cx="30" cy="650" r="7" fill="none" stroke="#3a332a" stroke-width="1.5"/>
+  <circle cx="1170" cy="650" r="7" fill="none" stroke="#3a332a" stroke-width="1.5"/>
+  <circle cx="600" cy="340" r="215" fill="url(#glow)"/>
+
+  <!-- bus lanes -->
+  <rect x="300" y="170" width="600" height="340" rx="12" fill="none" stroke="#3a332a" stroke-width="1" opacity="0.5"/>
+  <rect x="290" y="160" width="620" height="360" rx="14" fill="none" stroke="#3a332a" stroke-width="1" opacity="0.35"/>
+  <rect x="280" y="150" width="640" height="380" rx="16" fill="none" stroke="#3a332a" stroke-width="1" opacity="0.2"/>
+
+  <!-- traces -->
+  <g fill="none" stroke-linecap="round" opacity="0.75">
+    <path d="M 210 95 H 460 L 500 170" stroke="#ff6b2c" stroke-width="2.4"/>
+    <path d="M 210 235 H 300" stroke="#4f9cf0" stroke-width="2"/>
+    <path d="M 210 372 H 290" stroke="#ff5fa2" stroke-width="1.6"/>
+    <path d="M 210 495 H 280 L 300 475" stroke="#e07bd2" stroke-width="1.6"/>
+    <path d="M 990 95 H 740 L 700 170" stroke="#b78bff" stroke-width="2.4"/>
+    <path d="M 990 235 H 900" stroke="#e5533d" stroke-width="2"/>
+    <path d="M 990 372 H 910" stroke="#78bf6d" stroke-width="1.6"/>
+    <path d="M 990 495 H 920 L 900 475" stroke="#e8c547" stroke-width="1.6"/>
+    <path d="M 520 110 V 150" stroke="#5ec3c9" stroke-width="2.4"/>
+    <path d="M 790 110 V 150" stroke="#d8d8d8" stroke-width="1.6"/>
+    <path d="M 440 570 V 530" stroke="#ffb020" stroke-width="2"/>
+    <path d="M 780 570 V 530" stroke="#948b7d" stroke-width="2.4"/>
+  </g>
+  <!-- packets -->
+  <circle cx="330" cy="95" r="3" fill="#ff6b2c"/>
+  <circle cx="860" cy="95" r="3" fill="#b78bff"/>
+  <circle cx="780" cy="552" r="3" fill="#948b7d"/>
+
+  <!-- zone template: dashed frame, label, chip rows -->
+  <g font-size="11" font-weight="700" letter-spacing="3">
+    <!-- left column -->
+    <g>
+      <rect x="30" y="46" width="180" height="112" rx="9" fill="none" stroke="#ff6b2c" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="34" y="38" fill="#ff6b2c">ENGINE</text>
+      <g fill="#1d1812" stroke="#ff6b2c" stroke-opacity="0.8">
+        <rect x="44" y="60" width="66" height="16" rx="4"/><rect x="122" y="60" width="66" height="16" rx="4"/>
+        <rect x="44" y="84" width="66" height="16" rx="4"/><rect x="122" y="84" width="66" height="16" rx="4"/>
+        <rect x="44" y="108" width="66" height="16" rx="4"/><rect x="122" y="108" width="66" height="16" rx="4"/>
+        <rect x="44" y="132" width="66" height="16" rx="4"/><rect x="122" y="132" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="30" y="186" width="180" height="98" rx="9" fill="none" stroke="#4f9cf0" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="34" y="178" fill="#4f9cf0">TALENT</text>
+      <g fill="#1d1812" stroke="#4f9cf0" stroke-opacity="0.8">
+        <rect x="44" y="200" width="66" height="16" rx="4"/><rect x="122" y="200" width="66" height="16" rx="4"/>
+        <rect x="44" y="224" width="66" height="16" rx="4"/><rect x="122" y="224" width="66" height="16" rx="4"/>
+        <rect x="44" y="248" width="66" height="16" rx="4"/><rect x="122" y="248" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="30" y="316" width="180" height="86" rx="9" fill="none" stroke="#ff5fa2" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="34" y="308" fill="#ff5fa2">CREATE</text>
+      <g fill="#1d1812" stroke="#ff5fa2" stroke-opacity="0.8">
+        <rect x="44" y="330" width="66" height="16" rx="4"/><rect x="122" y="330" width="66" height="16" rx="4"/>
+        <rect x="44" y="354" width="66" height="16" rx="4"/><rect x="122" y="354" width="66" height="16" rx="4"/>
+        <rect x="44" y="378" width="66" height="16" rx="4"/><rect x="122" y="378" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="30" y="434" width="180" height="72" rx="9" fill="none" stroke="#e07bd2" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="34" y="426" fill="#e07bd2">TRUST</text>
+      <g fill="#1d1812" stroke="#e07bd2" stroke-opacity="0.8">
+        <rect x="44" y="448" width="66" height="16" rx="4"/><rect x="122" y="448" width="66" height="16" rx="4"/>
+        <rect x="44" y="472" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+
+    <!-- right column -->
+    <g>
+      <rect x="990" y="46" width="180" height="112" rx="9" fill="none" stroke="#b78bff" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="994" y="38" fill="#b78bff">BUILD</text>
+      <g fill="#1d1812" stroke="#b78bff" stroke-opacity="0.8">
+        <rect x="1004" y="60" width="66" height="16" rx="4"/><rect x="1082" y="60" width="66" height="16" rx="4"/>
+        <rect x="1004" y="84" width="66" height="16" rx="4"/><rect x="1082" y="84" width="66" height="16" rx="4"/>
+        <rect x="1004" y="108" width="66" height="16" rx="4"/><rect x="1082" y="108" width="66" height="16" rx="4"/>
+        <rect x="1004" y="132" width="66" height="16" rx="4"/><rect x="1082" y="132" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="990" y="186" width="180" height="98" rx="9" fill="none" stroke="#e5533d" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="994" y="178" fill="#e5533d">COMMERCE</text>
+      <g fill="#1d1812" stroke="#e5533d" stroke-opacity="0.8">
+        <rect x="1004" y="200" width="66" height="16" rx="4"/><rect x="1082" y="200" width="66" height="16" rx="4"/>
+        <rect x="1004" y="224" width="66" height="16" rx="4"/><rect x="1082" y="224" width="66" height="16" rx="4"/>
+        <rect x="1004" y="248" width="66" height="16" rx="4"/><rect x="1082" y="248" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="990" y="316" width="180" height="86" rx="9" fill="none" stroke="#78bf6d" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="994" y="308" fill="#78bf6d">DATA</text>
+      <g fill="#1d1812" stroke="#78bf6d" stroke-opacity="0.8">
+        <rect x="1004" y="330" width="66" height="16" rx="4"/><rect x="1082" y="330" width="66" height="16" rx="4"/>
+        <rect x="1004" y="354" width="66" height="16" rx="4"/><rect x="1082" y="354" width="66" height="16" rx="4"/>
+        <rect x="1004" y="378" width="66" height="16" rx="4"/><rect x="1082" y="378" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="990" y="434" width="180" height="72" rx="9" fill="none" stroke="#e8c547" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="994" y="426" fill="#e8c547">CAPITAL</text>
+      <g fill="#1d1812" stroke="#e8c547" stroke-opacity="0.8">
+        <rect x="1004" y="448" width="66" height="16" rx="4"/><rect x="1082" y="448" width="66" height="16" rx="4"/>
+        <rect x="1004" y="472" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+
+    <!-- top band -->
+    <g>
+      <rect x="380" y="40" width="280" height="70" rx="9" fill="none" stroke="#5ec3c9" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="384" y="32" fill="#5ec3c9">DECIDE</text>
+      <g fill="#1d1812" stroke="#5ec3c9" stroke-opacity="0.8">
+        <rect x="394" y="54" width="58" height="16" rx="4"/><rect x="460" y="54" width="58" height="16" rx="4"/><rect x="526" y="54" width="58" height="16" rx="4"/><rect x="592" y="54" width="58" height="16" rx="4"/>
+        <rect x="394" y="78" width="58" height="16" rx="4"/><rect x="460" y="78" width="58" height="16" rx="4"/><rect x="526" y="78" width="58" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="700" y="40" width="180" height="70" rx="9" fill="none" stroke="#d8d8d8" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="704" y="32" fill="#d8d8d8">EXECUTIVE</text>
+      <g fill="#1d1812" stroke="#d8d8d8" stroke-opacity="0.8">
+        <rect x="714" y="54" width="66" height="16" rx="4"/><rect x="792" y="54" width="66" height="16" rx="4"/>
+        <rect x="714" y="78" width="66" height="16" rx="4"/>
+      </g>
+    </g>
+
+    <!-- bottom band -->
+    <g>
+      <rect x="300" y="562" width="280" height="70" rx="9" fill="none" stroke="#ffb020" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="304" y="554" fill="#ffb020">OPERATE</text>
+      <g fill="#1d1812" stroke="#ffb020" stroke-opacity="0.8">
+        <rect x="314" y="576" width="58" height="16" rx="4"/><rect x="380" y="576" width="58" height="16" rx="4"/><rect x="446" y="576" width="58" height="16" rx="4"/>
+        <rect x="314" y="600" width="58" height="16" rx="4"/><rect x="380" y="600" width="58" height="16" rx="4"/><rect x="446" y="600" width="58" height="16" rx="4"/>
+      </g>
+    </g>
+    <g>
+      <rect x="640" y="562" width="280" height="70" rx="9" fill="none" stroke="#948b7d" stroke-dasharray="5 6" opacity="0.5"/>
+      <text x="644" y="554" fill="#948b7d">GOVERN</text>
+      <g fill="#1d1812" stroke="#948b7d" stroke-opacity="0.8">
+        <rect x="654" y="576" width="58" height="16" rx="4"/><rect x="720" y="576" width="58" height="16" rx="4"/><rect x="786" y="576" width="58" height="16" rx="4"/><rect x="852" y="576" width="58" height="16" rx="4"/>
+        <rect x="654" y="600" width="58" height="16" rx="4"/><rect x="720" y="600" width="58" height="16" rx="4"/><rect x="786" y="600" width="58" height="16" rx="4"/><rect x="852" y="600" width="58" height="16" rx="4"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- CPU -->
+  <g>
+    <rect x="510" y="272" width="180" height="136" rx="12" fill="#1d1812" stroke="#ff6b2c" stroke-width="2.4"/>
+    <g fill="#5a4f42">
+      <rect x="524" y="264" width="7" height="5"/><rect x="547" y="264" width="7" height="5"/><rect x="570" y="264" width="7" height="5"/><rect x="593" y="264" width="7" height="5"/><rect x="616" y="264" width="7" height="5"/><rect x="639" y="264" width="7" height="5"/><rect x="662" y="264" width="7" height="5"/>
+      <rect x="524" y="411" width="7" height="5"/><rect x="547" y="411" width="7" height="5"/><rect x="570" y="411" width="7" height="5"/><rect x="593" y="411" width="7" height="5"/><rect x="616" y="411" width="7" height="5"/><rect x="639" y="411" width="7" height="5"/><rect x="662" y="411" width="7" height="5"/>
+      <rect x="502" y="286" width="5" height="7"/><rect x="502" y="309" width="5" height="7"/><rect x="502" y="332" width="5" height="7"/><rect x="502" y="355" width="5" height="7"/><rect x="502" y="378" width="5" height="7"/>
+      <rect x="693" y="286" width="5" height="7"/><rect x="693" y="309" width="5" height="7"/><rect x="693" y="332" width="5" height="7"/><rect x="693" y="355" width="5" height="7"/><rect x="693" y="378" width="5" height="7"/>
+    </g>
+    <text x="600" y="318" text-anchor="middle" font-size="30" fill="#ff6b2c">▲</text>
+    <text x="600" y="348" text-anchor="middle" font-size="16" font-weight="800" letter-spacing="4" fill="#f5efe6">HARMONY</text>
+    <text x="600" y="368" text-anchor="middle" font-size="9" letter-spacing="2" fill="#8d8171">ORCHESTRATOR · AUDIT CHAIN</text>
+    <text x="600" y="386" text-anchor="middle" font-size="9" letter-spacing="2" fill="#8d8171">72/72 SECTIONS WIRED</text>
+  </g>
+
+  <!-- silkscreen -->
+  <text x="34" y="662" font-size="10" letter-spacing="2.5" fill="#5a4f42">CRUCIBLE CORE · MAINBOARD · AI-NATIVE COMPANY</text>
+  <text x="1166" y="662" text-anchor="end" font-size="10" letter-spacing="2.5" fill="#5a4f42">12 DIVISIONS · 72 DEPARTMENTS · HUMANS HOLD THE GATES</text>
+</svg>
