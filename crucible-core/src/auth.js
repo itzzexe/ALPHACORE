@@ -127,7 +127,7 @@ export const PERMS = [
   'press.approve',
 ];
 
-const hashPassword = (pw) => {
+export const hashPassword = (pw) => {
   const salt = randomBytes(16).toString('hex');
   return `${salt}:${scryptSync(pw, salt, 64).toString('hex')}`;
 };

@@ -69,6 +69,7 @@ start "" /b cmd /c "ping -n 3 127.0.0.1 >nul & start "" http://localhost:8484"
 echo.
 echo   Dashboard:  http://localhost:8484
 echo   First boot: the owner username and password are printed above, once only
+echo   Missed it?   npm run reset-password
 echo   Stop:       press Ctrl+C in this window ^(or just close it^)
 echo   Live keys:  paste provider keys in Settings, or copy .env.example to .env
 echo.

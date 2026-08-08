@@ -385,6 +385,11 @@ function toast(msg, isErr = false) {
 
 // ---------- shell status ----------
 async function refreshShell() {
+  // Nobody signed in means nothing to refresh. Without this the timer below
+  // kept firing five authenticated requests every seven seconds at the login
+  // screen, filling the console with 401s and burying whatever the real
+  // problem was — which is the moment you most need the console readable.
+  if (!currentUser) return;
   try {
     const [health, chain, stats, notif, journeys] = await Promise.all([
       api('/api/health'), api('/api/audit/verify'), api('/api/stats'), api('/api/notifications?unread=1'),

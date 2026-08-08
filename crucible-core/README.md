@@ -124,6 +124,8 @@ Requires **Node ≥ 22.5** (built-in `node:sqlite`; the npm scripts pass the fla
 
 **First run creates one account and prints its password to the console, once.** Username `owner`, superadmin: every permission, the owner powers, the kill switches. Copy the password when you see it — it is stored only as a hash, and until you replace it that account can do exactly two things: read itself, and choose a new password. That is enforced in the server, not merely asked for on screen.
 
+Missed that line? `npm run reset-password` issues a new one, ends every session for that account, and records the reset on the chain.
+
 Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 **Going live:** paste provider API keys in **Settings** (stored locally in SQLite, never echoed back, effective immediately) or copy `.env.example` → `.env`. With zero keys the router runs a deterministic **mock mode** — the entire platform is demoable at $0.

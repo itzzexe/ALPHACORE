@@ -65,7 +65,7 @@ import { chiefTick } from './chief.js';
 import { seedSlos, observeTick, trimMetrics } from './observe.js';
 import { takeBackup } from './backup.js';
 import { mcpTools } from './mcptools.js';
-import { one, exec } from './db.js';
+import { one, exec, q } from './db.js';
 import { getSetting, setSetting } from './settings.js';
 
 const PUBLIC_BASE = () => getSetting('PUBLIC_BASE_URL');
@@ -99,6 +99,18 @@ seedSlos();
 // it in Settings. A wrong-looking localhost URL on a callback screen is far
 // easier to notice than an empty one.
 if (!getSetting('PUBLIC_BASE_URL')) setSetting('PUBLIC_BASE_URL', `http://localhost:${PORT}`);
+
+// The first-run password is printed once and kept only as a hash. If that line
+// was missed — window closed, output swallowed by a service manager, scrolled
+// past — the account is unreachable and nothing on screen says what to do. So
+// every boot that still finds an unclaimed account names the way back in.
+{
+  const waiting = q('SELECT username FROM users WHERE must_change = 1').map((u) => u.username);
+  if (waiting.length) {
+    console.log(`\n  ${waiting.join(', ')} ${waiting.length > 1 ? 'have' : 'has'} not chosen a password yet.`);
+    console.log('  Lost the one printed at first run?  npm run reset-password\n');
+  }
+}
 
 startWorkers();
 

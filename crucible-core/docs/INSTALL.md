@@ -51,8 +51,19 @@ account and prints it:
 ```
 
 **Copy it now.** It is stored only as a hash; nobody — not you, not the
-platform — can read it back. If you lose it before signing in, stop the server,
-delete `data/alphacore.db`, and start again.
+platform — can read it back.
+
+If you miss it, you are not locked out. From the machine the company runs on:
+
+```bash
+npm run reset-password            # the owner account
+npm run reset-password -- alice   # somebody else
+```
+
+That issues a new one, prints it once, ends every open session for that
+account, and writes the reset to the audit chain. It asks for filesystem access
+to `data/alphacore.db` — the same access needed to delete that file — so it
+grants nobody anything they did not already have.
 
 That account can do exactly two things until you change the password: look at
 itself, and replace that password. This is enforced in the server, not merely
@@ -221,6 +232,7 @@ Start here, in this order:
 | An outbound call did not go out | Egress page — the gate logs *why*, including the rule that stopped it |
 | The chain badge is red | Audit page → *Verify chain*. It names the exact entry that broke |
 | A department opens an empty page | Run `node scripts/launch-audit.mjs` — it reports unwired sections by name |
+| "invalid credentials" and you never saw the password | `npm run reset-password` — it prints a new one |
 
 ### The audit, in one command
 
