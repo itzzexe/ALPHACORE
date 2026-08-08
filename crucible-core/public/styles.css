@@ -1046,18 +1046,10 @@ pre.json {
 /* Diagrams keep Latin reading order even in Arabic. */
 .constellation, .board { direction: ltr; }
 
-@media (max-width: 860px) {
-  .app, .app.nav-open { grid-template-columns: 1fr; }
-  .rail {
-    position: fixed; bottom: 0; top: auto; inset-inline: 0; height: auto; width: 100%;
-    flex-direction: row; justify-content: space-around; overflow-x: auto;
-    border-inline-end: none; border-top: 1px solid var(--seam);
-  }
-  .rail-brand, .rail-spacer, .rail-tip { display: none; }
-  .flyout { position: fixed; inset-block: 0 56px; inset-inline-start: 0; width: 78vw; box-shadow: var(--shadow-pop); }
-  .main { padding-bottom: 64px; }
-  .top-search { max-width: none; }
-}
+/* The phone layout used to live here and had not worked for a while: the
+   paper stylesheet below redefines .rail after this point and quietly won, so
+   the rail stayed a 100vh column and pushed the document 193px wider than the
+   screen. It is now one block at the end of the file, where it wins. */
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -2084,4 +2076,251 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
   display: flex; justify-content: center; gap: var(--s2);
   margin-top: var(--s5); padding-top: var(--s4);
   border-top: 1px solid var(--seam-soft);
+}
+
+/* ==========================================================================
+   The phone.
+
+   Everything above assumes a mouse, a wide screen, and a rail you can hover.
+   A phone has none of those, so below 860px the shell rearranges rather than
+   shrinks: the rail and the flyout become a drawer you pull in, and a bar of
+   four thumb-sized targets takes over the bottom of the screen.
+
+   This block sits at the end of the file on purpose. The paper layer redefines
+   .rail and .topbar further up, and a breakpoint that loses to the rules it is
+   meant to override is not a breakpoint — it is a comment.
+   ========================================================================== */
+
+/* The bar and the drawer do not exist on a desktop, so they cost it nothing. */
+.tabbar, .nav-scrim { display: none; }
+
+@media (max-width: 860px) {
+  /* ---------- the shell ---------- */
+  .app, .app.nav-open {
+    grid-template-columns: 1fr;
+    /* The bar is fixed; this keeps the last row of every page above it,
+       including on phones whose home indicator eats another 34px. */
+    padding-bottom: calc(58px + env(safe-area-inset-bottom));   /* clears .tabbar */
+  }
+
+  /* ---------- the drawer: the rail and the flyout, pulled in ---------- */
+  .rail {
+    position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 60;
+    width: 62px; height: 100dvh;
+    background: var(--paper);
+    border-inline-end: 1px solid var(--seam);
+    padding-block: calc(var(--s4) + env(safe-area-inset-top)) calc(var(--s4) + env(safe-area-inset-bottom));
+    overflow-y: auto; overscroll-behavior: contain;
+    transform: translateX(-100%);
+    transition: transform var(--t-mid, 0.22s) var(--ease);
+  }
+  html[dir="rtl"] .rail { transform: translateX(100%); }
+
+  .flyout {
+    position: fixed; inset-block: 0; inset-inline-start: 62px; z-index: 59;
+    width: min(272px, calc(100vw - 62px)); height: 100dvh;
+    padding-block: calc(var(--s4) + env(safe-area-inset-top)) calc(var(--s6) + env(safe-area-inset-bottom));
+    overflow-y: auto; overscroll-behavior: contain;
+    box-shadow: var(--shadow-pop);
+    transform: translateX(-120%);
+    transition: transform var(--t-mid, 0.22s) var(--ease);
+  }
+  html[dir="rtl"] .flyout { transform: translateX(120%); }
+  /* The flyout is hidden by an attribute when no division is chosen; on a
+     phone the drawer opens on the rail alone, which is a legitimate state. */
+  .flyout[hidden] { display: flex; visibility: hidden; }
+
+  .app.mnav .rail,
+  .app.mnav .flyout { transform: translateX(0); }
+  .app.mnav .flyout[hidden] { visibility: hidden; }
+
+  .nav-scrim {
+    display: block; position: fixed; inset: 0; z-index: 58;
+    /* Always a dim, never the paper-coloured --scrim: a light veil over a light
+       page reads as a rendering fault rather than as a backdrop. */
+    background: rgba(20, 16, 12, 0.45);
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--t-mid, 0.22s) var(--ease);
+  }
+  .app.mnav ~ .nav-scrim,
+  .nav-scrim.on { opacity: 1; pointer-events: auto; }
+  .nav-scrim[hidden] { display: block; }
+
+  /* Touch has no hover, so the tooltip would only ever appear stuck. */
+  .rail-tip { display: none; }
+  .rail-brand { margin-bottom: var(--s3); }
+  .rail-btn { width: 42px; height: 42px; }
+
+  /* ---------- the top bar ---------- */
+  .topbar {
+    padding: calc(var(--s3) + env(safe-area-inset-top)) var(--s4) var(--s3);
+    gap: var(--s2);
+  }
+  .topbar h1 {
+    font-size: 15px;
+    /* A long department name must not push the chips off the screen. */
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+  /* Search moved to the bar at the bottom, where a thumb can reach it. */
+  .top-search { display: none; }
+  .top-right { gap: var(--s1); margin-inline-start: auto; }
+  .who-chip { display: none; }             /* it is the fourth tab now */
+  #poll-chip { display: none; }
+  .chip { font-size: 9.5px; padding: 2px 6px; }
+
+  /* ---------- the page ---------- */
+  .view { padding: var(--s4) var(--s4) var(--s6); gap: var(--s4); }
+  /* A grid item defaults to min-width:auto, which means "never shrink below
+     your content". One wide table therefore stretched its panel to 865px and
+     took the document with it — the scroll box inside was doing its job, but
+     nothing above it was constrained enough to make it necessary. */
+  .view > *, .panel, .tscroll, .form-inline > * { min-width: 0; }
+  .view > * { max-width: 100%; }
+  .grid, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .panel { padding: var(--s4); }
+  .form-inline { flex-direction: column; align-items: stretch; }
+  .form-inline > * { min-width: 0; width: 100%; }
+  .map-legend { font-size: 11px; }
+
+  /* A table is the one thing that genuinely cannot reflow, so it scrolls
+     inside its own box. The wrapper is added after each render — see
+     wrapWideThings() — because the tables are written by ninety renderers
+     and none of them should have to know about phones. */
+  .tscroll {
+    overflow-x: auto;
+    margin-inline: calc(var(--s4) * -1); padding-inline: var(--s4);
+  }
+  .tscroll > table { min-width: max-content; }
+  .tscroll > table td, .tscroll > table th { white-space: nowrap; }
+
+  /* Same for the maps and the graphs: pan them, do not squash them. */
+  .atlas-wrap, .map-wrap, .svg-scroll { overflow-x: auto; }
+
+  /* ---------- dialogs become sheets ---------- */
+  #palette { align-items: flex-start; padding: 0; }
+  .pal-box {
+    width: 100%; max-width: none; max-height: 100dvh; border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+  .pal-list { max-height: 60dvh; }
+  #map-dialog .md-box { padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom)); }
+
+  /* ---------- the way in ---------- */
+  #login { padding: var(--s4); align-items: center; }
+  .login-panel { width: 100%; max-width: 400px; padding: var(--s6) var(--s5) var(--s4); }
+
+  /* ---------- the bar ---------- */
+  .tabbar {
+    /* One number for the bar's height, because two things depend on it: the
+       page's bottom padding and the live ticker that floats above it. When
+       they were written separately they disagreed by three pixels, which is
+       exactly enough for the ticker to sit on top of the bar. */
+    --tabbar-h: 58px;
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    position: fixed; inset-inline: 0; bottom: 0; z-index: 55;
+    background: var(--paper);
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-top: 1px solid var(--seam);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tab {
+    /* 44px is the smallest target a thumb hits reliably; this is 58. */
+    min-height: 58px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; position: relative;
+    border: none; background: none; cursor: pointer;
+    color: var(--ink-faint); text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: color var(--t-fast) var(--ease);
+  }
+  .tab svg {
+    width: 21px; height: 21px;
+    fill: none; stroke: currentColor; stroke-width: 1.35;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .tab span {
+    font-family: var(--font-display); font-size: 8.5px;
+    letter-spacing: var(--track-mid); text-transform: uppercase;
+  }
+  html[lang="ar"] .tab span { letter-spacing: 0; font-size: 10px; text-transform: none; }
+  .tab:active { color: var(--ink); }
+  .tab.on { color: var(--ink); }
+  .tab.on::before {
+    content: ""; position: absolute; top: 0; inset-inline: 26%;
+    height: 2px; background: var(--accent);
+  }
+  .tab-dot {
+    position: absolute; top: 8px; inset-inline-end: 22%;
+    min-width: 15px; height: 15px; padding: 0 4px; border-radius: var(--r-pill);
+    background: var(--accent); color: var(--paper);
+    font: 400 9px/15px var(--font-mono); text-align: center;
+  }
+  .tab-dot:empty { display: none; }
+}
+
+/* A phone in landscape, and a small tablet: the drawer is unnecessary but the
+   bar still is not, so only the widths change. */
+@media (max-width: 860px) and (min-width: 620px) {
+  .flyout { width: 300px; }
+  .view { padding-inline: var(--s5); }
+  .grid-2, .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+
+/* Installed to a home screen there is no browser chrome to scroll away, so the
+   app can own the full height and stop bouncing like a web page. */
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: none; }
+}
+
+/* Touch devices, at any width: nothing should depend on hovering. */
+@media (hover: none) {
+  .rail-tip { display: none; }
+  /* A tap on a row must not leave it looking selected afterwards. */
+  .row:hover, tr:hover { background: inherit; }
+}
+
+/* The overview's own row: a centred switch with the wiring count and the way
+   to the relationship table pinned to the end of the line. It used to carry
+   that positioning in an inline style, which no breakpoint can override — so
+   on a phone the two halves printed on top of each other. */
+.atlas-bar { justify-content: center; position: relative; }
+.atlas-aside {
+  position: absolute; inset-inline-end: 0;
+  display: flex; gap: var(--s2); align-items: center;
+}
+
+@media (max-width: 860px) {
+  /* No room for a pin: the row becomes two centred lines. */
+  .atlas-bar { flex-wrap: wrap; gap: var(--s2); }
+  .atlas-aside { position: static; flex-wrap: wrap; justify-content: center; }
+
+  /* The live ticker is fixed to the bottom of the screen, which is where the
+     bar now lives. It sits above it rather than under it. */
+  #live-bar {
+    inset-block-end: calc(58px + env(safe-area-inset-bottom) + 12px);
+    max-width: calc(100vw - 24px);
+  }
+  /* With the drawer open the ticker is floating over a menu, which is noise. */
+  .app.mnav ~ #live-bar, .app.mnav #live-bar { display: none; }
+}
+
+/* A submit that used to close a row now follows the last field instead. On a
+   wide screen it should not stretch across the whole panel to say one word. */
+.form-go { align-self: flex-start; margin-top: var(--s2); }
+@media (max-width: 860px) { .form-go { align-self: stretch; width: 100%; } }
+
+/* The revenue funnel: one column per stage, and there are seven of them. Each
+   is flex:1, which still will not go below its own content — so on a phone the
+   row keeps its proportions and scrolls rather than crushing the numbers. */
+.fn-bars > div { min-width: 40px; }
+
+@media (max-width: 860px) {
+  .fn-bars { overflow-x: auto; }
+  .fn-bars > div { min-width: 52px; }
+  /* The marketing funnel is four wide cards, which is two rows on a phone. */
+  .funnel { flex-wrap: wrap; }
+  .fn-step { flex: 1 1 44%; }
+  .fn-step + .fn-step { margin-inline-start: 0; }
 }

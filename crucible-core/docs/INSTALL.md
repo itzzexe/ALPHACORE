@@ -116,7 +116,54 @@ Worth knowing before you leave it running overnight:
 
 ---
 
-## 4. Backups
+## 4. On a phone
+
+The console is built for a phone as well as a desktop. Below 860px the rail and
+the department list become a drawer, a bar of four thumb-sized targets takes
+over the bottom of the screen, tables scroll inside their own box instead of
+pushing the page sideways, and the layout keeps clear of the notch and the home
+indicator.
+
+### Opening it from a phone
+
+A phone cannot reach `localhost` — it needs this machine's address on the
+network, which the server now prints when it starts:
+
+```
+AlphaCore running on http://localhost:8484
+  on this network:  http://192.168.0.193:8484
+```
+
+Same network, same wifi, and the phone is in.
+
+### Installing it to the home screen
+
+It is a progressive web app: an icon, no address bar, its own entry in the app
+switcher, and it opens without waiting for the network.
+
+- **Android / Chrome** — the menu offers *Install app* or *Add to Home screen*.
+- **iOS / Safari** — Share, then *Add to Home Screen*.
+
+**This needs HTTPS.** Browsers only treat `localhost` as a secure origin over
+plain `http`, so over a LAN address the install option will not appear and the
+service worker will not register — the layout still works, but it stays a
+browser tab. Put a TLS terminator in front of it (Caddy will do this in one
+line, and a tunnel like Cloudflare or Tailscale will do it without touching
+your router) and both come back.
+
+### What works without a network
+
+The shell only. Opening it offline paints the app's own screen and says, in
+your language, that there is no connection to the company — rather than a
+browser error page pretending the app is broken.
+
+Nothing under `/api` is ever cached. A stale approval queue or a run count from
+yesterday would look exactly like the truth, and that is worse than an error.
+The company itself is always read live.
+
+---
+
+## 5. Backups
 
 The whole company is `crucible-core/data/`. Two things live there:
 
@@ -160,7 +207,7 @@ Rituals.
 
 ---
 
-## 5. Upgrading
+## 6. Upgrading
 
 ```bash
 git pull
@@ -181,7 +228,7 @@ ignored.
 
 ---
 
-## 6. Running it as a service
+## 7. Running it as a service
 
 The server is a plain Node process. Any supervisor works.
 
@@ -219,7 +266,7 @@ sit as permanently "running".
 
 ---
 
-## 7. When something is wrong
+## 8. When something is wrong
 
 Start here, in this order:
 
@@ -256,7 +303,7 @@ All three run in mock mode: no key, no network, no cost.
 
 ---
 
-## 8. Multiple companies on one machine
+## 9. Multiple companies on one machine
 
 Tenancy is by file and process, not by a `WHERE` clause — two companies never
 share a table:
@@ -274,7 +321,7 @@ machine. The isolation is real, the blast radius of a compromised host is not.
 
 ---
 
-## 9. Environment variables
+## 10. Environment variables
 
 Everything below can also be set in Settings, which takes precedence. Use the
 environment when a machine should be configured before it first starts.

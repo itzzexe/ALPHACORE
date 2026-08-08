@@ -13,7 +13,8 @@
     "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js",
     "prove": "node --experimental-sqlite scripts/prove-world.mjs",
     "prove:platform": "node --experimental-sqlite scripts/prove-platform.mjs",
-    "reset-password": "node --experimental-sqlite scripts/reset-password.mjs"
+    "reset-password": "node --experimental-sqlite scripts/reset-password.mjs",
+    "icons": "node --experimental-sqlite scripts/make-icons.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"

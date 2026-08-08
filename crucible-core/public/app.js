@@ -253,6 +253,71 @@ function renderFlyout() {
   markActiveNav();
 }
 
+/* ---------- the phone ----------
+   A rail you hover and a flyout that lives beside it are the wrong shape for a
+   thumb. Below the breakpoint the same two elements slide in as a drawer, and
+   the bar at the bottom of the screen becomes the way around: home, the
+   departments, search, and who you are. Nothing here runs on a desktop except
+   the media query that turns it off. */
+
+const onPhone = () => window.matchMedia('(max-width: 860px)').matches;
+
+function openMobileNav() {
+  // A drawer that opens onto a bare strip of icons is a drawer that has to be
+  // used twice. If no division is chosen it opens on the one you are already
+  // standing in, so the list is there the moment it slides in.
+  if (!openDiv) {
+    const here = CATALOG.sections?.find((s) => routeOf(s.href) === currentRoute().key);
+    const first = DIV_ORDER.find((d2) => visibleSections().some((s) => s.division === d2));
+    openDiv = here?.division || first || null;
+    if (openDiv) renderFlyout();
+  }
+  $('#app').classList.add('mnav');
+  $('#nav-scrim').classList.add('on');
+  $('#tab-nav')?.classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileNav() {
+  $('#app').classList.remove('mnav');
+  $('#nav-scrim').classList.remove('on');
+  $('#tab-nav')?.classList.remove('on');
+  document.body.style.overflow = '';
+}
+
+function initMobileNav() {
+  $('#nav-scrim')?.addEventListener('click', closeMobileNav);
+  $('#tab-nav')?.addEventListener('click', () => {
+    if ($('#app').classList.contains('mnav')) closeMobileNav();
+    else openMobileNav();
+  });
+  $('#tab-search')?.addEventListener('click', () => { closeMobileNav(); openPalette(); });
+  // The fourth tab is the account: who you are, and the way out.
+  $('#tab-who')?.addEventListener('click', () => { closeMobileNav(); $('#who-chip')?.click(); });
+  $('[data-tab="home"]')?.addEventListener('click', closeMobileNav);
+  // Escape closes the drawer before anything else gets to see it.
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('#app').classList.contains('mnav')) { closeMobileNav(); e.stopPropagation(); }
+  }, true);
+  // Rotating a phone to landscape can cross the breakpoint; a drawer left open
+  // there would be a panel floating over a layout that no longer expects it.
+  window.matchMedia('(max-width: 860px)').addEventListener('change', closeMobileNav);
+}
+
+/** Mirror the shell's state onto the bar: which tab is lit, and what is waiting. */
+function paintTabbar() {
+  const bar = $('#tabbar');
+  if (!bar) return;
+  const home = currentRoute().key === 'home';
+  $('[data-tab="home"]')?.classList.toggle('on', home);
+  const label = $('#tab-who-label');
+  if (label && currentUser) label.textContent = currentUser.displayName || currentUser.username;
+  // One number, the same one the rail carries: everything stopped for a person.
+  const waiting = document.querySelector('[data-div="decide"] .rail-dot')?.textContent || '';
+  const dot = $('#tab-dot');
+  if (dot) dot.textContent = $('#app').classList.contains('mnav') ? '' : waiting;
+}
+
 function markActiveNav() {
   const here = currentRoute().key;
   document.querySelectorAll('#flyout a').forEach((a) => a.classList.toggle('active', a.dataset.route === here));
@@ -260,6 +325,7 @@ function markActiveNav() {
   document.querySelectorAll('#rail-items .rail-btn').forEach((b) => {
     b.classList.toggle('on', b.dataset.div === (openDiv || sec?.division));
   });
+  paintTabbar();
 }
 
 async function loadCatalog() {
@@ -309,6 +375,7 @@ function palMove(step) {
 }
 
 function initShell() {
+  initMobileNav();
   $('#open-palette')?.addEventListener('click', openPalette);
   $('#rail-search')?.addEventListener('click', openPalette);
   $('#pal-input')?.addEventListener('input', (e) => palFilter(e.target.value));
@@ -603,16 +670,37 @@ async function navigate() {
     return;
   }
   markActiveNav();
+  closeMobileNav();
   view.innerHTML = `<div class="empty">${esc(t('Loading…'))}</div>`;
-  try { await r.render(arg); translateDom(view); }
+  try { await r.render(arg); afterRender(); }
   catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
   if (r.poll) {
     pollTimer = setInterval(() => {
       // Never re-render out from under someone who is typing.
       if (pollPaused()) { showPollState(true); return; }
       showPollState(false);
-      r.render(arg).then(() => translateDom(view)).catch(() => {});
+      r.render(arg).then(afterRender).catch(() => {});
     }, r.poll);
+  }
+}
+
+/**
+ * Everything the shell owes a freshly rendered page: the Arabic pass, and a
+ * scroll box around anything that cannot reflow.
+ *
+ * Ninety renderers write tables, and none of them should have to know that a
+ * phone exists. A table is the one element that genuinely cannot be made
+ * narrower without lying about the data, so it gets to keep its width and
+ * scroll inside its own box instead of pushing the whole document sideways.
+ */
+function afterRender() {
+  translateDom(view);
+  for (const table of view.querySelectorAll('table')) {
+    if (table.parentElement?.classList.contains('tscroll')) continue;
+    const box = document.createElement('div');
+    box.className = 'tscroll';
+    table.replaceWith(box);
+    box.appendChild(table);
   }
 }
 window.addEventListener('hashchange', navigate);
@@ -1366,7 +1454,7 @@ function atlasGoTo(divId) {
   if (divId) localStorage.setItem('alphacore-atlas-zoom', divId);
   else localStorage.removeItem('alphacore-atlas-zoom');
   const r = routes[currentRoute().key];
-  if (r) r.render(currentRoute().arg).then(() => translateDom(view)).catch(() => {});
+  if (r) r.render(currentRoute().arg).then(afterRender).catch(() => {});
 }
 
 function atlasStep(delta) {
@@ -2086,12 +2174,12 @@ async function renderOverview() {
 
   view.innerHTML = `
   <div class="panel" style="border-top:none;padding-top:0">
-    <div class="panel-title" style="justify-content:center;position:relative">
+    <div class="panel-title atlas-bar">
       <span class="atlas-switch">
         <button data-ovtab="map" class="${tab === 'map' ? 'on' : ''}">${esc(t('Map'))}</button>
         <button data-ovtab="dashboards" class="${tab === 'dashboards' ? 'on' : ''}">${esc(t('Dashboards'))}</button>
       </span>
-      <span style="position:absolute;inset-inline-end:0;display:flex;gap:var(--s2);align-items:center">
+      <span class="atlas-aside">
         ${here ? `<button class="btn btn-sm" data-atlasout>← ${esc(t('the whole company'))}</button>` : ''}
         ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}</span>` : ''}
         <a class="chip chip-dim" style="text-decoration:none" href="#/graph">${esc(t('relationship table'))} →</a>
@@ -2283,9 +2371,9 @@ async function renderRuns() {
       <div><label class="fl">Agent</label>
         <select id="run-agent">${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</select></div>
       <div><label class="fl">Task type</label><input type="text" id="run-type" value="task"></div>
-      <button class="btn btn-primary" id="run-go">Enqueue</button>
     </div>
     <div><label class="fl">Prompt</label><textarea id="run-prompt" placeholder="What should the agent do?"></textarea></div>
+    <button class="btn btn-primary form-go" id="run-go">Enqueue</button>
   </div>
   <div class="panel">
     <div class="panel-title"><span>Recent runs</span>
@@ -2704,9 +2792,9 @@ async function renderSupport() {
       </div>
       <div class="form-inline">
         <div style="flex:1"><label class="fl">Subject</label><input type="text" id="tk-subj"></div>
-        <button class="btn btn-primary" id="tk-go">Receive</button>
       </div>
       <div><label class="fl">Message</label><textarea id="tk-body"></textarea></div>
+        <button class="btn btn-primary form-go" id="tk-go">Receive</button>
     </div>
     <div class="panel">
       <div class="panel-title">Graduation ladder — ≥100 sent · ≥95% unedited; auto-recall &lt;90%</div>
@@ -3256,9 +3344,9 @@ async function renderDatasets() {
     <div class="panel-title">Or store your own — paste anything (CSV, JSON, text, mixed Arabic/English)</div>
     <div class="form-inline">
       <div><label class="fl">Name</label><input type="text" id="ds-name"></div>
-      <button class="btn btn-primary" id="ds-go">Store</button>
     </div>
     <div><label class="fl">Raw data (treated as untrusted input — never executed, never obeyed)</label><textarea id="ds-raw" style="min-height:100px"></textarea></div>
+      <button class="btn btn-primary form-go" id="ds-go">Store</button>
   </div>` : ''}
   <div class="panel">
     <div class="panel-title">Datasets — clean · summarize → Knowledge · extract entities → Intelligence</div>
@@ -4701,9 +4789,9 @@ async function renderContent() {
     <div class="form-inline">
       <div><label class="fl">Kind</label><select id="ct-kind"><option>article</option><option>blog</option><option>video-script</option><option>email</option><option>landing</option><option>doc</option></select></div>
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="ct-title"></div>
-      <button class="btn btn-primary" id="ct-go">Draft it</button>
     </div>
     <div><label class="fl">Brief</label><textarea id="ct-brief" placeholder="Audience, angle, key points, call to action…"></textarea></div>
+      <button class="btn btn-primary form-go" id="ct-go">Draft it</button>
   </div>` : ''}
   <div class="panel">
     <div class="panel-title">Content pipeline — AI drafts · human approves · human publishes</div>
@@ -4746,9 +4834,9 @@ async function renderDesign() {
     <div class="form-inline">
       <div><label class="fl">Kind</label><select id="ds-kind"><option>social-visual</option><option>logo</option><option>banner</option><option>ui</option><option>brand</option><option>diagram</option></select></div>
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="ds-title"></div>
-      <button class="btn btn-primary" id="ds-go">Design it</button>
     </div>
     <div><label class="fl">Brief</label><textarea id="ds-brief" placeholder="Purpose, mood, colors, text to include, dimensions…"></textarea></div>
+      <button class="btn btn-primary form-go" id="ds-go">Design it</button>
   </div>` : ''}
   <div class="grid grid-3">
     ${designs.map((d) => `
@@ -6905,7 +6993,7 @@ async function renderRevenue() {
 
   <div class="panel">
     <div class="panel-title">The path — a name on a list to money in the account</div>
-    <div style="display:flex;gap:6px;align-items:flex-end;margin:16px 0 8px">
+    <div class="fn-bars" style="display:flex;gap:6px;align-items:flex-end;margin:16px 0 8px">
       ${d.funnel.map((f, i) => `
         <div style="flex:1;text-align:center">
           <div class="mono" style="font-size:18px;color:${f.count ? 'var(--ember)' : 'var(--ink-faint)'}">${f.count}</div>
@@ -8300,7 +8388,7 @@ async function renderRecruiting() {
   <div class="panel"><div class="panel-title">Open a role — an agent drafts the spec, a reviewer trials it, you decide</div>
     ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
       <input id="rc-role" placeholder="role, e.g. Localization QA" style="width:220px">
-      <input id="rc-brief" placeholder="what should this employee do?" style="width:380px">
+      <input id="rc-brief" placeholder="what should this employee do?" style="flex:1;min-width:0">
       <button class="btn btn-sm btn-primary" id="rc-go">Open role</button></div>` : ''}
   </div>
   ${rows.map((c) => `
@@ -9462,7 +9550,7 @@ function connectLive() {
       // its next tick — but only if nobody is typing into it.
       const key = currentRoute().key;
       const touched = msg.entries.some((e) => (e.action || '').startsWith(key));
-      if (touched && routes[key]?.poll && !pollPaused()) routes[key].render(currentRoute().arg).then(() => translateDom(view)).catch(() => {});
+      if (touched && routes[key]?.poll && !pollPaused()) routes[key].render(currentRoute().arg).then(afterRender).catch(() => {});
     }
   });
   live.addEventListener('close', () => { paintLive('off'); setTimeout(connectLive, 4000); });
@@ -9472,6 +9560,16 @@ function connectLive() {
 window.addEventListener('hashchange', () => {
   if (live?.readyState === WebSocket.OPEN) live.send(JSON.stringify({ type: 'at', page: currentRoute().key || 'overview' }));
 });
+
+// Installed to a home screen, the app should open without waiting for a
+// network round trip, and say something in its own words when there is none.
+// The worker is network-first — see public/sw.js for why that matters more
+// here than speed does.
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* http, private mode, or told not to */ });
+  });
+}
 
 // boot — authenticate first, then bring up the console.
 (async function boot() {
@@ -9487,5 +9585,13 @@ window.addEventListener('hashchange', () => {
     refreshShell();
     navigate();
     connectLive();
-  } catch { showLogin(); }
+  } catch (e) {
+    showLogin();
+    // Installed on a phone, this screen is also what you get in a lift or on a
+    // plane. "Sign in" and "there is no network" look identical from here, and
+    // only one of them is your fault — so say which it is. A rejected fetch is
+    // a TypeError; a real 401 comes back as a message from the server.
+    const offline = !navigator.onLine || e instanceof TypeError;
+    if (offline) $('#login-err').textContent = t('No connection to the company — this is the last thing your phone kept.');
+  }
 })();

@@ -2,8 +2,24 @@
 <html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- viewport-fit=cover lets the page paint under the notch and the home bar;
+     the layout pays that back with env(safe-area-inset-*) where it matters. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AlphaCore — Operations Console</title>
+
+<!-- Installed on a phone, this should look like an application and not like a
+     browser tab wearing a costume: no address bar, the right status-bar colour
+     in both themes, and a real icon. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f2f0ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16150f" media="(prefers-color-scheme: dark)">
+<meta name="application-name" content="AlphaCore">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AlphaCore">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%2314100c'/><polygon points='50,20 78,50 50,80 22,50' fill='%23e0714f'/></svg>">
 <link rel="stylesheet" href="/styles.css">
 </head>
@@ -47,6 +63,32 @@
     </header>
     <section id="view" class="view"></section>
   </main>
+
+  <!-- Phone navigation. The rail and the flyout are the wrong shape for a
+       thumb, so on a small screen they slide in as a drawer and this bar takes
+       over: four targets, all reachable without moving your grip. It is
+       display:none above the breakpoint, so nothing here costs a desktop
+       anything. -->
+  <div class="nav-scrim" id="nav-scrim" hidden></div>
+  <nav class="tabbar" id="tabbar" aria-label="Main">
+    <a class="tab" href="#/" data-tab="home">
+      <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+      <span data-i18n="Overview">Overview</span>
+    </a>
+    <button class="tab" type="button" id="tab-nav">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span data-i18n="Departments">Departments</span>
+      <span class="tab-dot" id="tab-dot"></span>
+    </button>
+    <button class="tab" type="button" id="tab-search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <span data-i18n="Search">Search</span>
+    </button>
+    <button class="tab" type="button" id="tab-who">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>
+      <span id="tab-who-label" data-i18n="Account">Account</span>
+    </button>
+  </nav>
 </div>
 
 <!-- Command palette: every department and every quick action, one keystroke away -->

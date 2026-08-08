@@ -3,6 +3,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { PORT, ROOT, mockMode } from './env.js';
 import './db.js';
 import { audit } from './audit.js';
@@ -226,6 +227,11 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  // The manifest must arrive as JSON or the browser will not read it, and a
+  // service worker served as anything but JavaScript is refused outright.
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 
 const publicDir = path.join(ROOT, 'public');
@@ -445,4 +451,15 @@ setInterval(() => { try { liveTick(); } catch { /* a dropped socket costs a nice
 server.listen(PORT, () => {
   audit({ actorType: 'system', actorId: 'server', action: 'server.started', payload: { port: PORT, mockMode: mockMode() } });
   console.log(`AlphaCore running on http://localhost:${PORT} ${mockMode() ? '(mock mode — no provider keys configured)' : ''}`);
+
+  // The console is built for a phone as well as a desktop, and a phone cannot
+  // reach "localhost" — it needs this machine's address on the network. The
+  // server already listens on every interface; it just never said so.
+  const lan = Object.values(os.networkInterfaces()).flat()
+    .filter((a) => a && a.family === 'IPv4' && !a.internal)
+    .map((a) => a.address);
+  if (lan.length) {
+    console.log(`  on this network:  ${lan.map((a) => `http://${a}:${PORT}`).join('   ')}`);
+    console.log('  (adding it to a home screen needs HTTPS — over plain http only localhost counts as secure)');
+  }
 });

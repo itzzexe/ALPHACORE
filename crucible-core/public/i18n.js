@@ -83,6 +83,10 @@ const AR = {
   'After dark': 'الوضع الليلي', 'Back to daylight': 'العودة إلى النهار',
   // the way in
   'The company that runs itself': 'الشركة التي تدير نفسها',
+  // the bar at the bottom of a phone
+  'Departments': 'الأقسام', 'Search': 'بحث', 'Account': 'الحساب',
+  'No connection to the company — this is the last thing your phone kept.':
+    'لا اتصال بالشركة — هذا آخر ما احتفظ به هاتفك.',
   'Current password': 'كلمة المرور الحالية', 'New password': 'كلمة المرور الجديدة',
   'Type it again': 'أعد كتابتها', 'Set the password': 'اعتمد كلمة المرور',
   'Those two do not match': 'الكلمتان غير متطابقتين',

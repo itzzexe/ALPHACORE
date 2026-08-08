@@ -126,6 +126,8 @@ Requires **Node ≥ 22.5** (built-in `node:sqlite`; the npm scripts pass the fla
 
 Missed that line? `npm run reset-password` issues a new one, ends every session for that account, and records the reset on the chain.
 
+**On a phone:** the console rearranges below 860px — the rail becomes a drawer, a bar of four thumb-sized targets takes the bottom of the screen, tables scroll in their own box. It is a progressive web app, so it installs to a home screen with its own icon and no address bar, and opens offline to say so in your own language rather than showing a browser error. The server prints this machine's address on the network at startup; installing needs HTTPS, because only `localhost` counts as secure over plain http. See **[docs/INSTALL.md §4](docs/INSTALL.md)**.
+
 Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 **Going live:** paste provider API keys in **Settings** (stored locally in SQLite, never echoed back, effective immediately) or copy `.env.example` → `.env`. With zero keys the router runs a deterministic **mock mode** — the entire platform is demoable at $0.
