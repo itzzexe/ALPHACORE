@@ -5,17 +5,17 @@
 ### The company that runs itself — and proves every move on a hash chain.
 
 **An entire AI-native company inside a single Node process.**
-One hundred and two departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and fourteen departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports, **hires its own new employees** — and now reaches the real world
 through one guarded door — while humans hold every gate that matters: approving, publishing,
 signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-102-ff6b2c?style=flat-square" alt="102 departments">
+<img src="https://img.shields.io/badge/departments-114-ff6b2c?style=flat-square" alt="114 departments">
 <img src="https://img.shields.io/badge/divisions-13-e8c547?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/integrations-10_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="10 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-4f9cf0?style=flat-square" alt="9 providers plus local">
-<img src="https://img.shields.io/badge/permissions-203_atomic-e07bd2?style=flat-square" alt="203 atomic permissions">
+<img src="https://img.shields.io/badge/permissions-204_atomic-e07bd2?style=flat-square" alt="204 atomic permissions">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/frameworks-zero-78bf6d?style=flat-square" alt="zero frameworks">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-5ec3c9?style=flat-square" alt="Node ≥ 22.5">
@@ -148,7 +148,7 @@ sequenceDiagram
 ```
 
 - Session login (scrypt-hashed passwords, opaque 7-day tokens). Every `/api/*` route is authenticated; anonymous requests get 401.
-- **203 atomic permissions** in `section.action` form (`support.view`, `decisions.decide`, `security.manage`, …). A user can be granted **exactly one permission** and nothing else; navigation and pages gate themselves accordingly.
+- **204 atomic permissions** in `section.action` form (`support.view`, `decisions.decide`, `security.manage`, …). A user can be granted **exactly one permission** and nothing else; navigation and pages gate themselves accordingly.
 - **Identity is never client-supplied.** The server stamps every action with the session's account; the audit chain records who really acted.
 - The superadmin manages users (create, disable, reset password, edit grants) and provider connections from the UI.
 
@@ -186,7 +186,7 @@ clicking a relationship line explains what kind of movement it is, drag and
 wheel pan and zoom. A **MAP / DASHBOARDS** switch separates the drawing from
 the numbers, because they are two different questions.
 
-## The company — 13 divisions, 102 departments
+## The company — 13 divisions, 114 departments
 
 | Division | Departments |
 |---|---|
@@ -194,8 +194,8 @@ the numbers, because they are two different questions.
 | **BUILD** | System design (full spec packages), Infrastructure plans, Products (ten-gate factory), Journeys, Projects, Tasks (delegable to agents), The Lab (A/B experiments), Releases (auto-drafted changelogs) |
 | **DECIDE** | Human gate, Decisions registry + tribunal, Budgets, Risks, Quality, Evals & canaries, PMO stage gates |
 | **DATA** | Intelligence (multi-pass collection + web enrichment, Arabic/English exports), Segments, Datasets, Archive, Knowledge, Insights (company analytics) |
-| **CREATE** | Localization (AR ⇄ EN), Social media, Content studio, Design studio, Marketing, Brand studio |
-| **COMMERCE** | Pricing, Customer success, Market watch, Sales, Customers (CRM), Relations (partners/investors/government), Procurement (human-approved spend) |
+| **MARKETING** | A whole department, twenty desks: the marketing desk itself, Personas, Positioning, Campaigns, Editorial calendar, Search, Paid media, Lifecycle email, Events, Press & media, Community, Attribution, Landing pages, Marketing operations, Market watch, Brand studio, Content studio, Design studio, Social media, Localization |
+| **COMMERCE** | Pricing, Customer success, Sales, Customers (CRM), Relations (partners/investors/government), Procurement (human-approved spend), Revenue loop |
 | **CAPITAL** | Finance, Financial reports, FinOps (cost per agent, waste detection, tier advice) |
 | **OPERATE** | Incidents (SEV lifecycle + enforced postmortems), Support, Assets, Legal (human-signed contracts), Vendors, Objectives (OKRs) |
 | **TALENT** | People (HR), Org & personas, The society (how agent colleagues get on), Disputes, **Recruiting — the company hires its own AI employees** (spec → trial → human decision → live on the roster), Academy (training that closes measured eval gaps), Enablement |
@@ -206,7 +206,7 @@ the numbers, because they are two different questions.
 
 Plus, folded into the divisions that own them: **Revenue loop** (Commerce), **Provenance** and **Red team** (Trust), **Shadow company** (Decide), **Skill market** (Talent), **Knowledge graph** (Data), **Treasury**, **Money desk**, **Contact centre**, **Agent memory**, **The floor**.
 
-Everything is cross-linked: 285 declared relationships, each a live SQL count, zero orphans, plus the universal rules — *everything ends on the audit chain; produced items freeze into the archive.*
+Everything is cross-linked: 336 declared relationships, each a live SQL count, zero orphans, plus the universal rules — *everything ends on the audit chain; produced items freeze into the archive.*
 
 **The company hires its own workforce** (Talent → Recruiting):
 

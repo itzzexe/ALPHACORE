@@ -19,7 +19,7 @@ export let lang = localStorage.getItem(KEY) || 'en';
 export const DIV_AR = {
   world: 'العالم الخارجي',
   engine: 'المحرك', build: 'البناء', decide: 'القرار', data: 'البيانات',
-  create: 'الإبداع', commerce: 'التجارة', capital: 'المال', operate: 'التشغيل',
+  marketing: 'التسويق', commerce: 'التجارة', capital: 'المال', operate: 'التشغيل',
   talent: 'الكوادر', trust: 'الثقة', exec: 'الإدارة العليا', govern: 'الحوكمة',
 };
 
@@ -34,7 +34,7 @@ export const SECTION_AR = {
   intel: 'الاستخبارات', segments: 'الشرائح', data: 'مجموعات البيانات', archive: 'الأرشيف',
   knowledge: 'المعرفة', insights: 'التحليلات',
   localization: 'الترجمة والتوطين', social: 'التواصل الاجتماعي', content: 'استوديو المحتوى',
-  design: 'استوديو التصميم', marketing: 'التسويق', brand: 'الهوية',
+  design: 'استوديو التصميم', marketing: 'الحملات', brand: 'الهوية',
   pricing: 'التسعير', success: 'نجاح العملاء', marketwatch: 'مراقبة السوق', sales: 'المبيعات',
   customers: 'العملاء', relations: 'العلاقات', procurement: 'المشتريات',
   finance: 'المالية', finreports: 'التقارير المالية', finops: 'كفاءة الإنفاق',
@@ -51,6 +51,11 @@ export const SECTION_AR = {
   chat: 'الساحة (المحادثة)', mkt: 'قسم التسويق', treasury: 'الخزينة (كربتو)',
   money: 'إدارة الأموال', contact: 'مركز الاتصال',
   // العالم الخارجي — كل ما يجعل الشركة تلمس ما هو خارجها
+  // قسم التسويق كاملًا
+  personas: 'الشخصيات', positioning: 'التموضع', seo: 'محرّكات البحث',
+  paidmedia: 'الإعلانات المدفوعة', lifecycle: 'بريد دورة الحياة', calendar: 'التقويم التحريري',
+  events: 'الفعاليات', press: 'الصحافة والإعلام', community: 'المجتمع',
+  attribution: 'إسناد المصدر', pages: 'صفحات الهبوط', mktops: 'عمليات التسويق',
   connectors: 'التكاملات', egress: 'البوابة الخارجية', vault: 'الخزنة',
   web: 'الويب المفتوح', mcp: 'بروتوكول MCP', jobs: 'طابور المهام',
   constitution: 'الدستور', provenance: 'إثبات الأصل', redteam: 'الفريق الأحمر',

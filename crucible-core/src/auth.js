@@ -122,6 +122,9 @@ export const PERMS = [
   'chief.view', 'chief.run',
   'observe.view', 'observe.run',
   'backups.view', 'backups.take', 'backups.restore',
+  // Putting the company on record in a newspaper is its own act, separate from
+  // running a campaign.
+  'press.approve',
 ];
 
 const hashPassword = (pw) => {

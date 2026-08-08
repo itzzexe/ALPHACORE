@@ -40,6 +40,14 @@ const TEAM = [
     mission: 'Runs the public voice day to day and reports what the audience actually reacts to.' },
   { id: 'AGT-MKT-008', name: 'Marketing Analyst', speciality: 'analytics', tier: 'T2',
     mission: 'Owns the funnel numbers and says plainly which channel earned its money and which did not.' },
+  { id: 'AGT-MKT-009', name: 'Events Producer', speciality: 'events', tier: 'T2',
+    mission: 'Books the room, writes the run-of-show, and makes sure somebody follows up the next morning.' },
+  { id: 'AGT-MKT-010', name: 'Press & Media', speciality: 'press', tier: 'T2',
+    mission: 'Writes what a journalist would actually print, and never a claim the ledger cannot support.' },
+  { id: 'AGT-MKT-011', name: 'Community Lead', speciality: 'community', tier: 'T1',
+    mission: 'Knows who advocates for us unpaid, who is unhappy, and what either group is saying today.' },
+  { id: 'AGT-MKT-012', name: 'Marketing Operations', speciality: 'ops', tier: 'T2',
+    mission: 'Owns the plumbing: tracking, lead scoring, naming conventions, and whether the numbers can be trusted.' },
 ];
 
 export function seedMarketingTeam() {
@@ -357,3 +365,362 @@ export function marketingDesk() {
     },
   };
 }
+
+// ===========================================================================
+// The rest of the department.
+//
+// Campaigns, content, design, brand, social and search were already here. What
+// follows are the functions a marketing department has that none of those
+// cover: the room it books, the journalist it calls, the people who advocate
+// for it without being paid, where a customer actually came from, the page they
+// land on, and the plumbing that makes any of it measurable.
+//
+// Each one is a real desk with a real table behind it, staffed by a named
+// specialist who can be mentioned in chat and given work like anyone else.
+// ===========================================================================
+
+// ---------- events ----------
+export function planEvent({ name, kind = 'webinar', format = 'online', startsAt = null, city = null, audience = null, goal = null, budgetUsd = 0, campaignId = null, actor }) {
+  if (!clean(name)) throw new Error('an event needs a name');
+  exec(
+    `INSERT INTO mkt_events (name, kind, format, starts_at, city, audience, goal, budget_usd, campaign_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    clean(name), kind, format, startsAt, city, audience, goal, r2(budgetUsd), campaignId, actor,
+  );
+  const id = lastId();
+  // The brief is written by the person who owns the audience, not by whoever
+  // happened to book the room.
+  const agent = specialist('content');
+  if (agent) {
+    const runId = enqueueRun({
+      agentId: agent, taskType: 'event_brief', actor: `human:${actor}`,
+      input: {
+        instruction: 'Write the run-of-show for this event. Return JSON: {"promise": "the one sentence that makes someone attend", "agenda": [{"minutes": 0, "item": "..."}], "who_should_come": "...", "what_they_leave_with": "...", "follow_up": "the single thing we do the day after"}. No filler sessions.',
+        event: { name, kind, format, audience, goal, city, startsAt },
+        positioning: one('SELECT audience, promise, proof FROM positioning ORDER BY id DESC LIMIT 1') || null,
+        personas: q('SELECT name, job_title, pains FROM personas LIMIT 3'),
+      },
+    });
+    exec("UPDATE mkt_events SET run_id = ?, state = 'briefed' WHERE id = ?", runId, id);
+  }
+  audit({ actorType: 'human', actorId: actor, action: 'event.planned', subjectType: 'event', subjectId: id, payload: { name, kind, budgetUsd } });
+  return one('SELECT * FROM mkt_events WHERE id = ?', id);
+}
+
+export function recordEvent(id, { registered = null, attended = null, leads = null, spent = null, state = null, actor }) {
+  const e = one('SELECT * FROM mkt_events WHERE id = ?', id);
+  if (!e) throw new Error('no such event');
+  exec(
+    `UPDATE mkt_events SET registered = COALESCE(?, registered), attended = COALESCE(?, attended),
+       leads = COALESCE(?, leads), spent_usd = COALESCE(?, spent_usd), state = COALESCE(?, state) WHERE id = ?`,
+    registered, attended, leads, spent === null ? null : r2(spent), state, id,
+  );
+  // An event that produced leads is a touch on each of them; recording it here
+  // is what stops attribution being a guess later.
+  if (leads) {
+    exec("INSERT INTO mkt_touchpoints (subject, channel, source, campaign_id, event_id, weight) VALUES (?, 'event', ?, ?, ?, 1)",
+      `event:${id}`, e.name, e.campaign_id, id);
+  }
+  audit({ actorType: 'human', actorId: actor, action: 'event.recorded', subjectType: 'event', subjectId: id, payload: { registered, attended, leads, spent } });
+  return one('SELECT * FROM mkt_events WHERE id = ?', id);
+}
+
+// ---------- press and media ----------
+export function draftPress({ kind = 'release', title, outlet = null, journalist = null, angle = null, actor }) {
+  if (!clean(title)) throw new Error('a press item needs a title');
+  exec('INSERT INTO mkt_press (kind, title, outlet, journalist, angle, created_by) VALUES (?,?,?,?,?,?)',
+    kind, clean(title), outlet, journalist, angle, actor);
+  const id = lastId();
+  const agent = specialist('positioning');
+  if (agent) {
+    const runId = enqueueRun({
+      agentId: agent, taskType: 'press_draft', actor: `human:${actor}`,
+      input: {
+        instruction: 'Write this as a journalist would want to receive it. Return JSON: {"headline": "...", "lede": "the first paragraph, which must contain the news", "body": "...", "quote": "one quote worth printing", "facts": ["verifiable claims only"], "why_this_outlet": "..."}. Every number must come from the evidence given; if a claim cannot be supported, leave it out.',
+        item: { kind, title, outlet, journalist, angle },
+        positioning: one('SELECT audience, promise, proof FROM positioning ORDER BY id DESC LIMIT 1') || null,
+        evidence: {
+          customers: one("SELECT COUNT(*) AS n FROM customers WHERE state = 'active'").n,
+          mrrUsd: one("SELECT COALESCE(SUM(mrr_usd),0) AS v FROM customers WHERE state = 'active'").v,
+          shipped: one("SELECT COUNT(*) AS n FROM releases WHERE state = 'published'")?.n ?? 0,
+        },
+      },
+    });
+    exec('UPDATE mkt_press SET run_id = ? WHERE id = ?', runId, id);
+  }
+  audit({ actorType: 'human', actorId: actor, action: 'press.drafted', subjectType: 'press', subjectId: id, payload: { kind, title, outlet } });
+  return one('SELECT * FROM mkt_press WHERE id = ?', id);
+}
+
+/** Approving is a human act: a press release is the company speaking on record. */
+export function approvePress(id, { actor }) {
+  if (!actor || !String(actor).startsWith('human')) throw new Error('only a person can put the company on record');
+  exec("UPDATE mkt_press SET state = 'approved', approved_by = ? WHERE id = ?", actor, id);
+  audit({ actorType: 'human', actorId: actor, action: 'press.approved', subjectType: 'press', subjectId: id });
+  return one('SELECT * FROM mkt_press WHERE id = ?', id);
+}
+
+export function recordCoverage(id, { url, sentiment = 'neutral', actor }) {
+  exec("UPDATE mkt_press SET state = 'published', url = ?, sentiment = ? WHERE id = ?", url, sentiment, id);
+  const p = one('SELECT title, outlet FROM mkt_press WHERE id = ?', id);
+  exec("INSERT INTO mkt_touchpoints (subject, channel, source, weight) VALUES (?, 'press', ?, 0.5)", `press:${id}`, p?.outlet || 'press');
+  audit({ actorType: 'human', actorId: actor, action: 'press.covered', subjectType: 'press', subjectId: id, payload: { url, sentiment } });
+  return { ok: true };
+}
+
+// ---------- community ----------
+export function addCommunityMember({ handle, channel = 'other', role = 'member', reach = 0, notes = null, customerId = null, actor }) {
+  if (!clean(handle)) throw new Error('who are we adding?');
+  exec(
+    `INSERT INTO mkt_community (handle, channel, role, reach, notes, customer_id, last_seen)
+     VALUES (?,?,?,?,?,?, datetime('now'))`,
+    clean(handle), channel, role, Number(reach) || 0, notes, customerId,
+  );
+  audit({ actorType: 'human', actorId: actor, action: 'community.added', subjectType: 'community', subjectId: lastId(), payload: { handle, channel, role } });
+  return one('SELECT * FROM mkt_community WHERE id = ?', lastId());
+}
+
+export function setCommunityRole(id, { role, sentiment = null, actor }) {
+  exec("UPDATE mkt_community SET role = ?, sentiment = COALESCE(?, sentiment), last_seen = datetime('now') WHERE id = ?", role, sentiment, id);
+  audit({ actorType: 'human', actorId: actor, action: 'community.role', subjectType: 'community', subjectId: id, payload: { role } });
+  return { ok: true };
+}
+
+// ---------- attribution ----------
+export function recordTouch({ subject, channel, source = null, campaignId = null, contentId = null, eventId = null, weight = 1, valueUsd = 0 }) {
+  if (!subject || !channel) throw new Error('a touch needs a subject and a channel');
+  exec(
+    `INSERT INTO mkt_touchpoints (subject, channel, source, campaign_id, content_id, event_id, weight, value_usd)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    String(subject), channel, source, campaignId, contentId, eventId, Number(weight) || 1, r2(valueUsd),
+  );
+  return { ok: true };
+}
+
+/**
+ * Credit, three ways, side by side. Last-touch is the number everybody quotes
+ * and the one most likely to be wrong, so it is shown next to first-touch and
+ * an even split rather than on its own.
+ */
+export function attribution() {
+  const subjects = q('SELECT DISTINCT subject FROM mkt_touchpoints').map((r) => r.subject);
+  const models = { first: {}, last: {}, even: {} };
+  let credited = 0;
+  for (const s of subjects) {
+    const touches = q('SELECT * FROM mkt_touchpoints WHERE subject = ? ORDER BY occurred_at ASC, id ASC', s);
+    if (!touches.length) continue;
+    const value = touches.reduce((a, t) => a + (t.value_usd || 0), 0) || 1;
+    credited += 1;
+    const add = (model, channel, v) => { models[model][channel] = r2((models[model][channel] || 0) + v); };
+    add('first', touches[0].channel, value);
+    add('last', touches[touches.length - 1].channel, value);
+    for (const t of touches) add('even', t.channel, value / touches.length);
+  }
+  const channels = [...new Set(Object.keys(models.first).concat(Object.keys(models.last), Object.keys(models.even)))];
+  return {
+    journeys: credited,
+    touches: one('SELECT COUNT(*) AS n FROM mkt_touchpoints').n,
+    byChannel: channels.map((c) => ({
+      channel: c,
+      first: models.first[c] || 0,
+      last: models.last[c] || 0,
+      even: models.even[c] || 0,
+    })).sort((a, b) => b.even - a.even),
+    // The honest caveat, printed rather than assumed.
+    note: 'A journey with one recorded touch credits that touch three times over. The three columns disagreeing is the useful signal — it means the path had more than one step.',
+    longest: q(`SELECT subject, COUNT(*) AS touches FROM mkt_touchpoints GROUP BY subject ORDER BY touches DESC LIMIT 8`),
+  };
+}
+
+// ---------- landing pages ----------
+export function draftPage({ slug, title, purpose = null, personaId = null, campaignId = null, actor }) {
+  const s = clean(slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+  if (!s) throw new Error('a page needs a slug');
+  if (one('SELECT id FROM mkt_pages WHERE slug = ?', s)) throw new Error(`there is already a page at /${s}`);
+  exec('INSERT INTO mkt_pages (slug, title, purpose, persona_id, campaign_id, created_by) VALUES (?,?,?,?,?,?)',
+    s, clean(title) || s, purpose, personaId, campaignId, actor);
+  const id = lastId();
+  const agent = specialist('content');
+  if (agent) {
+    const persona = personaId ? one('SELECT * FROM personas WHERE id = ?', personaId) : one('SELECT * FROM personas ORDER BY id DESC LIMIT 1');
+    const runId = enqueueRun({
+      agentId: agent, taskType: 'page_draft', actor: `human:${actor}`,
+      input: {
+        instruction: 'Write this landing page. Return JSON: {"headline": "...", "subhead": "...", "body": "three short sections", "cta": "the one action", "objection_handled": "the thing that stops them, answered"}. Speak to the person described, not to everyone.',
+        page: { slug: s, title, purpose },
+        persona: persona ? { name: persona.name, job: persona.job_title, pains: persona.pains } : null,
+        positioning: one('SELECT audience, promise, proof FROM positioning ORDER BY id DESC LIMIT 1') || null,
+      },
+    });
+    exec('UPDATE mkt_pages SET run_id = ? WHERE id = ?', runId, id);
+  }
+  audit({ actorType: 'human', actorId: actor, action: 'page.drafted', subjectType: 'page', subjectId: id, payload: { slug: s } });
+  return one('SELECT * FROM mkt_pages WHERE id = ?', id);
+}
+
+export function setPageState(id, { state, actor }) {
+  if (!['draft', 'review', 'live', 'retired'].includes(state)) throw new Error('unknown state');
+  if (state === 'live' && !String(actor).startsWith('human')) throw new Error('a person publishes a page');
+  exec('UPDATE mkt_pages SET state = ? WHERE id = ?', state, id);
+  audit({ actorType: 'human', actorId: actor, action: 'page.state', subjectType: 'page', subjectId: id, payload: { state } });
+  return { ok: true };
+}
+
+export function recordPageResult(id, { visits = null, conversions = null, actor }) {
+  exec('UPDATE mkt_pages SET visits = COALESCE(?, visits), conversions = COALESCE(?, conversions) WHERE id = ?', visits, conversions, id);
+  audit({ actorType: 'human', actorId: actor, action: 'page.measured', subjectType: 'page', subjectId: id, payload: { visits, conversions } });
+  return { ok: true };
+}
+
+// ---------- marketing operations ----------
+const OPS_SEED = [
+  { kind: 'convention', name: 'UTM naming', detail: 'utm_source=channel, utm_medium=paid|organic|email, utm_campaign=<campaign id>-<slug>', value: 'enforced' },
+  { kind: 'rule', name: 'Lead scoring', detail: 'visit 1 · content download 5 · event attended 15 · pricing page 20 · demo request 40. Over 50 goes to sales.', value: '50' },
+  { kind: 'convention', name: 'One claim, one source', detail: 'No number appears in public copy without a query behind it. The auditor checks this.', value: 'enforced' },
+  { kind: 'tracking', name: 'Touchpoints', detail: 'Every channel writes a row to mkt_touchpoints. Attribution is computed, never typed.', value: 'on' },
+];
+
+export function seedMarketingOps() {
+  for (const o of OPS_SEED) {
+    if (one('SELECT id FROM mkt_ops WHERE name = ?', o.name)) continue;
+    exec('INSERT INTO mkt_ops (kind, name, detail, value, owner) VALUES (?,?,?,?,?)', o.kind, o.name, o.detail, o.value, 'AGT-MKT-008');
+  }
+}
+
+export function setOpsEntry({ id = null, kind = 'tool', name, detail = null, value = null, state = 'active', actor }) {
+  if (id) {
+    exec('UPDATE mkt_ops SET kind = ?, name = ?, detail = ?, value = ?, state = ? WHERE id = ?', kind, name, detail, value, state, id);
+  } else {
+    exec('INSERT INTO mkt_ops (kind, name, detail, value, state, owner) VALUES (?,?,?,?,?,?)', kind, clean(name), detail, value, state, actor);
+  }
+  audit({ actorType: 'human', actorId: actor, action: 'mktops.set', subjectType: 'mktops', subjectId: id || lastId(), payload: { kind, name } });
+  return { ok: true };
+}
+
+// ---------- the desks, each answering its own page ----------
+export const eventsDesk = () => ({
+  events: q('SELECT * FROM mkt_events ORDER BY COALESCE(starts_at, created_at) DESC LIMIT 60'),
+  counts: {
+    planned: one("SELECT COUNT(*) AS n FROM mkt_events WHERE state IN ('planned','briefed')").n,
+    done: one("SELECT COUNT(*) AS n FROM mkt_events WHERE state = 'done'").n,
+    leads: one('SELECT COALESCE(SUM(leads),0) AS n FROM mkt_events').n,
+    spentUsd: one('SELECT COALESCE(ROUND(SUM(spent_usd),2),0) AS n FROM mkt_events').n,
+  },
+  // Cost per lead is the only number an event is really judged on.
+  costPerLead: (() => {
+    const r = one('SELECT COALESCE(SUM(spent_usd),0) AS s, COALESCE(SUM(leads),0) AS l FROM mkt_events');
+    return r.l ? r2(r.s / r.l) : null;
+  })(),
+  campaigns: q("SELECT id, name FROM campaigns WHERE state != 'archived' ORDER BY id DESC LIMIT 20"),
+});
+
+export const pressDesk = () => ({
+  items: q('SELECT * FROM mkt_press ORDER BY id DESC LIMIT 60'),
+  counts: {
+    drafts: one("SELECT COUNT(*) AS n FROM mkt_press WHERE state = 'draft'").n,
+    awaiting: one("SELECT COUNT(*) AS n FROM mkt_press WHERE state = 'approved'").n,
+    published: one("SELECT COUNT(*) AS n FROM mkt_press WHERE state = 'published'").n,
+    outlets: one('SELECT COUNT(DISTINCT outlet) AS n FROM mkt_press WHERE outlet IS NOT NULL').n,
+  },
+  coverage: q("SELECT outlet, sentiment, COUNT(*) AS n FROM mkt_press WHERE state = 'published' GROUP BY outlet, sentiment ORDER BY n DESC"),
+});
+
+export const communityDesk = () => ({
+  members: q('SELECT * FROM mkt_community ORDER BY reach DESC, id DESC LIMIT 80'),
+  counts: {
+    total: one('SELECT COUNT(*) AS n FROM mkt_community').n,
+    advocates: one("SELECT COUNT(*) AS n FROM mkt_community WHERE role IN ('advocate','ambassador')").n,
+    critics: one("SELECT COUNT(*) AS n FROM mkt_community WHERE role = 'critic'").n,
+    reach: one('SELECT COALESCE(SUM(reach),0) AS n FROM mkt_community').n,
+  },
+  byChannel: q('SELECT channel, COUNT(*) AS n, COALESCE(SUM(reach),0) AS reach FROM mkt_community GROUP BY channel ORDER BY n DESC'),
+});
+
+export const pagesDesk = () => ({
+  pages: q('SELECT * FROM mkt_pages ORDER BY id DESC LIMIT 60'),
+  counts: {
+    live: one("SELECT COUNT(*) AS n FROM mkt_pages WHERE state = 'live'").n,
+    draft: one("SELECT COUNT(*) AS n FROM mkt_pages WHERE state IN ('draft','review')").n,
+    visits: one('SELECT COALESCE(SUM(visits),0) AS n FROM mkt_pages').n,
+    conversions: one('SELECT COALESCE(SUM(conversions),0) AS n FROM mkt_pages').n,
+  },
+  best: q("SELECT slug, title, visits, conversions, ROUND(CASE WHEN visits > 0 THEN conversions * 100.0 / visits ELSE 0 END, 1) AS rate FROM mkt_pages WHERE state = 'live' ORDER BY rate DESC LIMIT 10"),
+  personas: q('SELECT id, name FROM personas ORDER BY id DESC LIMIT 20'),
+});
+
+export const opsDesk = () => ({
+  entries: q('SELECT * FROM mkt_ops ORDER BY kind, name'),
+  counts: {
+    total: one('SELECT COUNT(*) AS n FROM mkt_ops').n,
+    active: one("SELECT COUNT(*) AS n FROM mkt_ops WHERE state = 'active'").n,
+    rules: one("SELECT COUNT(*) AS n FROM mkt_ops WHERE kind = 'rule'").n,
+  },
+  // The plumbing is only real if the things it claims to track have rows.
+  health: {
+    touchpoints: one('SELECT COUNT(*) AS n FROM mkt_touchpoints').n,
+    keywords: one('SELECT COUNT(*) AS n FROM seo_keywords').n,
+    channels: one('SELECT COUNT(*) AS n FROM campaign_channels').n,
+    sequences: one('SELECT COUNT(*) AS n FROM email_sequences').n,
+    calendar: one('SELECT COUNT(*) AS n FROM content_calendar').n,
+  },
+});
+
+// ---------- the surfaced desks: tables that had no page of their own ----------
+export const seoDesk = () => ({
+  keywords: q('SELECT * FROM seo_keywords ORDER BY priority DESC, id DESC LIMIT 120'),
+  counts: {
+    total: one('SELECT COUNT(*) AS n FROM seo_keywords').n,
+    targeted: one('SELECT COUNT(*) AS n FROM seo_keywords WHERE target_url IS NOT NULL').n,
+    languages: one('SELECT COUNT(DISTINCT language) AS n FROM seo_keywords').n,
+  },
+  byIntent: q('SELECT COALESCE(intent, \'unknown\') AS intent, COUNT(*) AS n FROM seo_keywords GROUP BY intent ORDER BY n DESC'),
+  // A keyword nobody has written for is a keyword nobody is winning.
+  unwritten: q(`SELECT k.keyword, k.intent, k.difficulty FROM seo_keywords k
+                WHERE NOT EXISTS (SELECT 1 FROM content_calendar c WHERE c.title LIKE '%' || k.keyword || '%')
+                ORDER BY k.priority DESC LIMIT 15`),
+});
+
+export const paidDesk = () => ({
+  channels: q(`SELECT ch.*, c.name AS campaign FROM campaign_channels ch
+               LEFT JOIN campaigns c ON c.id = ch.campaign_id ORDER BY ch.id DESC LIMIT 60`),
+  counts: {
+    live: one("SELECT COUNT(*) AS n FROM campaign_channels WHERE state = 'live'").n,
+    budgetUsd: one('SELECT COALESCE(ROUND(SUM(budget_usd),2),0) AS n FROM campaign_channels').n,
+    spentUsd: one('SELECT COALESCE(ROUND(SUM(spent_usd),2),0) AS n FROM campaign_channels').n,
+    leads: one('SELECT COALESCE(SUM(leads),0) AS n FROM campaign_channels').n,
+  },
+  verdicts: q(`SELECT channel,
+                 COALESCE(SUM(spent_usd),0) AS spent, COALESCE(SUM(leads),0) AS leads,
+                 COALESCE(SUM(customers),0) AS customers,
+                 CASE WHEN SUM(leads) > 0 THEN ROUND(SUM(spent_usd) / SUM(leads), 2) END AS cost_per_lead
+               FROM campaign_channels GROUP BY channel ORDER BY spent DESC`),
+  campaigns: q("SELECT id, name FROM campaigns WHERE state != 'archived' ORDER BY id DESC LIMIT 20"),
+});
+
+export const lifecycleDesk = () => ({
+  sequences: q('SELECT * FROM email_sequences ORDER BY id DESC LIMIT 40').map((s) => ({ ...s, steps: J(s.steps, []) })),
+  counts: {
+    live: one("SELECT COUNT(*) AS n FROM email_sequences WHERE state = 'live'").n,
+    draft: one("SELECT COUNT(*) AS n FROM email_sequences WHERE state != 'live'").n,
+    sent: one('SELECT COALESCE(SUM(sent),0) AS n FROM email_sequences').n,
+  },
+  // Sending is an outbound act, so it belongs to the gate rather than to us.
+  gate: {
+    connector: one("SELECT id, state FROM connectors WHERE id = 'gmail'") || null,
+    note: 'A sequence going live queues sends through the egress gate, which checks the scope, the allowlist and the constitution before anything leaves.',
+  },
+});
+
+export const calendarDesk = () => ({
+  items: q(`SELECT c.*, p.name AS persona FROM content_calendar c
+            LEFT JOIN personas p ON p.id = c.persona_id
+            ORDER BY COALESCE(c.due_date, c.created_at) ASC LIMIT 80`),
+  counts: {
+    planned: one("SELECT COUNT(*) AS n FROM content_calendar WHERE state = 'planned'").n,
+    inFlight: one("SELECT COUNT(*) AS n FROM content_calendar WHERE state IN ('briefed','drafting')").n,
+    late: one("SELECT COUNT(*) AS n FROM content_calendar WHERE due_date IS NOT NULL AND due_date < date('now') AND state != 'published'").n,
+    published: one("SELECT COUNT(*) AS n FROM content_calendar WHERE state = 'published'").n,
+  },
+  byStage: q('SELECT stage, COUNT(*) AS n FROM content_calendar GROUP BY stage ORDER BY n DESC'),
+  personas: q('SELECT id, name FROM personas ORDER BY id DESC LIMIT 20'),
+});

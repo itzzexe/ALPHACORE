@@ -40,7 +40,7 @@ import { ensureChannels, syncChat } from './chat.js';
 import { walletTick } from './wallet.js';
 import { commsTick, verifyWebhook, receiveMessage, receiveCall, twiml } from './comms.js';
 import { moneyWatch } from './money.js';
-import { seedMarketingTeam, syncMarketing } from './marketing.js';
+import { seedMarketingTeam, seedMarketingOps, syncMarketing } from './marketing.js';
 // The outside world: credentials, connectors, the gate, the queue, and the
 // systems that keep all of it honest.
 import { seedConnectors, callConnector } from './connectors/index.js';
@@ -82,6 +82,7 @@ seedPersonas();
 ensurePlaybooks();
 ensureChannels();
 seedMarketingTeam();
+seedMarketingOps();
 seedConnectors();
 seedConstitution();
 seedPackages();

@@ -136,19 +136,23 @@ const navPerm = {
   chief: 'chief.view', observe: 'observe.view', tenants: 'tenants.view',
   keys: 'keys.view', webhooks: 'webhooks.view', packages: 'packages.view',
   backups: 'backups.view', pkg: 'packages.view',
+  events: 'marketing.view', press: 'marketing.view', community: 'marketing.view',
+  attribution: 'marketing.view', pages: 'marketing.view', mktops: 'marketing.view',
+  seo: 'marketing.view', paidmedia: 'marketing.view', lifecycle: 'marketing.view',
+  calendar: 'marketing.view', personas: 'marketing.view', positioning: 'marketing.view',
 };
 
 // ---------- shell v2: rail + flyout + command palette ----------
 // The navigation is generated from the same catalogue the map draws, so a new
 // department appears in the rail, the flyout and the palette the moment it is
 // declared server-side — one source of truth, no list to forget to update.
-const DIV_ORDER = ['engine', 'world', 'build', 'decide', 'data', 'create', 'commerce', 'capital', 'operate', 'talent', 'trust', 'exec', 'govern'];
+const DIV_ORDER = ['engine', 'world', 'build', 'decide', 'data', 'marketing', 'commerce', 'capital', 'operate', 'talent', 'trust', 'exec', 'govern'];
 const DIV_ICON = {
   engine: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
   build: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
   decide: '<path d="M12 3v18M5 7h14"/><path d="M5 7l-2.5 6h5zM19 7l-2.5 6h5z"/>',
   data: '<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/>',
-  create: '<path d="M4 20l3.5-9 9-3.5L20 4"/><path d="M14 6l4 4"/><circle cx="7" cy="17" r="1.6"/>',
+  marketing: '<path d="M4 20l3.5-9 9-3.5L20 4"/><path d="M14 6l4 4"/><circle cx="7" cy="17" r="1.6"/>',
   commerce: '<path d="M3 7h13l-1.5 8H6z"/><circle cx="8" cy="19" r="1.4"/><circle cx="15" cy="19" r="1.4"/><path d="M3 7L2 4"/>',
   capital: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 2-2.5.8-2.5 2 1.1 2 2.5 2 2.5-.8 2.5-2"/>',
   operate: '<path d="M3 12h4l2.5 6 5-14 2.5 8h4"/>',
@@ -459,6 +463,19 @@ const routes = {
   packages: { title: 'Department packages — a department you can install', render: renderPackages },
   backups: { title: 'Backups — a platform that can lose the company is not a platform', render: renderBackups, poll: 20000 },
   pkg: { title: 'Installed department', render: renderPackageSection },
+  // Marketing, desk by desk.
+  events: { title: 'Events — rooms booked, and whether anybody followed up', render: renderEvents, poll: 15000 },
+  press: { title: 'Press & media — what the company says on record', render: renderPress, poll: 15000 },
+  community: { title: 'Community — who speaks for us, and who is unhappy', render: renderCommunity },
+  attribution: { title: 'Attribution — where customers actually came from', render: renderAttribution, poll: 20000 },
+  pages: { title: 'Landing pages — one person, one action', render: renderPages, poll: 15000 },
+  mktops: { title: 'Marketing operations — the plumbing under the numbers', render: renderMktOps },
+  seo: { title: 'Search — the queries worth winning', render: renderSeo, poll: 20000 },
+  paidmedia: { title: 'Paid media — which channel earned its money', render: renderPaidMedia, poll: 15000 },
+  lifecycle: { title: 'Lifecycle email — curious to paying, and staying', render: renderLifecycle, poll: 15000 },
+  calendar: { title: 'Editorial calendar — what goes out, and when', render: renderCalendar, poll: 15000 },
+  personas: { title: 'Personas — who we are actually talking to', render: renderPersonas },
+  positioning: { title: 'Positioning — the promise, in one line', render: renderPositioning },
 };
 
 // ---------- auto-refresh guard ----------
@@ -7375,6 +7392,531 @@ async function renderPackageSection(id) {
   <div class="panel">
     <div class="panel-title">The manifest it came from</div>
     ${preBody(JSON.stringify(p.manifest, null, 1))}
+  </div>`;
+}
+
+
+// ===========================================================================
+// MARKETING — the district, desk by desk.
+//
+// Six of these were tables buried inside the marketing desk with no page of
+// their own; six are functions a marketing department has that this company
+// simply did not. Each answers one question and shows the number it is judged
+// on, because a marketing page that shows activity instead of outcome is how
+// departments talk themselves into being busy.
+// ===========================================================================
+
+const mktState = (s) => `<span class="chip ${['live', 'published', 'approved', 'done'].includes(s) ? 'chip-ok' : ['cancelled', 'declined', 'retired'].includes(s) ? 'chip-bad' : s === 'review' ? 'chip-warn' : 'chip-dim'}">${esc(s)}</span>`;
+
+// ---------- Events ----------
+async function renderEvents() {
+  const d = await api('/api/mkt/events');
+  const canM = hasPermC('marketing.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Rooms booked', d.counts.planned, 'planned or briefed')}
+    ${tile('Run', d.counts.done, 'and finished')}
+    ${tile('Leads out of them', d.counts.leads, 'people who wanted to keep talking', d.counts.leads ? 'tile-ok' : '')}
+    ${tile('Cost per lead', d.costPerLead === null ? '—' : `${d.costPerLead}`, `${d.counts.spentUsd} spent in total`)}
+  </div>
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Book a room</div>
+    <div class="form-grid">
+      <input id="ev-name" placeholder="what it is called">
+      <div class="form-inline">
+        <select id="ev-kind"><option value="webinar">webinar</option><option value="roundtable">roundtable</option><option value="conference">conference</option><option value="meetup">meetup</option></select>
+        <select id="ev-format"><option value="online">online</option><option value="in-person">in person</option><option value="hybrid">hybrid</option></select>
+        <input id="ev-when" type="datetime-local" style="width:210px">
+        <input id="ev-city" placeholder="city" style="width:130px">
+        <input id="ev-budget" type="number" placeholder="budget $" style="width:120px">
+      </div>
+      <input id="ev-audience" placeholder="who should be in the room">
+      <input id="ev-goal" placeholder="what we want to leave with">
+      <button class="btn btn-primary" id="ev-add">Plan it</button>
+    </div>
+    <div class="map-legend">Booking it commissions the run-of-show from the events producer: the promise that makes somebody attend, an agenda in minutes, and the single thing that happens the morning after. An event with no follow-up is a party.</div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Events</div>
+    <table><thead><tr><th>Event</th><th>When</th><th>State</th><th class="num">Registered</th><th class="num">Came</th><th class="num">Leads</th><th class="num">Spent</th><th></th></tr></thead><tbody>
+    ${d.events.map((e) => `<tr>
+      <td><b>${esc(e.name)}</b><div class="sub">${esc(e.kind)} · ${esc(e.format)}${e.city ? ` · ${esc(e.city)}` : ''}${e.audience ? ` · ${esc(short(e.audience, 40))}` : ''}</div></td>
+      <td class="mono sub">${esc(String(e.starts_at || '—').slice(0, 16))}</td>
+      <td>${mktState(e.state)}</td>
+      <td class="num mono">${e.registered}</td><td class="num mono">${e.attended}</td>
+      <td class="num mono" style="${e.leads ? 'color:var(--ok)' : ''}">${e.leads}</td>
+      <td class="num mono">${Number(e.spent_usd).toFixed(0)}/${Number(e.budget_usd).toFixed(0)}</td>
+      <td>${canM ? `<button class="btn btn-sm" data-evrec="${e.id}">Record</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">No events yet.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  $('#ev-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/mkt/events', { method: 'POST', body: {
+        name: $('#ev-name').value.trim(), kind: $('#ev-kind').value, format: $('#ev-format').value,
+        startsAt: $('#ev-when').value || null, city: $('#ev-city').value.trim() || null,
+        budgetUsd: Number($('#ev-budget').value || 0),
+        audience: $('#ev-audience').value.trim() || null, goal: $('#ev-goal').value.trim() || null,
+      } });
+      toast('Planned — the run-of-show is being written'); renderEvents();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-evrec]').forEach((b) => b.addEventListener('click', async () => {
+    const registered = prompt('How many registered?');
+    if (registered === null) return;
+    const attended = prompt('How many actually came?');
+    const leads = prompt('How many wanted to keep talking?');
+    const spent = prompt('What did it cost?');
+    try {
+      await api(`/api/mkt/events/${b.dataset.evrec}`, { method: 'POST', body: {
+        registered: Number(registered) || 0, attended: Number(attended) || 0,
+        leads: Number(leads) || 0, spent: Number(spent) || 0, state: 'done',
+      } });
+      toast('Recorded'); renderEvents();
+    } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Press ----------
+async function renderPress() {
+  const d = await api('/api/mkt/press');
+  const canM = hasPermC('marketing.manage');
+  const canApprove = hasPermC('press.approve');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('In draft', d.counts.drafts, 'written, not yet approved')}
+    ${tile('Approved, unsent', d.counts.awaiting, 'a person has signed off', d.counts.awaiting ? 'tile-warn' : '')}
+    ${tile('Published', d.counts.published, 'somebody printed it', d.counts.published ? 'tile-ok' : '')}
+    ${tile('Outlets', d.counts.outlets, 'places that have carried us')}
+  </div>
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Write something</div>
+    <div class="form-grid">
+      <div class="form-inline">
+        <select id="pr-kind"><option value="release">press release</option><option value="pitch">pitch</option><option value="briefing">briefing</option></select>
+        <input id="pr-outlet" placeholder="outlet" style="width:180px">
+        <input id="pr-journalist" placeholder="journalist" style="width:180px">
+      </div>
+      <input id="pr-title" placeholder="the news, in one line">
+      <input id="pr-angle" placeholder="why this outlet should care">
+      <button class="btn btn-primary" id="pr-add">Draft it</button>
+    </div>
+    <div class="map-legend">The draft is written against the ledger: customer counts, revenue and shipped releases are read from the database and handed to the writer as evidence. A claim that cannot be supported is left out rather than softened — and the constitution refuses the send if one slips through.</div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Press</div>
+    <table><thead><tr><th>Item</th><th>Outlet</th><th>State</th><th>Coverage</th><th></th></tr></thead><tbody>
+    ${d.items.map((p) => `<tr>
+      <td><b>${esc(p.title)}</b><div class="sub">${esc(p.kind)}${p.angle ? ` · ${esc(short(p.angle, 60))}` : ''}</div></td>
+      <td>${esc(p.outlet || '—')}${p.journalist ? `<div class="sub">${esc(p.journalist)}</div>` : ''}</td>
+      <td>${mktState(p.state)}${p.approved_by ? `<div class="sub mono">${esc(p.approved_by)}</div>` : ''}</td>
+      <td>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">read</a>` : ''}${p.sentiment ? ` <span class="chip chip-dim">${esc(p.sentiment)}</span>` : ''}</td>
+      <td>${canApprove && p.state === 'draft' ? xbtn(`/api/mkt/press/${p.id}/approve`, {}, 'Approve', 'btn-primary') : ''}
+          ${canM && p.state === 'approved' ? `<button class="btn btn-sm" data-prcov="${p.id}">Record coverage</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing written yet.</td></tr>'}
+    </tbody></table>
+    <div class="map-legend">Approving is a human act and its own permission: a press release is the company speaking on record, which is not the same power as running a campaign.</div>
+  </div>`;
+  wireXact(renderPress);
+  $('#pr-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/mkt/press', { method: 'POST', body: {
+        kind: $('#pr-kind').value, title: $('#pr-title').value.trim(),
+        outlet: $('#pr-outlet').value.trim() || null, journalist: $('#pr-journalist').value.trim() || null,
+        angle: $('#pr-angle').value.trim() || null,
+      } });
+      toast('Drafting'); renderPress();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-prcov]').forEach((b) => b.addEventListener('click', async () => {
+    const url = prompt('Where did it run?');
+    if (!url) return;
+    try { await api(`/api/mkt/press/${b.dataset.prcov}/coverage`, { method: 'POST', body: { url, sentiment: 'positive' } }); toast('Recorded'); renderPress(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Community ----------
+async function renderCommunity() {
+  const d = await api('/api/mkt/community');
+  const canM = hasPermC('marketing.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('People', d.counts.total, 'we know by name')}
+    ${tile('Advocates', d.counts.advocates, 'who speak for us unpaid', d.counts.advocates ? 'tile-ok' : '')}
+    ${tile('Unhappy', d.counts.critics, 'and saying so in public', d.counts.critics ? 'tile-warn' : '')}
+    ${tile('Reach', d.counts.reach.toLocaleString(), 'combined audience of the people above')}
+  </div>
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Add somebody</div>
+    <div class="form-inline">
+      <input id="cm-handle" placeholder="@handle or name" style="width:200px">
+      <input id="cm-channel" placeholder="where — x, linkedin, telegram…" style="width:170px">
+      <select id="cm-role"><option value="member">member</option><option value="advocate">advocate</option><option value="ambassador">ambassador</option><option value="critic">critic</option></select>
+      <input id="cm-reach" type="number" placeholder="reach" style="width:110px">
+      <button class="btn btn-sm btn-primary" id="cm-add">Add</button>
+    </div>
+  </div>` : ''}
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">The room</div>
+      <table><thead><tr><th>Who</th><th>Where</th><th>Role</th><th class="num">Reach</th><th></th></tr></thead><tbody>
+      ${d.members.map((m) => `<tr>
+        <td><b>${esc(m.handle)}</b>${m.notes ? `<div class="sub">${esc(short(m.notes, 50))}</div>` : ''}</td>
+        <td class="mono sub">${esc(m.channel)}</td>
+        <td><span class="chip ${m.role === 'critic' ? 'chip-bad' : ['advocate', 'ambassador'].includes(m.role) ? 'chip-ok' : 'chip-dim'}">${esc(m.role)}</span></td>
+        <td class="num mono">${(m.reach || 0).toLocaleString()}</td>
+        <td>${canM ? `<button class="btn btn-sm" data-cmrole="${m.id}">Change</button>` : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="empty">Nobody yet.</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">By channel</div>
+      <table><thead><tr><th>Channel</th><th class="num">People</th><th class="num">Reach</th></tr></thead><tbody>
+      ${d.byChannel.map((c) => `<tr><td class="mono">${esc(c.channel)}</td><td class="num mono">${c.n}</td><td class="num mono">${(c.reach || 0).toLocaleString()}</td></tr>`).join('')
+        || '<tr><td colspan="3" class="empty">—</td></tr>'}
+      </tbody></table>
+      <div class="map-legend">A critic is tracked in the same list as an advocate on purpose. The two are usually the same kind of person at a different moment, and the one worth acting on is the critic.</div>
+    </div>
+  </div>`;
+  $('#cm-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/mkt/community', { method: 'POST', body: {
+        handle: $('#cm-handle').value.trim(), channel: $('#cm-channel').value.trim() || 'other',
+        role: $('#cm-role').value, reach: Number($('#cm-reach').value || 0),
+      } });
+      toast('Added'); renderCommunity();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-cmrole]').forEach((b) => b.addEventListener('click', async () => {
+    const role = prompt('member, advocate, ambassador or critic?');
+    if (!role) return;
+    try { await api(`/api/mkt/community/${b.dataset.cmrole}`, { method: 'POST', body: { role } }); toast('Changed'); renderCommunity(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Attribution ----------
+async function renderAttribution() {
+  const d = await api('/api/mkt/attribution');
+  const max = Math.max(...d.byChannel.map((c) => Math.max(c.first, c.last, c.even)), 1);
+  const bar = (v, colour) => `<div style="height:6px;width:${(v / max) * 100}%;background:${colour};border-radius:1px;min-width:${v ? '2px' : '0'}"></div>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Journeys credited', d.journeys, 'subjects with at least one touch')}
+    ${tile('Touches recorded', d.touches, 'written as they happened, not typed later')}
+    ${tile('Channels involved', d.byChannel.length, 'that got credit under any model')}
+    ${tile('Longest path', d.longest[0]?.touches ?? 0, d.longest[0] ? esc(short(d.longest[0].subject, 24)) : 'nothing yet')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Who gets the credit — three answers, side by side</div>
+    <table><thead><tr><th>Channel</th><th>First touch</th><th>Last touch</th><th>Even split</th></tr></thead><tbody>
+    ${d.byChannel.map((c) => `<tr>
+      <td class="mono">${esc(c.channel)}</td>
+      <td style="width:26%"><div class="mono sub">${c.first}</div>${bar(c.first, 'var(--ink-faint)')}</td>
+      <td style="width:26%"><div class="mono sub">${c.last}</div>${bar(c.last, 'var(--accent)')}</td>
+      <td style="width:26%"><div class="mono sub">${c.even}</div>${bar(c.even, 'var(--steel)')}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="empty">No touches recorded yet — channels write them as they happen.</td></tr>'}
+    </tbody></table>
+    <div class="map-legend">${esc(d.note)} Last touch is the number everybody quotes and the one most likely to be wrong, so it is never shown on its own here.</div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Longest journeys</div>
+    <table><thead><tr><th>Subject</th><th class="num">Touches</th></tr></thead><tbody>
+    ${d.longest.map((l) => `<tr><td class="mono">${esc(l.subject)}</td><td class="num mono">${l.touches}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">—</td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+
+// ---------- Landing pages ----------
+async function renderPages() {
+  const d = await api('/api/mkt/pages');
+  const canM = hasPermC('marketing.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Live', d.counts.live, 'pages a campaign can point at', d.counts.live ? 'tile-ok' : '')}
+    ${tile('In progress', d.counts.draft, 'written or in review')}
+    ${tile('Visits', d.counts.visits.toLocaleString(), 'across every live page')}
+    ${tile('Conversions', d.counts.conversions, d.counts.visits ? `${((d.counts.conversions / d.counts.visits) * 100).toFixed(1)}% of visits` : 'nothing measured yet')}
+  </div>
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Write a page</div>
+    <div class="form-inline">
+      <input id="pg-slug" placeholder="slug, e.g. oil-and-gas-arabic" style="width:230px">
+      <input id="pg-title" placeholder="title" style="width:200px">
+      <select id="pg-persona"><option value="">any persona</option>${d.personas.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+      <button class="btn btn-sm btn-primary" id="pg-add">Draft</button>
+    </div>
+    <input id="pg-purpose" placeholder="what one action this page is for" style="width:60%;margin-top:8px">
+    <div class="map-legend">The draft is written for the persona you pick, not for everyone — headline, subhead, three short sections, one call to action, and the objection that stops people, answered.</div>
+  </div>` : ''}
+  <div class="panel">
+    <div class="panel-title">Pages</div>
+    <table><thead><tr><th>Page</th><th>State</th><th class="num">Visits</th><th class="num">Conversions</th><th class="num">Rate</th><th></th></tr></thead><tbody>
+    ${d.pages.map((p) => `<tr>
+      <td><b>${esc(p.title)}</b><div class="sub mono">/${esc(p.slug)}${p.purpose ? ` · ${esc(short(p.purpose, 44))}` : ''}</div></td>
+      <td>${mktState(p.state)}</td>
+      <td class="num mono">${p.visits}</td><td class="num mono">${p.conversions}</td>
+      <td class="num mono">${p.visits ? `${((p.conversions / p.visits) * 100).toFixed(1)}%` : '—'}</td>
+      <td>${canM && p.state !== 'live' ? xbtn(`/api/mkt/pages/${p.id}/state`, { state: 'live' }, 'Publish', 'btn-primary') : ''}
+          ${canM ? `<button class="btn btn-sm" data-pgres="${p.id}">Record</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">No pages yet.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  wireXact(renderPages);
+  $('#pg-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/mkt/pages', { method: 'POST', body: {
+        slug: $('#pg-slug').value.trim(), title: $('#pg-title').value.trim(),
+        purpose: $('#pg-purpose').value.trim() || null, personaId: Number($('#pg-persona').value) || null,
+      } });
+      toast('Drafting'); renderPages();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-pgres]').forEach((b) => b.addEventListener('click', async () => {
+    const visits = prompt('Visits?'); if (visits === null) return;
+    const conversions = prompt('Conversions?');
+    try { await api(`/api/mkt/pages/${b.dataset.pgres}/result`, { method: 'POST', body: { visits: Number(visits) || 0, conversions: Number(conversions) || 0 } }); toast('Recorded'); renderPages(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Marketing operations ----------
+async function renderMktOps() {
+  const d = await api('/api/mkt/ops');
+  const canM = hasPermC('marketing.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Entries', d.counts.total, 'tools, rules, conventions and tracking')}
+    ${tile('Active', d.counts.active, 'in force right now')}
+    ${tile('Scoring rules', d.counts.rules, 'that decide when sales gets a lead')}
+    ${tile('Touches tracked', d.health.touchpoints, 'the proof the plumbing works', d.health.touchpoints ? 'tile-ok' : 'tile-warn')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">The plumbing</div>
+    <table><thead><tr><th>Kind</th><th>Name</th><th>Detail</th><th>Value</th><th>State</th></tr></thead><tbody>
+    ${d.entries.map((o) => `<tr>
+      <td><span class="chip chip-dim">${esc(o.kind)}</span></td>
+      <td><b>${esc(o.name)}</b></td>
+      <td class="sub">${esc(o.detail || '')}</td>
+      <td class="mono">${esc(o.value || '—')}</td>
+      <td>${mktState(o.state)}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing configured.</td></tr>'}
+    </tbody></table>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Does the plumbing actually carry anything?</div>
+    <table><tbody>
+      <tr><td>Touchpoints recorded</td><td class="num mono">${d.health.touchpoints}</td></tr>
+      <tr><td>Keywords tracked</td><td class="num mono">${d.health.keywords}</td></tr>
+      <tr><td>Paid channels measured</td><td class="num mono">${d.health.channels}</td></tr>
+      <tr><td>Sequences built</td><td class="num mono">${d.health.sequences}</td></tr>
+      <tr><td>Calendar entries</td><td class="num mono">${d.health.calendar}</td></tr>
+    </tbody></table>
+    <div class="map-legend">A convention nobody follows is a comment. These counts are the difference between a documented process and a working one.</div>
+  </div>
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Add a rule or a tool</div>
+    <div class="form-inline">
+      <select id="op-kind"><option value="tool">tool</option><option value="rule">rule</option><option value="tracking">tracking</option><option value="convention">convention</option></select>
+      <input id="op-name" placeholder="name" style="width:180px">
+      <input id="op-value" placeholder="value" style="width:120px">
+      <button class="btn btn-sm btn-primary" id="op-add">Add</button>
+    </div>
+    <input id="op-detail" placeholder="what it means in practice" style="width:70%;margin-top:8px">
+  </div>` : ''}`;
+  $('#op-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/mkt/ops', { method: 'POST', body: {
+        kind: $('#op-kind').value, name: $('#op-name').value.trim(),
+        detail: $('#op-detail').value.trim() || null, value: $('#op-value').value.trim() || null,
+      } });
+      toast('Added'); renderMktOps();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- Search ----------
+async function renderSeo() {
+  const d = await api('/api/mkt/seo');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Keywords', d.counts.total, 'researched and kept')}
+    ${tile('Targeted', d.counts.targeted, 'pointing at a real page', d.counts.targeted ? 'tile-ok' : '')}
+    ${tile('Languages', d.counts.languages, 'Arabic counts separately, and should')}
+    ${tile('Unwritten', d.unwritten.length, 'worth winning, nobody has written for', d.unwritten.length ? 'tile-warn' : '')}
+  </div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Nobody has written for these</div>
+      <table><thead><tr><th>Keyword</th><th>Intent</th><th class="num">Difficulty</th></tr></thead><tbody>
+      ${d.unwritten.map((k) => `<tr><td><b>${esc(k.keyword)}</b></td><td class="mono sub">${esc(k.intent || '—')}</td><td class="num mono">${k.difficulty ?? '—'}</td></tr>`).join('')
+        || '<tr><td colspan="3" class="empty">Every keyword has a piece written for it.</td></tr>'}
+      </tbody></table>
+      <div class="map-legend">A keyword nobody has written for is a keyword nobody is winning. This list is the brief queue for the content studio.</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">By intent</div>
+      <table><tbody>${d.byIntent.map((i) => `<tr><td class="mono">${esc(i.intent)}</td><td class="num mono">${i.n}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</tbody></table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Every keyword</div>
+    <table><thead><tr><th>Keyword</th><th>Language</th><th>Intent</th><th class="num">Volume</th><th class="num">Difficulty</th><th>Target</th></tr></thead><tbody>
+    ${d.keywords.map((k) => `<tr><td>${esc(k.keyword)}</td><td class="mono sub">${esc(k.language)}</td>
+      <td class="mono sub">${esc(k.intent || '—')}</td><td class="num mono">${k.volume ?? '—'}</td>
+      <td class="num mono">${k.difficulty ?? '—'}</td><td class="mono sub">${esc(short(k.target_url || '—', 30))}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="empty">No keywords yet — research a topic from the marketing desk.</td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+
+// ---------- Paid media ----------
+async function renderPaidMedia() {
+  const d = await api('/api/mkt/paid');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Channels live', d.counts.live, 'buying attention right now')}
+    ${tile('Budget', `${d.counts.budgetUsd}`, `${d.counts.spentUsd} spent`)}
+    ${tile('Leads bought', d.counts.leads, 'people who raised a hand')}
+    ${tile('Cost per lead', d.counts.leads ? `${(d.counts.spentUsd / d.counts.leads).toFixed(2)}` : '—', 'across every channel')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Which channel earned its money</div>
+    <table><thead><tr><th>Channel</th><th class="num">Spent</th><th class="num">Leads</th><th class="num">Customers</th><th class="num">Cost per lead</th><th>Verdict</th></tr></thead><tbody>
+    ${d.verdicts.map((v) => {
+      const cpl = v.cost_per_lead;
+      const verdict = !v.leads ? 'nothing back yet' : cpl < 20 ? 'paying for itself' : cpl < 80 ? 'watch it' : 'stop it';
+      return `<tr><td class="mono">${esc(v.channel)}</td>
+        <td class="num mono">${Number(v.spent).toFixed(2)}</td>
+        <td class="num mono">${v.leads}</td><td class="num mono">${v.customers}</td>
+        <td class="num mono">${cpl ? `${cpl}` : '—'}</td>
+        <td><span class="chip ${verdict === 'paying for itself' ? 'chip-ok' : verdict === 'stop it' ? 'chip-bad' : 'chip-warn'}">${verdict}</span></td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">No paid channels planned yet.</td></tr>'}
+    </tbody></table>
+    <div class="map-legend">The verdict is arithmetic, not opinion: spend over leads. A channel that has taken money and returned nothing says so on its own line rather than being averaged into the total.</div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Every channel</div>
+    <table><thead><tr><th>Campaign</th><th>Channel</th><th class="num">Budget</th><th class="num">Spent</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">Leads</th><th>State</th></tr></thead><tbody>
+    ${d.channels.map((c) => `<tr><td>${esc(c.campaign || '—')}</td><td class="mono">${esc(c.channel)}</td>
+      <td class="num mono">${Number(c.budget_usd).toFixed(0)}</td><td class="num mono">${Number(c.spent_usd).toFixed(0)}</td>
+      <td class="num mono">${c.impressions || 0}</td><td class="num mono">${c.clicks || 0}</td><td class="num mono">${c.leads || 0}</td>
+      <td>${mktState(c.state)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">—</td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+
+// ---------- Lifecycle email ----------
+async function renderLifecycle() {
+  const d = await api('/api/mkt/lifecycle');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Live sequences', d.counts.live, 'sending right now', d.counts.live ? 'tile-ok' : '')}
+    ${tile('In draft', d.counts.draft, 'written, not switched on')}
+    ${tile('Sent', d.counts.sent, 'messages that actually went')}
+    <div class="panel tile"><div class="panel-title">The mailbox</div>
+      <div class="sub" style="margin-top:8px">${d.gate.connector ? `<span class="chip ${d.gate.connector.state === 'live' ? 'chip-ok' : 'chip-warn'}">gmail · ${esc(d.gate.connector.state)}</span>` : '<span class="chip chip-dim">no mailbox connected</span>'}</div>
+      <div class="sub" style="margin-top:6px">Nothing sends until a connector is armed.</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Sequences</div>
+    ${d.sequences.map((s) => `
+      <div style="border-top:1px solid var(--seam-soft);padding:var(--s4) 0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3)">
+          <div><b>${esc(s.name)}</b> ${mktState(s.state)}<div class="sub">${esc(s.goal || '')}${s.audience ? ` · ${esc(s.audience)}` : ''}</div></div>
+          <div class="mono sub">${(s.steps || []).length} emails · ${s.sent || 0} sent</div>
+        </div>
+        <table style="margin-top:var(--s3)"><tbody>
+        ${(s.steps || []).map((st) => `<tr><td class="mono sub" style="width:64px">day ${st.day ?? '—'}</td><td><b>${esc(st.subject || '')}</b><div class="sub">${esc(short(st.body || st.preview || '', 110))}</div></td></tr>`).join('')
+          || '<tr><td class="empty">Still being written.</td></tr>'}
+        </tbody></table>
+      </div>`).join('') || '<div class="empty">No sequences yet.</div>'}
+    <div class="map-legend">${esc(d.gate.note)}</div>
+  </div>`;
+}
+
+// ---------- Editorial calendar ----------
+async function renderCalendar() {
+  const d = await api('/api/mkt/calendar');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Planned', d.counts.planned, 'on the calendar, not started')}
+    ${tile('In flight', d.counts.inFlight, 'briefed or being written')}
+    ${tile('Late', d.counts.late, 'past its date and unpublished', d.counts.late ? 'tile-bad' : '')}
+    ${tile('Published', d.counts.published, 'out in the world', d.counts.published ? 'tile-ok' : '')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">What is going out, and when</div>
+    <table><thead><tr><th>Piece</th><th>Channel</th><th>Stage</th><th>For</th><th>Due</th><th>State</th></tr></thead><tbody>
+    ${d.items.map((c) => {
+      const late = c.due_date && c.due_date < new Date().toISOString().slice(0, 10) && c.state !== 'published';
+      return `<tr><td><b>${esc(c.title)}</b></td>
+        <td class="mono sub">${esc(c.channel || '—')}</td>
+        <td><span class="chip chip-dim">${esc(c.stage || '—')}</span></td>
+        <td class="sub">${esc(c.persona || 'anyone')}</td>
+        <td class="mono sub" style="${late ? 'color:var(--bad)' : ''}">${esc(c.due_date || '—')}</td>
+        <td>${mktState(c.state)}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">Nothing scheduled.</td></tr>'}
+    </tbody></table>
+  </div>
+  <div class="panel">
+    <div class="panel-title">By funnel stage</div>
+    <table><tbody>${d.byStage.map((s) => `<tr><td class="mono">${esc(s.stage || 'unset')}</td><td class="num mono">${s.n}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</tbody></table>
+    <div class="map-legend">A calendar weighted entirely to one stage is a department talking to itself. Awareness with no decision-stage pieces produces readers; decision with no awareness produces nobody to read them.</div>
+  </div>`;
+}
+
+// ---------- Personas and positioning, as their own pages ----------
+async function renderPersonas() {
+  const d = await api('/api/mkt');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Personas', (d.personas || []).length, 'people we decided we are talking to')}
+    ${tile('Grounded', (d.personas || []).filter((p) => p.evidence).length, 'built from real customers and intel', 'tile-ok')}
+    ${tile('Approved', (d.personas || []).filter((p) => p.state === 'approved').length, 'a person signed them off')}
+    ${tile('Calendar pieces', (d.calendar || []).length, 'written for one of them')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Who we are talking to</div>
+    ${(d.personas || []).map((p) => `
+      <div style="border-top:1px solid var(--seam-soft);padding:var(--s4) 0">
+        <div style="display:flex;justify-content:space-between;gap:var(--s3)"><div><b>${esc(p.name)}</b> ${mktState(p.state)}<div class="sub">${esc(p.job_title || '')}${p.segment ? ` · ${esc(p.segment)}` : ''}</div></div></div>
+        ${p.pains ? `<div class="sub" style="margin-top:6px"><b>What hurts:</b> ${esc(short(p.pains, 260))}</div>` : ''}
+        ${p.gains ? `<div class="sub"><b>What they want:</b> ${esc(short(p.gains, 200))}</div>` : ''}
+        ${p.objections ? `<div class="sub"><b>Why they say no:</b> ${esc(short(p.objections, 200))}</div>` : ''}
+        ${p.channels ? `<div class="sub"><b>Found on:</b> ${esc(short(p.channels, 160))}</div>` : ''}
+      </div>`).join('') || '<div class="empty">No personas yet — build one from the marketing desk.</div>'}
+    <div class="map-legend">A persona is only worth having if it was built from somebody real. These are grounded in the customer list and the intelligence file, which is why they name actual companies rather than "enterprise decision makers".</div>
+  </div>`;
+}
+
+async function renderPositioning() {
+  const d = await api('/api/mkt');
+  const rows = d.positioning || [];
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Statements', rows.length, 'versions of the promise')}
+    ${tile('Approved', rows.filter((p) => p.state === 'approved').length, 'the one everybody repeats', 'tile-ok')}
+    ${tile('Campaigns carrying it', (d.campaigns || []).length, 'the promise, out in a channel')}
+    ${tile('Proof points', rows.filter((p) => p.proof).length, 'claims with evidence behind them')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">The promise</div>
+    ${rows.map((p) => `
+      <div style="border-top:1px solid var(--seam-soft);padding:var(--s5) 0">
+        ${p.tagline ? `<div style="font-family:var(--font-display);font-size:24px;line-height:1.3">${esc(p.tagline)}</div>` : ''}
+        <div class="sub" style="margin-top:8px">${mktState(p.state)} · for ${esc(p.audience || 'everyone')}${p.category ? ` · in ${esc(p.category)}` : ''}</div>
+        ${p.promise ? `<div style="margin-top:10px">${esc(p.promise)}</div>` : ''}
+        ${p.proof ? `<div class="sub" style="margin-top:8px"><b>Proof:</b> ${esc(short(p.proof, 300))}</div>` : ''}
+        ${p.alternatives ? `<div class="sub"><b>Instead of:</b> ${esc(short(p.alternatives, 200))}</div>` : ''}
+      </div>`).join('') || '<div class="empty">No positioning yet — write one from the marketing desk.</div>'}
+    <div class="map-legend">Positioning is written against real alternatives from the market watch, not in a vacuum. If the promise is true of a competitor as well, it is not positioning — it is a description.</div>
   </div>`;
 }
 

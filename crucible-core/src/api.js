@@ -21,6 +21,15 @@ import {
   marketingDesk, createPersona, setPersonaState, createPositioning, approvePositioning,
   planChannel, recordChannelResult, planContent, commissionContent, researchKeywords,
   createSequence, setSequenceState,
+  // The rest of the department: the six desks that had no page of their own,
+  // and the six functions the company did not have at all.
+  planEvent, recordEvent, eventsDesk,
+  draftPress, approvePress, recordCoverage, pressDesk,
+  addCommunityMember, setCommunityRole, communityDesk,
+  recordTouch, attribution,
+  draftPage, setPageState, recordPageResult, pagesDesk,
+  setOpsEntry, opsDesk,
+  seoDesk, paidDesk, lifecycleDesk, calendarDesk,
 } from './marketing.js';
 import {
   chatOverview, messages as chatMessages, post as chatPost, markRead as chatMarkRead,
@@ -1122,6 +1131,68 @@ const routes = [
   ['POST', /^\/api\/backups$/, (_p, body) => takeBackup({ kind: 'manual', actor: body.actor })],
   ['POST', /^\/api\/backups\/(\d+)\/verify$/, ([id]) => verifyBackup(Number(id))],
   ['POST', /^\/api\/backups\/(\d+)\/restore$/, ([id], body) => restoreBackup(Number(id), { confirm: body.confirm, actor: body.actor })],
+  // ==========================================================================
+  // Marketing, department by department.
+  // ==========================================================================
+  ['GET', /^\/api\/mkt\/events$/, () => eventsDesk()],
+  ['POST', /^\/api\/mkt\/events$/, (_p, body) => planEvent({
+    name: need(body, 'name'), kind: body.kind, format: body.format, startsAt: body.startsAt,
+    city: body.city, audience: body.audience, goal: body.goal,
+    budgetUsd: body.budgetUsd, campaignId: body.campaignId || null, actor: body.actor,
+  })],
+  ['POST', /^\/api\/mkt\/events\/(\d+)$/, ([id], body) => recordEvent(Number(id), {
+    registered: body.registered ?? null, attended: body.attended ?? null,
+    leads: body.leads ?? null, spent: body.spent ?? null, state: body.state || null, actor: body.actor,
+  })],
+
+  ['GET', /^\/api\/mkt\/press$/, () => pressDesk()],
+  ['POST', /^\/api\/mkt\/press$/, (_p, body) => draftPress({
+    kind: body.kind, title: need(body, 'title'), outlet: body.outlet,
+    journalist: body.journalist, angle: body.angle, actor: body.actor,
+  })],
+  ['POST', /^\/api\/mkt\/press\/(\d+)\/approve$/, ([id], body) => approvePress(Number(id), { actor: body.actor })],
+  ['POST', /^\/api\/mkt\/press\/(\d+)\/coverage$/, ([id], body) => recordCoverage(Number(id), {
+    url: need(body, 'url'), sentiment: body.sentiment, actor: body.actor,
+  })],
+
+  ['GET', /^\/api\/mkt\/community$/, () => communityDesk()],
+  ['POST', /^\/api\/mkt\/community$/, (_p, body) => addCommunityMember({
+    handle: need(body, 'handle'), channel: body.channel, role: body.role,
+    reach: body.reach, notes: body.notes, customerId: body.customerId || null, actor: body.actor,
+  })],
+  ['POST', /^\/api\/mkt\/community\/(\d+)$/, ([id], body) => setCommunityRole(Number(id), {
+    role: need(body, 'role'), sentiment: body.sentiment, actor: body.actor,
+  })],
+
+  ['GET', /^\/api\/mkt\/attribution$/, () => attribution()],
+  ['POST', /^\/api\/mkt\/attribution$/, (_p, body) => recordTouch({
+    subject: need(body, 'subject'), channel: need(body, 'channel'), source: body.source,
+    campaignId: body.campaignId || null, contentId: body.contentId || null,
+    eventId: body.eventId || null, weight: body.weight, valueUsd: body.valueUsd,
+  })],
+
+  ['GET', /^\/api\/mkt\/pages$/, () => pagesDesk()],
+  ['POST', /^\/api\/mkt\/pages$/, (_p, body) => draftPage({
+    slug: need(body, 'slug'), title: body.title, purpose: body.purpose,
+    personaId: body.personaId || null, campaignId: body.campaignId || null, actor: body.actor,
+  })],
+  ['POST', /^\/api\/mkt\/pages\/(\d+)\/state$/, ([id], body) => setPageState(Number(id), { state: need(body, 'state'), actor: body.actor })],
+  ['POST', /^\/api\/mkt\/pages\/(\d+)\/result$/, ([id], body) => recordPageResult(Number(id), {
+    visits: body.visits ?? null, conversions: body.conversions ?? null, actor: body.actor,
+  })],
+
+  ['GET', /^\/api\/mkt\/ops$/, () => opsDesk()],
+  ['POST', /^\/api\/mkt\/ops$/, (_p, body) => setOpsEntry({
+    id: body.id || null, kind: body.kind, name: need(body, 'name'),
+    detail: body.detail, value: body.value, state: body.state, actor: body.actor,
+  })],
+
+  // The four tables that were buried inside the marketing desk with no page.
+  ['GET', /^\/api\/mkt\/seo$/, () => seoDesk()],
+  ['GET', /^\/api\/mkt\/paid$/, () => paidDesk()],
+  ['GET', /^\/api\/mkt\/lifecycle$/, () => lifecycleDesk()],
+  ['GET', /^\/api\/mkt\/calendar$/, () => calendarDesk()],
+
   ['GET', /^\/api\/backups\/export$/, () => ({
     __raw: {
       contentType: 'application/json; charset=utf-8',
@@ -1268,6 +1339,8 @@ function permFor(m, path) {
   if (path.startsWith('/api/revenue')) return m === 'GET' ? 'revenue.view' : 'revenue.manage';
   // The platform. Creating a company, minting a key and restoring a database
   // are each their own power — none of them is implied by being able to look.
+  if (is(/^\/api\/mkt\/press\/\d+\/approve$/)) return 'press.approve';
+  if (path.startsWith('/api/mkt/')) return m === 'GET' ? 'marketing.view' : 'marketing.manage';
   if (path.startsWith('/api/tenants')) return m === 'GET' ? 'tenants.view' : 'tenants.manage';
   if (path.startsWith('/api/keys')) return m === 'GET' ? 'keys.view' : 'keys.manage';
   if (path.startsWith('/api/webhooks')) return m === 'GET' ? 'webhooks.view' : 'webhooks.manage';

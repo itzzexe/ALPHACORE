@@ -1978,6 +1978,113 @@ CREATE TABLE IF NOT EXISTS remedies (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ============================================================================
+-- Marketing, as a whole department rather than a posting tool.
+--
+-- Campaigns, content, design, brand, social and search already existed; what
+-- was missing were the functions a marketing department has that none of those
+-- cover — the room it books, the journalist it calls, the people who advocate
+-- for it unpaid, where a customer actually came from, the page they land on,
+-- and the plumbing that makes any of that measurable.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS mkt_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'webinar',   -- webinar|conference|meetup|roundtable
+  format      TEXT NOT NULL DEFAULT 'online',
+  starts_at   TEXT,
+  city        TEXT,
+  audience    TEXT,
+  goal        TEXT,
+  budget_usd  REAL NOT NULL DEFAULT 0,
+  spent_usd   REAL NOT NULL DEFAULT 0,
+  registered  INTEGER NOT NULL DEFAULT 0,
+  attended    INTEGER NOT NULL DEFAULT 0,
+  leads       INTEGER NOT NULL DEFAULT 0,
+  campaign_id INTEGER,
+  brief       TEXT,
+  run_id      TEXT,
+  state       TEXT NOT NULL DEFAULT 'planned',   -- planned|briefed|live|done|cancelled
+  created_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mkt_press (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL DEFAULT 'release',   -- release|pitch|coverage|briefing
+  title       TEXT NOT NULL,
+  outlet      TEXT,
+  journalist  TEXT,
+  angle       TEXT,
+  body        TEXT,
+  url         TEXT,
+  sentiment   TEXT,
+  state       TEXT NOT NULL DEFAULT 'draft',     -- draft|approved|sent|published|declined
+  run_id      TEXT,
+  approved_by TEXT,
+  created_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mkt_community (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  handle      TEXT NOT NULL,
+  channel     TEXT NOT NULL DEFAULT 'other',
+  role        TEXT NOT NULL DEFAULT 'member',    -- member|advocate|ambassador|critic
+  reach       INTEGER NOT NULL DEFAULT 0,
+  sentiment   TEXT,
+  last_seen   TEXT,
+  notes       TEXT,
+  customer_id INTEGER,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Where a customer actually came from, as a chain of touches rather than a
+-- single field somebody typed. Last-touch is a lie told for convenience.
+CREATE TABLE IF NOT EXISTS mkt_touchpoints (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject     TEXT NOT NULL,                     -- customer:12, deal:8, lead email
+  channel     TEXT NOT NULL,
+  source      TEXT,
+  campaign_id INTEGER,
+  content_id  INTEGER,
+  event_id    INTEGER,
+  weight      REAL NOT NULL DEFAULT 1,
+  value_usd   REAL NOT NULL DEFAULT 0,
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS mkt_touch_subject ON mkt_touchpoints (subject, occurred_at);
+
+CREATE TABLE IF NOT EXISTS mkt_pages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug        TEXT NOT NULL UNIQUE,
+  title       TEXT NOT NULL,
+  purpose     TEXT,
+  persona_id  INTEGER,
+  campaign_id INTEGER,
+  headline    TEXT,
+  body        TEXT,
+  cta         TEXT,
+  visits      INTEGER NOT NULL DEFAULT 0,
+  conversions INTEGER NOT NULL DEFAULT 0,
+  state       TEXT NOT NULL DEFAULT 'draft',     -- draft|review|live|retired
+  run_id      TEXT,
+  created_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The plumbing: what is connected, how a lead is scored, and what is tracked.
+CREATE TABLE IF NOT EXISTS mkt_ops (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                     -- tool|rule|tracking|convention
+  name        TEXT NOT NULL,
+  detail      TEXT,
+  value       TEXT,
+  state       TEXT NOT NULL DEFAULT 'active',
+  owner       TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Backups: a platform that can lose the company is not a platform.
 CREATE TABLE IF NOT EXISTS backups (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

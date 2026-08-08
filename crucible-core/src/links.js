@@ -360,15 +360,15 @@ export function sectionCatalog() {
     S('archive', 'Archive', 'data', '#/archive', n('SELECT COUNT(*) AS n FROM archive_items'), 'The repository of everything'),
     S('knowledge', 'Knowledge', 'data', '#/knowledge', n('SELECT COUNT(*) AS n FROM memory_entries'), 'Organizational memory'),
     // Create
-    S('localization', 'Localization', 'create', '#/localization', n('SELECT COUNT(*) AS n FROM localizations'), 'Arabic ⇄ English adaptation of anything the company writes'),
-    S('social', 'Social media', 'create', '#/social', n('SELECT COUNT(*) AS n FROM posts'), 'AI drafts, humans publish'),
-    S('content', 'Content studio', 'create', '#/content', n('SELECT COUNT(*) AS n FROM content_items'), 'Articles, scripts, emails'),
-    S('design', 'Design studio', 'create', '#/design', n('SELECT COUNT(*) AS n FROM designs'), 'Real SVG deliverables'),
-    S('marketing', 'Marketing', 'create', '#/marketing', n('SELECT COUNT(*) AS n FROM campaigns'), 'Campaigns with budgets'),
+    S('localization', 'Localization', 'marketing', '#/localization', n('SELECT COUNT(*) AS n FROM localizations'), 'Arabic ⇄ English adaptation of anything the company writes'),
+    S('social', 'Social media', 'marketing', '#/social', n('SELECT COUNT(*) AS n FROM posts'), 'AI drafts, humans publish'),
+    S('content', 'Content studio', 'marketing', '#/content', n('SELECT COUNT(*) AS n FROM content_items'), 'Articles, scripts, emails'),
+    S('design', 'Design studio', 'marketing', '#/design', n('SELECT COUNT(*) AS n FROM designs'), 'Real SVG deliverables'),
+    S('marketing', 'Marketing', 'marketing', '#/marketing', n('SELECT COUNT(*) AS n FROM campaigns'), 'Campaigns with budgets'),
     // Commerce
     S('pricing', 'Pricing', 'commerce', '#/pricing', n('SELECT COUNT(*) AS n FROM pricing_records'), 'The approved price record every agent must cite'),
     S('success', 'Customer success', 'commerce', '#/success', n('SELECT COUNT(*) AS n FROM customer_health'), 'Health, adoption and churn risk'),
-    S('marketwatch', 'Market watch', 'commerce', '#/marketwatch', n('SELECT COUNT(*) AS n FROM competitors'), 'Competitors, their pricing and their weaknesses'),
+    S('marketwatch', 'Market watch', 'marketing', '#/marketwatch', n('SELECT COUNT(*) AS n FROM competitors'), 'Competitors, their pricing and their weaknesses'),
     S('sales', 'Sales', 'commerce', '#/sales', n('SELECT COUNT(*) AS n FROM deals'), 'Deals pipeline'),
     S('customers', 'Customers', 'commerce', '#/customers', n('SELECT COUNT(*) AS n FROM customers'), 'CRM'),
     S('relations', 'Relations', 'commerce', '#/relations', n('SELECT COUNT(*) AS n FROM partners'), 'Partners, investors, government'),
@@ -401,8 +401,23 @@ export function sectionCatalog() {
     S('releases', 'Releases', 'build', '#/releases', n('SELECT COUNT(*) AS n FROM releases'), 'Changelog drafted from completed work, human-published'),
     S('pmo', 'PMO gates', 'decide', '#/pmo', n('SELECT COUNT(*) AS n FROM stage_gates'), 'Stage gates across all projects, humans rule the crossing'),
     S('insights', 'Insights', 'data', '#/insights', n("SELECT COUNT(*) AS n FROM audit_log WHERE occurred_at >= datetime('now','-7 days')"), 'Company analytics: activity, spend and throughput trends'),
-    S('mkt', 'Marketing department', 'create', '#/mkt', n('SELECT COUNT(*) AS n FROM content_calendar') + n('SELECT COUNT(*) AS n FROM personas'), 'Personas, positioning, channel spend, editorial calendar, search and lifecycle — with its own eight specialists'),
-    S('brand', 'Brand studio', 'create', '#/brand', n('SELECT COUNT(*) AS n FROM brand_assets'), 'Voice, palette and guidelines every agent must obey'),
+    S('mkt', 'Marketing department', 'marketing', '#/mkt', n('SELECT COUNT(*) AS n FROM content_calendar') + n('SELECT COUNT(*) AS n FROM personas'), 'Personas, positioning, channel spend, editorial calendar, search and lifecycle — with its own eight specialists'),
+    S('brand', 'Brand studio', 'marketing', '#/brand', n('SELECT COUNT(*) AS n FROM brand_assets'), 'Voice, palette and guidelines every agent must obey'),
+    // The department, in full. Six of these were tables buried inside the
+    // marketing desk with no page of their own, and six are functions a real
+    // marketing department has that this company simply did not.
+    S('personas', 'Personas', 'marketing', '#/personas', n('SELECT COUNT(*) AS n FROM personas'), 'Who we are actually talking to — grounded in real customers and real intel, not invented'),
+    S('positioning', 'Positioning', 'marketing', '#/positioning', n('SELECT COUNT(*) AS n FROM positioning'), 'The promise, the category and the proof, sharpened until a stranger gets it in one line'),
+    S('seo', 'Search', 'marketing', '#/seo', n('SELECT COUNT(*) AS n FROM seo_keywords'), 'The searches worth winning, and which of them nobody has written for yet'),
+    S('paidmedia', 'Paid media', 'marketing', '#/paidmedia', n('SELECT COUNT(*) AS n FROM campaign_channels'), 'Attention bought on measurable terms, with the cost per lead beside every channel'),
+    S('lifecycle', 'Lifecycle email', 'marketing', '#/lifecycle', n('SELECT COUNT(*) AS n FROM email_sequences'), 'The sequences that move a lead from curious to paying — and every send passes the gate'),
+    S('calendar', 'Editorial calendar', 'marketing', '#/calendar', n('SELECT COUNT(*) AS n FROM content_calendar'), 'What gets published when, for whom, at which stage of the funnel'),
+    S('events', 'Events', 'marketing', '#/events', n('SELECT COUNT(*) AS n FROM mkt_events'), 'Webinars and rooms, judged on cost per lead and on whether anybody followed up'),
+    S('press', 'Press & media', 'marketing', '#/press', n('SELECT COUNT(*) AS n FROM mkt_press'), 'What a journalist would actually print — and no claim the ledger cannot support'),
+    S('community', 'Community', 'marketing', '#/community', n('SELECT COUNT(*) AS n FROM mkt_community'), 'Who advocates for us unpaid, who is unhappy, and what either is saying today'),
+    S('attribution', 'Attribution', 'marketing', '#/attribution', n('SELECT COUNT(*) AS n FROM mkt_touchpoints'), 'Where customers actually came from, as a chain of touches rather than one field somebody typed'),
+    S('pages', 'Landing pages', 'marketing', '#/pages', n('SELECT COUNT(*) AS n FROM mkt_pages'), 'The page the campaign points at, written for one person and measured on one action'),
+    S('mktops', 'Marketing operations', 'marketing', '#/mktops', n('SELECT COUNT(*) AS n FROM mkt_ops'), 'The plumbing: tracking, lead scoring, naming conventions, and whether the numbers can be trusted'),
     S('procurement', 'Procurement', 'commerce', '#/procurement', n('SELECT COUNT(*) AS n FROM purchase_requests'), 'Purchase requests with human spend approval'),
     S('finops', 'FinOps', 'capital', '#/finops', n('SELECT COUNT(*) AS n FROM model_calls'), 'Cost per agent and token, waste detection, tier advice'),
     S('treasury', 'Treasury (crypto)', 'capital', '#/treasury', n('SELECT COUNT(*) AS n FROM invoices'), 'Watch-only wallets, crypto invoices that settle themselves, and payouts a human must sign'),
@@ -476,7 +491,7 @@ export const DIVISIONS = [
   { id: 'build', label: 'BUILD', color: '#b78bff' },
   { id: 'decide', label: 'DECIDE', color: '#5ec3c9' },
   { id: 'data', label: 'DATA', color: '#78bf6d' },
-  { id: 'create', label: 'CREATE', color: '#ff5fa2' },
+  { id: 'marketing', label: 'MARKETING', color: '#ff5fa2' },
   { id: 'commerce', label: 'COMMERCE', color: '#e5533d' },
   { id: 'capital', label: 'CAPITAL', color: '#e8c547' },
   { id: 'operate', label: 'OPERATE', color: '#ffb020' },
@@ -497,23 +512,21 @@ export const DIVISIONS = [
 export function connectivityAudit() {
   const sections = sectionCatalog();
   const edges = relationshipMatrix();
-  const touched = new Set();
-  for (const e of edges) {
-    if (e.from !== 'all') touched.add(e.from);
-    if (e.to !== 'all') touched.add(e.to);
-  }
-  // 'all → audit' and 'all → archive' mean literally every section.
-  const universal = edges.some((e) => e.from === 'all');
-  const orphans = sections.filter((s) => !touched.has(s.id) && !['audit', 'archive'].includes(s.id) && !universal ? true : !touched.has(s.id) && !universal);
-  // "Not an orphan" is a low bar: a department reachable only by the universal
-  // audit rule is not really joined to the company. Degree counts specific,
-  // declared relationships only, so thin wiring is visible instead of implied.
+  // Degree counts specific, declared relationships only. The universal rules
+  // ("the auditor may audit anything") are true of every department and so say
+  // nothing about any particular one.
   const degree = Object.fromEntries(sections.map((s) => [s.id, 0]));
   for (const e of edges) {
     if (e.from === 'all' || e.to === 'all') continue;
     if (degree[e.from] !== undefined) degree[e.from] += 1;
     if (degree[e.to] !== undefined) degree[e.to] += 1;
   }
+  // This used to short-circuit on the existence of any `all` edge, which meant
+  // that from the moment the auditor was wired to everything, the orphan check
+  // returned an empty list without checking anything. A department with no
+  // declared relationship is an orphan, whatever the universal rules say.
+  const orphans = sections.filter((s) => degree[s.id] === 0)
+    .map((s) => ({ id: s.id, label: s.label }));
   const weak = sections.filter((s) => degree[s.id] <= 1)
     .map((s) => ({ id: s.id, label: s.label, degree: degree[s.id] }));
   return {
@@ -782,6 +795,69 @@ export function relationshipMatrix() {
     edge('kgraph', 'memory', 'the graph is the shape memory implies', n('SELECT COUNT(*) AS n FROM graph_nodes'), '#/memory', 'memory'),
     edge('kgraph', 'intel', 'organisations, people and what connects them', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'organisation'"), '#/intel'),
     edge('kgraph', 'customers', 'everything known about one customer, in one hop', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'customer'"), '#/customers'),
+// ---- marketing, as one department -------------------------------------
+    // The desk is the hub: everything in the district reports to it, and the
+    // district as a whole is judged on one thing — whether the company is
+    // understood by people outside it.
+    edge('mkt', 'personas', 'who we decided we are talking to', n('SELECT COUNT(*) AS n FROM personas'), '#/personas'),
+    edge('mkt', 'positioning', 'the promise the whole department repeats', n('SELECT COUNT(*) AS n FROM positioning'), '#/positioning'),
+    edge('mkt', 'marketing', 'campaigns carry the promise to a channel', n('SELECT COUNT(*) AS n FROM campaigns'), '#/marketing'),
+    edge('mkt', 'calendar', 'what gets published, when, for whom', n('SELECT COUNT(*) AS n FROM content_calendar'), '#/calendar'),
+    edge('mkt', 'seo', 'the searches worth winning', n('SELECT COUNT(*) AS n FROM seo_keywords'), '#/seo'),
+    edge('mkt', 'paidmedia', 'attention bought on measurable terms', n('SELECT COUNT(*) AS n FROM campaign_channels'), '#/paidmedia'),
+    edge('mkt', 'lifecycle', 'the sequences that move a lead along', n('SELECT COUNT(*) AS n FROM email_sequences'), '#/lifecycle'),
+    edge('mkt', 'events', 'rooms booked and rooms filled', n('SELECT COUNT(*) AS n FROM mkt_events'), '#/events'),
+    edge('mkt', 'press', 'what the company says on record', n('SELECT COUNT(*) AS n FROM mkt_press'), '#/press'),
+    edge('mkt', 'community', 'the people who speak for us unpaid', n('SELECT COUNT(*) AS n FROM mkt_community'), '#/community'),
+    edge('mkt', 'attribution', 'and whether any of it actually worked', n('SELECT COUNT(*) AS n FROM mkt_touchpoints'), '#/attribution', 'audit'),
+    edge('mkt', 'mktops', 'the plumbing that makes the numbers trustworthy', n('SELECT COUNT(*) AS n FROM mkt_ops'), '#/mktops'),
+    edge('mkt', 'marketwatch', 'positioning is against somebody, not in a vacuum', n('SELECT COUNT(*) AS n FROM competitors'), '#/marketwatch'),
+
+    // The producers: three studios that exist to make what the department says
+    // legible, seen and readable in two languages.
+    edge('calendar', 'content', 'a planned piece becomes a brief for a writer', n("SELECT COUNT(*) AS n FROM content_calendar WHERE state != 'planned'"), '#/content'),
+    edge('marketing', 'design', 'every live campaign gets a visual', n('SELECT COUNT(*) AS n FROM designs WHERE campaign_id IS NOT NULL'), '#/design'),
+    edge('marketing', 'social', 'and a post on every connected channel', n('SELECT COUNT(*) AS n FROM posts WHERE campaign_id IS NOT NULL'), '#/social'),
+    edge('brand', 'content', 'the voice every writer has to obey', n("SELECT COUNT(*) AS n FROM brand_assets WHERE state = 'approved'"), '#/content'),
+    edge('brand', 'design', 'and the palette every designer has to obey', n("SELECT COUNT(*) AS n FROM brand_assets WHERE state = 'approved'"), '#/design'),
+    edge('brand', 'positioning', 'identity and promise have to agree', n('SELECT COUNT(*) AS n FROM positioning'), '#/positioning'),
+    edge('content', 'localization', 'anything published in one language is owed the other', n('SELECT COUNT(*) AS n FROM localizations'), '#/localization'),
+    edge('social', 'localization', 'the public voice speaks Arabic too', n("SELECT COUNT(*) AS n FROM localizations WHERE source_kind = 'post'"), '#/localization'),
+    edge('seo', 'content', 'a keyword nobody wrote for is a keyword nobody won', n('SELECT COUNT(*) AS n FROM seo_keywords WHERE target_url IS NOT NULL'), '#/content', 'loop'),
+    edge('personas', 'pages', 'a page is written for one person, not for everyone', n('SELECT COUNT(*) AS n FROM mkt_pages WHERE persona_id IS NOT NULL'), '#/pages'),
+    edge('pages', 'marketing', 'the campaign has to point somewhere', n('SELECT COUNT(*) AS n FROM mkt_pages WHERE campaign_id IS NOT NULL'), '#/marketing'),
+    edge('events', 'content', 'the run-of-show is written before the room opens', n("SELECT COUNT(*) AS n FROM mkt_events WHERE state != 'planned'"), '#/content'),
+
+    // Every touch a channel makes is written down, which is the only reason
+    // attribution can be computed rather than typed.
+    edge('paidmedia', 'attribution', 'paid touches, recorded as they happen', n("SELECT COUNT(*) AS n FROM mkt_touchpoints WHERE channel = 'paid'"), '#/attribution'),
+    edge('events', 'attribution', 'a room full of people is a set of touches', n("SELECT COUNT(*) AS n FROM mkt_touchpoints WHERE channel = 'event'"), '#/attribution'),
+    edge('press', 'attribution', 'coverage counts, at half weight', n("SELECT COUNT(*) AS n FROM mkt_touchpoints WHERE channel = 'press'"), '#/attribution'),
+    edge('pages', 'attribution', 'the page that converted is the touch that mattered', n('SELECT COUNT(*) AS n FROM mkt_pages WHERE conversions > 0'), '#/attribution'),
+    edge('mktops', 'attribution', 'lead scoring and tracking, or the numbers are fiction', n("SELECT COUNT(*) AS n FROM mkt_ops WHERE kind IN ('rule','tracking')"), '#/attribution', 'audit'),
+
+    // ---- and out, to the rest of the company -------------------------------
+    edge('intel', 'personas', 'personas are grounded in real companies, not invented', n("SELECT COUNT(*) AS n FROM personas WHERE evidence IS NOT NULL"), '#/personas'),
+    edge('segments', 'lifecycle', 'a segment is who a sequence is sent to', n('SELECT COUNT(*) AS n FROM segments'), '#/lifecycle'),
+    edge('marketwatch', 'pricing', 'what rivals charge is an input to what we charge', n('SELECT COUNT(*) AS n FROM competitors'), '#/pricing'),
+    edge('attribution', 'revenue', 'a credited touch is the front of the revenue loop', n('SELECT COUNT(*) AS n FROM mkt_touchpoints'), '#/revenue'),
+    edge('attribution', 'customers', 'and the back of it is a customer with an origin', n("SELECT COUNT(*) AS n FROM customers WHERE campaign_id IS NOT NULL"), '#/customers'),
+    edge('lifecycle', 'egress', 'every send passes the gate before it leaves', n("SELECT COUNT(*) AS n FROM egress_log WHERE capability LIKE 'mail%'"), '#/egress', 'gate'),
+    edge('social', 'connectors', 'publishing is an outbound act like any other', n("SELECT COUNT(*) AS n FROM egress_log WHERE capability LIKE 'post%'"), '#/connectors', 'gate'),
+    edge('press', 'gate', 'the company goes on record only when a person says so', n("SELECT COUNT(*) AS n FROM mkt_press WHERE state = 'approved'"), '#/gate', 'gate'),
+    edge('paidmedia', 'budgets', 'buying attention spends real money', n('SELECT COUNT(*) AS n FROM campaign_channels'), '#/budgets'),
+    edge('events', 'finance', 'a room costs what a room costs', n('SELECT COUNT(*) AS n FROM mkt_events WHERE spent_usd > 0'), '#/finance'),
+    edge('mkt', 'sales', 'a lead over the scoring threshold belongs to sales', n('SELECT COUNT(*) AS n FROM deals'), '#/sales'),
+    edge('community', 'success', 'an advocate is usually a customer who was looked after', n('SELECT COUNT(*) AS n FROM mkt_community WHERE customer_id IS NOT NULL'), '#/success'),
+    edge('community', 'support', 'and a critic is usually a ticket nobody closed', n("SELECT COUNT(*) AS n FROM mkt_community WHERE role = 'critic'"), '#/support', 'loop'),
+    edge('mkt', 'chief', 'the quarter tells marketing what it is for', n("SELECT COUNT(*) AS n FROM objectives WHERE state = 'active'"), '#/chief'),
+    edge('mkt', 'quality', 'public copy is reviewed by somebody who did not write it', n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'mkt_%' OR task_type IN ('press_draft','page_draft','event_brief')"), '#/quality', 'review'),
+    edge('press', 'constitution', 'no claim the ledger cannot support', n("SELECT COUNT(*) AS n FROM constitution WHERE rule_id = 'claims-need-sources'"), '#/constitution', 'audit'),
+    edge('mkt', 'provenance', 'anything published leaves with a signed receipt', n("SELECT COUNT(*) AS n FROM provenance WHERE subject_type = 'run'"), '#/provenance'),
+    edge('mkt', 'kgraph', 'campaigns, customers and content, joined up', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'campaign'"), '#/kgraph'),
+    edge('mkt', 'memory', 'what worked last time, before planning this time', n("SELECT COUNT(*) AS n FROM mem_docs"), '#/memory', 'memory'),
+    edge('mkt', 'agents', 'twelve specialists, not one generalist', n("SELECT COUNT(*) AS n FROM agents WHERE id LIKE 'AGT-MKT-%'"), '#/agents'),
+
     edge('kgraph', 'knowledge', 'semantic search across the whole company', n('SELECT COUNT(*) AS n FROM graph_edges'), '#/knowledge'),
 
     // ---- the platform ------------------------------------------------------
