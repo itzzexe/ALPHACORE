@@ -75,7 +75,7 @@ const AR = {
   'chain —': 'السلسلة —',
   '✎ auto-refresh paused': '✎ التحديث التلقائي متوقف',
   'Nothing found': 'لا نتائج',
-  'Light / dark': 'فاتح / داكن',
+
   // universal verbs and states
   Save: 'حفظ', Cancel: 'إلغاء', Create: 'إنشاء', Open: 'فتح', Close: 'إغلاق', Delete: 'حذف',
   Edit: 'تعديل', Approve: 'اعتماد', Reject: 'رفض', Send: 'إرسال', Publish: 'نشر', Start: 'بدء',
@@ -255,6 +255,14 @@ const AR = {
   'Source new deals from intelligence': 'استخرج صفقات جديدة من الاستخبارات',
   'Move everything that can move': 'حرّك كل ما يمكن تحريكه',
   'Send the approach': 'أرسل المقاربة', 'Invoice': 'أصدر فاتورة',
+  // ---- the atlas ----
+  'Map': 'الخريطة', 'Dashboards': 'اللوحات', 'empty': 'فارغ',
+  'the whole company': 'الشركة كاملة',
+  'a district to go inside': 'على حي لتدخله',
+  'The whole company as one drawing: a dense core of the orchestrator and the chain, and a tree for every district growing out of it. Every leaf is a department. Point at a district to bring up its colour; open it to go inside.':
+    'الشركة كلها في رسم واحد: نواة كثيفة فيها المنسّق والسلسلة، وشجرة لكل حي تنمو منها. كل ورقة قسم. مرّر على حي ليظهر لونه، وافتحه لتدخله.',
+  'One district, and the departments inside it. Each mark is a department; a filled one holds records, a hollow one is declared and still empty. The arrows walk you round the rim.':
+    'حي واحد والأقسام التي فيه. كل علامة قسم؛ المملوءة تحمل سجلات والمجوّفة معلنة وما زالت فارغة. والسهمان يمشيان بك حول المحيط.',
   // ---- the platform ----
   'Autonomy': 'الاستقلالية', 'Days run': 'أيام جرت', 'Corrections made': 'تصحيحات أُجريت',
   'Turn the clock now': 'أدر الساعة الآن', 'Day': 'يوم', 'Week': 'أسبوع', 'Quarter': 'ربع',

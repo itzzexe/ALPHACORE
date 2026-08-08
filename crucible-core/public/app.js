@@ -278,16 +278,12 @@ function initShell() {
     else if (e.key === 'Enter') { const h = palHits[palIndex]; if (h) { location.hash = h.href; closePalette(); } }
   });
 
-  // Theme: explicit choice wins, otherwise the operating system decides.
-  const savedTheme = localStorage.getItem('crucible-theme');
-  if (savedTheme) document.documentElement.dataset.theme = savedTheme;
-  $('#theme-toggle')?.addEventListener('click', () => {
-    const now = document.documentElement.dataset.theme
-      || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    const next = now === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem('crucible-theme', next);
-  });
+  // One surface, on purpose: warm paper. A design that commits to a single set
+  // of conditions is better than one that hedges across two, and every colour
+  // decision here is made for this light. Any theme somebody set before is
+  // cleared rather than silently honoured.
+  delete document.documentElement.dataset.theme;
+  localStorage.removeItem('crucible-theme');
 
   const flipLang = () => {
     setLang(lang === 'ar' ? 'en' : 'ar');
@@ -999,48 +995,109 @@ const flowLegend = (flow) => !flow ? '' : `
       ${flow.humanGates} ${esc(t('human rulings'))} · ${flow.memoryRecalls} ${esc(t('memory recalls'))}</span>
   </div>`;
 
-// ---------- map style switcher ----------
-// Two maps, not six. The Hive answers "what is this company and how is it
-// joined together"; the Stream answers "where is the work right now". Six
-// variations on the first question were five too many, and none of them
-// answered the second.
-// Both are driven by the same /api/map payload and share one interaction
-// engine (initAtlas): click opens the department, right-click opens its
-// connection ledger and trace, clicking a line explains the relationship,
-// drag/wheel pans and zooms, and the live ticker + pings work in both.
-const MAP_STYLES = [
-  ['hive', 'The Hive', '⬡', 'Every department as a cell, grouped into districts — hover one to see only what it touches'],
-  ['stream', 'The Stream', '⇄', 'Where work actually is: intake to produce to review to audit to the gate, loops included'],
-];
-// Anyone who used the old maps has a dead style name in localStorage; only the
-// two that exist now are honoured.
-const mapStyle = () => {
-  const s = localStorage.getItem('crucible-map-style');
-  return MAP_STYLES.some((m) => m[0] === s) ? s : 'hive';
+// ---------- the atlas ----------
+// One map, two depths. Far: every district as a tree growing out of a dense
+// core, names set around the rim in the serif. Near: one district, its
+// departments as chips, with the district name ghosted enormous behind them.
+//
+// The previous two maps each answered half the question and made you choose
+// which half. A map you zoom answers both, and the act of zooming is itself the
+// explanation — the branch you followed is the relationship.
+//
+// Geometry is deterministic: the same company always draws the same picture, so
+// you learn where things are and they stay there.
+
+const ATLAS_R = { core: 66, trunk: 182, fork: 268, leaf: 330, rim: 476 };
+
+/** Which district the near view is showing, or null for the whole company. */
+let atlasZoom = localStorage.getItem('crucible-atlas-zoom') || null;
+
+/**
+ * A small, curated glyph set. Every department gets a mark; the mark is chosen
+ * by what the department does rather than by which division it sits in, so two
+ * writing desks look alike even when they report to different places.
+ */
+const NODE_GLYPH = {
+  write: '<path d="M3 13L13 3l2 2L5 15H3z"/>',
+  search: '<circle cx="7.5" cy="7.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  people: '<circle cx="9" cy="6" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4 15c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+  money: '<path d="M9 3v12M6.2 6.2c0-1 1.2-1.8 2.8-1.8s2.8.8 2.8 1.8-1.2 1.5-2.8 1.9-2.8.9-2.8 1.9 1.2 1.8 2.8 1.8 2.8-.8 2.8-1.8" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+  chart: '<path d="M4 14V8M9 14V4M14 14v-4" stroke="currentColor" stroke-width="1.7" fill="none"/>',
+  shield: '<path d="M9 3l5 2v4c0 3.2-2.1 5.6-5 6.4C6.1 14.6 4 12.2 4 9V5z" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  gate: '<rect x="4" y="4" width="10" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 4v10" stroke="currentColor" stroke-width="1.4"/>',
+  build: '<path d="M4 14V7l5-3 5 3v7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 14v-4h4v4" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  data: '<ellipse cx="9" cy="5.5" rx="4.6" ry="1.9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.4 5.5v7c0 1 2 1.9 4.6 1.9s4.6-.9 4.6-1.9v-7" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  flow: '<path d="M3 9h5M10 9h5" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9" r="1.6"/>',
+  clock: '<circle cx="9" cy="9" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 6v3.4l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  bell: '<path d="M9 3.6a3.6 3.6 0 013.6 3.6v3l1 1.8H4.4l1-1.8v-3A3.6 3.6 0 019 3.6z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7.6 14a1.5 1.5 0 002.8 0" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  globe: '<circle cx="9" cy="9" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.4 9h11.2M9 3.4c1.6 1.7 2.5 3.5 2.5 5.6S10.6 12.9 9 14.6C7.4 12.9 6.5 11.1 6.5 9S7.4 5.1 9 3.4z" fill="none" stroke="currentColor" stroke-width="1.2"/>',
+  chat: '<path d="M3.6 5.4h10.8v6.2H9l-3.4 2.6v-2.6H3.6z" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  doc: '<path d="M5 3.4h5.4L13 6v8.6H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.4 3.4V6H13" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  spark: '<path d="M9 3l1.5 4.5L15 9l-4.5 1.5L9 15l-1.5-4.5L3 9l4.5-1.5z"/>',
+  key: '<circle cx="6" cy="9" r="2.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.8 9H15M12.5 9v2.4M14.2 9v1.8" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  box: '<rect x="4" y="5" width="10" height="9" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4 8h10" stroke="currentColor" stroke-width="1.2"/>',
+  cart: '<path d="M3.4 4.4h2l1.6 7h6l1.4-5H6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="14" r="1.1"/><circle cx="12.4" cy="14" r="1.1"/>',
+  eye: '<path d="M2.6 9S5 5 9 5s6.4 4 6.4 4-2.4 4-6.4 4S2.6 9 2.6 9z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="1.7"/>',
 };
-function buildMap(m) {
-  const s = mapStyle();
-  if (atlasState.style !== s) {
-    atlasState.style = s;
-    atlasState.vb = null; atlasState.sel = null; atlasState.traceFrom = null; atlasState.divSel = null;
+
+/** Keyword → glyph. First match wins, so order is the priority. */
+const GLYPH_RULES = [
+  [/chat|floor|comms|society|relations|support/, 'chat'],
+  [/intel|search|marketwatch|insight|knowledge|kgraph|graph/, 'search'],
+  [/people|org|recruit|workforce|agents|academy|talent|enable/, 'people'],
+  [/finance|money|budget|treasury|finops|pricing|revenue|invoice|capital/, 'money'],
+  [/scorecard|report|eval|quality|analytic|observe|metric|insights/, 'chart'],
+  [/security|compliance|trust|redteam|provenance|sustain|legal|risk/, 'shield'],
+  [/gate|approval|oversight|decision|pmo|governance|constitution/, 'gate'],
+  [/system|infra|product|lab|release|project|sprint|build|package|journey/, 'build'],
+  [/data|dataset|archive|segment|memory|backup/, 'data'],
+  [/run|pipeline|workstream|task|queue|job|autopilot|harmony|nexus/, 'flow'],
+  [/time|period|chief|ritual|capacity/, 'clock'],
+  [/incident|alert|dispute|problem/, 'bell'],
+  [/connector|web|mcp|egress|tenant|webhook|localization/, 'globe'],
+  [/content|doc|brand|design|social|marketing|mkt|campaign|artifact|blueprint/, 'doc'],
+  [/vault|key|user|setting|auth/, 'key'],
+  [/asset|vendor|procure|inventory/, 'box'],
+  [/sale|deal|customer|success|commerce/, 'cart'],
+  [/audit|watch|monitor|trace/, 'eye'],
+  [/skill|simulation|experiment|idea/, 'spark'],
+];
+
+const glyphFor = (id) => {
+  const s = String(id).toLowerCase();
+  for (const [re, g] of GLYPH_RULES) if (re.test(s)) return g;
+  return 'flow';
+};
+
+/**
+ * A district's tree. Departments are dealt into branches of at most four, each
+ * branch given a slice of the district's angle, and leaves placed at three
+ * depths so a crowded district reads as depth rather than as a picket fence.
+ */
+function districtTree(items, angle, slice) {
+  const branches = [];
+  const perBranch = 4;
+  const count = Math.max(1, Math.ceil(items.length / perBranch));
+  for (let b = 0; b < count; b++) {
+    const mine = items.slice(b * perBranch, (b + 1) * perBranch);
+    if (!mine.length) continue;
+    // Branches fan out inside the slice; a single branch sits on the centreline.
+    const spread = slice * 0.72;
+    const at = count === 1 ? angle : angle - spread / 2 + (spread * b) / (count - 1);
+    const leaves = mine.map((item, i) => {
+      const depth = i % 3;
+      const r = ATLAS_R.leaf + depth * 44;
+      const wobble = (((i % 2) ? 1 : -1) * (0.6 + i * 0.5) * slice) / 22;
+      return { item, a: at + wobble, r };
+    });
+    branches.push({ at, leaves });
   }
-  return s === 'stream' ? buildStream(m) : buildHive(m);
+  return branches;
 }
 
-// ---------- map I · The Hive ----------
-// Eighty-one departments drawn as hexagonal cells packed into twelve districts.
-// Two decisions carry this design:
-//
-//   1. Hexagons tile with no wasted space and six neighbours each, so a dense
-//      company reads as a dense honeycomb rather than a scatter of boxes.
-//   2. Relationships are NOT drawn by default. Two hundred lines at rest is
-//      noise; the same lines revealed for one cell at a time is an answer.
-//      Hover a cell and only its own connections appear.
-function buildHive(map) {
-  const { divisions, sections, edges, harmony, audit: connAudit, flow } = map;
-  const R = 46;                       // hex radius
-  const HW = Math.sqrt(3) * R;        // horizontal spacing
-  const HV = R * 1.5;                 // vertical spacing
+/** The whole company: districts radiating from the core. */
+function buildAtlasFar(map) {
+  const { divisions, sections, harmony, audit: connAudit, flow } = map;
   const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
   for (const s of sections) {
     if (s.id === 'harmony') continue;
@@ -1048,274 +1105,197 @@ function buildHive(map) {
   }
   const divs = divisions.filter((d) => byDiv[d.id].items.length);
 
-  // Districts sit on a ring around the core, each one a compact hex block.
-  const CX = 980, CY = 700;
-  const cell = {};
-  const districts = [];
+  // The one deliberate distortion: everything is stretched sideways, because a
+  // circle in a widescreen panel wastes half the page. The core stays round so
+  // the eye still reads a centre.
+  const XS = 1.46;
+  const CX = 940, CY = 640;
+  const slice = (Math.PI * 2) / divs.length;
+  const px = (a, r) => CX + Math.cos(a) * r * XS;
+  const py = (a, r) => CY + Math.sin(a) * r;
 
-  // A fixed ring cannot hold twelve districts of wildly different sizes: a
-  // nine-cell block and a three-cell block placed at the same radius either
-  // collide or leave a hole. So each district is measured first, seeded on an
-  // alternating inner/outer ring, and then pushed apart until nothing overlaps
-  // anything — including the core and each other's name plates.
-  const LABEL_BAND = 44;                // room above a block for its name
-  const GAP = 22;                       // breathing space between districts
-  const plan = divs.map((d, di) => {
+  const districts = divs.map((d, i) => {
+    // Start at the top and go clockwise, so the first district is where the eye
+    // lands rather than where the maths happens to begin.
+    const angle = i * slice - Math.PI / 2;
     const items = byDiv[d.id].items;
-    const cols = items.length > 8 ? 3 : items.length > 3 ? 2 : 1;
-    const rows = Math.ceil(items.length / cols);
-    // Offsets of every cell relative to the block origin, measured exactly —
-    // odd rows are nudged half a hex, so the extents are not symmetric.
-    const offs = items.map((s, i) => {
-      const col = i % cols, row = Math.floor(i / cols);
-      return { s, dx: (col - (cols - 1) / 2) * HW + (row % 2 ? HW / 2 : 0), dy: (row - (rows - 1) / 2) * HV };
-    });
-    const left = Math.min(...offs.map((o) => o.dx)) - R;
-    const right = Math.max(...offs.map((o) => o.dx)) + R;
-    const top = Math.min(...offs.map((o) => o.dy)) - R - LABEL_BAND;
-    const bottom = Math.max(...offs.map((o) => o.dy)) + R;
-    const ang = (di / divs.length) * Math.PI * 2 - Math.PI / 2;
-    const ring = di % 2 ? 715 : 455;
-    return {
-      d, items, offs, left, right, top, bottom, ang,
-      x: CX + Math.cos(ang) * ring * 1.06,
-      y: CY + Math.sin(ang) * ring * 0.72,
-    };
-  });
+    const branches = districtTree(items, angle, slice);
 
-  const CORE = 170;                     // keep the Harmony hexagon clear
-  for (let pass = 0; pass < 220; pass++) {
-    let moved = false;
-    for (let i = 0; i < plan.length; i++) {
-      for (let j = i + 1; j < plan.length; j++) {
-        const a = plan[i], b = plan[j];
-        const ox = Math.min(a.x + a.right, b.x + b.right) - Math.max(a.x + a.left, b.x + b.left) + GAP;
-        const oy = Math.min(a.y + a.bottom, b.y + b.bottom) - Math.max(a.y + a.top, b.y + b.top) + GAP;
-        if (ox <= 0 || oy <= 0) continue;
-        moved = true;
-        // Separate along the cheaper axis — it keeps the ring recognisable
-        // instead of flinging blocks diagonally across the canvas.
-        const s = (ox < oy ? ox : oy) / 2 + 0.5;
-        if (ox < oy) { const dir = a.x <= b.x ? -1 : 1; a.x += dir * s; b.x -= dir * s; }
-        else { const dir = a.y <= b.y ? -1 : 1; a.y += dir * s; b.y -= dir * s; }
-      }
-      // Push out of the core, then off the canvas edges.
-      const p = plan[i];
-      const dx = p.x - CX, dy = p.y - CY, dist = Math.hypot(dx, dy) || 1;
-      const need = CORE + Math.max(Math.abs(p.left), p.right, Math.abs(p.top), p.bottom) * 0.55;
-      if (dist < need) { p.x = CX + (dx / dist) * need; p.y = CY + (dy / dist) * need; moved = true; }
-    }
-    if (!moved) break;
-  }
+    const trunk = { x: px(angle, ATLAS_R.trunk), y: py(angle, ATLAS_R.trunk) };
+    // Every district has its own trunk node, joined to the core by a single
+    // thin line. Without it the stems all converge on one point and the drawing
+    // reads as a starburst rather than as thirteen trees.
+    const root = `M ${px(angle, ATLAS_R.core + 6).toFixed(1)} ${py(angle, ATLAS_R.core + 6).toFixed(1)} L ${trunk.x.toFixed(1)} ${trunk.y.toFixed(1)}`;
 
-  // Re-centre whatever the relaxation produced, then lay the cells down.
-  const span = {
-    x0: Math.min(...plan.map((p) => p.x + p.left)), x1: Math.max(...plan.map((p) => p.x + p.right)),
-    y0: Math.min(...plan.map((p) => p.y + p.top)), y1: Math.max(...plan.map((p) => p.y + p.bottom)),
-  };
-  const shiftX = CX - (span.x0 + span.x1) / 2, shiftY = CY - (span.y0 + span.y1) / 2;
-  // Relaxation settles into a square, but the map lives in a wide panel — a
-  // square viewBox would letterbox and shrink every label. Spreading the
-  // districts sideways only ever widens the gaps between them, so it is safe.
-  const aspect = (span.x1 - span.x0) / (span.y1 - span.y0);
-  const stretch = Math.min(2.1, Math.max(1, 1.95 / aspect));
-  for (const p of plan) {
-    const ox = CX + (p.x + shiftX - CX) * stretch, oy = p.y + shiftY;
-    const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
-    for (const o of p.offs) {
-      const x = ox + o.dx, y = oy + o.dy;
-      cell[o.s.id] = { x, y, color: p.d.color, div: p.d.id, s: o.s };
-      box.x0 = Math.min(box.x0, x); box.y0 = Math.min(box.y0, y);
-      box.x1 = Math.max(box.x1, x); box.y1 = Math.max(box.y1, y);
-    }
-    districts.push({ ...p.d, n: p.items.length, ...box, labelX: ox, labelY: box.y0 - R - 26 });
-  }
+    const lines = `<path class="at-branch" d="${root}"/>` + branches.map((b) => {
+      const fx = px(b.at, ATLAS_R.fork), fy = py(b.at, ATLAS_R.fork);
+      const stem = `M ${trunk.x.toFixed(1)} ${trunk.y.toFixed(1)} Q ${((trunk.x + fx) / 2).toFixed(1)} ${((trunk.y + fy) / 2).toFixed(1)} ${fx.toFixed(1)} ${fy.toFixed(1)}`;
+      const twigs = b.leaves.map((l) => {
+        const lx = px(l.a, l.r), ly = py(l.a, l.r);
+        return `<path class="at-branch" d="M ${fx.toFixed(1)} ${fy.toFixed(1)} Q ${(fx * 0.35 + lx * 0.65).toFixed(1)} ${(fy * 0.35 + ly * 0.65).toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)}"/>`;
+      }).join('');
+      return `<path class="at-branch" d="${stem}"/>${twigs}`;
+    }).join('')
+      + `<circle class="at-leaf" cx="${trunk.x.toFixed(1)}" cy="${trunk.y.toFixed(1)}" r="2.6" opacity="0.5"/>`;
 
-  const hexPath = (x, y) => {
-    const p = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 180) * (60 * i - 90);
-      p.push(`${(x + R * Math.cos(a)).toFixed(1)} ${(y + R * Math.sin(a)).toFixed(1)}`);
-    }
-    return `M ${p.join(' L ')} Z`;
-  };
+    const leaves = branches.flatMap((b) => b.leaves).map((l) => {
+      // A department with nothing in it yet is drawn hollow — present, not busy.
+      const live = l.item.count > 0;
+      const cx = px(l.a, l.r).toFixed(1), cy = py(l.a, l.r).toFixed(1);
+      const title = `<title>${esc(sectionName(l.item.id, l.item.label))} · ${live ? l.item.count : t('empty')}</title>`;
+      return live
+        ? `<circle class="at-leaf" cx="${cx}" cy="${cy}" r="3.2">${title}</circle>`
+        : `<circle class="at-leaf-ring" cx="${cx}" cy="${cy}" r="2.6">${title}</circle>`;
+    }).join('');
 
-  // Links are laid down once but start invisible; the interaction layer lights
-  // the ones belonging to whatever you point at.
-  const maxCount = Math.max(...edges.map((e) => e.count), 1);
-  const links = edges.map((e, i) => {
-    const a = cell[e.from]; const b = cell[e.to];
-    if (!a || !b || e.from === e.to) return '';
-    const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
-    const bx = mx + (CX - mx) * 0.42; const by = my + (CY - my) * 0.42;
-    const w = e.count ? 1.2 + (Math.log10(e.count + 1) / Math.log10(maxCount + 1)) * 3 : 0.8;
-    const d = `M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${bx.toFixed(1)} ${by.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
-    return `<path class="cx-edge hv-link ${e.count ? 'live' : 'dormant'}" data-edge="${i}" data-a="${esc(e.from)}" data-b="${esc(e.to)}"
-      d="${d}" stroke="${a.color}" stroke-width="${w.toFixed(2)}"${edgeAttrs(e)} fill="none"/>
-      <path class="cx-hit" data-edgehit="${i}" d="${d}" fill="none"><title>${esc(e.from)} → ${esc(e.to)} · ${esc(e.label)} (${e.count})</title></path>`;
+    const lx = px(angle, ATLAS_R.rim);
+    const ly = py(angle, ATLAS_R.rim);
+    const sample = items.slice(0, 3).map((x) => sectionName(x.id, x.label).toLowerCase()).join(' · ');
+
+    return `<g class="at-district" data-district="${esc(d.id)}" style="color:${d.color}">
+      ${lines}${leaves}
+      <text class="at-dname" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}">${esc(divisionName(d.id, d.label))}</text>
+      <text class="at-dsub" x="${lx.toFixed(1)}" y="${(ly + 15).toFixed(1)}">${esc(short(sample, 36))}</text>
+      <ellipse class="at-hit" cx="${lx.toFixed(1)}" cy="${(ly - 2).toFixed(1)}" rx="96" ry="34"/>
+    </g>`;
   }).join('');
 
-  const districtShapes = districts.map((d) => `
-    <rect class="hv-district" data-divlabel="${esc(d.id)}" rx="34"
-      x="${(d.x0 - R - 16).toFixed(1)}" y="${(d.y0 - R - 14).toFixed(1)}"
-      width="${(d.x1 - d.x0 + R * 2 + 32).toFixed(1)}" height="${(d.y1 - d.y0 + R * 2 + 28).toFixed(1)}"
-      stroke="${d.color}"/>
-    <text class="hv-dname" data-divlabel="${esc(d.id)}" x="${d.labelX.toFixed(1)}" y="${d.labelY.toFixed(1)}" fill="${d.color}">
-      ${esc(divisionName(d.id, d.label))}<tspan class="hv-dn"> ${d.n}</tspan></text>`).join('');
-
-  // Wrap on words to the width a hexagon actually has, rather than cutting at
-  // a fixed character count — "Marketing depar…" told you nothing.
-  const wrapCell = (label) => {
-    const out = [];
-    for (const w of String(label).split(/\s+/)) {
-      if (out.length && (out[out.length - 1] + ' ' + w).length <= 11) out[out.length - 1] += ' ' + w;
-      else out.push(w);
-    }
-    if (out.length > 2) return [out[0], short(out.slice(1).join(' '), 11)];
-    return [out[0] || '', out[1] || ''];
-  };
-  const cells = Object.values(cell).map((c) => {
-    const label = sectionName(c.s.id, c.s.label);
-    const [line1, line2] = wrapCell(label);
-    return `<a href="${c.s.href}" data-node="${esc(c.s.id)}" data-color="${c.color}" data-label="${esc(label)}"
-      data-hint="${esc(c.s.hint)}" data-count="${c.s.count}" data-div="${esc(c.div)}" style="color:${c.color}">
-      <g class="hv-cell">
-        <path class="hv-hex" d="${hexPath(c.x, c.y)}" stroke="${c.color}"/>
-        <path class="hv-glow" d="${hexPath(c.x, c.y)}" stroke="${c.color}"/>
-        <text class="hv-label" x="${c.x.toFixed(1)}" y="${(c.y - (line2 ? 6 : 1)).toFixed(1)}">${esc(short(line1, 13))}</text>
-        ${line2 ? `<text class="hv-label" x="${c.x.toFixed(1)}" y="${(c.y + 9).toFixed(1)}">${esc(line2)}</text>` : ''}
-        <text class="hv-count" x="${c.x.toFixed(1)}" y="${(c.y + (line2 ? 26 : 20)).toFixed(1)}">${c.s.count}</text>
-        <circle class="hv-led ${c.s.count > 0 ? 'on' : ''}" cx="${c.x.toFixed(1)}" cy="${(c.y - R + 13).toFixed(1)}" r="2.6"/>
-      </g></a>`;
+  // The core: a small cloud for the orchestrator and the chain beneath it.
+  // Deterministic scatter, so it is the same cloud every time.
+  const dots = Array.from({ length: 52 }, (_, i) => {
+    const a = i * 2.399963;                        // golden angle
+    const r = ATLAS_R.core * 0.66 * Math.sqrt(i / 52);
+    return `<circle class="at-core-dot" cx="${(CX + Math.cos(a) * r).toFixed(1)}" cy="${(CY + Math.sin(a) * r).toFixed(1)}" r="${(1.6 - i / 52).toFixed(2)}"/>`;
   }).join('');
 
   const hs = harmony?.score ?? 0;
-  const hsColor = hs >= 80 ? 'var(--ok)' : hs >= 55 ? 'var(--warn)' : 'var(--bad)';
-  const coreHex = [0, 1, 2, 3, 4, 5].map((i) => {
-    const a = (Math.PI / 180) * (60 * i - 90);
-    return `${(CX + 118 * Math.cos(a)).toFixed(1)} ${(CY + 118 * Math.sin(a)).toFixed(1)}`;
-  }).join(' L ');
-
-  // The relaxation decides how wide the hive ends up, so the frame follows it
-  // rather than the other way round — no clipped district, no dead margin.
-  const PAD = 56;
-  const vb = {
-    x0: Math.min(...districts.map((d) => d.x0 - R), CX - 400) - PAD,
-    x1: Math.max(...districts.map((d) => d.x1 + R), CX + 400) + PAD,
-    y0: Math.min(...districts.map((d) => d.y0 - R - LABEL_BAND), CY - 400) - PAD,
-    y1: Math.max(...districts.map((d) => d.y1 + R), CY + 400) + PAD + 30,
-  };
-  return `<svg class="constellation atlas hive" viewBox="${vb.x0.toFixed(0)} ${vb.y0.toFixed(0)} ${(vb.x1 - vb.x0).toFixed(0)} ${(vb.y1 - vb.y0).toFixed(0)}" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="The Hive — every department as a cell, grouped into districts">
-    <defs>${MAP_DEFS}
-      <radialGradient id="hiveGlow"><stop offset="0%" stop-color="rgba(255,122,60,0.16)"/><stop offset="100%" stop-color="rgba(255,122,60,0)"/></radialGradient>
-    </defs>
-    <circle cx="${CX}" cy="${CY}" r="360" fill="url(#hiveGlow)"/>
-    ${districtShapes}${links}${cells}
-    <a href="#/harmony" data-node="harmony" data-color="#ff7a3c" data-label="HARMONY"
-       data-hint="The orchestrator. Every district is wired to this cell; hover it to see the whole reach at once."
-       data-count="${hs}" data-div="govern" style="color:#ff7a3c">
-      <g class="hv-core">
-        <path class="hv-corehex" d="M ${coreHex} Z" stroke="${hsColor}"/>
-        <path class="hv-corepulse" d="M ${coreHex} Z" stroke="${hsColor}"/>
-        <text class="cx-core-glyph" x="${CX}" y="${CY - 22}">▲</text>
-        <text class="cx-core-score" x="${CX}" y="${CY + 14}" fill="${hsColor}">${hs}%</text>
-        <text class="cx-core-sub" x="${CX}" y="${CY + 34}">HARMONY</text>
-        <text class="cx-core-sub" x="${CX}" y="${CY + 50}">${connAudit.wired}/${connAudit.sections} WIRED</text>
-      </g>
-    </a>
-    <text class="silk" x="${(vb.x0 + 24).toFixed(0)}" y="${(vb.y1 - 16).toFixed(0)}">${sections.length} ${esc(t('DEPARTMENTS'))} · ${divs.length} ${esc(t('DISTRICTS'))} · ${edges.length} ${esc(t('RELATIONSHIPS'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
+  return `<svg class="atlas-svg" viewBox="150 92 1590 1108" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="The company as a constellation — every district a tree growing from the core">
+    ${districts}
+    <g class="at-core">
+      <circle class="at-core-ring" cx="${CX}" cy="${CY}" r="${ATLAS_R.core}"/>
+      ${dots}
+      <text class="at-core-label" x="${CX}" y="${CY + ATLAS_R.core + 18}">${esc(t('HARMONY'))} ${hs}%</text>
+    </g>
+    <text class="at-foot" x="166" y="1186">${sections.length} ${esc(t('DEPARTMENTS'))} · ${divs.length} ${esc(t('DISTRICTS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
   </svg>`;
 }
 
-// ---------- map II · The Stream ----------
-// Not what the company is — what it is doing. Six stages left to right, the
-// real volume between them, and the two arcs that matter most: work sent back
-// to be improved, and work stopped for a person. Both drawn above the flow so
-// they cannot be mistaken for progress.
-function buildStream(map) {
-  const { edges, flow, sections, harmony } = map;
-  const S = Object.fromEntries(sections.map((s) => [s.id, s]));
-  const n = (id) => S[id]?.count ?? 0;
-  const kindTotal = (kind) => edges.filter((e) => e.kind === kind).reduce((a, e) => a + e.count, 0);
+function buildAtlasNear(map, divId) {
+  const { divisions, sections, edges } = map;
+  const div = divisions.find((d) => d.id === divId) || divisions[0];
+  const items = sections.filter((s) => s.division === div.id && s.id !== 'harmony');
+  const W = 1600, H = 1020;
+  const rootX = W / 2, rootY = H - 118;
 
-  const STAGES = [
-    { id: 'intake', label: 'Intake', sub: 'requests · chat · orchestrator', value: n('requests') + n('chat'), sections: ['requests', 'chat', 'harmony'], color: '#ff7a3c' },
-    { id: 'produce', label: 'Produce', sub: 'employees do the work', value: n('runs'), sections: ['runs', 'workstreams', 'pipelines', 'tasks'], color: '#b78bff' },
-    { id: 'review', label: 'Peer review', sub: 'someone who did not write it', value: flow?.peerReviews ?? kindTotal('review'), sections: ['quality', 'agents'], color: '#5ec3c9' },
-    { id: 'audit', label: 'Audit', sub: 'one standard, every department', value: flow?.audits ?? kindTotal('audit'), sections: ['auditor', 'evals'], color: '#e3a63c' },
-    { id: 'gate', label: 'Human gate', sub: 'a person decides', value: flow?.humanGates ?? n('gate'), sections: ['gate', 'oversight'], color: '#f0685a' },
-    { id: 'land', label: 'Landed', sub: 'shipped · archived · on the chain', value: n('archive'), sections: ['archive', 'artifacts', 'audit'], color: '#6fc487' },
-  ];
-  const W = 1720, H = 780, X0 = 90, GAP = (W - X0 * 2) / (STAGES.length - 1), MID = 420;
-  const max = Math.max(...STAGES.map((s) => s.value), 1);
-  const height = (v) => 26 + (Math.log10(v + 1) / Math.log10(max + 1)) * 210;
+  // Clusters of at most four, fanned across almost a half-circle so the tree
+  // occupies the page rather than a corner of it. Each node gets its own angular
+  // slot inside its cluster, which is what stops two chips landing on top of
+  // each other when a district is crowded.
+  const per = 4;
+  const clusters = [];
+  for (let i = 0; i < items.length; i += per) clusters.push(items.slice(i, i + per));
+  const n = clusters.length;
+  const SPAN = Math.PI * 0.74;                 // wide enough to fan, narrow enough to climb
+  const TOP = -Math.PI / 2;
 
-  const nodes = STAGES.map((s, i) => {
-    const x = X0 + i * GAP;
-    const h = height(s.value);
-    return { ...s, x, h, y0: MID - h / 2, y1: MID + h / 2 };
+  const placed = clusters.map((group, ci) => {
+    const a = n === 1 ? TOP : TOP - SPAN / 2 + (SPAN * ci) / (n - 1);
+    const fork = { x: rootX + Math.cos(a) * 350, y: rootY + Math.sin(a) * 330 };
+    const inner = Math.min(0.5, SPAN / (n * 2.1));
+    const nodes = group.map((sec, i) => {
+      const slot = group.length === 1 ? 0 : (i / (group.length - 1) - 0.5) * 2;
+      const na = a + slot * inner;
+      // Alternating reach gives the cluster depth instead of an arc of beads.
+      const reach = 235 + (i % 2 ? 132 : 0) + Math.floor(i / 2) * 60;
+      return { sec, x: fork.x + Math.cos(na) * reach, y: fork.y + Math.sin(na) * reach };
+    });
+    return { a, fork, nodes, group };
   });
 
-  // Ribbons between consecutive stages, thickness carried by the smaller end.
-  const ribbons = nodes.slice(0, -1).map((a, i) => {
-    const b = nodes[i + 1];
-    const t = Math.min(a.h, b.h) * 0.82;
-    const ay0 = MID - t / 2, ay1 = MID + t / 2;
-    const c1 = a.x + 76, c2 = b.x - 76;
-    return `<path class="st-ribbon" d="M ${a.x + 74} ${ay0} C ${c1 + 60} ${ay0}, ${c2 - 60} ${ay0}, ${b.x - 74} ${ay0}
-      L ${b.x - 74} ${ay1} C ${c2 - 60} ${ay1}, ${c1 + 60} ${ay1}, ${a.x + 74} ${ay1} Z"
-      fill="url(#grad${i})"/>
-      <path class="st-spark" d="M ${a.x + 74} ${MID} C ${c1 + 60} ${MID}, ${c2 - 60} ${MID}, ${b.x - 74} ${MID}" stroke="${b.color}"/>`;
+  const drawn = placed.map(({ fork, nodes, group }) => {
+    const stem = `<path class="at-edge" d="M ${rootX} ${rootY - 26} Q ${(rootX + (fork.x - rootX) * 0.42).toFixed(1)} ${(rootY + (fork.y - rootY) * 0.72).toFixed(1)} ${fork.x.toFixed(1)} ${fork.y.toFixed(1)}"/>`;
+    const twigs = nodes.map((nd) => `<path class="at-edge" d="M ${fork.x.toFixed(1)} ${fork.y.toFixed(1)} Q ${((fork.x + nd.x) / 2).toFixed(1)} ${((fork.y + nd.y) / 2 - 14).toFixed(1)} ${nd.x.toFixed(1)} ${nd.y.toFixed(1)}"/>`).join('');
+
+    const chips = nodes.map((nd) => {
+      const live = nd.sec.count > 0;
+      const label = sectionName(nd.sec.id, nd.sec.label);
+      return `<a class="at-node ${live ? '' : 'hollow'}" href="${nd.sec.href}" data-node="${esc(nd.sec.id)}"
+        data-color="${div.color}" data-label="${esc(label)}" data-hint="${esc(nd.sec.hint)}"
+        data-count="${nd.sec.count}" data-div="${esc(div.id)}">
+        ${live
+          ? `<circle class="at-chip" cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="17"/>`
+          : `<circle class="at-chip-ring" cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="17"/>`}
+        <g class="at-chip-glyph" style="color:${live ? 'var(--paper)' : 'var(--ink)'};fill:${live ? 'var(--paper)' : 'var(--ink)'}"
+           transform="translate(${(nd.x - 9).toFixed(1)}, ${(nd.y - 9).toFixed(1)})">${NODE_GLYPH[glyphFor(nd.sec.id)]}</g>
+        <text class="at-nlabel" x="${nd.x.toFixed(1)}" y="${(nd.y + 33).toFixed(1)}">${esc(short(label, 24))}</text>
+        <title>${esc(label)} · ${live ? `${nd.sec.count} ${t('records')}` : t('empty')}</title>
+      </a>`;
+    }).join('');
+
+    // The cluster is named after the work in it, set above the highest node in
+    // the reference's manner: small, wide-tracked, and out of the way.
+    const top = nodes.reduce((acc, b) => (b.y < acc.y ? b : acc), nodes[0]);
+    return `${stem}${twigs}
+      <text class="at-cluster" x="${top.x.toFixed(1)}" y="${(top.y - 44).toFixed(1)}">${esc(short(sectionName(group[0].id, group[0].label), 20))}
+        <tspan class="at-cluster-n" x="${top.x.toFixed(1)}" dy="12">${group.length} ${esc(t('sections'))}</tspan></text>
+      ${chips}`;
   }).join('');
 
-  const grads = nodes.slice(0, -1).map((a, i) => `
-    <linearGradient id="grad${i}" x1="0" x2="1">
-      <stop offset="0%" stop-color="${a.color}" stop-opacity="0.30"/>
-      <stop offset="100%" stop-color="${nodes[i + 1].color}" stop-opacity="0.30"/>
-    </linearGradient>`).join('');
+  const total = items.reduce((a, x) => a + x.count, 0);
+  const related = edges.filter((e) => items.some((x) => x.id === e.from) || items.some((x) => x.id === e.to)).length;
 
-  const pillars = nodes.map((s) => `
-    <a href="${S[s.sections[0]]?.href || '#/'}" data-node="${esc(s.sections[0])}" data-color="${s.color}"
-       data-label="${esc(t(s.label))}" data-hint="${esc(t(s.sub))}" data-count="${s.value}" style="color:${s.color}">
-      <g class="st-stage">
-        <rect class="st-pillar" x="${s.x - 74}" y="${s.y0.toFixed(1)}" width="148" height="${s.h.toFixed(1)}" rx="16" stroke="${s.color}"/>
-        <text class="st-num" x="${s.x}" y="${(MID + 8).toFixed(1)}" fill="${s.color}">${s.value}</text>
-        <text class="st-label" x="${s.x}" y="${(s.y1 + 34).toFixed(1)}">${esc(t(s.label))}</text>
-        <text class="st-sub" x="${s.x}" y="${(s.y1 + 52).toFixed(1)}">${esc(t(s.sub))}</text>
-        <g class="st-chips">${s.sections.map((k, j) => S[k]
-          ? `<text class="st-chip" x="${s.x}" y="${(s.y1 + 72 + j * 15).toFixed(1)}">${esc(sectionName(k, S[k].label))} · ${S[k].count}</text>` : '').join('')}
-        </g>
-      </g></a>`).join('');
+  return `<svg class="atlas-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="${esc(divisionName(div.id, div.label))} — its departments and how they connect"
+    style="color:${div.color}">
+    <text class="at-ghost" x="${rootX}" y="${(rootY - 430).toFixed(0)}" style="font-size:196px">${esc(divisionName(div.id, div.label))}</text>
+    ${drawn}
+    <g class="at-node">
+      <circle class="at-chip-ring" cx="${rootX}" cy="${rootY}" r="21" style="stroke:${div.color}"/>
+      <g class="at-chip-glyph" style="fill:${div.color}" transform="translate(${rootX - 9}, ${rootY - 9})">${NODE_GLYPH.flow}</g>
+    </g>
+    <text class="at-dname" x="${rootX}" y="${rootY + 50}" style="fill:${div.color}">${esc(divisionName(div.id, div.label))}</text>
+    <text class="at-dsub" x="${rootX}" y="${rootY + 68}">${items.length} ${esc(t('sections'))} · ${total} ${esc(t('records'))} · ${related} ${esc(t('relationships'))}</text>
 
-  // The two arcs that are not progress.
-  const loopFrom = nodes[3].x, loopTo = nodes[1].x;
-  const sentBack = flow?.sentBack ?? 0;
-  const revisions = flow?.revisions ?? 0;
-  const gateStops = flow?.humanGates ?? 0;
-  const arcs = `
-    <path class="st-loop" d="M ${loopFrom} ${nodes[3].y0 - 12} C ${loopFrom - 120} ${MID - 320}, ${loopTo + 120} ${MID - 320}, ${loopTo} ${nodes[1].y0 - 12}"/>
-    <text class="st-arclabel" x="${((loopFrom + loopTo) / 2).toFixed(1)}" y="${(MID - 296).toFixed(1)}">
-      ${sentBack} ${esc(t('sent back to be improved'))} · ${revisions} ${esc(t('revision rounds run')).replace('rounds run', revisions === 1 ? 'round run' : 'rounds run')}
-    </text>
-    <path class="st-gatearc" d="M ${nodes[4].x} ${nodes[4].y1 + 96} C ${nodes[4].x - 60} ${MID + 300}, ${nodes[1].x + 60} ${MID + 300}, ${nodes[1].x} ${nodes[1].y1 + 96}"/>
-    <text class="st-arclabel low" x="${((nodes[4].x + nodes[1].x) / 2).toFixed(1)}" y="${(MID + 318).toFixed(1)}">
-      ${gateStops} ${esc(t('human rulings — rejected work returns to the maker')).replace('rulings', gateStops === 1 ? 'ruling' : 'rulings')}
-    </text>`;
-
-  const hs = harmony?.score ?? 0;
-  return `<svg class="constellation atlas stream" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="The Stream — where work is right now, from intake to landed">
-    <defs>${MAP_DEFS}${grads}</defs>
-    ${ribbons}${arcs}${pillars}
-    <text class="silk" x="34" y="${H - 22}">${esc(t('HARMONY'))} ${hs}% · ${flow?.departmentsTouched ?? 0} ${esc(t('DEPARTMENTS TOUCHED'))} · ${flow?.reviewersInvolved ?? 0} ${esc(t('REVIEWERS'))} · ${flow?.memoryRecalls ?? 0} ${esc(t('MEMORY RECALLS'))}</text>
-    <text class="silk" x="${W - 34}" y="${H - 22}" text-anchor="end">${esc(t('WIDTH = REAL VOLUME · ARCS ABOVE AND BELOW ARE NOT PROGRESS'))}</text>
+    <g class="at-stepper">
+      <path class="at-step" d="M 56 ${rootY - 40} l -12 10 l 12 10"/>
+      <rect class="at-step-hit" data-step="-1" x="24" y="${rootY - 68}" width="64" height="66"/>
+      <path class="at-step" d="M ${W - 56} ${rootY - 40} l 12 10 l -12 10"/>
+      <rect class="at-step-hit" data-step="1" x="${W - 88}" y="${rootY - 68}" width="64" height="66"/>
+    </g>
   </svg>`;
+}
+
+/** The map, at whichever depth you are standing. */
+function buildMap(m) {
+  const known = m.divisions.some((d) => d.id === atlasZoom);
+  if (atlasZoom && !known) atlasZoom = null;
+  if (atlasState.style !== (atlasZoom || 'far')) {
+    atlasState.style = atlasZoom || 'far';
+    atlasState.vb = null; atlasState.sel = null; atlasState.traceFrom = null; atlasState.divSel = null;
+  }
+  return atlasZoom ? buildAtlasNear(m, atlasZoom) : buildAtlasFar(m);
+}
+
+/** Walking the rim, and going in and out. */
+function atlasGoTo(divId) {
+  atlasZoom = divId;
+  if (divId) localStorage.setItem('crucible-atlas-zoom', divId);
+  else localStorage.removeItem('crucible-atlas-zoom');
+  const r = routes[currentRoute().key];
+  if (r) r.render(currentRoute().arg).then(() => translateDom(view)).catch(() => {});
+}
+
+function atlasStep(delta) {
+  const ids = (CATALOG.divisions || []).map((d) => d.id);
+  if (!ids.length) return;
+  const at = ids.indexOf(atlasZoom);
+  atlasGoTo(ids[(at + delta + ids.length) % ids.length]);
 }
 
 /** Pan/zoom, hover isolation, click-to-inspect, hop-by-hop flow tracing. */
 function initAtlas(map) {
-  const svg = view.querySelector('svg.constellation.atlas');
+  const svg = view.querySelector('svg.atlas-svg');
   if (!svg) return;
   const panel = svg.closest('.panel');
   panel.style.position = 'relative';
@@ -2015,25 +1995,36 @@ async function renderOverview() {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
 
+  // The map and the numbers are two different questions, so they are two
+  // views rather than one long scroll. Both are rendered; the switch decides
+  // which one is on screen, which keeps the toggle instant.
+  const tab = localStorage.getItem('crucible-overview-tab') === 'dashboards' ? 'dashboards' : 'map';
+  const here = atlasZoom && mapData ? mapData.divisions.find((d) => d.id === atlasZoom) : null;
+
   view.innerHTML = `
-  <div class="panel">
-    <div class="panel-title">
-      <span>${esc(t('The company as it actually is'))} — ${mapData ? `${mapData.sections.length} ${esc(t('sections'))} · ${mapData.edges.filter((e) => e.count > 0).length}/${mapData.edges.length} ${esc(t('relationships live'))}` : esc(t('system map'))}</span>
-      <span>
-        <span class="map-style-picker">${MAP_STYLES.map(([k, label, icon, hint]) =>
-          `<button data-mapstyle="${k}" class="${mapStyle() === k ? 'on' : ''}" title="${esc(t(hint))}"><b>${icon}</b>${esc(t(label))}</button>`).join('')}</span>
-        ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}${mapData.audit.orphans.length ? ` · ${mapData.audit.orphans.length} ${esc(t('orphan'))}` : ` · ${esc(t('no orphans'))}`}</span>` : ''}
+  <div class="panel" style="border-top:none;padding-top:0">
+    <div class="panel-title" style="justify-content:center;position:relative">
+      <span class="atlas-switch">
+        <button data-ovtab="map" class="${tab === 'map' ? 'on' : ''}">${esc(t('Map'))}</button>
+        <button data-ovtab="dashboards" class="${tab === 'dashboards' ? 'on' : ''}">${esc(t('Dashboards'))}</button>
+      </span>
+      <span style="position:absolute;inset-inline-end:0;display:flex;gap:var(--s2);align-items:center">
+        ${here ? `<button class="btn btn-sm" data-atlasout>← ${esc(t('the whole company'))}</button>` : ''}
+        ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}</span>` : ''}
         <a class="chip chip-dim" style="text-decoration:none" href="#/graph">${esc(t('relationship table'))} →</a>
       </span>
     </div>
-    ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
-    ${flowLegend(mapData?.flow)}
-    <div class="map-legend">${esc(t(mapStyle() === 'stream'
-      ? 'The Stream: six stages of one piece of work. A pillar is as tall as the volume actually sitting in it, a ribbon as thick as the work crossing between two stages, and the two arcs are the paths that are not progress — work sent back to be improved, and rulings a person made.'
-      : 'The Hive: one cell per department, cells grouped into the district that owns them, and the orchestrator in the middle. Relationships stay hidden until you point at a cell, because two hundred lines at once is noise and seven lines is an answer.'))}
-      <b>${esc(t('Click'))}</b> ${esc(t('a cell to open that department'))} · <b>${esc(t('right-click'))}</b> ${esc(t('for everything it touches and a hop-by-hop'))} <b>${esc(t('Trace flow'))}</b> · <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))} · ${esc(t('click a relationship line to read what kind of movement it is'))}.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">${esc(t('Unwired'))}: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
+    <div ${tab === 'map' ? '' : 'hidden'}>
+      ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
+      <div class="map-legend">${esc(t(here
+        ? 'One district, and the departments inside it. Each mark is a department; a filled one holds records, a hollow one is declared and still empty. The arrows walk you round the rim.'
+        : 'The whole company as one drawing: a dense core of the orchestrator and the chain, and a tree for every district growing out of it. Every leaf is a department. Point at a district to bring up its colour; open it to go inside.'))}
+        <b>${esc(t('Click'))}</b> ${esc(t('a district to go inside'))} · <b>${esc(t('right-click'))}</b> ${esc(t('for everything it touches and a hop-by-hop'))} <b>${esc(t('Trace flow'))}</b> · <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))}.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">${esc(t('Unwired'))}: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
+      ${flowLegend(mapData?.flow)}
+    </div>
   </div>
 
+  <div ${tab === 'dashboards' ? '' : 'hidden'}>
   <div class="grid grid-4">
     <div class="panel tile">
       <div class="panel-title">Month spend</div>
@@ -2102,12 +2093,29 @@ async function renderOverview() {
         </tbody>
       </table>
     </div>
+  </div>
   </div>`;
   if (mapData) initAtlas(mapData); else initMapInteractivity();
-  view.querySelectorAll('[data-mapstyle]').forEach((b) => b.addEventListener('click', () => {
-    localStorage.setItem('crucible-map-style', b.dataset.mapstyle);
+  view.querySelectorAll('[data-ovtab]').forEach((b) => b.addEventListener('click', () => {
+    localStorage.setItem('crucible-overview-tab', b.dataset.ovtab);
     renderOverview();
   }));
+  view.querySelector('[data-atlasout]')?.addEventListener('click', () => atlasGoTo(null));
+  // Going into a district and walking the rim: the two gestures the map needs
+  // beyond what the shared interaction engine already provides.
+  view.querySelectorAll('[data-district]').forEach((g) => {
+    g.querySelector('.at-hit')?.addEventListener('click', () => atlasGoTo(g.dataset.district));
+    g.querySelector('.at-dname')?.addEventListener('click', () => atlasGoTo(g.dataset.district));
+    g.addEventListener('mouseenter', () => {
+      view.querySelector('.atlas-svg')?.classList.add('focused');
+      g.classList.add('lit');
+    });
+    g.addEventListener('mouseleave', () => {
+      view.querySelector('.atlas-svg')?.classList.remove('focused');
+      g.classList.remove('lit');
+    });
+  });
+  view.querySelectorAll('[data-step]').forEach((r) => r.addEventListener('click', () => atlasStep(Number(r.dataset.step))));
 }
 
 const DEPT_LABEL = {

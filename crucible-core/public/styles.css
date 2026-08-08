@@ -1,85 +1,70 @@
 /* Crucible Core — the operations console.
-   One warm system, two skins: a calm daylight surface and a graphite night.
-   Colour, type and spacing are tokens; every component reads them, so light,
-   dark, LTR and RTL are the same interface wearing different clothes. */
+
+   One surface: warm paper. The whole interface is ink on bone, and colour is
+   held back until you point at something — which is what lets a hundred and two
+   departments sit on one page without shouting. Type does the work instead: a
+   light serif with wide tracking for names and places, a quiet sans for the
+   interface, a mono for anything that is a figure or an identifier.
+
+   Light only, on purpose. A design that commits to one set of conditions is
+   better than one that hedges across two. */
 
 :root {
-  /* Warm neutrals — the console is a workplace, not a spreadsheet. */
-  --bg: #faf7f2;
-  --bg-raise: #ffffff;
-  --bg-panel: #ffffff;
-  --bg-sunk: #f2ede5;
-  --seam: #e4dcd0;
-  --seam-soft: #efe9df;
-  --ink: #1c1917;
-  --ink-mute: #6b6156;
-  --ink-faint: #9a8f80;
-  --ember: #c9501b;          /* AA on light surfaces */
-  --ember-soft: #a8420f;
-  --steel: #1f6b7a;
-  --ok: #2c7a52;
-  --warn: #9a6410;
-  --bad: #b23122;
-  --accent-wash: rgba(201, 80, 27, 0.09);
-  --shadow-pop: 0 10px 34px rgba(28, 25, 23, 0.14);
+  /* Paper and ink */
+  --paper: #f2f0ea;          /* the page itself — warm bone, never white */
+  --paper-raise: #f8f7f3;    /* a panel lifted off it */
+  --paper-sunk: #eae7df;     /* a well pressed into it */
+  --paper-veil: #fbfaf7;     /* overlays, dialogs */
+  --seam: #ded9cf;           /* hairline — the only border weight that exists */
+  --seam-soft: #e9e5dc;
+  --ink: #191714;            /* near-black, warm */
+  --ink-mute: #6a645b;
+  --ink-faint: #9d968a;
+  --ink-ghost: #cfc9bd;      /* the huge type behind the map */
 
-  /* Type: one bilingual family for the interface, a mono for figures.
-     IBM Plex Sans Arabic carries Latin and Arabic in one voice, so the app
-     does not change personality when the language flips. */
-  --font-ui: "IBM Plex Sans Arabic", "Saira", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", "Red Hat Mono", ui-monospace, monospace;
+  /* The single accent. Terracotta, taken from the thin red marks on the
+     reference lines — used for live state, the current thing, and nothing else. */
+  --accent: #b8503a;
+  --accent-soft: #cf7a63;
+  --accent-wash: rgba(184, 80, 58, 0.08);
 
-  /* 4px spatial rhythm */
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
-  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-pill: 999px;
-  --rail: 64px;
-  --t-fast: 140ms; --t-mid: 240ms;
+  /* Status, muted to sit on paper rather than glow on it */
+  --ok: #5d7f5f;
+  --warn: #a07a35;
+  --bad: #a8443a;
+  --steel: #4a6d76;
+
+  /* Compatibility: older rules still name the previous tokens. Mapping them
+     here keeps one source of truth while the components are restyled. */
+  --bg: var(--paper);
+  --bg-raise: var(--paper-raise);
+  --bg-panel: var(--paper-raise);
+  --bg-sunk: var(--paper-sunk);
+  --ember: var(--accent);
+  --ember-soft: var(--accent-soft);
+  --edge: var(--seam);
+  --shadow-pop: 0 18px 48px rgba(25, 23, 20, 0.10);
+  --shadow-soft: 0 2px 10px rgba(25, 23, 20, 0.04);
+
+  /* Type. The serif carries the identity; on Arabic it falls to Sakkal Majalla,
+     which is the closest thing to this voice that ships with the system. */
+  --font-display: 'Cambria', 'Constantia', 'Sakkal Majalla', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Segoe UI', -apple-system, 'Sakkal Majalla', Tahoma, system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, 'IBM Plex Mono', monospace;
+
+  /* Tracking is a design element here, not a flourish: it is what makes a
+     six-letter word read as a place rather than a label. */
+  --track-wide: 0.34em;
+  --track-mid: 0.18em;
+  --track-tight: 0.06em;
+
+  /* 4px rhythm, but the shell breathes at a larger scale than the tables */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 72px;
+  --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
+  --rail: 62px;
+  --t-fast: 140ms; --t-mid: 260ms; --t-slow: 520ms;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  --bg: #14100c;
-  --bg-raise: #1c1713;
-  --bg-panel: #1c1713;
-  --bg-sunk: #100d0a;
-  --seam: #2f2820;
-  --seam-soft: #262019;
-  --ink: #f5efe6;
-  --ink-mute: #a1968a;
-  --ink-faint: #6e6355;
-  --ember: #ff7a3c;
-  --ember-soft: #ffa028;
-  --steel: #5ec3c9;
-  --ok: #6fc487;
-  --warn: #e3a63c;
-  --bad: #f0685a;
-  --accent-wash: rgba(255, 122, 60, 0.13);
-  --shadow-pop: 0 14px 40px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #14100c;
-    --bg-raise: #1c1713;
-    --bg-panel: #1c1713;
-    --bg-sunk: #100d0a;
-    --seam: #2f2820;
-    --seam-soft: #262019;
-    --ink: #f5efe6;
-    --ink-mute: #a1968a;
-    --ink-faint: #6e6355;
-    --ember: #ff7a3c;
-    --ember-soft: #ffa028;
-    --steel: #5ec3c9;
-    --ok: #6fc487;
-    --warn: #e3a63c;
-    --bad: #f0685a;
-    --accent-wash: rgba(255, 122, 60, 0.13);
-    --shadow-pop: 0 14px 40px rgba(0, 0, 0, 0.55);
-    color-scheme: dark;
-  }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1522,3 +1507,424 @@ body.map-modal-open .map-ctl, body.map-modal-open .map-style-picker { pointer-ev
 #live-bar .lb-feed { color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; }
 #live-bar .lb-actor { color: var(--ember); }
 @media (max-width: 700px) { #live-bar .lb-feed { display: none; } }
+
+/* ==========================================================================
+   PAPER — the surface restated.
+
+   Everything above is the previous console, kept because a hundred pages read
+   from it. This block is the new voice, and it is deliberately last so it wins
+   without a specificity war: the same components, wearing paper.
+
+   Three rules run through all of it. One border weight — a hairline, never a
+   box. One accent, held back until you point at something. And type carrying
+   the identity instead of colour: a light serif with wide tracking says where
+   you are, and everything else gets out of its way.
+   ========================================================================== */
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+html[lang="ar"] body { font-size: 15px; line-height: 1.85; }
+
+/* The page has a grain rather than a gradient: a barely-there warmth from the
+   top left, the way light falls on a sheet lying on a desk. */
+body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(1400px 700px at 12% -8%, rgba(255, 253, 248, 0.9), transparent 60%),
+    radial-gradient(900px 500px at 92% 108%, rgba(184, 80, 58, 0.035), transparent 62%);
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ---------- the rail: quieter, and it does not glow ---------- */
+.rail {
+  background: transparent;
+  border-inline-end: 1px solid var(--seam);
+  padding-block: var(--s4);
+}
+.rail-brand {
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--seam);
+  border-radius: 50%;
+  width: 34px; height: 34px;
+  box-shadow: none;
+}
+.rail-btn {
+  color: var(--ink-faint);
+  border-radius: 50%;
+  width: 38px; height: 38px;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.rail-btn svg { stroke-width: 1.25; }
+.rail-btn:hover { background: transparent; color: var(--ink); }
+.rail-btn.on { background: var(--ink); color: var(--paper); }
+.rail-btn.on::before { display: none; }
+.rail-dot {
+  background: var(--accent); color: var(--paper);
+  font-size: 9px; font-family: var(--font-mono);
+  border: none; min-width: 15px; height: 15px; line-height: 15px;
+}
+.rail-tip {
+  background: var(--ink); color: var(--paper);
+  border: none; border-radius: 2px;
+  font-size: 10px; letter-spacing: var(--track-tight); text-transform: uppercase;
+  box-shadow: none;
+}
+
+/* ---------- the flyout: a list, not a menu ---------- */
+.flyout {
+  background: var(--paper);
+  border-inline-end: 1px solid var(--seam);
+  box-shadow: none;
+}
+.flyout-head {
+  font-family: var(--font-display);
+  font-size: 12px; font-weight: 400;
+  letter-spacing: var(--track-wide); text-transform: uppercase;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--seam);
+  padding-block: var(--s4);
+}
+.flyout a {
+  position: relative;
+  color: var(--ink-mute);
+  font-size: 13px; letter-spacing: 0; text-transform: none;
+  border-radius: 2px; padding: 7px 12px;
+}
+.flyout a:hover { background: var(--paper-sunk); color: var(--ink); }
+.flyout a.active { background: transparent; color: var(--ink); font-weight: 600; }
+.flyout a.active::before {
+  content: ""; position: absolute; inset-inline-start: 0; top: 9px;
+  width: 2px; height: 16px; background: var(--accent);
+}
+
+/* ---------- the top bar: a masthead ---------- */
+.topbar, .topbar2 {
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  border-bottom: 1px solid var(--seam);
+  padding: var(--s5) var(--s6) var(--s4);
+}
+.topbar h1, #page-title {
+  font-family: var(--font-display);
+  font-size: 19px; font-weight: 400; font-stretch: normal;
+  letter-spacing: var(--track-mid); text-transform: uppercase;
+  color: var(--ink);
+}
+html[lang="ar"] #page-title { letter-spacing: 0; font-size: 22px; }
+
+/* ---------- panels: hairlines, no shadows, no fills ---------- */
+.panel {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--seam);
+  border-radius: 0;
+  padding: var(--s5) 0 var(--s6);
+  box-shadow: none;
+}
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 10.5px; font-weight: 400;
+  letter-spacing: var(--track-wide); text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: var(--s4);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+}
+html[lang="ar"] .panel-title { letter-spacing: var(--track-mid); font-size: 12px; }
+
+/* The tiles are the one place a number is allowed to be large. */
+.panel.tile { border-top: 1px solid var(--seam); padding: var(--s4) 0 var(--s5); }
+.tile .big {
+  font-family: var(--font-display);
+  font-size: 40px; font-weight: 400; line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-top: var(--s2);
+}
+.tile .sub {
+  font-family: var(--font-ui); font-size: 11.5px; color: var(--ink-faint);
+  margin-top: var(--s2); line-height: 1.5;
+}
+.tile::after { display: none; }
+.tile.tile-ok .big { color: var(--ok); }
+.tile.tile-bad .big { color: var(--bad); }
+.tile.tile-warn .big { color: var(--warn); }
+.tile.tile-steel .big { color: var(--steel); }
+
+/* ---------- tables: rules, not boxes ---------- */
+table { border-collapse: collapse; }
+th {
+  font-family: var(--font-display);
+  font-size: 9.5px; font-weight: 400;
+  letter-spacing: var(--track-mid); text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--seam);
+  padding: var(--s2) var(--s3);
+  background: transparent;
+}
+html[lang="ar"] th { letter-spacing: var(--track-tight); font-size: 11px; }
+td {
+  border-bottom: 1px solid var(--seam-soft);
+  padding: 9px var(--s3);
+  font-size: 13px;
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background var(--t-fast) var(--ease); }
+tbody tr:hover { background: var(--paper-sunk); }
+td b, td strong { font-weight: 600; }
+
+/* ---------- buttons: text first, chrome second ---------- */
+.btn {
+  background: transparent;
+  border: 1px solid var(--seam);
+  color: var(--ink-mute);
+  border-radius: 2px;
+  font-family: var(--font-ui);
+  font-size: 11.5px; font-weight: 500;
+  letter-spacing: var(--track-tight); text-transform: uppercase;
+  padding: 7px 13px;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+html[lang="ar"] .btn { letter-spacing: 0; text-transform: none; font-size: 12.5px; }
+.btn:hover { border-color: var(--ink); color: var(--ink); box-shadow: none; background: transparent; }
+.btn-primary { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.btn-primary:hover { background: var(--accent); border-color: var(--accent); color: var(--paper); box-shadow: none; }
+.btn-ok { border-color: var(--ok); color: var(--ok); }
+.btn-ok:hover { background: var(--ok); border-color: var(--ok); color: var(--paper); }
+.btn-bad { border-color: var(--seam); color: var(--ink-mute); }
+.btn-bad:hover { border-color: var(--bad); color: var(--bad); background: transparent; }
+.btn-sm { font-size: 10.5px; padding: 5px 10px; }
+
+/* ---------- chips: a word with a hairline, not a badge ---------- */
+.chip {
+  background: transparent;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-pill);
+  color: var(--ink-mute);
+  font-family: var(--font-ui);
+  font-size: 10.5px; font-weight: 500;
+  letter-spacing: var(--track-tight);
+  padding: 2px 9px;
+}
+.chip-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--seam)); }
+.chip-bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--seam)); }
+.chip-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--seam)); }
+.chip-ember { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--seam)); }
+.chip-steel { color: var(--steel); border-color: color-mix(in srgb, var(--steel) 35%, var(--seam)); }
+.chip-dim { color: var(--ink-faint); opacity: 1; }
+
+/* ---------- inputs: a line to write on ---------- */
+input, select, textarea {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--seam);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 6px 2px;
+  transition: border-color var(--t-fast) var(--ease);
+}
+input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: var(--ink); }
+input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+textarea { border: 1px solid var(--seam); border-radius: 2px; padding: var(--s3); }
+
+/* ---------- the view: wider gutters, air between panels ---------- */
+.view { padding: var(--s6) var(--s6) var(--s8); gap: var(--s5); }
+.grid { gap: var(--s5); }
+.empty { color: var(--ink-faint); font-size: 12.5px; padding: var(--s5) 0; text-align: start; }
+.sub { color: var(--ink-faint); font-size: 11.5px; }
+.mono { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: -0.01em; }
+
+.map-legend {
+  color: var(--ink-faint); font-size: 11.5px; line-height: 1.65;
+  margin-top: var(--s4); padding-top: var(--s3);
+  border-top: 1px solid var(--seam-soft);
+  max-width: 78ch;
+}
+.map-legend b { color: var(--ink-mute); font-weight: 600; }
+
+/* ---------- the search and the palette ---------- */
+.pal-box { background: var(--paper-veil); border: 1px solid var(--seam); box-shadow: var(--shadow-pop); border-radius: var(--r-sm); }
+.pal-box input { border: none; border-bottom: 1px solid var(--seam); font-size: 15px; padding: var(--s4); }
+.pal-item { border-radius: 2px; font-size: 13px; }
+.pal-item.on, .pal-item:hover { background: var(--paper-sunk); }
+
+/* ---------- dialogs and the live bar, on paper ---------- */
+#map-dialog { background: rgba(242, 240, 234, 0.72); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+#map-dialog .md-box {
+  background: var(--paper-veil);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
+}
+#map-dialog .md-box .ms-head { font-family: var(--font-display); font-weight: 400; letter-spacing: var(--track-tight); }
+#map-dialog .md-box .ms-sec {
+  font-family: var(--font-display); font-size: 9.5px; font-weight: 400;
+  letter-spacing: var(--track-wide); text-transform: uppercase; color: var(--ink-faint);
+  border-top: 1px solid var(--seam);
+}
+#live-bar {
+  background: color-mix(in srgb, var(--paper-veil) 94%, transparent);
+  border: 1px solid var(--seam);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink-faint);
+}
+#live-bar .lb-dot { background: var(--accent); box-shadow: none; }
+#live-bar .lb-actor { color: var(--accent); }
+.trace-hud {
+  background: var(--paper-veil); border: 1px solid var(--seam);
+  box-shadow: var(--shadow-pop); color: var(--ink-mute);
+}
+.toast { background: var(--ink); color: var(--paper); border: none; border-radius: 2px; }
+
+.map-ticker {
+  background: transparent; border: none; border-top: 1px solid var(--seam-soft);
+  font-size: 10.5px;
+}
+.map-ticker .tk-act { color: var(--ink-mute); }
+.map-ticker .tk-who, .map-ticker .tk-idle { color: var(--ink-faint); }
+
+/* ==========================================================================
+   THE ATLAS — one map, two depths.
+
+   Far: every district as a tree radiating from a dense core, names set in the
+   serif at wide tracking around the rim. Near: one district, its departments
+   as filled chips with the district name ghosted enormous behind them.
+
+   The lines are hairlines and the nodes are small, because at this density the
+   drawing has to be quiet enough that the labels can be read over it.
+   ========================================================================== */
+.atlas-wrap { position: relative; }
+.atlas-svg {
+  width: 100%; height: auto; display: block; cursor: grab;
+  max-height: calc(100vh - 196px);
+}
+.atlas-svg:active { cursor: grabbing; }
+
+/* the MAP / DASHBOARDS switch */
+.atlas-switch {
+  display: inline-flex; align-items: center; gap: 2px;
+  border: 1px solid var(--seam); border-radius: 2px; padding: 2px;
+}
+.atlas-switch button {
+  background: transparent; border: none; cursor: pointer;
+  font-family: var(--font-display); font-size: 9.5px; font-weight: 400;
+  letter-spacing: var(--track-mid); text-transform: uppercase;
+  color: var(--ink-faint); padding: 5px 14px; border-radius: 1px;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.atlas-switch button:hover { color: var(--ink); }
+.atlas-switch button.on { background: var(--ink); color: var(--paper); }
+html[lang="ar"] .atlas-switch button { letter-spacing: var(--track-tight); font-size: 11px; }
+
+/* district names around the rim */
+.at-dname {
+  font-family: var(--font-display); font-size: 15px; font-weight: 400;
+  letter-spacing: var(--track-wide); text-transform: uppercase;
+  fill: var(--ink-mute); text-anchor: middle; cursor: pointer;
+  transition: fill var(--t-fast) var(--ease);
+}
+.at-dname:hover { fill: var(--ink); }
+.at-dsub {
+  font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.12em;
+  fill: var(--ink-faint); text-anchor: middle; text-transform: lowercase;
+  pointer-events: none;
+}
+
+/* branches and leaves */
+.at-branch {
+  fill: none; stroke: var(--ink-faint); stroke-width: 0.7; opacity: 0.5;
+  transition: stroke var(--t-mid) var(--ease), opacity var(--t-mid) var(--ease);
+}
+.at-leaf {
+  fill: var(--ink); stroke: none;
+  transition: fill var(--t-fast) var(--ease), r var(--t-fast) var(--ease);
+}
+.at-leaf-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 0.9; }
+.at-hit { fill: transparent; cursor: pointer; }
+
+/* Colour is the reward for pointing at something: the district you are on
+   takes its own hue, and everything else recedes rather than competing. */
+.atlas-svg.focused .at-branch { opacity: 0.14; }
+.atlas-svg.focused .at-leaf { fill: var(--ink-ghost); }
+.atlas-svg.focused .at-dname { fill: var(--ink-ghost); }
+.atlas-svg .at-district.lit .at-branch { opacity: 1; stroke: currentColor; stroke-width: 0.9; }
+.atlas-svg .at-district.lit .at-leaf { fill: currentColor; }
+.atlas-svg .at-district.lit .at-dname { fill: currentColor; }
+.atlas-svg .at-district.lit .at-dsub { fill: var(--ink-mute); }
+
+/* the core: a dense little cloud, the orchestrator and the chain */
+.at-core-dot { fill: var(--ink); opacity: 0.55; }
+.at-core-ring { fill: none; stroke: var(--seam); stroke-width: 0.6; }
+.at-core-label {
+  font-family: var(--font-display); font-size: 8.5px; letter-spacing: var(--track-mid);
+  text-transform: uppercase; fill: var(--ink-faint); text-anchor: middle;
+}
+
+/* ---- the near view ---- */
+.at-ghost {
+  font-family: var(--font-display); font-weight: 400;
+  letter-spacing: var(--track-wide); text-transform: uppercase;
+  fill: var(--ink-ghost); opacity: 0.5; text-anchor: middle;
+  pointer-events: none; user-select: none;
+}
+.at-cluster {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: var(--track-mid);
+  text-transform: uppercase; fill: var(--ink-faint); text-anchor: middle;
+}
+.at-cluster-n { font-family: var(--font-ui); font-size: 7.5px; letter-spacing: 0.1em; fill: var(--ink-ghost); }
+.at-chip { fill: var(--ink); transition: fill var(--t-fast) var(--ease); }
+.at-chip-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 1; }
+.at-chip-glyph { stroke: none; pointer-events: none; }
+
+.at-node { cursor: pointer; }
+.at-node:hover .at-chip { fill: var(--accent); }
+.at-node:hover .at-chip-ring { stroke: var(--accent); }
+.at-nlabel {
+  font-family: var(--font-ui); font-size: 8.5px; letter-spacing: 0.02em;
+  fill: var(--ink-mute); text-anchor: middle; pointer-events: none;
+  opacity: 0; transition: opacity var(--t-fast) var(--ease);
+}
+.at-node:hover .at-nlabel { opacity: 1; }
+.at-edge { fill: none; stroke: var(--ink-faint); stroke-width: 0.7; opacity: 0.55; }
+.at-edge-mark { stroke: var(--accent); stroke-width: 0.9; opacity: 0.8; }
+
+/* the arrows that walk you around the rim */
+.at-step {
+  fill: none; stroke: var(--ink-faint); stroke-width: 1.1; cursor: pointer;
+  transition: stroke var(--t-fast) var(--ease);
+}
+.at-step:hover { stroke: var(--ink); }
+.at-step-hit { fill: transparent; cursor: pointer; }
+
+/* the footnote under the drawing */
+.at-foot {
+  font-family: var(--font-ui); font-size: 8px; letter-spacing: 0.16em;
+  text-transform: uppercase; fill: var(--ink-ghost);
+}
+
+/* Arabic is a connected script: letter-spacing pulls the joins apart and turns
+   a word into a row of orphans. The tracking that carries the identity in Latin
+   is removed here, and the sizes come up to match the optical weight. */
+html[lang="ar"] .at-dname { letter-spacing: 0; font-size: 17px; }
+html[lang="ar"] .at-dsub { letter-spacing: 0; font-size: 10.5px; }
+html[lang="ar"] .at-cluster { letter-spacing: 0; font-size: 12px; }
+html[lang="ar"] .at-cluster-n { letter-spacing: 0; font-size: 9px; }
+html[lang="ar"] .at-ghost { letter-spacing: 0; }
+html[lang="ar"] .at-core-label,
+html[lang="ar"] .at-foot { letter-spacing: 0; font-size: 10px; }
+html[lang="ar"] .at-nlabel { font-size: 10px; }

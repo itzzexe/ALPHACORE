@@ -152,16 +152,39 @@ sequenceDiagram
 - **Identity is never client-supplied.** The server stamps every action with the session's account; the audit chain records who really acted.
 - The superadmin manages users (create, disable, reset password, edit grants) and provider connections from the UI.
 
-## The living map — two designs, one for each question
+## The surface
 
-The Overview page renders the whole company from live data (`/api/map`): every department, every relationship as a **real database join with its live count**, zero orphans (enforced by a connectivity audit). A picker in the panel header switches between them; the choice persists.
+One skin: warm paper. The whole interface is ink on bone, and colour is held
+back until you point at something — which is what lets a hundred and two
+departments sit on one page without shouting. Type carries the identity
+instead: a light serif at wide tracking for names and places, a quiet sans for
+the interface, a mono for anything that is a figure or an identifier. One
+border weight exists, a hairline, and there are no boxes.
 
-| Map | Answers | How it reads |
-|---|---|---|
-| **The Hive** | *What is this company, and how is it joined together?* | One hexagonal cell per department, cells packed into the district that owns them, Harmony in the middle. Relationships stay **hidden until you point at a cell** — two hundred lines at once is noise; seven lines is an answer. |
-| **The Stream** | *Where is the work right now?* | Six stages — intake, produce, peer review, audit, human gate, landed — with pillar heights and ribbon widths carrying real volume, plus the two arcs that are **not** progress: work sent back to be improved, and rulings a person made. |
+Light only, deliberately. A design that commits to one set of conditions is
+better than one that hedges across two, so every colour decision is made for
+this light and the theme toggle is gone.
 
-One interaction engine drives both: **click** opens the department · **right-click** opens a real window over the map (the map underneath stops taking the pointer) listing everything it touches, with hop-by-hop **Trace flow** that survives closing the window · **clicking a relationship line** explains what kind of movement it is and how that mechanism works · drag/wheel pans and zooms · clicking a district name isolates it. A **live ticker** narrates the audit chain and departments **flash** the moment something happens in them.
+The density is split on purpose: the shell, the map and the summaries are as
+airy as the reference that inspired them; the tables where work actually
+happens keep the same type and colour but a density that lets you scan forty
+rows without scrolling for a minute.
+
+## The map
+
+One map, two depths, and zooming between them *is* the explanation — the branch
+you followed is the relationship.
+
+| Depth | What you see |
+|---|---|
+| **The whole company** | A dense core — the orchestrator and the chain — with a tree for every district growing out of it. Each leaf is a department: filled if it holds records, hollow if it is declared and still empty. District names sit around the rim in the serif. Point at one and its colour comes up while everything else recedes. |
+| **One district** | Its departments as chips carrying a mark for the kind of work they do, clustered by branch, with the district name ghosted enormous behind them. Arrows walk you round the rim without going back out. |
+
+The interaction engine is unchanged and shared: click opens the department,
+right-click opens its full connection ledger with hop-by-hop **Trace flow**,
+clicking a relationship line explains what kind of movement it is, drag and
+wheel pan and zoom. A **MAP / DASHBOARDS** switch separates the drawing from
+the numbers, because they are two different questions.
 
 ## The company — 13 divisions, 102 departments
 
