@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,149 +7,80 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 90,85 10,85' fill='%23ff6b2c'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Saira:wdth,wght@62.5..100,300..800&family=Red+Hat+Mono:wght@300..600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wdth,wght@62.5..100,300..800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<div class="app">
-  <aside class="side">
-    <div class="brand">
-      <div class="brand-glyph">▲</div>
-      <div class="brand-name">
-        <span>CRUCIBLE</span>
-        <span class="brand-sub">CORE · OPS CONSOLE</span>
-      </div>
-    </div>
-    <nav id="nav">
-      <div class="nav-sec">Steer</div>
-      <a href="#/" data-route="">Overview</a>
-      <a href="#/requests" data-route="requests">Request desk <span class="nav-count" id="req-count"></span></a>
-      <a href="#/harmony" data-route="harmony">Harmony</a>
-      <a href="#/scorecard" data-route="scorecard">Scorecard</a>
-      <a href="#/graph" data-route="graph">Relationship Graph</a>
-      <a href="#/autopilot" data-route="autopilot">Autopilot</a>
-      <a href="#/governance" data-route="governance">Governance <span class="nav-count" id="alert-count"></span></a>
-      <div class="nav-sec">Decide</div>
-      <a href="#/gate" data-route="gate">Approvals inbox <span class="nav-count" id="gate-count"></span></a>
-      <a href="#/decisions" data-route="decisions">Decisions</a>
-      <a href="#/pmo" data-route="pmo">PMO Gates</a>
-      <div class="nav-sec">Engineer</div>
-      <a href="#/systems" data-route="systems">System Design</a>
-      <a href="#/infra" data-route="infra">Infrastructure</a>
-      <a href="#/lab" data-route="lab">The Lab (A/B)</a>
-      <a href="#/releases" data-route="releases">Releases</a>
-      <div class="nav-sec">Produce</div>
-      <a href="#/journeys" data-route="journeys">Journeys <span class="nav-count" id="journey-count"></span></a>
-      <a href="#/products" data-route="products">Products</a>
-      <a href="#/pipelines" data-route="pipelines">Pipelines</a>
-      <a href="#/runs" data-route="runs">Runs</a>
-      <a href="#/artifacts" data-route="artifacts">Artifacts</a>
-      <div class="nav-sec">Plan</div>
-      <a href="#/workforce" data-route="workforce">Workforce (AI)</a>
-      <a href="#/capacity" data-route="capacity">Capacity</a>
-      <a href="#/projects" data-route="projects">Projects</a>
-      <a href="#/tasks" data-route="tasks">Tasks</a>
-      <a href="#/risks" data-route="risks">Risks</a>
-      <a href="#/quality" data-route="quality">Quality</a>
-      <div class="nav-sec">Operate</div>
-      <a href="#/incidents" data-route="incidents">Incidents</a>
-      <a href="#/support" data-route="support">Support</a>
-      <div class="nav-sec">Data</div>
-      <a href="#/intel" data-route="intel">Intelligence</a>
-      <a href="#/segments" data-route="segments">Segments</a>
-      <a href="#/data" data-route="data">Datasets</a>
-      <a href="#/archive" data-route="archive">Archive</a>
-      <a href="#/insights" data-route="insights">Insights</a>
-      <div class="nav-sec">Creative</div>
-      <a href="#/social" data-route="social">Social Media</a>
-      <a href="#/content" data-route="content">Content Studio</a>
-      <a href="#/design" data-route="design">Design Studio</a>
-      <a href="#/localization" data-route="localization">Localization</a>
-      <a href="#/marketing" data-route="marketing">Marketing</a>
-      <a href="#/brand" data-route="brand">Brand Studio</a>
-      <div class="nav-sec">Commercial</div>
-      <a href="#/sales" data-route="sales">Sales (Deals)</a>
-      <a href="#/customers" data-route="customers">Customers</a>
-      <a href="#/success" data-route="success">Customer Success</a>
-      <a href="#/pricing" data-route="pricing">Pricing</a>
-      <a href="#/marketwatch" data-route="marketwatch">Market Watch</a>
-      <a href="#/relations" data-route="relations">Relations (RM)</a>
-      <a href="#/procurement" data-route="procurement">Procurement</a>
-      <div class="nav-sec">Capital</div>
-      <a href="#/finance" data-route="finance">Finance</a>
-      <a href="#/finreports" data-route="finreports">Financial Reports</a>
-      <a href="#/finops" data-route="finops">FinOps</a>
-      <div class="nav-sec">Talent</div>
-      <a href="#/org" data-route="org">Org &amp; Personas</a>
-      <a href="#/society" data-route="society">The Society</a>
-      <a href="#/disputes" data-route="disputes">Disputes <span class="nav-count" id="dispute-count"></span></a>
-      <a href="#/people" data-route="people">People (HR)</a>
-      <a href="#/recruiting" data-route="recruiting">Recruiting</a>
-      <a href="#/academy" data-route="academy">Academy</a>
-      <a href="#/enablement" data-route="enablement">Enablement</a>
-      <div class="nav-sec">Corporate</div>
-      <a href="#/assets" data-route="assets">Assets</a>
-      <a href="#/legal" data-route="legal">Legal</a>
-      <a href="#/vendors" data-route="vendors">Vendors</a>
-      <a href="#/knowledge" data-route="knowledge">Knowledge</a>
-      <a href="#/objectives" data-route="objectives">Objectives</a>
-      <div class="nav-sec">Trust</div>
-      <a href="#/security" data-route="security">Security (SOC)</a>
-      <a href="#/compliance" data-route="compliance">Compliance</a>
-      <a href="#/sustainability" data-route="sustainability">Sustainability</a>
-      <div class="nav-sec">Executive</div>
-      <a href="#/board" data-route="board">Board Room</a>
-      <a href="#/ir" data-route="ir">Investor Relations</a>
-      <a href="#/comms" data-route="comms">Internal Comms</a>
-      <div class="nav-sec">Admin</div>
-      <a href="#/owner" data-route="owner">Owner console</a>
-      <a href="#/oversight" data-route="oversight">Oversight</a>
-      <a href="#/users" data-route="users">Users &amp; Roles</a>
-      <a href="#/settings" data-route="settings">Settings</a>
-      <div class="nav-sec">Assure</div>
-      <a href="#/evals" data-route="evals">Evals &amp; Canaries</a>
-      <a href="#/agents" data-route="agents">Agents</a>
-      <a href="#/budgets" data-route="budgets">Budgets</a>
-      <a href="#/audit" data-route="audit">Audit Chain</a>
-      <a href="#/providers" data-route="providers">Providers</a>
-    </nav>
-    <div class="side-foot">
-      <div class="acting">
-        <label>Signed in</label>
-        <div id="who" class="mono" style="color:var(--steel);font-size:12px;padding:4px 0">—</div>
-        <button class="btn btn-sm" id="logout" style="width:100%">Logout</button>
-      </div>
-      <div class="foot-row">
-        <span id="mode-chip" class="chip"></span>
-        <span class="ver">v0.3</span>
-      </div>
-    </div>
+<div class="app" id="app">
+  <!-- Icon rail: one button per division. The 76 departments live one click
+       deeper, so the shell stays quiet until you ask it for something. -->
+  <aside class="rail" id="rail">
+    <a class="rail-brand" href="#/" title="Crucible Core">▲</a>
+    <div id="rail-items"></div>
+    <div class="rail-spacer"></div>
+    <button class="rail-btn" id="rail-search" type="button" aria-label="Search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <span class="rail-tip" data-i18n="Search  Ctrl+K">Search · Ctrl+K</span>
+    </button>
   </aside>
+
+  <nav class="flyout" id="flyout" hidden aria-label="Departments"></nav>
+
   <main class="main">
     <header class="topbar">
       <h1 id="page-title">Overview</h1>
+      <button class="top-search" id="open-palette" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span data-i18n="Search departments, actions…">Search departments, actions…</span>
+        <kbd>Ctrl K</kbd>
+      </button>
       <div class="top-right">
         <span id="poll-chip" class="chip chip-warn" title="This page normally refreshes itself; it is paused so your typing is not lost" hidden>✎ auto-refresh paused</span>
         <span id="chain-chip" class="chip chip-dim" title="Audit hash-chain integrity">chain —</span>
-        <span id="clock" class="clock"></span>
+        <button class="icon-btn wide" id="lang-toggle" type="button" title="العربية / English">ع</button>
+        <button class="icon-btn" id="theme-toggle" type="button" title="Light / dark">◐</button>
+        <button class="who-chip" id="who-chip" type="button" title="Sign out">
+          <span class="avatar" id="who-avatar">—</span>
+          <span>
+            <span class="who-name" id="who-name">—</span><br>
+            <span class="who-role" id="who-role"></span>
+          </span>
+        </button>
       </div>
     </header>
     <section id="view" class="view"></section>
   </main>
 </div>
+
+<!-- Command palette: every department and every quick action, one keystroke away -->
+<div id="palette" hidden>
+  <div class="pal-box" role="dialog" aria-modal="true" aria-label="Command palette">
+    <input type="text" id="pal-input" autocomplete="off" spellcheck="false" placeholder="Jump to a department…">
+    <div class="pal-list" id="pal-list"></div>
+    <div class="pal-foot">
+      <span>↑↓ <span data-i18n="navigate">navigate</span></span>
+      <span>↵ <span data-i18n="open">open</span></span>
+      <span>esc <span data-i18n="close">close</span></span>
+    </div>
+  </div>
+</div>
+
 <div id="login" hidden>
   <div class="login-panel">
     <div class="brand" style="border:none;justify-content:center;padding-bottom:4px">
       <div class="brand-glyph">▲</div>
       <div class="brand-name"><span>CRUCIBLE</span><span class="brand-sub">CORE · OPS CONSOLE</span></div>
     </div>
-    <label class="fl">Username</label>
+    <label class="fl" data-i18n="Username">Username</label>
     <input type="text" id="login-user" autocomplete="username">
-    <label class="fl" style="margin-top:10px">Password</label>
+    <label class="fl" style="margin-top:10px" data-i18n="Password">Password</label>
     <input type="password" id="login-pass" autocomplete="current-password">
-    <button class="btn btn-primary" id="login-go" style="width:100%;margin-top:16px">Sign in</button>
+    <button class="btn btn-primary" id="login-go" style="width:100%;margin-top:16px" data-i18n="Sign in">Sign in</button>
     <div id="login-err" class="reason" style="margin-top:10px;text-align:center"></div>
     <div class="map-legend" style="text-align:center;margin-top:12px">first boot: admin / crucible</div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="icon-btn wide" id="login-lang" type="button">العربية</button>
+    </div>
   </div>
 </div>
 <script type="module" src="/app.js"></script>

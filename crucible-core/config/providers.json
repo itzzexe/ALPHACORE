@@ -65,6 +65,59 @@
         "gemini-2.5-flash":     { "priceIn": 0.3, "priceOut": 2.5 }
       }
     },
+    "openrouter": {
+      "family": "openrouter",
+      "kind": "openai-compat",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "keyEnv": "OPENROUTER_API_KEY",
+      "dpa": false,
+      "noTraining": false,
+      "_note": "An aggregator in front of many families. Treated as its own family for reviewer independence: two OpenRouter calls may land on the same underlying model, so they never count as two opinions.",
+      "models": {
+        "anthropic/claude-sonnet-4.5": { "priceIn": 3.0, "priceOut": 15.0 },
+        "meta-llama/llama-3.3-70b-instruct": { "priceIn": 0.12, "priceOut": 0.3 },
+        "qwen/qwen-2.5-72b-instruct": { "priceIn": 0.12, "priceOut": 0.39 }
+      }
+    },
+    "groq": {
+      "family": "groq",
+      "kind": "openai-compat",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "keyEnv": "GROQ_API_KEY",
+      "dpa": false,
+      "noTraining": false,
+      "_note": "Very fast, very cheap; used for triage volume where latency matters more than depth.",
+      "models": {
+        "llama-3.3-70b-versatile": { "priceIn": 0.59, "priceOut": 0.79 },
+        "llama-3.1-8b-instant": { "priceIn": 0.05, "priceOut": 0.08 }
+      }
+    },
+    "together": {
+      "family": "together",
+      "kind": "openai-compat",
+      "baseUrl": "https://api.together.xyz/v1",
+      "keyEnv": "TOGETHER_API_KEY",
+      "dpa": false,
+      "noTraining": false,
+      "models": {
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo": { "priceIn": 0.88, "priceOut": 0.88 },
+        "Qwen/Qwen2.5-72B-Instruct-Turbo": { "priceIn": 1.2, "priceOut": 1.2 }
+      }
+    },
+    "ollama": {
+      "family": "local",
+      "kind": "openai-compat",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "keyEnv": "OLLAMA_ENABLED",
+      "dpa": true,
+      "noTraining": true,
+      "_note": "Sovereign mode. The model runs on this machine, so nothing leaves it and the price is electricity. This is the only provider that keeps working with the internet cut, which in Iraq is the difference between a company that runs and one that waits. Because the data never leaves, it is cleared for every sensitivity level.",
+      "models": {
+        "qwen2.5:14b": { "priceIn": 0, "priceOut": 0 },
+        "llama3.1:8b": { "priceIn": 0, "priceOut": 0 },
+        "gemma2:9b": { "priceIn": 0, "priceOut": 0 }
+      }
+    },
     "mock": {
       "family": "mock",
       "kind": "mock",
@@ -81,7 +134,9 @@
         { "provider": "claude-subscription", "model": "haiku" },
         { "provider": "anthropic", "model": "claude-haiku-4-5" },
         { "provider": "google", "model": "gemini-2.5-flash" },
-        { "provider": "deepseek", "model": "deepseek-chat" }
+        { "provider": "groq", "model": "llama-3.1-8b-instant" },
+        { "provider": "deepseek", "model": "deepseek-chat" },
+        { "provider": "ollama", "model": "llama3.1:8b" }
       ],
       "onExhausted": "queue"
     },
@@ -92,7 +147,9 @@
         { "provider": "anthropic", "model": "claude-sonnet-5" },
         { "provider": "claude-subscription", "model": "haiku" },
         { "provider": "openai", "model": "gpt-5-mini" },
-        { "provider": "deepseek", "model": "deepseek-chat" }
+        { "provider": "deepseek", "model": "deepseek-chat" },
+        { "provider": "openrouter", "model": "qwen/qwen-2.5-72b-instruct" },
+        { "provider": "ollama", "model": "qwen2.5:14b" }
       ],
       "onExhausted": "degrade-T1-with-flag"
     },
@@ -123,9 +180,9 @@
   },
   "sensitivity": {
     "_note": "Part 3 §7.5 — customer_min payloads may only reach providers with dpa AND noTraining; restricted content never enters model context at all.",
-    "public": ["anthropic", "claude-subscription", "openai", "deepseek", "google", "mock"],
-    "internal": ["anthropic", "claude-subscription", "openai", "deepseek", "google", "mock"],
-    "customer_min": ["anthropic", "claude-subscription", "openai", "google", "mock"],
-    "restricted": []
+    "public": ["anthropic", "claude-subscription", "openai", "deepseek", "google", "openrouter", "groq", "together", "ollama", "mock"],
+    "internal": ["anthropic", "claude-subscription", "openai", "deepseek", "google", "groq", "ollama", "mock"],
+    "customer_min": ["anthropic", "claude-subscription", "openai", "google", "ollama", "mock"],
+    "restricted": ["ollama"]
   }
 }

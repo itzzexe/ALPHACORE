@@ -35,6 +35,23 @@ const runText = (runId) => {
 };
 const lastId = () => one('SELECT last_insert_rowid() AS id').id;
 
+/**
+ * A run returns an envelope — {raw, parsed, provider, model} — and the role
+ * specification is inside it. Storing the envelope made every automatic hire
+ * fail silently, because the id it needs was one level down.
+ */
+function extractSpec(runId) {
+  const r = one('SELECT state, output FROM runs WHERE id = ?', runId);
+  if (r?.state !== 'done' || !r.output) return null;
+  let o;
+  try { o = JSON.parse(r.output); } catch { return null; }
+  let spec = o?.parsed ?? o;
+  if (spec && typeof spec.raw === 'string') {
+    try { spec = JSON.parse(spec.raw); } catch { /* fall through to the check below */ }
+  }
+  return spec && typeof spec === 'object' && spec.id ? spec : null;
+}
+
 // ---------- TRUST · Security (SOC) ----------
 export function securityOverview() {
   return {
@@ -346,6 +363,8 @@ export function decideCandidate(id, { verdict, actor }) {
   if (!c.spec) throw new Error('no spec to hire from');
   let spec;
   try { spec = JSON.parse(c.spec); } catch { throw new Error('spec is not valid JSON — reject and re-open'); }
+  // Older candidates stored the run envelope; unwrap rather than refuse them.
+  if (spec && !spec.id) spec = extractSpec(c.spec_run) || spec;
   const agentId = String(spec.id || '').toUpperCase();
   if (!/^AGT-[A-Z]{2,5}-\d{3}$/.test(agentId)) throw new Error('spec.id must look like AGT-XXX-001');
   if (one('SELECT id FROM agents WHERE id = ?', agentId)) throw new Error(`${agentId} already exists`);
@@ -355,6 +374,85 @@ export function decideCandidate(id, { verdict, actor }) {
   audit({ actorType: 'human', actorId: actor, action: 'recruiting.hired', subjectType: 'agent', subjectId: agentId, payload: { candidate: id, roleName: c.role_name } });
   notify({ level: 'info', source: 'recruiting', message: `New employee hired: ${agentId} (${c.role_name}).`, subjectType: 'agent', subjectId: agentId });
   return { hired: true, agentId };
+}
+
+// ---------- TALENT · Recruiting itself ----------
+// A company that cannot staff itself is not autonomous, only obedient. This
+// looks for the shapes of understaffing that show up in the data — work
+// queued behind saturated employees, whole role groups missing, departments
+// taking requests nobody is assigned to — and opens the role. The existing
+// pipeline then drafts the spec, trials it, and hires. Nobody is asked.
+//
+// The limits are deliberate: hiring costs money on every future run, so the
+// company may not grow without bound, and a role it just opened may not be
+// opened again while that candidate is still moving.
+const HIRE_CAP = 60;          // total active employees this may grow to
+const OPENINGS_PER_SWEEP = 1; // never more than one new role at a time
+const ROLE_COOLDOWN_H = 6;
+
+export function workforceGaps() {
+  const gaps = [];
+  const roleLoad = q(`SELECT a.role_group,
+      COUNT(DISTINCT a.id) AS staff,
+      COALESCE(SUM(CASE WHEN r.state IN ('queued','leased','running') THEN 1 ELSE 0 END), 0) AS inflight
+    FROM agents a LEFT JOIN runs r ON r.agent_id = a.id
+    WHERE a.status = 'active' GROUP BY a.role_group`);
+  for (const r of roleLoad) {
+    const perHead = r.staff ? r.inflight / r.staff : 0;
+    if (perHead >= 3) {
+      gaps.push({
+        role: r.role_group, severity: perHead,
+        why: `${r.role_group} is carrying ${r.inflight} live items across ${r.staff} employee(s) — ${perHead.toFixed(1)} each, which is where quality starts slipping.`,
+      });
+    }
+  }
+  // Work waiting on a human because nobody in the role can take it.
+  const stuck = one("SELECT COUNT(*) AS n FROM tasks WHERE state = 'blocked'").n;
+  if (stuck >= 3) gaps.push({ role: 'run', severity: stuck, why: `${stuck} tasks are blocked; the delivery side is undermanned.` });
+  // A department taking intake with nobody mapped to it.
+  for (const d of q(`SELECT dept, COUNT(*) AS n FROM request_steps GROUP BY dept HAVING n >= 2`)) {
+    const covered = one("SELECT id FROM agents WHERE status = 'active' AND lower(name) LIKE ?", `%${String(d.dept).toLowerCase()}%`);
+    if (!covered) gaps.push({ role: 'run', dept: d.dept, severity: d.n, why: `${d.n} requests have been routed to "${d.dept}" and no employee is named for it.` });
+  }
+  return gaps.sort((a, b) => b.severity - a.severity);
+}
+
+/** Open the most pressing role, once, with the evidence attached. */
+export function autoRecruit({ actor = 'system:autonomy' } = {}) {
+  const staff = one("SELECT COUNT(*) AS n FROM agents WHERE status = 'active'").n;
+  if (staff >= HIRE_CAP) return { opened: 0, reason: `at the ${HIRE_CAP}-employee cap` };
+  const moving = one("SELECT COUNT(*) AS n FROM candidates WHERE state IN ('drafting','screening','trial')").n;
+  if (moving) return { opened: 0, reason: `${moving} candidate(s) already in the pipeline` };
+
+  const gaps = workforceGaps();
+  if (!gaps.length) return { opened: 0, reason: 'no gap in the data' };
+
+  const opened = [];
+  for (const g of gaps.slice(0, OPENINGS_PER_SWEEP)) {
+    const roleName = g.dept ? `${g.dept} specialist` : `${g.role} capacity`;
+    const recent = one("SELECT id FROM candidates WHERE role_name = ? AND created_at >= datetime('now', ?)", roleName, `-${ROLE_COOLDOWN_H} hours`);
+    if (recent) continue;
+    try {
+      const id = createOpening({
+        roleName,
+        brief: `${g.why} Design an employee that absorbs this specific load: what it takes on, what it must refuse, and how its output is checked. Keep the scope narrow enough that it does not overlap an existing role.`,
+        actor,
+      });
+      opened.push({ id, roleName, why: g.why });
+      audit({
+        actorType: 'system', actorId: actor, action: 'recruiting.auto_opened',
+        subjectType: 'candidate', subjectId: id, payload: { roleName, evidence: g.why, staff },
+      });
+      notify({
+        level: 'info', source: 'recruiting',
+        message: `The company opened a role for itself: ${roleName}. ${g.why}`,
+        subjectType: 'candidate', subjectId: id,
+      });
+    } catch (e) {
+      audit({ actorType: 'system', actorId: actor, action: 'recruiting.auto_failed', subjectType: 'candidate', subjectId: 'auto', payload: { error: String(e.message).slice(0, 160) } });
+    }
+  }
+  return { opened: opened.length, roles: opened };
 }
 
 // ---------- TALENT · Academy ----------
@@ -489,8 +587,8 @@ export function syncExpansion() {
   pull('releases', 'notes');
   pull('brand_assets', 'content');
   for (const c of q("SELECT id, spec_run FROM candidates WHERE state = 'drafting' AND spec_run IS NOT NULL")) {
-    const r = one('SELECT state, output FROM runs WHERE id = ?', c.spec_run);
-    if (r?.state === 'done' && r.output) exec("UPDATE candidates SET spec = ?, state = 'screening' WHERE id = ?", r.output, c.id);
+    const spec = extractSpec(c.spec_run);
+    if (spec) exec("UPDATE candidates SET spec = ?, state = 'screening' WHERE id = ?", JSON.stringify(spec, null, 2), c.id);
   }
   for (const c of q("SELECT id, trial_run FROM candidates WHERE state = 'trial' AND trial_run IS NOT NULL AND trial_note IS NULL")) {
     const text = runText(c.trial_run);

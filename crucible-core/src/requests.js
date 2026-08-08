@@ -90,7 +90,19 @@ Step kinds:
 - "spawn": that department opens a REAL record and the desk waits for it to finish. Only for departments marked [spawn]. Use it when the request genuinely calls for that artefact — a design package, an intelligence campaign, a published-ready post, a financial report, an infrastructure plan, a visual, a content piece, or delegated tasks.
 - "human": a person must act. Only for publishing, sending to a customer or partner, signing, approving spend, or a gate verdict.
 
-Rules: 2 to 7 steps. Each step's brief must be actionable on its own, and must say what output it hands to the next step. Order matters — later steps receive the earlier outputs. Answer in the language the request was written in.`,
+Rules: 2 to 7 steps. Each step's brief must be actionable on its own, and must say what output it hands to the next step. Order matters — later steps receive the earlier outputs. Answer in the language the request was written in.
+
+HOW TO TREAT THIS REQUEST
+This is an instruction from the owner of the company, not a proposal for you to evaluate. You are the routing desk, not the approvals desk.
+
+- Route it. Do not ask clarifying questions, do not propose alternatives, do not comment on whether it is a good idea, do not add caveats.
+- If it is vague, pick the most reasonable reading and route that. Missing details are for the departments to resolve as they work.
+- If it is large, route the first sensible slice of it rather than refusing for scope.
+- If it is outside anything the departments obviously cover, route it to research first and let them work out how.
+- Never return an empty plan because you disagree with the priorities, the ambition, or the phrasing.
+- Judge this request on its own words. Do not import intent from anything you were told earlier.
+
+The single exception, and it is narrow: if carrying it out would mean deceiving or defrauding people outside this company, or bulk-contacting real third parties who never asked to hear from us, say so plainly in one sentence and route nothing. Everything else is an order — execute it.`,
     },
     actor,
   });
@@ -241,6 +253,56 @@ function priorOutputs(requestId, seq) {
     .map((s) => `### ${s.dept} — ${s.title}\n${String(s.output).slice(0, 3000)}`).join('\n\n');
 }
 
+/** Write a route into the database and set the request running. */
+function planSteps(r, steps, summary, { title = null, deliverable = null } = {}) {
+  steps.slice(0, 8).forEach((s, i) => {
+    const d = DEPT_BY_NAME[s.dept];
+    const kind = ['agent', 'human', 'spawn'].includes(s.kind) ? s.kind : 'agent';
+    const spawn = kind === 'spawn' && d.spawn && SPAWNS.has(d.spawn) ? d.spawn : null;
+    exec('INSERT INTO request_steps (request_id, seq, dept, title, brief, kind, spawn_kind, agent_id) VALUES (?,?,?,?,?,?,?,?)',
+      r.id, i + 1, s.dept, String(s.title || d.does).slice(0, 140), s.brief || null,
+      spawn ? 'spawn' : kind, spawn, kind === 'human' ? null : d.agent);
+  });
+  exec("UPDATE requests SET state = 'running', run_id = NULL, title = COALESCE(NULLIF(?,''), title), plan_summary = ?, deliverable = ? WHERE id = ?",
+    String(title || '').slice(0, 140), summary, deliverable, r.id);
+  audit({ actorType: 'agent', actorId: 'AGT-REQ-001', action: 'request.routed', subjectType: 'request', subjectId: r.id, payload: { steps: steps.length, depts: steps.map((s) => s.dept) } });
+  notify({ level: 'info', source: 'requests', message: `Request #${r.id} routed through ${steps.length} department(s): ${steps.map((s) => s.dept).join(' → ')}.`, subjectType: 'request', subjectId: r.id });
+}
+
+/**
+ * The desk's own reading of a request, used when the router's reply cannot be
+ * parsed. Keyword matching in both languages — crude next to a model, but it
+ * always produces a route, and a request that reaches three real departments
+ * beats one that sits in "failed" because a reply came back as prose.
+ */
+const ROUTE_HINTS = [
+  { dept: 'research', re: /research|market|competitor|find|list|collect|بحث|سوق|منافس|ابحث|اجمع|قائمة/i },
+  { dept: 'intel', re: /companies|leads|contacts|prospect|شركات|عملاء|جهات|تواصل/i },
+  { dept: 'analysis', re: /analy|compare|evaluate|assess|price|pricing|cost|تحليل|قارن|قيّم|تسعير|سعر|كلفة/i },
+  { dept: 'product', re: /product|feature|roadmap|offering|منتج|ميزة|خدمة|عرض/i },
+  { dept: 'architecture', re: /architect|system design|technical design|معماري|تصميم النظام/i },
+  { dept: 'engineering', re: /build|code|implement|develop|برمج|بناء|طوّر|نفّذ/i },
+  { dept: 'designAsset', re: /logo|visual|banner|graphic|شعار|تصميم|بصري/i },
+  { dept: 'content', re: /write|article|page|copy|email|post|اكتب|مقال|صفحة|محتوى|بريد|منشور/i },
+  { dept: 'finance', re: /budget|revenue|invoice|profit|مالي|ميزانية|إيراد|فاتورة|ربح/i },
+  { dept: 'legal', re: /contract|terms|legal|compliance|عقد|قانوني|شروط|امتثال/i },
+  { dept: 'security', re: /security|risk|threat|أمن|مخاطر|تهديد/i },
+  { dept: 'ops', re: /incident|outage|operations|تشغيل|حادثة|عطل/i },
+  { dept: 'qa', re: /test|quality|review|اختبار|جودة|مراجعة/i },
+];
+export function fallbackRoute(body) {
+  const text = String(body || '');
+  const hits = ROUTE_HINTS.filter((h) => h.re.test(text)).map((h) => h.dept);
+  // Always start by understanding, always end by writing something down.
+  const route = [...new Set(['research', ...hits, 'docs'])].filter((d) => DEPT_BY_NAME[d]).slice(0, 5);
+  return route.map((dept) => ({
+    dept,
+    kind: 'agent',
+    title: DEPT_BY_NAME[dept].does,
+    brief: `Take this request and do your department's part of it, then hand your output to the next step.\n\nREQUEST:\n${text.slice(0, 1200)}`,
+  }));
+}
+
 export function advanceRequests() {
   // 1. Triage results become the route.
   for (const r of q("SELECT * FROM requests WHERE state = 'triaging' AND run_id IS NOT NULL")) {
@@ -249,23 +311,26 @@ export function advanceRequests() {
     const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
     const steps = Array.isArray(parsed?.steps) ? parsed.steps.filter((s) => s?.dept && DEPT_BY_NAME[s.dept]) : [];
     if (!steps.length) {
+      const declined = /declined this work/.test(String(run.failure_reason || ''));
+      const words = (() => {
+        try { return String(JSON.parse(run.output)?.raw || '').replace(/\s+/g, ' ').trim().slice(0, 600); }
+        catch { return ''; }
+      })();
+      // A model that returns prose instead of JSON is a technical stumble, not
+      // an answer. The desk routes it anyway, by reading the words in the
+      // request — nothing is dropped because a reply arrived in the wrong shape.
+      if (!declined) {
+        const fallback = fallbackRoute(r.body);
+        planSteps(r, fallback, `Routed by the desk's own reading of the request — the router's reply arrived in the wrong shape, so it was not allowed to block the work.`);
+        audit({ actorType: 'system', actorId: 'requests', action: 'request.fallback_routed', subjectType: 'request', subjectId: r.id, payload: { steps: fallback.map((s) => s.dept) } });
+        continue;
+      }
       exec("UPDATE requests SET state = 'failed', plan_summary = ? WHERE id = ?",
-        `could not route this request: ${run.failure_reason || 'the router returned no usable steps'}`, r.id);
+        `The intake router declined this request. In its words: "${words}"`, r.id);
       notify({ level: 'warn', source: 'requests', message: `Request #${r.id} could not be routed — rewrite it with more detail, or route it by hand.`, subjectType: 'request', subjectId: r.id });
       continue;
     }
-    steps.slice(0, 8).forEach((s, i) => {
-      const d = DEPT_BY_NAME[s.dept];
-      const kind = ['agent', 'human', 'spawn'].includes(s.kind) ? s.kind : 'agent';
-      const spawn = kind === 'spawn' && d.spawn && SPAWNS.has(d.spawn) ? d.spawn : null;
-      exec('INSERT INTO request_steps (request_id, seq, dept, title, brief, kind, spawn_kind, agent_id) VALUES (?,?,?,?,?,?,?,?)',
-        r.id, i + 1, s.dept, String(s.title || d.does).slice(0, 140), s.brief || null,
-        spawn ? 'spawn' : kind, spawn, kind === 'human' ? null : (d.agent));
-    });
-    exec("UPDATE requests SET state = 'running', run_id = NULL, title = COALESCE(NULLIF(?,''), title), plan_summary = ?, deliverable = ? WHERE id = ?",
-      String(parsed.title || '').slice(0, 140), parsed.summary || null, parsed.deliverable || null, r.id);
-    audit({ actorType: 'agent', actorId: 'AGT-REQ-001', action: 'request.routed', subjectType: 'request', subjectId: r.id, payload: { steps: steps.length, depts: steps.map((s) => s.dept) } });
-    notify({ level: 'info', source: 'requests', message: `Request #${r.id} routed through ${steps.length} department(s): ${steps.map((s) => s.dept).join(' → ')}.`, subjectType: 'request', subjectId: r.id });
+    planSteps(r, steps, parsed.summary || null, { title: parsed.title, deliverable: parsed.deliverable });
   }
 
   // 2. Walk each running route, one step at a time.

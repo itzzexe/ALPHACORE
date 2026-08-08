@@ -9,6 +9,35 @@ import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword } fro
 import { wipeSystem } from './wipe.js';
 import { activityFeed } from './links.js';
 import {
+  treasuryOverview, addWallet, retireWallet, createInvoice, cancelInvoice,
+  preparePayout, resolvePayout,
+} from './wallet.js';
+import {
+  commsOverview, addNumber, scheduleCall, placeCall, dispositionCall,
+  sendMessage, deliverMessage,
+} from './comms.js';
+import { moneyDesk, setPolicy, recordMove } from './money.js';
+import {
+  marketingDesk, createPersona, setPersonaState, createPositioning, approvePositioning,
+  planChannel, recordChannelResult, planContent, commissionContent, researchKeywords,
+  createSequence, setSequenceState,
+} from './marketing.js';
+import {
+  chatOverview, messages as chatMessages, post as chatPost, markRead as chatMarkRead,
+  openDm as chatOpenDm, react as chatReact, editMessage as chatEdit, pin as chatPin,
+  deleteMessage as chatDelete, search as chatSearch,
+} from './chat.js';
+import {
+  METHODS, DEPARTMENTS as CYCLE_DEPARTMENTS, createWorkstream, listWorkstreams, getWorkstream,
+  addWorkstreamNote, rerunWorkstream, closeWorkstream,
+  requestAudit, auditorOverview,
+  listSprints, createSprint, assignToSprint, setSprintState,
+} from './cycles.js';
+import {
+  memoryOverview, agentMemory, search as memSearch, remember, forget,
+  readPlaybook, writePlaybook, startReflection, verifyLesson,
+} from './memory.js';
+import {
   securityOverview, securityScan, setSecurityState,
   complianceOverview, addComplianceCheck, sustainabilityOverview, capacityOverview,
   listExperiments, createExperiment, concludeExperiment,
@@ -16,7 +45,7 @@ import {
   pmoOverview, createGate, resolveGate, insightsOverview,
   listBrandAssets, createBrandAsset, approveBrandAsset,
   listPurchases, createPurchase, resolvePurchase, finopsOverview,
-  listCandidates, createOpening, trialCandidate, decideCandidate,
+  listCandidates, createOpening, trialCandidate, decideCandidate, workforceGaps, autoRecruit,
   academyOverview, createCurriculum, setCurriculumState,
   listInvestorUpdates, generateInvestorUpdate, sendInvestorUpdate,
   listBoardRecords, generateBoardPacket, holdBoardMeeting,
@@ -29,6 +58,26 @@ import {
   qualityDashboard, addQualityReview,
 } from './pm.js';
 import { setFrozen } from './policy.js';
+// The outside world.
+import { listSecrets, putSecret, dropSecret, getSecret as vaultGet } from './vault.js';
+import {
+  DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
+  getConnector, connectorsOverview, callConnector,
+} from './connectors/index.js';
+import { authorizeUrl } from './connectors/oauth.js';
+import { getSetting } from './settings.js';
+import { egressOverview, releaseGated, denyGated, grantScope, revokeScope, scopesFor } from './egress.js';
+import { jobsOverview, retryJob, cancelJob } from './jobs.js';
+import { webOverview, readFetch, fetchPage, searchWeb, browsePage } from './web.js';
+import { mcpOverview, registerServer, syncServer, callTool, allTools, CRUCIBLE_TOOLS } from './mcp.js';
+import { constitutionOverview, amendConstitution, retireRule } from './constitution.js';
+import { provenanceOverview, sealFinishedWork, verifyStored, verifyReceipt } from './provenance.js';
+import { timeMachineOverview, takeSnapshot, standAt, replay, reopenDecision } from './timemachine.js';
+import { simulationOverview, readSimulation, startSimulation, discardSimulation } from './simulation.js';
+import { skillsOverview, proposeSkill, trialSkill, inviteProposals, runTournament } from './skills.js';
+import { redteamOverview, runRedTeam, markFixed } from './redteam.js';
+import { graphOverview, rebuildGraph, semanticSearch, neighbourhood } from './graph.js';
+import { revenueOverview, sourceFromIntel, revenueTick, sendOutreach, invoiceDeal } from './revenue.js';
 import { enqueueRun, resolveRun, queueStats, getAgentSpec } from './workflow.js';
 import {
   createDecision, listDecisions, getDecision, addEvidence, verifyEvidence,
@@ -56,7 +105,7 @@ import {
   createDataset, listDatasets, getDataset, transformDataset, datasetFromSource, listInternalSources,
   listArchive, getArchiveItem, archiveItem, archiveStats,
 } from './data.js';
-import { connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit } from './links.js';
+import { connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats } from './links.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
 import {
   createPricing, listPricing, setPricingState, approvedPricing,
@@ -325,6 +374,134 @@ const routes = [
   // --- Live map activity: the board's heartbeat ---
   ['GET', /^\/api\/map\/activity$/, (_p, _b, url) => activityFeed(Number(url.searchParams.get('since') || 0))],
 
+  // --- Contact centre: numbers, voices, calls, messages ---
+  ['GET', /^\/api\/contact$/, () => commsOverview()],
+  ['POST', /^\/api\/contact\/numbers$/, (_p, body) => ({ id: addNumber({ number: need(body, 'number'), label: body.label || null, country: body.country || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/contact\/calls$/, (_p, body) => ({ id: scheduleCall({
+    toNumber: need(body, 'toNumber'), purpose: need(body, 'purpose'), customerId: body.customerId || null,
+    agentId: body.agentId || null, voice: body.voice || 'ava', language: body.language || 'en', actor: need(body, 'actor'),
+  }) })],
+  ['POST', /^\/api\/contact\/calls\/(\d+)\/place$/, ([id], body) => placeCall(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/contact\/calls\/(\d+)\/disposition$/, ([id], body) => { dispositionCall(Number(id), { outcome: need(body, 'outcome'), followUp: body.followUp || null, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/contact\/messages$/, (_p, body) => ({ id: sendMessage({
+    toNumber: need(body, 'toNumber'), body: body.body || null, channel: body.channel || 'sms',
+    customerId: body.customerId || null, draftWith: body.draftWith || null, actor: need(body, 'actor'),
+  }) })],
+  ['POST', /^\/api\/contact\/messages\/(\d+)\/send$/, ([id], body) => deliverMessage(Number(id), { actor: need(body, 'actor') })],
+
+  // --- Marketing: audience, promise, channels, calendar, search, lifecycle ---
+  ['GET', /^\/api\/mkt$/, () => marketingDesk()],
+  ['POST', /^\/api\/mkt\/personas$/, (_p, body) => ({ id: createPersona({ name: need(body, 'name'), segment: body.segment || null, evidence: body.evidence || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/mkt\/personas\/(\d+)\/state$/, ([id], body) => { setPersonaState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/mkt\/positioning$/, (_p, body) => ({ id: createPositioning({ audience: need(body, 'audience'), promise: need(body, 'promise'), productId: body.productId || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/mkt\/positioning\/(\d+)\/approve$/, ([id], body) => { approvePositioning(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/mkt\/channels$/, (_p, body) => ({ id: planChannel({ campaignId: need(body, 'campaignId'), channel: need(body, 'channel'), budgetUsd: body.budgetUsd || 0, notes: body.notes || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/mkt\/channels\/(\d+)$/, ([id], body) => { recordChannelResult(Number(id), { ...body, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/mkt\/calendar$/, (_p, body) => ({ id: planContent({
+    title: need(body, 'title'), channel: body.channel || 'blog', stage: body.stage || 'awareness',
+    personaId: body.personaId || null, campaignId: body.campaignId || null, dueDate: body.dueDate || null,
+    brief: body.brief || null, actor: need(body, 'actor'),
+  }) })],
+  ['POST', /^\/api\/mkt\/calendar\/(\d+)\/commission$/, ([id], body) => commissionContent(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/mkt\/seo$/, (_p, body) => researchKeywords({ topic: need(body, 'topic'), language: body.language || 'en', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/mkt\/sequences$/, (_p, body) => ({ id: createSequence({ name: need(body, 'name'), goal: need(body, 'goal'), audience: body.audience || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/mkt\/sequences\/(\d+)\/state$/, ([id], body) => { setSequenceState(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
+
+  // --- The money desk: position, runway, allocation policy ---
+  ['GET', /^\/api\/money$/, () => moneyDesk()],
+  ['POST', /^\/api\/money\/policy$/, (_p, body) => ({ id: setPolicy({
+    reserve: need(body, 'reserve'), opex: need(body, 'opex'), growth: need(body, 'growth'),
+    minRunway: body.minRunway || 6, note: body.note || null, actor: need(body, 'actor'),
+  }) })],
+  ['POST', /^\/api\/money\/moves$/, (_p, body) => ({ id: recordMove({
+    kind: need(body, 'kind'), bucket: body.bucket || null, amount: body.amount || 0,
+    asset: body.asset || 'USD', reason: need(body, 'reason'), actor: need(body, 'actor'),
+  }) })],
+
+  // --- Treasury: watch-only wallets, invoices, incoming payments ---
+  ['GET', /^\/api\/treasury$/, () => treasuryOverview()],
+  ['POST', /^\/api\/treasury\/wallets$/, (_p, body) => ({ id: addWallet({
+    label: need(body, 'label'), chain: need(body, 'chain'), address: need(body, 'address'),
+    asset: body.asset || null, kind: body.kind || 'receiving', actor: need(body, 'actor'),
+  }) })],
+  ['POST', /^\/api\/treasury\/wallets\/(\d+)\/retire$/, ([id], body) => { retireWallet(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/treasury\/invoices$/, (_p, body) => createInvoice({
+    description: need(body, 'description'), amount: need(body, 'amount'), chain: body.chain || null,
+    walletId: body.walletId || null, customerId: body.customerId || null, dealId: body.dealId || null,
+    expiresHours: body.expiresHours || 72, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/treasury\/invoices\/(\d+)\/cancel$/, ([id], body) => { cancelInvoice(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/treasury\/payouts$/, (_p, body) => ({ id: preparePayout({
+    toAddress: need(body, 'toAddress'), chain: need(body, 'chain'), asset: body.asset || null,
+    amount: need(body, 'amount'), reason: need(body, 'reason'), actor: need(body, 'actor'),
+  }) })],
+  // Releasing money is the one action an agent identity can never perform: the
+  // caller must be a signed-in person, not the autonomy loop.
+  ['POST', /^\/api\/treasury\/payouts\/(\d+)\/resolve$/, ([id], body, _u, user) => {
+    resolvePayout(Number(id), {
+      state: need(body, 'state'), txHash: body.txHash || null,
+      actor: need(body, 'actor'), isHuman: Boolean(user?.username),
+    });
+    return { ok: true };
+  }],
+
+  // --- The floor: humans and AI employees in the same rooms ---
+  ['GET', /^\/api\/chat$/, (_p, _b, url) => chatOverview(url.searchParams.get('actor'))],
+  ['GET', /^\/api\/chat\/(\d+)$/, ([id], _b, url) => ({
+    channel: one('SELECT * FROM chat_channels WHERE id = ?', Number(id)),
+    messages: chatMessages(Number(id), { since: Number(url.searchParams.get('since') || 0) }),
+  })],
+  ['POST', /^\/api\/chat\/(\d+)$/, ([id], body) => chatPost({
+    channelId: Number(id), body: need(body, 'body'), parentId: body.parentId || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/chat\/(\d+)\/read$/, ([id], body) => chatMarkRead(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/chat\/dm$/, (_p, body) => chatOpenDm(need(body, 'actor'), need(body, 'with'))],
+  ['POST', /^\/api\/chat\/msg\/(\d+)\/react$/, ([id], body) => chatReact(Number(id), { emoji: need(body, 'emoji'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/chat\/msg\/(\d+)\/edit$/, ([id], body) => { chatEdit(Number(id), { body: need(body, 'body'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/chat\/msg\/(\d+)\/pin$/, ([id], body) => chatPin(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/chat\/msg\/(\d+)\/delete$/, ([id], body, _u, user) => { chatDelete(Number(id), { actor: need(body, 'actor'), isOwner: Boolean(user?.isOwner) }); return { ok: true }; }],
+  ['GET', /^\/api\/chat\/search$/, (_p, _b, url) => chatSearch(url.searchParams.get('q') || '')],
+
+  // --- The iteration engine: workstreams, the universal auditor, sprints ---
+  ['GET', /^\/api\/workstreams$/, () => ({ methods: METHODS, departments: CYCLE_DEPARTMENTS, workstreams: listWorkstreams() })],
+  ['POST', /^\/api\/workstreams$/, (_p, body) => ({ id: createWorkstream({
+    title: need(body, 'title'), goal: need(body, 'goal'), method: body.method || 'kaizen',
+    route: body.route || null, qualityTarget: body.qualityTarget, maxCycles: body.maxCycles,
+    reviewers: body.reviewers, subjectType: body.subjectType || null, subjectId: body.subjectId || null,
+    actor: need(body, 'actor'),
+  }) })],
+  ['GET', /^\/api\/workstreams\/(\d+)$/, ([id]) => getWorkstream(Number(id)) || (() => { throw new HttpError(404, 'no such workstream'); })()],
+  ['POST', /^\/api\/workstreams\/(\d+)\/note$/, ([id], body) => ({ id: addWorkstreamNote(Number(id), { body: need(body, 'body'), actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/workstreams\/(\d+)\/rerun$/, ([id], body) => { rerunWorkstream(Number(id), { note: body.note || null, dept: body.dept || null, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/workstreams\/(\d+)\/close$/, ([id], body) => { closeWorkstream(Number(id), { verdict: need(body, 'verdict'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['GET', /^\/api\/auditor$/, () => auditorOverview()],
+  ['POST', /^\/api\/auditor$/, (_p, body) => ({ id: requestAudit({
+    subjectType: need(body, 'subjectType'), subjectId: need(body, 'subjectId'),
+    dept: body.dept || null, title: body.title || null, content: body.content || null,
+    criteria: body.criteria || null, context: body.context || null, actor: need(body, 'actor'),
+  }) })],
+  ['GET', /^\/api\/sprints$/, () => listSprints()],
+  ['POST', /^\/api\/sprints$/, (_p, body) => ({ id: createSprint({ name: need(body, 'name'), goal: body.goal || null, startsOn: body.startsOn || null, endsOn: body.endsOn || null, actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/sprints\/(\d+)\/assign$/, ([id], body) => { assignToSprint(Number(id), { taskId: Number(need(body, 'taskId')), points: body.points, actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/sprints\/(\d+)\/state$/, ([id], body) => { setSprintState(Number(id), { state: need(body, 'state'), retro: body.retro || null, actor: need(body, 'actor') }); return { ok: true }; }],
+
+  // --- Agent memory: episodes, retrieval, playbooks, reflection ---
+  ['GET', /^\/api\/memory$/, () => memoryOverview()],
+  ['GET', /^\/api\/memory\/search$/, (_p, _b, url) => memSearch(url.searchParams.get('q') || '', {
+    limit: Math.min(20, Number(url.searchParams.get('limit')) || 8),
+    agentId: url.searchParams.get('agent') || null,
+  })],
+  ['GET', /^\/api\/memory\/agent\/([\w.-]+)$/, ([id]) => agentMemory(id)],
+  ['GET', /^\/api\/memory\/playbook\/([\w.-]+)$/, ([id]) => ({ agentId: id, body: readPlaybook(id) })],
+  ['POST', /^\/api\/memory\/playbook\/([\w.-]+)$/, ([id], body) => { writePlaybook(id, need(body, 'body'), { actor: need(body, 'actor'), reason: 'human edit' }); return { ok: true }; }],
+  ['POST', /^\/api\/memory\/reflect\/([\w.-]+)$/, async ([id], body) => ({ id: await startReflection(id, { actor: need(body, 'actor') }) })],
+  ['POST', /^\/api\/memory\/(\d+)\/verify$/, ([id], body) => { verifyLesson(Number(id), { verdict: need(body, 'verdict'), actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/memory\/(\d+)\/forget$/, ([id], body) => { forget(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
+  ['POST', /^\/api\/memory$/, (_p, body) => ({ id: remember({
+    kind: 'lesson', agentId: body.agentId || null, title: body.title || 'human note',
+    body: need(body, 'body'), sourceType: 'human', verification: 'verified', createdBy: need(body, 'actor'),
+  }) })],
+
   // --- Expansion wave: TRUST / CAPITAL / TALENT / EXEC + friends ---
   ['GET', /^\/api\/security$/, () => securityOverview()],
   ['POST', /^\/api\/security\/scan$/, (_p, body) => securityScan({ actor: need(body, 'actor') })],
@@ -350,7 +527,8 @@ const routes = [
   ['POST', /^\/api\/procurement$/, (_p, body) => ({ id: createPurchase({ item: need(body, 'item'), vendorId: body.vendorId || null, amountUsd: body.amountUsd || 0, justification: body.justification || null, actor: need(body, 'actor') }) })],
   ['POST', /^\/api\/procurement\/(\d+)\/resolve$/, ([id], body) => { resolvePurchase(Number(id), { state: need(body, 'state'), actor: need(body, 'actor') }); return { ok: true }; }],
   ['GET', /^\/api\/finops$/, () => finopsOverview()],
-  ['GET', /^\/api\/recruiting$/, () => listCandidates()],
+  ['GET', /^\/api\/recruiting$/, () => ({ candidates: listCandidates(), gaps: workforceGaps() })],
+  ['POST', /^\/api\/recruiting\/auto$/, (_p, body) => autoRecruit({ actor: need(body, 'actor') })],
   ['POST', /^\/api\/recruiting$/, (_p, body) => ({ id: createOpening({ roleName: need(body, 'roleName'), brief: need(body, 'brief'), actor: need(body, 'actor') }) })],
   ['POST', /^\/api\/recruiting\/(\d+)\/trial$/, ([id], body) => { trialCandidate(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
   ['POST', /^\/api\/recruiting\/(\d+)\/decide$/, ([id], body) => decideCandidate(Number(id), { verdict: need(body, 'verdict'), actor: need(body, 'actor') })],
@@ -442,6 +620,7 @@ const routes = [
     sections: sectionCatalog(),
     edges: relationshipMatrix(),
     audit: connectivityAudit(),
+    flow: flowStats(),
     harmony: harmonyScore(),
   })],
 
@@ -518,7 +697,11 @@ const routes = [
   ['POST', /^\/api\/harmony\/mode$/, (_p, body) => { setMaestroMode(need(body, 'mode'), need(body, 'actor')); return { ok: true }; }],
   // --- Autonomy: the company decides for itself ---
   ['GET', /^\/api\/autonomy$/, () => autonomyOverview()],
-  ['POST', /^\/api\/autonomy\/toggle$/, (_p, body) => setAutonomy(Boolean(body.enabled), need(body, 'actor'))],
+  // level: off | full | unattended. `enabled` is still accepted so the old
+  // toggle keeps working.
+  ['POST', /^\/api\/autonomy\/toggle$/, (_p, body) => setAutonomy(
+    body.level !== undefined ? body.level : Boolean(body.enabled), need(body, 'actor'),
+  )],
   ['POST', /^\/api\/autonomy\/(\d+)\/revert$/, ([id], body) => revertDecision(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
 
   ['GET', /^\/api\/harmony\/remediations$/, () => remediations()],
@@ -728,6 +911,155 @@ const routes = [
       body.layer || 'org', body.classification || 'internal', need(body, 'content'), need(body, 'sourceRef'), body.createdBy || 'human:admin');
     return { ok: true };
   }],
+
+  // ==========================================================================
+  // The outside world.
+  // ==========================================================================
+
+  // --- the vault: secrets in, never out ---
+  ['GET', /^\/api\/vault$/, () => listSecrets()],
+  ['POST', /^\/api\/vault$/, (_p, body) => putSecret(need(body, 'name'), need(body, 'value'), {
+    kind: body.kind, connector: body.connector, note: body.note, expiresAt: body.expiresAt, actor: body.actor,
+  })],
+  ['DELETE', /^\/api\/vault\/([A-Za-z0-9_.-]+)$/, ([name], _b, url) => dropSecret(name, { actor: url.searchParams.get('actor') })],
+
+  // --- connectors: the services the company can reach ---
+  ['GET', /^\/api\/connectors$/, () => connectorsOverview()],
+  ['GET', /^\/api\/connectors\/([a-z0-9:_-]+)$/, ([id]) => getConnector(id) || (() => { throw new HttpError(404, 'no such connector'); })()],
+  ['POST', /^\/api\/connectors$/, (_p, body) => addConnector({
+    id: need(body, 'id'), driver: need(body, 'driver'), label: body.label,
+    config: body.config || {}, allowlist: body.allowlist || [], scopes: body.scopes, quotaDay: body.quotaDay, actor: body.actor,
+  })],
+  ['POST', /^\/api\/connectors\/([a-z0-9:_-]+)\/connect$/, ([id], body) => connect(id, {
+    secret: body.secret, account: body.account || 'default', meta: body.meta || {}, actor: body.actor,
+  })],
+  ['POST', /^\/api\/connectors\/([a-z0-9:_-]+)\/state$/, ([id], body) => setConnectorState(id, need(body, 'state'), { actor: body.actor })],
+  ['POST', /^\/api\/connectors\/([a-z0-9:_-]+)\/allowlist$/, ([id], body) => setAllowlist(id, body.allowlist || [], { actor: body.actor })],
+  ['POST', /^\/api\/connectors\/([a-z0-9:_-]+)\/call$/, ([id], body) => callConnector({
+    connector: id, capability: need(body, 'capability'), args: body.args || {},
+    actor: body.actor, reason: body.reason || 'called by hand from the console',
+  })],
+  // Start an OAuth handshake: the client id and secret go straight to the vault.
+  ['POST', /^\/api\/connectors\/([a-z0-9:_-]+)\/authorize$/, ([id], body, url) => {
+    const base = id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    if (body.clientId) putSecret(`${base}_CLIENT_ID`, body.clientId, { kind: 'oauth', connector: id, actor: body.actor });
+    if (body.clientSecret) putSecret(`${base}_CLIENT_SECRET`, body.clientSecret, { kind: 'oauth', connector: id, actor: body.actor });
+    const driver = DRIVERS[one('SELECT driver FROM connectors WHERE id = ?', id)?.driver];
+    if (!driver?.auth?.provider) throw new HttpError(400, 'that connector does not use OAuth');
+    exec('UPDATE connectors SET config = ? WHERE id = ?', JSON.stringify({ provider: driver.auth.provider }), id);
+    const origin = getSetting('PUBLIC_BASE_URL') || url.origin;
+    return {
+      url: authorizeUrl({
+        connector: id, provider: driver.auth.provider,
+        clientId: body.clientId || vaultGet(`${base}_CLIENT_ID`),
+        scopes: body.scopes || driver.auth.scopes,
+        redirectUri: `${origin}/oauth/callback`,
+      }),
+      redirectUri: `${origin}/oauth/callback`,
+    };
+  }],
+
+  // --- the gate: every attempt to touch anything outside ---
+  ['GET', /^\/api\/egress$/, () => egressOverview()],
+  ['POST', /^\/api\/egress\/(\d+)\/release$/, ([id], body) => releaseGated(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/egress\/(\d+)\/deny$/, ([id], body) => denyGated(Number(id), { actor: need(body, 'actor'), why: body.why || '' })],
+  ['GET', /^\/api\/scopes\/([A-Za-z0-9-]+)$/, ([agentId]) => scopesFor(agentId)],
+  ['POST', /^\/api\/scopes$/, (_p, body) => grantScope({
+    agentId: need(body, 'agentId'), connector: need(body, 'connector'), capability: need(body, 'capability'),
+    constraint: body.constraint || null, expiresAt: body.expiresAt || null, actor: body.actor,
+  })],
+  ['POST', /^\/api\/scopes\/revoke$/, (_p, body) => revokeScope({
+    agentId: need(body, 'agentId'), connector: need(body, 'connector'), capability: need(body, 'capability'), actor: body.actor,
+  })],
+
+  // --- the queue ---
+  ['GET', /^\/api\/jobs$/, () => jobsOverview()],
+  ['POST', /^\/api\/jobs\/(\d+)\/retry$/, ([id], body) => retryJob(Number(id), { actor: body.actor })],
+  ['POST', /^\/api\/jobs\/(\d+)\/cancel$/, ([id], body) => cancelJob(Number(id), { actor: body.actor })],
+
+  // --- the web ---
+  ['GET', /^\/api\/web$/, () => webOverview()],
+  ['GET', /^\/api\/web\/(\d+)$/, ([id]) => readFetch(Number(id))],
+  ['POST', /^\/api\/web\/fetch$/, (_p, body) => fetchPage(need(body, 'url'), { agentId: body.agentId || null })],
+  ['POST', /^\/api\/web\/search$/, (_p, body) => searchWeb(need(body, 'query'), { agentId: body.agentId || null })],
+  ['POST', /^\/api\/web\/browse$/, (_p, body) => browsePage(need(body, 'url'), { agentId: body.agentId || null, screenshot: Boolean(body.screenshot) })],
+
+  // --- MCP ---
+  ['GET', /^\/api\/mcp$/, () => mcpOverview()],
+  ['POST', /^\/api\/mcp$/, (_p, body) => registerServer({
+    id: need(body, 'id'), label: body.label, transport: body.transport || 'stdio',
+    command: body.command, args: body.args || [], url: body.url, envNames: body.envNames || [], actor: body.actor,
+  })],
+  ['POST', /^\/api\/mcp\/([a-z0-9:_-]+)\/sync$/, ([id]) => syncServer(id)],
+  ['POST', /^\/api\/mcp\/([a-z0-9:_-]+)\/call$/, ([id], body) => callTool({
+    serverId: id, tool: need(body, 'tool'), args: body.args || {}, agentId: body.agentId || null,
+  })],
+  ['GET', /^\/api\/mcp\/tools$/, () => ({ tools: allTools(), exposed: CRUCIBLE_TOOLS })],
+
+  // --- the constitution ---
+  ['GET', /^\/api\/constitution$/, () => constitutionOverview()],
+  ['POST', /^\/api\/constitution$/, (_p, body) => amendConstitution({
+    ruleId: need(body, 'ruleId'), article: body.article, text: need(body, 'text'),
+    machine: body.machine || null, severity: body.severity, actor: body.actor,
+  })],
+  ['POST', /^\/api\/constitution\/([A-Za-z0-9.-]+)\/retire$/, ([ruleId], body) => retireRule(ruleId, { actor: body.actor })],
+
+  // --- provenance ---
+  ['GET', /^\/api\/provenance$/, () => provenanceOverview()],
+  ['POST', /^\/api\/provenance\/seal$/, () => ({ sealed: sealFinishedWork() })],
+  ['POST', /^\/api\/provenance\/(\d+)\/verify$/, ([id], body) => verifyStored(Number(id), body.content ?? null)],
+  ['POST', /^\/api\/provenance\/verify$/, (_p, body) => verifyReceipt({ receipt: need(body, 'receipt'), content: body.content ?? null })],
+
+  // --- the time machine ---
+  ['GET', /^\/api\/timemachine$/, () => timeMachineOverview()],
+  ['POST', /^\/api\/timemachine\/snapshot$/, (_p, body) => takeSnapshot({ label: need(body, 'label'), actor: body.actor })],
+  ['GET', /^\/api\/timemachine\/at\/(\d+)$/, ([seq]) => standAt(Number(seq))],
+  ['GET', /^\/api\/timemachine\/replay\/(\d+)\/(\d+)$/, ([from, to]) => replay(Number(from), Number(to))],
+  ['POST', /^\/api\/timemachine\/reopen$/, (_p, body) => reopenDecision({
+    decisionId: need(body, 'decisionId'), why: need(body, 'why'), actor: body.actor,
+  })],
+
+  // --- the shadow company ---
+  ['GET', /^\/api\/simulation$/, () => simulationOverview()],
+  ['GET', /^\/api\/simulation\/(\d+)$/, ([id]) => readSimulation(Number(id))],
+  ['POST', /^\/api\/simulation$/, (_p, body) => startSimulation({
+    name: need(body, 'name'), question: need(body, 'question'),
+    changes: body.changes || [], horizon: body.horizon, actor: body.actor,
+  })],
+  ['DELETE', /^\/api\/simulation\/(\d+)$/, ([id], _b, url) => discardSimulation(Number(id), { actor: url.searchParams.get('actor') })],
+
+  // --- skills and tournaments ---
+  ['GET', /^\/api\/skills$/, () => skillsOverview()],
+  ['POST', /^\/api\/skills$/, (_p, body) => proposeSkill({
+    title: need(body, 'title'), taskType: need(body, 'taskType'), body: need(body, 'body'),
+    proposedBy: body.proposedBy || body.actor, actor: body.actor,
+  })],
+  ['POST', /^\/api\/skills\/(\d+)\/trial$/, ([id], body) => trialSkill(Number(id), { actor: body.actor })],
+  ['POST', /^\/api\/skills\/invite$/, () => ({ asked: inviteProposals(2) })],
+  ['POST', /^\/api\/tournaments$/, (_p, body) => runTournament(need(body, 'taskType'), { actor: body.actor })],
+
+  // --- the red team ---
+  ['GET', /^\/api\/redteam$/, () => redteamOverview()],
+  ['POST', /^\/api\/redteam\/run$/, (_p, body) => runRedTeam({ only: body.only || null, actor: body.actor })],
+  ['POST', /^\/api\/redteam\/(\d+)\/fixed$/, ([id], body) => markFixed(Number(id), { actor: body.actor })],
+
+  // --- the knowledge graph ---
+  ['GET', /^\/api\/kgraph$/, () => graphOverview()],
+  ['POST', /^\/api\/kgraph\/rebuild$/, () => rebuildGraph()],
+  ['GET', /^\/api\/kgraph\/search$/, (_p, _b, url) => ({ results: semanticSearch(url.searchParams.get('q') || '', { k: 12, kind: url.searchParams.get('kind') || null }) })],
+  ['GET', /^\/api\/kgraph\/node\/(.+)$/, ([id]) => neighbourhood(decodeURIComponent(id)) || (() => { throw new HttpError(404, 'no such node'); })()],
+
+  // --- the revenue loop ---
+  ['GET', /^\/api\/revenue$/, () => revenueOverview()],
+  ['POST', /^\/api\/revenue\/source$/, (_p, body) => ({ created: sourceFromIntel({ limit: body.limit || 3 }) })],
+  ['POST', /^\/api\/revenue\/tick$/, () => ({ moved: revenueTick() })],
+  ['POST', /^\/api\/revenue\/(\d+)\/outreach$/, ([id], body) => sendOutreach({
+    dealId: Number(id), connector: body.connector || 'gmail', to: need(body, 'to'),
+    agentId: body.agentId || null, actor: body.actor,
+  })],
+  ['POST', /^\/api\/revenue\/(\d+)\/invoice$/, ([id], body) => invoiceDeal({
+    dealId: Number(id), amountUsd: Number(need(body, 'amountUsd')), actor: body.actor,
+  })],
 ];
 
 /** Path → permission key. One permission per capability; superadmin holds "*". */
@@ -818,6 +1150,17 @@ function permFor(m, path) {
   if (path === '/api/perms' || path.startsWith('/api/users')) return 'users.manage';
   if (path.startsWith('/api/settings') || path === '/api/system/wipe') return 'settings.manage';
   if (path === '/api/map/activity') return 'dashboard.view';
+  if (path.startsWith('/api/chat')) return m === 'GET' ? 'chat.view' : 'chat.post';
+  // Money leaving the company is its own permission, held apart from invoicing.
+  if (path.startsWith('/api/comms')) return m === 'GET' ? 'comms.view' : 'comms.manage';
+  if (path.startsWith('/api/money')) return m === 'GET' ? 'money.view' : 'money.manage';
+  if (path.startsWith('/api/mkt')) return m === 'GET' ? 'marketing.view' : 'marketing.manage';
+  if (/^\/api\/treasury\/payouts\/\d+\/resolve$/.test(path)) return 'treasury.pay';
+  if (path.startsWith('/api/treasury')) return m === 'GET' ? 'treasury.view' : 'treasury.manage';
+  if (path.startsWith('/api/memory')) return m === 'GET' ? 'memory.view' : 'memory.manage';
+  if (path.startsWith('/api/workstreams')) return m === 'GET' ? 'workstreams.view' : 'workstreams.manage';
+  if (path.startsWith('/api/auditor')) return m === 'GET' ? 'auditor.view' : 'auditor.request';
+  if (path.startsWith('/api/sprints')) return m === 'GET' ? 'sprints.view' : 'sprints.manage';
   if (path.startsWith('/api/security')) return m === 'GET' ? 'security.view' : 'security.manage';
   if (path.startsWith('/api/compliance')) return m === 'GET' ? 'compliance.view' : 'compliance.manage';
   if (path === '/api/sustainability') return 'sustainability.view';
@@ -834,6 +1177,26 @@ function permFor(m, path) {
   if (path.startsWith('/api/ir')) return m === 'GET' ? 'ir.view' : 'ir.manage';
   if (path.startsWith('/api/board')) return m === 'GET' ? 'board.view' : 'board.manage';
   if (path.startsWith('/api/comms')) return m === 'GET' ? 'comms.view' : 'comms.manage';
+  // The outside world. Reading a ledger and arming a connector are different
+  // powers, so they are different permissions.
+  if (path.startsWith('/api/vault')) return 'vault.manage';
+  if (path.startsWith('/api/connectors')) return m === 'GET' ? 'connectors.view' : 'connectors.manage';
+  if (path.startsWith('/api/scopes')) return m === 'GET' ? 'egress.view' : 'scopes.grant';
+  if (is(/^\/api\/egress\/\d+\/(release|deny)$/)) return 'egress.release';
+  if (path.startsWith('/api/egress')) return 'egress.view';
+  if (path.startsWith('/api/jobs')) return m === 'GET' ? 'jobs.view' : 'jobs.manage';
+  if (path.startsWith('/api/web')) return m === 'GET' ? 'web.view' : 'web.use';
+  if (path.startsWith('/api/mcp')) return m === 'GET' ? 'mcp.view' : 'mcp.manage';
+  if (path.startsWith('/api/constitution')) return m === 'GET' ? 'constitution.view' : 'constitution.amend';
+  if (path.startsWith('/api/provenance')) return m === 'GET' ? 'provenance.view' : 'provenance.issue';
+  if (is(/^\/api\/timemachine\/reopen$/)) return 'owner.rule';
+  if (path.startsWith('/api/timemachine')) return m === 'GET' ? 'timemachine.view' : 'timemachine.snapshot';
+  if (path.startsWith('/api/simulation')) return m === 'GET' ? 'simulation.view' : 'simulation.run';
+  if (path.startsWith('/api/skills') || path.startsWith('/api/tournaments')) return m === 'GET' ? 'skills.view' : 'skills.manage';
+  if (path.startsWith('/api/redteam')) return m === 'GET' ? 'redteam.view' : 'redteam.run';
+  if (path.startsWith('/api/kgraph')) return m === 'GET' ? 'graph.view' : 'graph.manage';
+  if (is(/^\/api\/revenue\/\d+\/invoice$/)) return 'revenue.invoice';
+  if (path.startsWith('/api/revenue')) return m === 'GET' ? 'revenue.view' : 'revenue.manage';
   return 'dashboard.view';
 }
 

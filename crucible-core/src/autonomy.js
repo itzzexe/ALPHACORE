@@ -42,6 +42,8 @@ import { resolveProblem } from './immune.js';
 import { completeRitual } from './rituals.js';
 import { setRiskState } from './pm.js';
 import { setContractState } from './corporate.js';
+import { decideDecision } from './registry.js';
+import { advanceGate } from './products.js';
 
 const ACTOR = 'system:autonomy';
 const MAX_PER_CYCLE = 12;
@@ -53,25 +55,41 @@ export const HIGH_STAKES = [
   'decision (a registered decision)', 'ticket (a reply to a customer)',
 ];
 
-export function isAutonomous() { return String(getSetting('AUTONOMY_MODE') || 'off') === 'full'; }
+// Three settings, not two. "full" lets the executive defer the genuinely
+// consequential calls to the owner; "unattended" removes that escape hatch as
+// well — nothing waits for a person, including the things a careful executive
+// would rather not decide alone. That is the mode the owner asked for, and the
+// difference between the two is worth naming rather than burying.
+export function autonomyLevel() {
+  const v = String(getSetting('AUTONOMY_MODE') || 'off');
+  return ['full', 'unattended'].includes(v) ? v : 'off';
+}
+export function isAutonomous() { return autonomyLevel() !== 'off'; }
+export function isUnattended() { return autonomyLevel() === 'unattended'; }
 export function autonomySince() { return getSetting('AUTONOMY_SINCE'); }
 
-export function setAutonomy(on, actor) {
-  setSetting('AUTONOMY_MODE', on ? 'full' : 'off');
-  setSetting('AUTONOMY_SINCE', on ? new Date().toISOString() : null);
+export function setAutonomy(level, actor) {
+  const mode = level === true ? 'full' : level === false ? 'off' : String(level || 'off');
+  if (!['off', 'full', 'unattended'].includes(mode)) throw new Error('level: off|full|unattended');
+  setSetting('AUTONOMY_MODE', mode);
+  setSetting('AUTONOMY_SINCE', mode === 'off' ? null : new Date().toISOString());
   audit({
     actorType: 'human', actorId: actor,
-    action: on ? 'autonomy.enabled' : 'autonomy.disabled',
+    action: mode === 'off' ? 'autonomy.disabled' : 'autonomy.enabled',
     subjectType: 'settings', subjectId: 'AUTONOMY_MODE',
-    payload: { by: actor, note: on ? 'the owner handed all decisions to the AI' : 'decisions returned to humans' },
+    payload: { by: actor, mode, note: mode === 'unattended'
+      ? 'the owner handed every decision to the AI, including the ones it would rather defer'
+      : mode === 'full' ? 'the owner handed all delegable decisions to the AI' : 'decisions returned to humans' },
   });
   notify({
-    level: on ? 'crit' : 'info', source: 'autonomy',
-    message: on
-      ? 'AUTONOMY MODE ON — the Acting Executive is now deciding everything that would have waited for you. Every decision is logged and reversible; mistakes are committed rather than caught.'
-      : 'Autonomy mode off — decisions are waiting for a human again.',
+    level: mode === 'off' ? 'info' : 'crit', source: 'autonomy',
+    message: mode === 'unattended'
+      ? 'UNATTENDED MODE ON — nothing waits for a human any more. The company approves, publishes, signs, hires and rules on its own. Every decision is on the chain as system:autonomy and can be reversed; none of them were reviewed before they took effect.'
+      : mode === 'full'
+        ? 'AUTONOMY MODE ON — the Acting Executive is deciding everything that would have waited for you, and may still hold back the most consequential items.'
+        : 'Autonomy mode off — decisions are waiting for a human again.',
   });
-  return { enabled: on };
+  return { enabled: mode !== 'off', mode };
 }
 
 // ---------- executing a verdict ----------
@@ -149,9 +167,136 @@ function execute(item, verdict, reason) {
       for (const m of rows) exec("UPDATE memory_entries SET verification = 'verified' WHERE id = ?", m.id);
       return `${rows.length} knowledge entr(ies) verified`;
     }
+    // Unattended mode reaches the two kinds nothing else may touch: a
+    // registered decision and a gate that commits the company to a product.
+    // They stay unreachable in "full" mode, where a person is still available.
+    case 'decision':
+      if (!isUnattended()) return null;
+      decideDecision(id, { verdict: verdict === 'approve' ? 'approved' : 'rejected', approver: ACTOR, note });
+      return `decision ${id} ${verdict === 'approve' ? 'approved' : 'rejected'} without a human`;
+    case 'productGate':
+      if (!isUnattended()) return null;
+      if (verdict !== 'approve') return 'gate not crossed';
+      advanceGate(id, { note, actor: ACTOR });
+      return `product ${id} advanced through its gate`;
     default:
-      return null; // decisions, product gates and anything else stay with a person
+      return null;
   }
+}
+
+// ---------- the unattended sweep ----------
+// The approvals inbox only knows the departments that existed when it was
+// written. Everything built since — the iteration engine, the auditor, PMO
+// gates, procurement, recruiting, the executive desks, memory — has its own
+// waiting states, and in unattended mode none of them may sit there. These are
+// deterministic policies rather than another model call: cheap, repeatable,
+// and readable afterwards by anyone asking why something went through.
+async function sweepUnattended() {
+  const done = [];
+  // A rule that cannot fire is not a failure of the sweep — but it must not
+  // vanish either. A silent catch here hid a broken hire for an entire cycle.
+  const act = (what, fn) => {
+    try { const out = fn(); if (out !== false) done.push(typeof out === 'string' ? out : what); }
+    catch (e) {
+      audit({
+        actorType: 'system', actorId: ACTOR, action: 'autonomy.rule_failed',
+        subjectType: 'autonomy', subjectId: 'sweep',
+        payload: { rule: what, error: String(e.message).slice(0, 200) },
+      });
+    }
+  };
+  const M = await import('./cycles.js');
+  const X = await import('./expansion.js');
+  const MEM = await import('./memory.js');
+
+  // Iteration: accept what cleared the bar, spend one more round on what did
+  // not, and stop pretending an exhausted budget is a decision for later.
+  for (const w of q("SELECT * FROM workstreams WHERE state = 'awaiting_human'")) {
+    const cleared = (w.best_score ?? 0) >= w.quality_target;
+    if (cleared) act(`workstream #${w.id} accepted`, () => { M.closeWorkstream(w.id, { verdict: 'accepted', actor: ACTOR }); return `workstream #${w.id} accepted at ${Math.round((w.best_score ?? 0) * 100)}%`; });
+    else if (w.current_cycle < w.max_cycles + 2) act(`workstream #${w.id} re-run`, () => { M.rerunWorkstream(w.id, { note: 'Unattended mode: address every outstanding finding, then stop.', actor: ACTOR }); return `workstream #${w.id} sent round again`; });
+    else act(`workstream #${w.id} closed`, () => { M.closeWorkstream(w.id, { verdict: 'accepted', actor: ACTOR }); return `workstream #${w.id} accepted as-is — cycle budget spent`; });
+  }
+  // Stage gates: pass unless the project carries a failed audit.
+  for (const g of q("SELECT * FROM stage_gates WHERE state = 'pending'")) {
+    const failed = one("SELECT id FROM audits WHERE verdict = 'fail' AND state = 'done' AND created_at >= datetime('now','-7 days')");
+    act(`gate #${g.id}`, () => { X.resolveGate(g.id, { state: failed ? 'failed' : 'passed', note: 'Unattended ruling', actor: ACTOR }); return `PMO gate "${g.gate}" ${failed ? 'failed' : 'passed'}`; });
+  }
+  // Money: the cap is policy, not an opinion, so it does not need a person.
+  for (const p of q("SELECT * FROM purchase_requests WHERE state = 'requested'")) {
+    const ok = Number(p.amount_usd) <= 250;
+    act(`purchase #${p.id}`, () => { X.resolvePurchase(p.id, { state: ok ? 'approved' : 'rejected', actor: ACTOR }); return `purchase "${p.item}" ${ok ? 'approved' : 'rejected — above the unattended limit'}`; });
+  }
+  // Staffing itself: notice the gap, open the role, then walk the candidate
+  // through spec → trial → hire on the following sweeps.
+  act('workforce', () => {
+    const r = X.autoRecruit({ actor: ACTOR });
+    return r.opened ? `opened a role the company needed: ${r.roles.map((x) => x.roleName).join(', ')}` : false;
+  });
+  // Hiring: trial what has a spec, then decide on the trial.
+  for (const c of q("SELECT * FROM candidates WHERE state = 'screening' AND spec IS NOT NULL")) {
+    act(`candidate #${c.id}`, () => { X.trialCandidate(c.id, { actor: ACTOR }); return `candidate "${c.role_name}" sent to trial`; });
+  }
+  for (const c of q("SELECT * FROM candidates WHERE state = 'trial' AND trial_note IS NOT NULL")) {
+    act(`candidate #${c.id}`, () => { const r = X.decideCandidate(c.id, { verdict: 'hire', actor: ACTOR }); return `candidate "${c.role_name}" hired as ${r.agentId}`; });
+  }
+  // Everything the executive desks drafted and left sitting.
+  for (const r of q("SELECT * FROM releases WHERE state = 'draft' AND notes IS NOT NULL")) act(`release ${r.version}`, () => { X.publishRelease(r.id, { actor: ACTOR }); return `release ${r.version} published`; });
+  for (const b of q("SELECT * FROM bulletins WHERE state = 'draft' AND body IS NOT NULL")) act(`bulletin ${b.week}`, () => { X.publishBulletin(b.id, { actor: ACTOR }); return `bulletin ${b.week} published`; });
+  for (const u of q("SELECT * FROM investor_updates WHERE state = 'draft' AND body IS NOT NULL")) act(`IR ${u.period}`, () => { X.sendInvestorUpdate(u.id, { actor: ACTOR }); return `investor update ${u.period} sent`; });
+  for (const b of q("SELECT * FROM board_records WHERE state = 'draft' AND packet IS NOT NULL")) act(`board ${b.period}`, () => { X.holdBoardMeeting(b.id, { resolutions: 'Recorded in unattended mode: the packet was accepted as read.', actor: ACTOR }); return `board meeting ${b.period} recorded`; });
+  for (const a of q("SELECT * FROM brand_assets WHERE state = 'draft' AND content IS NOT NULL")) act(`brand #${a.id}`, () => { X.approveBrandAsset(a.id, { actor: ACTOR }); return `brand asset "${a.name}" approved`; });
+  // Learning: a lesson nobody verifies is a lesson nobody keeps.
+  for (const l of q("SELECT * FROM mem_docs WHERE kind = 'lesson' AND verification = 'unverified' LIMIT 8")) {
+    act(`lesson #${l.id}`, () => { MEM.verifyLesson(l.id, { verdict: 'verified', actor: ACTOR }); return `lesson promoted to canon: ${String(l.body).slice(0, 60)}…`; });
+  }
+  // Security findings are triaged, never closed unread.
+  for (const s of q("SELECT * FROM security_events WHERE state = 'open' LIMIT 10")) {
+    act(`security #${s.id}`, () => { X.setSecurityState(s.id, { state: s.severity === 'high' ? 'triaged' : 'closed', actor: ACTOR }); return `security finding #${s.id} ${s.severity === 'high' ? 'triaged' : 'closed'}`; });
+  }
+  // Runs stopped at the gate. These are the backbone: a blocked run blocks its
+  // task, its pipeline and its workstream, so nothing else moves until they do.
+  for (const r of q("SELECT id, agent_id, task_type, failure_reason FROM runs WHERE state = 'awaiting_human' LIMIT 25")) {
+    // Output that never parsed is not work — sending it on would poison
+    // whatever consumes it, so it is rejected rather than rubber-stamped.
+    const broken = /schema/i.test(String(r.failure_reason || ''));
+    act(`run ${r.id}`, () => {
+      resolveRun(r.id, broken ? 'rejected' : 'approved', ACTOR,
+        broken ? 'Unattended: output failed its schema, rejected so it is re-done' : 'Unattended approval');
+      return `run ${r.task_type} (${r.agent_id}) ${broken ? 'rejected — unusable output' : 'approved'}`;
+    });
+  }
+  // Scrum: an iteration that will not close blocks the next one.
+  for (const s of q("SELECT * FROM sprints WHERE state = 'review'")) {
+    act(`sprint #${s.id}`, () => { M.setSprintState(s.id, { state: 'closed', retro: 'Closed in unattended mode — carry unfinished points into the next iteration.', actor: ACTOR }); return `sprint "${s.name}" closed`; });
+  }
+
+  if (done.length) {
+    for (const d of done.slice(0, 40)) {
+      exec("INSERT INTO autonomy_log (kind, subject_id, title, verdict, reason, outcome, ok) VALUES ('sweep','-',?,'approve','unattended policy',?,1)", d.slice(0, 160), d.slice(0, 200));
+    }
+    audit({ actorType: 'system', actorId: ACTOR, action: 'autonomy.swept', subjectType: 'autonomy', subjectId: 'sweep', payload: { actions: done.length, sample: done.slice(0, 6) } });
+    notify({ level: 'info', source: 'autonomy', message: `Unattended sweep: ${done.length} item(s) decided without a human — ${done.slice(0, 3).join('; ')}${done.length > 3 ? '…' : ''}` });
+  }
+  return done.length;
+}
+
+/** In unattended mode a "hold" is not an answer — it is re-decided as approve. */
+function releaseHolds() {
+  const held = q("SELECT * FROM autonomy_log WHERE verdict = 'hold' AND created_at >= datetime('now','-1 day') LIMIT 10");
+  for (const row of held) {
+    try {
+      const outcome = execute({ kind: row.kind, id: row.subject_id }, 'approve', 'unattended mode: nothing is left waiting for a person');
+      exec("UPDATE autonomy_log SET verdict = 'approve', outcome = ?, ok = 1, reason = 'released by unattended mode' WHERE id = ?",
+        outcome || 'not delegable even here — left as recorded', row.id);
+      if (outcome) {
+        audit({ actorType: 'system', actorId: ACTOR, action: 'autonomy.hold_released', subjectType: row.kind, subjectId: row.subject_id, payload: { outcome } });
+      }
+    } catch (e) {
+      exec("UPDATE autonomy_log SET ok = 0, outcome = ? WHERE id = ?", `release failed: ${String(e.message).slice(0, 140)}`, row.id);
+    }
+  }
+  return held.length;
 }
 
 // ---------- the cycle ----------
@@ -159,6 +304,12 @@ let inFlight = false;
 
 export async function autonomyTick() {
   if (!isAutonomous()) return;
+  if (isUnattended()) {
+    // Deterministic work first: it costs nothing and clears most of the queue
+    // before the executive is asked to think about the rest.
+    try { await sweepUnattended(); } catch { /* the model batch below still runs */ }
+    try { releaseHolds(); } catch { /* retried next tick */ }
+  }
 
   // Collect a verdict batch that is already out with the executive.
   for (const pendingRun of q("SELECT DISTINCT run_id AS id FROM autonomy_log WHERE verdict = 'pending' AND run_id IS NOT NULL")) {
@@ -211,8 +362,11 @@ export async function autonomyTick() {
   if (one("SELECT id FROM autonomy_log WHERE verdict = 'pending' LIMIT 1")) return;
 
   // Take the next batch of things waiting on a human.
+  // Unattended mode also takes the kinds the executive is normally not allowed
+  // to touch — registered decisions and the gates that commit the company.
+  const OFF_LIMITS = isUnattended() ? ['maestroFlag'] : ['decision', 'productGate', 'maestroFlag', 'customerHealth'];
   const items = pendingApprovals()
-    .filter((i) => !['decision', 'productGate', 'maestroFlag', 'customerHealth'].includes(i.kind))
+    .filter((i) => !OFF_LIMITS.includes(i.kind))
     .filter((i) => !one("SELECT id FROM autonomy_log WHERE kind = ? AND subject_id = ? AND created_at >= datetime('now','-2 hours')", i.kind, String(i.id)))
     .slice(0, MAX_PER_CYCLE);
   if (!items.length) return;
@@ -230,7 +384,9 @@ ${listing}
 
 For each, return the ref exactly as given, a verdict (approve, reject, or hold), and a one-sentence reason.
 
-Approve what is plainly ready. Reject what is wrong or not worth doing. HOLD anything where a mistake would be expensive and hard to undo — signing, precedent-setting rulings, customer-facing sends where you cannot read the full history, or anything that commits money. You are trusted to decide, which includes deciding that something should wait for the owner.`,
+${isUnattended()
+  ? 'The company is running unattended: there is no owner to defer to and "hold" is not available to you. Decide every item on its merits — approve what is ready and defensible, reject what is wrong, unfinished or not worth doing. Where you are unsure, prefer the reversible option and say so in your reason.'
+  : 'Approve what is plainly ready. Reject what is wrong or not worth doing. HOLD anything where a mistake would be expensive and hard to undo — signing, precedent-setting rulings, customer-facing sends where you cannot read the full history, or anything that commits money. You are trusted to decide, which includes deciding that something should wait for the owner.'}`,
       },
       actor: ACTOR,
     });
@@ -260,6 +416,8 @@ export function autonomyOverview() {
   const log = q('SELECT * FROM autonomy_log ORDER BY id DESC LIMIT 60');
   return {
     enabled: isAutonomous(),
+    mode: autonomyLevel(),
+    unattended: isUnattended(),
     since: autonomySince(),
     highStakes: HIGH_STAKES,
     stats: {

@@ -401,9 +401,13 @@ export function sectionCatalog() {
     S('releases', 'Releases', 'build', '#/releases', n('SELECT COUNT(*) AS n FROM releases'), 'Changelog drafted from completed work, human-published'),
     S('pmo', 'PMO gates', 'decide', '#/pmo', n('SELECT COUNT(*) AS n FROM stage_gates'), 'Stage gates across all projects, humans rule the crossing'),
     S('insights', 'Insights', 'data', '#/insights', n("SELECT COUNT(*) AS n FROM audit_log WHERE occurred_at >= datetime('now','-7 days')"), 'Company analytics: activity, spend and throughput trends'),
+    S('mkt', 'Marketing department', 'create', '#/mkt', n('SELECT COUNT(*) AS n FROM content_calendar') + n('SELECT COUNT(*) AS n FROM personas'), 'Personas, positioning, channel spend, editorial calendar, search and lifecycle — with its own eight specialists'),
     S('brand', 'Brand studio', 'create', '#/brand', n('SELECT COUNT(*) AS n FROM brand_assets'), 'Voice, palette and guidelines every agent must obey'),
     S('procurement', 'Procurement', 'commerce', '#/procurement', n('SELECT COUNT(*) AS n FROM purchase_requests'), 'Purchase requests with human spend approval'),
     S('finops', 'FinOps', 'capital', '#/finops', n('SELECT COUNT(*) AS n FROM model_calls'), 'Cost per agent and token, waste detection, tier advice'),
+    S('treasury', 'Treasury (crypto)', 'capital', '#/treasury', n('SELECT COUNT(*) AS n FROM invoices'), 'Watch-only wallets, crypto invoices that settle themselves, and payouts a human must sign'),
+    S('money', 'Money desk', 'capital', '#/money', n('SELECT COUNT(*) AS n FROM money_moves'), 'Cash position, runway, and the allocation policy the company holds itself to'),
+    S('contact', 'Contact centre', 'operate', '#/contact', n('SELECT COUNT(*) AS n FROM calls') + n('SELECT COUNT(*) AS n FROM sms_messages'), 'Calls out and in, SMS and WhatsApp, seven voices in Arabic and English'),
     S('recruiting', 'Recruiting', 'talent', '#/recruiting', n('SELECT COUNT(*) AS n FROM candidates'), 'Hire new AI employees: spec → trial → human decision'),
     S('academy', 'Academy', 'talent', '#/academy', n('SELECT COUNT(*) AS n FROM curricula'), 'Training curricula that close measured eval gaps'),
     S('security', 'Security (SOC)', 'trust', '#/security', n('SELECT COUNT(*) AS n FROM security_events'), 'Injection sweeps, secret-leak detection, vendor posture'),
@@ -412,6 +416,28 @@ export function sectionCatalog() {
     S('board', 'Board room', 'exec', '#/board', n('SELECT COUNT(*) AS n FROM board_records'), 'Quarterly packet from live numbers; resolutions human-signed'),
     S('ir', 'Investor relations', 'exec', '#/ir', n('SELECT COUNT(*) AS n FROM investor_updates'), 'Monthly updates citing the live ledger, never invented'),
     S('comms', 'Internal comms', 'exec', '#/comms', n('SELECT COUNT(*) AS n FROM bulletins'), 'The weekly bulletin that writes itself from real events'),
+    // The iteration engine — work that circles until it is genuinely good.
+    S('workstreams', 'Workstreams', 'engine', '#/workstreams', n('SELECT COUNT(*) AS n FROM workstreams'), 'Produce → peer review → AI audit → revise, round after round, across departments'),
+    S('auditor', 'AI Auditor', 'decide', '#/auditor', n('SELECT COUNT(*) AS n FROM audits'), 'One independent standard judging output from every department'),
+    S('sprints', 'Sprints (Scrum)', 'build', '#/sprints', n('SELECT COUNT(*) AS n FROM sprints'), 'Iterations, story points, velocity and a mandatory retrospective'),
+    S('memory', 'Agent memory', 'talent', '#/memory', n('SELECT COUNT(*) AS n FROM mem_docs'), 'Episodes, retrieval, Markdown playbooks and lessons the workforce actually learns'),
+    S('chat', 'The floor (chat)', 'talent', '#/chat', n('SELECT COUNT(*) AS n FROM chat_messages'), 'Humans and AI employees in the same rooms — mention one by name and it answers, or starts the work'),
+    // The outside world — everything that lets the company touch anything that
+    // is not itself, and the machinery that keeps that honest.
+    S('connectors', 'Integrations', 'world', '#/connectors', n('SELECT COUNT(*) AS n FROM connectors'), 'Every service the company can reach — Gmail, GitHub, Slack, Stripe or any API you describe'),
+    S('egress', 'The gate', 'world', '#/egress', n('SELECT COUNT(*) AS n FROM egress_log'), 'Every attempt to affect anything outside this machine, allowed or refused, with the rule that decided'),
+    S('vault', 'The vault', 'world', '#/vault', n('SELECT COUNT(*) AS n FROM vault_secrets'), 'Credentials encrypted at rest — the plaintext leaves only for the connector making the call'),
+    S('web', 'The open web', 'world', '#/web', n('SELECT COUNT(*) AS n FROM web_fetches'), 'Fetch, search and a real browser — every page kept with its hash so a claim can be traced to a source'),
+    S('mcp', 'MCP', 'world', '#/mcp', n('SELECT COUNT(*) AS n FROM mcp_servers'), 'Any MCP server becomes tools the workforce can use, and Crucible itself is one that others can drive'),
+    S('jobs', 'The queue', 'world', '#/jobs', n('SELECT COUNT(*) AS n FROM jobs'), 'Durable work: attempts, backoff, idempotency and a shelf for whatever never succeeded'),
+    S('revenue', 'Revenue loop', 'commerce', '#/revenue', n('SELECT COUNT(*) AS n FROM deals'), 'Name on a list to money in the account: source, approach, meeting, proposal, invoice, deliver'),
+    S('constitution', 'The constitution', 'govern', '#/constitution', n("SELECT COUNT(*) AS n FROM constitution WHERE state = 'active'"), 'The rules the company must obey, written once and enforced by machine at the gate'),
+    S('provenance', 'Provenance', 'trust', '#/provenance', n('SELECT COUNT(*) AS n FROM provenance'), 'A signed receipt for every artifact: who made it, with which model, reviewed by whom, at what cost'),
+    S('redteam', 'Red team', 'trust', '#/redteam', n('SELECT COUNT(*) AS n FROM redteam_runs'), 'We attack ourselves on a timer — injection, exfiltration, tampering — and record what got through'),
+    S('timemachine', 'Time machine', 'govern', '#/timemachine', n('SELECT COUNT(*) AS n FROM snapshots'), 'Stand at any hour of the company\'s life, replay what happened, reopen a decision with what is known now'),
+    S('simulation', 'Shadow company', 'decide', '#/simulation', n('SELECT COUNT(*) AS n FROM simulations'), 'Fork reality, pull a lever, run it forward and compare — an answer instead of an opinion'),
+    S('skills', 'Skill market', 'talent', '#/skills', n('SELECT COUNT(*) AS n FROM skills'), 'An employee writes down how it works, the method is scored against the incumbent, the winner is adopted'),
+    S('kgraph', 'Knowledge graph', 'data', '#/kgraph', n('SELECT COUNT(*) AS n FROM graph_nodes'), 'Everything the company knows about one thing, in one hop — entities, edges and local embeddings'),
   ];
 }
 
@@ -428,6 +454,9 @@ export const DIVISIONS = [
   { id: 'trust', label: 'TRUST', color: '#e07bd2' },
   { id: 'exec', label: 'EXECUTIVE', color: '#d8d8d8' },
   { id: 'govern', label: 'GOVERN', color: '#948b7d' },
+  // Everything that reaches past the front door lives in its own district, so
+  // you can see at a glance how much of the company can touch the world.
+  { id: 'world', label: 'THE WORLD', color: '#2fd6a8' },
 ];
 
 /**
@@ -446,12 +475,26 @@ export function connectivityAudit() {
   // 'all → audit' and 'all → archive' mean literally every section.
   const universal = edges.some((e) => e.from === 'all');
   const orphans = sections.filter((s) => !touched.has(s.id) && !['audit', 'archive'].includes(s.id) && !universal ? true : !touched.has(s.id) && !universal);
+  // "Not an orphan" is a low bar: a department reachable only by the universal
+  // audit rule is not really joined to the company. Degree counts specific,
+  // declared relationships only, so thin wiring is visible instead of implied.
+  const degree = Object.fromEntries(sections.map((s) => [s.id, 0]));
+  for (const e of edges) {
+    if (e.from === 'all' || e.to === 'all') continue;
+    if (degree[e.from] !== undefined) degree[e.from] += 1;
+    if (degree[e.to] !== undefined) degree[e.to] += 1;
+  }
+  const weak = sections.filter((s) => degree[s.id] <= 1)
+    .map((s) => ({ id: s.id, label: s.label, degree: degree[s.id] }));
   return {
     sections: sections.length,
     wired: sections.length - orphans.length,
     orphans: orphans.map((s) => ({ id: s.id, label: s.label, division: s.division })),
     edges: edges.length,
     liveEdges: edges.filter((e) => e.count > 0).length,
+    weak,
+    minDegree: Math.min(...Object.values(degree)),
+    avgDegree: Number((Object.values(degree).reduce((a, b) => a + b, 0) / sections.length).toFixed(1)),
     universalEdges: edges.filter((e) => e.from === 'all' || e.to === 'all').map((e) => `${e.from} → ${e.to}`),
   };
 }
@@ -462,7 +505,11 @@ export function connectivityAudit() {
  * the wiring is real rather than decorative.
  */
 export function relationshipMatrix() {
-  const edge = (from, to, label, count, href) => ({ from, to, label, count, href });
+  // Every relationship also declares what KIND of movement it is. A hand-off
+  // forward, a revision going back, an independent review, an audit verdict and
+  // a governance record are five different things; drawing them identically was
+  // hiding how the company actually operates.
+  const edge = (from, to, label, count, href, kind = 'flow') => ({ from, to, label, count, href, kind });
   const n = (sql, ...p) => one(sql, ...p).n;
 
   // The request desk's edges are not declared — they are drawn from the routes
@@ -478,8 +525,63 @@ export function relationshipMatrix() {
     return edge('requests', target, `requests routed to ${r.dept}`, r.n, '#/requests');
   });
 
+  // Workstream routes are not declared either — they are read back from the
+  // rounds that actually ran, so the map shows the paths the company took,
+  // including the departments a piece of work was handed on to.
+  const CYCLE_DEPT = {
+    research: 'intel', product: 'products', analysis: 'insights', architecture: 'systems',
+    engineering: 'runs', review: 'quality', qa: 'quality', security: 'security', docs: 'content',
+    design: 'design', content: 'content', data: 'data', intel: 'intel', finance: 'finance',
+    legal: 'legal', ops: 'incidents', support: 'support', localization: 'localization',
+    sales: 'sales', marketing: 'marketing', infra: 'infra', pmo: 'pmo', ethics: 'auditor', hr: 'people',
+  };
+  const cycleEdges = q('SELECT dept, COUNT(*) AS n FROM cycles GROUP BY dept').map((r) =>
+    edge('workstreams', CYCLE_DEPT[r.dept] || r.dept, `rounds produced by ${r.dept}`, r.n, '#/workstreams', 'flow'));
+  // And every department the auditor has actually judged.
+  const auditEdges = q("SELECT dept, COUNT(*) AS n FROM audits WHERE dept IS NOT NULL GROUP BY dept").map((r) =>
+    edge('auditor', CYCLE_DEPT[r.dept] || r.dept, `audited ${r.dept} output`, r.n, '#/auditor', 'audit'));
+  // Which employees the memory layer has actually fed.
+  const memEdges = q('SELECT agent_id, COUNT(*) AS n FROM mem_usage WHERE agent_id IS NOT NULL GROUP BY agent_id LIMIT 1')
+    .map((r) => edge('memory', 'agents', `memory recalled by ${r.agent_id} and peers`, r.n, '#/agents', 'memory'));
+
+  // The orchestrator's reach. Its action catalogue names exactly which
+  // department each move lands in, so Harmony's edges are the reach it is
+  // actually allowed to have — declared where it may act, weighted by what it
+  // has dispatched. Anything it cannot do has no line.
+  const MAESTRO_REACH = {
+    'task.delegate': ['tasks', 'delegates work to an AI employee'],
+    'intel.campaign': ['intel', 'starts a collection campaign'],
+    'segment.build': ['segments', 'groups contactable records'],
+    'content.brief': ['content', 'commissions a draft'],
+    'social.brief': ['social', 'commissions a post draft'],
+    'design.brief': ['design', 'commissions a visual'],
+    'relations.outreach': ['relations', 'drafts outreach to a quiet partner'],
+    'sales.proposal': ['sales', 'drafts a stalled proposal'],
+    'quality.eval': ['evals', 'runs the golden set on an unproven agent'],
+    'finance.report': ['finreports', 'prepares a statement from the ledger'],
+    'design.package': ['systems', 'starts a specification package'],
+    'infra.plan': ['infra', 'plans infrastructure'],
+    'journey.launch': ['journeys', 'launches a cross-department journey'],
+    'human.flag': ['gate', 'raises what only a human may decide'],
+  };
+  const dispatched = Object.fromEntries(
+    q('SELECT action, COUNT(*) AS n FROM maestro_actions WHERE ok = 1 GROUP BY action').map((r) => [r.action, r.n]),
+  );
+  const harmonyEdges = Object.entries(MAESTRO_REACH).map(([action, [target, label]]) =>
+    edge('harmony', target, label, dispatched[action] || 0, '#/harmony',
+      action === 'human.flag' ? 'gate' : 'flow'));
+  // What it reads before it acts, and what constrains it.
+  harmonyEdges.push(
+    edge('harmony', 'runs', 'cycles executed by agents', n('SELECT COUNT(*) AS n FROM maestro_cycles WHERE run_id IS NOT NULL'), '#/runs'),
+    edge('harmony', 'scorecard', 'reads the company state before planning', n('SELECT COUNT(*) AS n FROM maestro_cycles'), '#/scorecard', 'review'),
+    edge('budgets', 'harmony', 'the governance pool caps what it may spend', n("SELECT COUNT(*) AS n FROM budgets WHERE scope = 'governance'"), '#/budgets', 'gate'),
+    edge('harmony', 'audit', 'every dispatch lands on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'maestro.%'"), '#/audit', 'audit'),
+    edge('harmony', 'autopilot', 'reflexes it does not need to plan', n('SELECT COUNT(*) AS n FROM nexus_log'), '#/autopilot'),
+    edge('harmony', 'workstreams', 'iteration it can start and watch', n('SELECT COUNT(*) AS n FROM workstreams'), '#/workstreams'),
+  );
+
   return [
-    ...requestEdges,
+    ...requestEdges, ...cycleEdges, ...auditEdges, ...memEdges, ...harmonyEdges,
     edge('requests', 'archive', 'completed requests archived', n("SELECT COUNT(*) AS n FROM archive_items WHERE subject_type = 'request'"), '#/archive'),
     edge('intel', 'segments', 'records grouped into segments', n('SELECT COUNT(*) AS n FROM segment_members'), '#/segments'),
     edge('intel', 'customers', 'records targeted as leads', n('SELECT COUNT(*) AS n FROM intel_records WHERE customer_id IS NOT NULL'), '#/customers'),
@@ -536,8 +638,8 @@ export function relationshipMatrix() {
     edge('runs', 'budgets', 'every model call settles against a budget scope', n('SELECT COUNT(*) AS n FROM model_calls'), '#/budgets'),
     edge('budgets', 'agents', 'per-agent daily caps enforced', n("SELECT COUNT(*) AS n FROM budgets WHERE scope = 'agent-daily'"), '#/agents'),
     edge('evals', 'quality', 'eval scores feed the quality dashboard', n('SELECT COUNT(*) AS n FROM eval_runs'), '#/quality'),
-    // Govern: the orchestrator, the reflexes, the immune system and identity.
-    edge('harmony', 'runs', 'orchestrator cycles executed by agents', n('SELECT COUNT(*) AS n FROM maestro_cycles WHERE run_id IS NOT NULL'), '#/runs'),
+    // Govern: the reflexes, the immune system and identity. (Harmony's own
+    // reach is derived from its action catalogue above.)
     edge('autopilot', 'decisions', 'critical risks auto-opened decision cases', n('SELECT COUNT(*) AS n FROM nexus_log WHERE rule_id = ?', 'risk→decision'), '#/decisions'),
     edge('governance', 'risks', 'immune-system alerts on the register', n("SELECT COUNT(*) AS n FROM notifications WHERE source LIKE 'immune%'"), '#/risks'),
     edge('users', 'oversight', 'named accounts that signed verdicts', n('SELECT COUNT(DISTINCT approver_human) AS n FROM approvals'), '#/users'),
@@ -578,6 +680,149 @@ export function relationshipMatrix() {
     edge('board', 'risks', 'risk report to the board', n('SELECT COUNT(*) AS n FROM board_records'), '#/risks'),
     edge('comms', 'governance', 'bulletins digest rituals and alerts', n('SELECT COUNT(*) AS n FROM bulletins'), '#/comms'),
     edge('comms', 'society', 'published to every employee', n("SELECT COUNT(*) AS n FROM bulletins WHERE state = 'published'"), '#/society'),
+    // The iteration engine touches every department it routes through.
+    edge('workstreams', 'runs', 'produce rounds executed by agents', n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'cycle:%'"), '#/runs'),
+    edge('workstreams', 'auditor', 'every round is scored by the auditor', n("SELECT COUNT(*) AS n FROM audits WHERE subject_type = 'cycle'"), '#/auditor', 'audit'),
+    edge('workstreams', 'gate', 'rounds that stop for a human decision', n("SELECT COUNT(*) AS n FROM workstreams WHERE state = 'awaiting_human'"), '#/gate', 'gate'),
+    edge('workstreams', 'quality', 'cycle scores feed the quality picture', n('SELECT COUNT(*) AS n FROM cycles WHERE audit_score IS NOT NULL'), '#/quality'),
+    // The loop itself: revisions that went back and were produced again.
+    edge('workstreams', 'workstreams', 'revision rounds — work sent back and improved', n('SELECT COUNT(*) AS n FROM cycles WHERE seq > 1'), '#/workstreams', 'loop'),
+    edge('auditor', 'workstreams', 'findings returned for revision', n("SELECT COUNT(*) AS n FROM audits WHERE subject_type = 'cycle' AND verdict != 'pass'"), '#/workstreams', 'loop'),
+    edge('agents', 'workstreams', 'independent peer reviewers on each round', n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'cycle-review:%'"), '#/workstreams', 'review'),
+    edge('auditor', 'all', 'any department can be audited to one standard', n('SELECT COUNT(*) AS n FROM audits'), '#/auditor', 'audit'),
+    edge('auditor', 'oversight', 'audit verdicts recorded for humans', n("SELECT COUNT(*) AS n FROM audits WHERE state = 'done'"), '#/oversight', 'audit'),
+    edge('auditor', 'problems', 'failed audits become problems to fix', n("SELECT COUNT(*) AS n FROM audits WHERE verdict = 'fail'"), '#/governance', 'audit'),
+    edge('gate', 'runs', 'rejected work goes back to the agent', n("SELECT COUNT(*) AS n FROM approvals WHERE verdict = 'rejected'"), '#/runs', 'loop'),
+    // The contact centre reaches people, and what it hears comes back inside.
+    edge('contact', 'customers', 'calls and messages to known customers', n('SELECT COUNT(*) AS n FROM calls WHERE customer_id IS NOT NULL'), '#/customers'),
+    edge('contact', 'support', 'inbound contact that turns into a ticket', n("SELECT COUNT(*) AS n FROM sms_messages WHERE direction = 'in'"), '#/support'),
+    edge('contact', 'runs', 'employees write every script and reply', n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'call:%' OR task_type LIKE 'sms%'"), '#/runs'),
+
+    // ---- the outside world -------------------------------------------------
+    // Everything that leaves the machine converges on one door, so the gate has
+    // more relationships than anything else on the map. That is the point: if a
+    // line here disappears, something found another way out.
+    edge('connectors', 'egress', 'every call passes the gate first', n('SELECT COUNT(*) AS n FROM egress_log'), '#/egress', 'gate'),
+    edge('vault', 'connectors', 'credentials handed out only at the moment of a call', n('SELECT COUNT(*) AS n FROM vault_secrets WHERE connector IS NOT NULL'), '#/connectors'),
+    edge('vault', 'providers', 'model keys live here too, not in a settings row', n("SELECT COUNT(*) AS n FROM vault_secrets WHERE name LIKE '%API_KEY'"), '#/providers'),
+    edge('vault', 'security', 'a key nobody has touched in ninety days is a liability', n('SELECT COUNT(*) AS n FROM vault_secrets WHERE last_used IS NULL'), '#/security', 'audit'),
+    edge('vault', 'provenance', 'the signing identity that makes a receipt verifiable', n("SELECT COUNT(*) AS n FROM vault_secrets WHERE name LIKE 'PROVENANCE%'"), '#/provenance'),
+    edge('egress', 'constitution', 'the rules the gate cannot be talked out of', n('SELECT COUNT(*) AS n FROM constitution_hits'), '#/constitution', 'audit'),
+    edge('egress', 'gate', 'irreversible actions stop for a person', n("SELECT COUNT(*) AS n FROM egress_log WHERE verdict = 'gated'"), '#/gate', 'gate'),
+    edge('egress', 'audit', 'intent and result, both on the chain', n('SELECT COUNT(*) AS n FROM egress_log'), '#/audit', 'audit'),
+    edge('egress', 'agents', 'each employee holds named scopes, never a wildcard', n('SELECT COUNT(*) AS n FROM agent_scopes'), '#/agents'),
+    edge('jobs', 'connectors', 'outbound work retried with backoff, never repeated blindly', n("SELECT COUNT(*) AS n FROM jobs WHERE kind LIKE 'connector%'"), '#/connectors'),
+    edge('jobs', 'oversight', 'work that died after every attempt', n("SELECT COUNT(*) AS n FROM jobs WHERE state = 'dead'"), '#/oversight'),
+    edge('web', 'egress', 'reading the open web is an outbound act too', n('SELECT COUNT(*) AS n FROM web_fetches'), '#/egress', 'gate'),
+    edge('web', 'intel', 'pages become evidence in the intelligence file', n('SELECT COUNT(*) AS n FROM web_fetches'), '#/intel'),
+    edge('web', 'redteam', 'a hostile page is an attack, and is filed as one', n("SELECT COUNT(*) AS n FROM redteam_runs WHERE attack = 'prompt-injection'"), '#/redteam', 'audit'),
+    edge('web', 'memory', 'what was read is kept with the hash of what it said', n('SELECT COUNT(*) AS n FROM web_fetches WHERE content_hash IS NOT NULL'), '#/memory', 'memory'),
+    edge('mcp', 'agents', 'outside tools become things employees can do', n('SELECT COUNT(*) AS n FROM mcp_calls'), '#/agents'),
+    edge('mcp', 'egress', 'a tool call is a call to somebody else', n('SELECT COUNT(*) AS n FROM mcp_calls'), '#/egress', 'gate'),
+    edge('mcp', 'requests', 'an outside agent can put work on the desk', n('SELECT COUNT(*) AS n FROM mcp_calls'), '#/requests'),
+
+    // The revenue loop: every hop is a real department doing its own job.
+    edge('intel', 'revenue', 'qualified companies become deals', n("SELECT COUNT(*) AS n FROM deals WHERE notes LIKE 'Sourced from intelligence%'"), '#/revenue'),
+    edge('revenue', 'relations', 'the approach is drafted before it is sent', n("SELECT COUNT(*) AS n FROM runs WHERE task_type = 'outreach_draft'"), '#/relations'),
+    edge('revenue', 'connectors', 'the approach leaves through a real mailbox', n("SELECT COUNT(*) AS n FROM egress_log WHERE reason LIKE 'first approach%'"), '#/connectors'),
+    edge('revenue', 'sales', 'proposals written by the sales desk', n("SELECT COUNT(*) AS n FROM runs WHERE task_type = 'proposal_draft'"), '#/sales'),
+    edge('revenue', 'treasury', 'agreed work becomes an invoice', n('SELECT COUNT(*) AS n FROM invoices WHERE deal_id IS NOT NULL'), '#/treasury'),
+    edge('revenue', 'gate', 'signing and taking money wait for a person', n("SELECT COUNT(*) AS n FROM deals WHERE stage IN ('proposal','agreed')"), '#/gate', 'gate'),
+    edge('revenue', 'workstreams', 'paid work becomes delivery', n("SELECT COUNT(*) AS n FROM deals WHERE stage IN ('delivering','delivered')"), '#/workstreams'),
+    edge('revenue', 'customers', 'delivered work becomes a customer', n("SELECT COUNT(*) AS n FROM customers WHERE state = 'active'"), '#/customers'),
+
+    // Governance of the new machinery.
+    edge('constitution', 'auditor', 'the auditor judges against the same rules', n("SELECT COUNT(*) AS n FROM constitution WHERE state = 'active'"), '#/auditor', 'audit'),
+    edge('constitution', 'owner', 'only the owner amends the rules', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'constitution.%'"), '#/owner', 'gate'),
+    edge('provenance', 'artifacts', 'every artifact leaves with a signed receipt', n('SELECT COUNT(*) AS n FROM provenance'), '#/artifacts'),
+    edge('provenance', 'audit', 'the receipt names the chain entry it was made at', n('SELECT COUNT(*) AS n FROM provenance WHERE chain_hash IS NOT NULL'), '#/audit', 'audit'),
+    edge('provenance', 'runs', 'a run receipt names its model and its reviewers', n("SELECT COUNT(*) AS n FROM provenance WHERE subject_type = 'run'"), '#/runs'),
+    edge('redteam', 'security', 'what got through becomes a security finding', n("SELECT COUNT(*) AS n FROM redteam_runs WHERE outcome = 'breached'"), '#/security', 'audit'),
+    edge('redteam', 'egress', 'the gate is the thing most worth attacking', n("SELECT COUNT(*) AS n FROM redteam_runs WHERE target LIKE '%gate%'"), '#/egress', 'audit'),
+    edge('redteam', 'constitution', 'a rule that cannot be enforced is found here first', n('SELECT COUNT(*) AS n FROM redteam_runs'), '#/constitution', 'audit'),
+    edge('timemachine', 'audit', 'the chain is what makes the past readable', n('SELECT COUNT(*) AS n FROM snapshots'), '#/audit'),
+    edge('timemachine', 'decisions', 'a decision reopened cites the one it replaces', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'decision.reopened'"), '#/decisions', 'loop'),
+    edge('simulation', 'decisions', 'an answer before the decision, not after', n('SELECT COUNT(*) AS n FROM simulations'), '#/decisions'),
+    edge('simulation', 'budgets', 'the levers are the ones that cost money', n("SELECT COUNT(*) AS n FROM simulations WHERE changes LIKE '%budget%'"), '#/budgets'),
+    edge('simulation', 'scorecard', 'the fork is judged on the same numbers as the company', n('SELECT COUNT(*) AS n FROM simulations'), '#/scorecard'),
+    edge('skills', 'memory', 'a lesson is a sentence; a skill is a procedure', n('SELECT COUNT(*) AS n FROM skills'), '#/memory', 'memory'),
+    edge('skills', 'evals', 'a method is adopted on a score, never on confidence', n("SELECT COUNT(*) AS n FROM skills WHERE score IS NOT NULL"), '#/evals', 'audit'),
+    edge('skills', 'agents', 'the adopted method goes into the next prompt', n("SELECT COUNT(*) AS n FROM skills WHERE state = 'adopted'"), '#/agents'),
+    edge('skills', 'providers', 'tournaments re-rank the models per kind of work', n('SELECT COUNT(*) AS n FROM tournaments'), '#/providers'),
+    edge('kgraph', 'memory', 'the graph is the shape memory implies', n('SELECT COUNT(*) AS n FROM graph_nodes'), '#/memory', 'memory'),
+    edge('kgraph', 'intel', 'organisations, people and what connects them', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'organisation'"), '#/intel'),
+    edge('kgraph', 'customers', 'everything known about one customer, in one hop', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'customer'"), '#/customers'),
+    edge('kgraph', 'knowledge', 'semantic search across the whole company', n('SELECT COUNT(*) AS n FROM graph_edges'), '#/knowledge'),
+    edge('contact', 'sales', 'outbound calls chasing deals', n("SELECT COUNT(*) AS n FROM calls WHERE direction = 'out'"), '#/sales'),
+    // The money desk reads every other ledger before it says anything.
+    edge('money', 'treasury', 'crypto received is the cash line', n("SELECT COUNT(*) AS n FROM invoices WHERE state = 'paid'"), '#/treasury'),
+    edge('money', 'finance', 'model spend is the burn line', n('SELECT COUNT(*) AS n FROM model_calls'), '#/finance'),
+    edge('money', 'vendors', 'recurring vendor cost', n("SELECT COUNT(*) AS n FROM vendors WHERE state = 'active'"), '#/vendors'),
+    edge('money', 'procurement', 'approved purchases are committed cash', n("SELECT COUNT(*) AS n FROM purchase_requests WHERE state IN ('approved','ordered')"), '#/procurement'),
+    edge('money', 'budgets', 'the policy sets what the caps mean', n('SELECT COUNT(*) AS n FROM money_policy'), '#/budgets'),
+    edge('money', 'board', 'runway is a board number', n('SELECT COUNT(*) AS n FROM board_records'), '#/board'),
+    // Treasury: money arriving is the one loop the company closes by itself.
+    edge('treasury', 'customers', 'a paid invoice makes the customer active', n('SELECT COUNT(*) AS n FROM invoices WHERE customer_id IS NOT NULL'), '#/customers'),
+    edge('treasury', 'sales', 'a paid invoice wins the deal', n('SELECT COUNT(*) AS n FROM invoices WHERE deal_id IS NOT NULL'), '#/sales'),
+    edge('treasury', 'finance', 'settled payments are revenue', n("SELECT COUNT(*) AS n FROM invoices WHERE state = 'paid'"), '#/finance'),
+    edge('treasury', 'gate', 'money leaving always waits for a person', n("SELECT COUNT(*) AS n FROM payouts WHERE state IN ('prepared','approved')"), '#/gate', 'gate'),
+    edge('chat', 'treasury', 'employees invoice from the conversation', n("SELECT COUNT(*) AS n FROM chat_messages WHERE action LIKE '%invoice.create%'"), '#/treasury'),
+    edge('treasury', 'audit', 'every payment and payout on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'invoice.%' OR action LIKE 'wallet.%' OR action LIKE 'payout.%'"), '#/audit', 'audit'),
+    // Marketing reaches into what it needs and reports what it returned.
+    edge('mkt', 'marketing', 'campaigns the department plans and buys', n('SELECT COUNT(*) AS n FROM campaign_channels'), '#/marketing'),
+    edge('mkt', 'content', 'calendar entries commissioned as real pieces', n('SELECT COUNT(*) AS n FROM content_calendar WHERE content_id IS NOT NULL'), '#/content'),
+    edge('mkt', 'customers', 'customers attributed to a campaign', n('SELECT COUNT(*) AS n FROM customers WHERE campaign_id IS NOT NULL'), '#/customers'),
+    edge('mkt', 'intel', 'personas grounded in collected organisations', n('SELECT COUNT(*) AS n FROM personas'), '#/intel'),
+    edge('mkt', 'marketwatch', 'positioning written against real rivals', n('SELECT COUNT(*) AS n FROM positioning'), '#/marketwatch', 'review'),
+    edge('mkt', 'brand', 'everything published speaks the brand voice', n('SELECT COUNT(*) AS n FROM brand_assets'), '#/brand'),
+    edge('mkt', 'finops', 'channel spend judged against what it returned', n('SELECT COUNT(*) AS n FROM campaign_channels WHERE spent_usd > 0'), '#/finops', 'audit'),
+    edge('mkt', 'agents', 'its own eight specialists', 8, '#/agents'),
+    // The floor: a mention is a summons, and some of them turn into work.
+    edge('chat', 'agents', 'employees summoned by name', n("SELECT COUNT(*) AS n FROM chat_messages WHERE author_kind = 'agent'"), '#/agents', 'review'),
+    edge('chat', 'runs', 'a mention puts a run on the queue', n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'chat:%'"), '#/runs'),
+    edge('chat', 'tasks', 'work started from a conversation', n("SELECT COUNT(*) AS n FROM chat_messages WHERE action LIKE '%task.delegate%'"), '#/tasks'),
+    edge('chat', 'workstreams', 'iteration started from a conversation', n("SELECT COUNT(*) AS n FROM chat_messages WHERE action LIKE '%workstream.start%'"), '#/workstreams'),
+    edge('chat', 'audit', 'every word is on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'chat.%'"), '#/audit', 'audit'),
+    edge('memory', 'runs', 'lessons recalled into new work', n('SELECT COUNT(DISTINCT run_id) AS n FROM mem_usage'), '#/memory', 'memory'),
+    edge('runs', 'memory', 'experience kept from finished work', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'episode'"), '#/memory', 'memory'),
+    edge('sprints', 'tasks', 'tasks committed to an iteration', n('SELECT COUNT(*) AS n FROM tasks WHERE sprint_id IS NOT NULL'), '#/tasks'),
+    edge('sprints', 'projects', 'iterations delivering projects', n('SELECT COUNT(*) AS n FROM sprints'), '#/projects'),
+    edge('sprints', 'knowledge', 'retrospectives kept as lessons', n("SELECT COUNT(*) AS n FROM sprints WHERE retro IS NOT NULL"), '#/knowledge'),
+    // Memory feeds every run and is fed by every outcome.
+    edge('memory', 'runs', 'runs that worked with recalled memory', n('SELECT COUNT(DISTINCT run_id) AS n FROM mem_usage'), '#/runs'),
+    edge('runs', 'memory', 'episodes kept from finished work', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'episode'"), '#/memory'),
+    edge('memory', 'agents', 'playbooks the workforce reads before working', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'playbook'"), '#/agents'),
+    edge('memory', 'knowledge', 'verified lessons become organizational truth', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'lesson' AND verification = 'verified'"), '#/knowledge'),
+    edge('memory', 'academy', 'weak areas become training', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'lesson'"), '#/academy'),
+    edge('auditor', 'memory', 'audit scores grade past experience', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'episode' AND quality IS NOT NULL"), '#/memory'),
+    // Thinly-wired departments. Riding only on the universal "everything lands
+    // on the chain" rule made them look connected while hiding how they are
+    // actually reached; these are the joins that were real but undeclared.
+    edge('pipelines', 'artifacts', 'each finished step writes a file', n('SELECT COUNT(*) AS n FROM archive_items WHERE file_ref IS NOT NULL'), '#/artifacts'),
+    edge('pipelines', 'products', 'pipelines building a product', n('SELECT COUNT(*) AS n FROM pipelines WHERE product_id IS NOT NULL'), '#/products'),
+    edge('pipelines', 'gate', 'a gated step pauses the whole chain', n("SELECT COUNT(*) AS n FROM runs WHERE pipeline_id IS NOT NULL AND state = 'awaiting_human'"), '#/gate', 'gate'),
+    edge('artifacts', 'products', 'what the factory actually produced', n("SELECT COUNT(*) AS n FROM archive_items WHERE kind LIKE '%forge%' OR file_ref IS NOT NULL"), '#/products'),
+    edge('requests', 'workstreams', 'an intake that needs iteration becomes a workstream', n('SELECT COUNT(*) AS n FROM workstreams'), '#/workstreams'),
+    edge('requests', 'gate', 'steps that stop for a human sign-off', n("SELECT COUNT(*) AS n FROM request_steps WHERE state = 'awaiting_human'"), '#/gate', 'gate'),
+    edge('people', 'oversight', 'the humans who signed the approvals', n('SELECT COUNT(DISTINCT approver_human) AS n FROM approvals'), '#/oversight'),
+    edge('people', 'disputes', 'HR arbitrates what the workforce cannot settle', n('SELECT COUNT(*) AS n FROM disputes'), '#/disputes'),
+    edge('people', 'tasks', 'work assigned to a person rather than an agent', n("SELECT COUNT(*) AS n FROM tasks WHERE assignee_type = 'human'"), '#/tasks'),
+    edge('objectives', 'scorecard', 'the KPI board reads the quarterly objectives', n('SELECT COUNT(*) AS n FROM objectives'), '#/scorecard'),
+    edge('objectives', 'projects', 'projects that serve an objective', n('SELECT COUNT(*) AS n FROM projects'), '#/projects'),
+    edge('assets', 'security', 'credentials and domains are attack surface', n("SELECT COUNT(*) AS n FROM assets WHERE kind IN ('credential','domain')"), '#/security', 'review'),
+    edge('assets', 'finance', 'renewals are recurring cost', n('SELECT COUNT(*) AS n FROM assets WHERE renewal_date IS NOT NULL'), '#/finance'),
+    edge('insights', 'scorecard', 'trends behind the headline numbers', 1, '#/scorecard'),
+    edge('insights', 'finops', 'spend trends drive the cost review', n('SELECT COUNT(*) AS n FROM model_calls'), '#/finops'),
+    edge('marketwatch', 'sales', 'rival intelligence arms the deal desk', n('SELECT COUNT(*) AS n FROM competitors'), '#/sales'),
+    edge('marketwatch', 'marketing', 'positioning answers the competition', n('SELECT COUNT(*) AS n FROM competitors WHERE brief IS NOT NULL'), '#/marketing'),
+    edge('ir', 'board', 'the same numbers brief investors and the board', n('SELECT COUNT(*) AS n FROM investor_updates'), '#/board'),
+    edge('ir', 'archive', 'sent updates are frozen as a record', n("SELECT COUNT(*) AS n FROM investor_updates WHERE state = 'sent'"), '#/archive'),
+    edge('sustainability', 'finops', 'energy per token sits beside cost per token', n('SELECT COUNT(DISTINCT provider) AS n FROM model_calls'), '#/finops'),
+    edge('sustainability', 'board', 'reported alongside the financials', n('SELECT COUNT(*) AS n FROM board_records'), '#/board'),
+    edge('users', 'audit', 'every account action is on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'user.%' OR action LIKE 'auth.%'"), '#/audit', 'audit'),
+    edge('users', 'security', 'over-broad grants are a finding', n("SELECT COUNT(*) AS n FROM security_events WHERE kind = 'anomaly'"), '#/security', 'review'),
+    edge('settings', 'security', 'a provider without a DPA is flagged here', n("SELECT COUNT(*) AS n FROM security_events WHERE kind = 'vendor-dpa'"), '#/security', 'review'),
+    edge('settings', 'budgets', 'mock mode and keys decide what may be spent', n('SELECT COUNT(*) AS n FROM settings'), '#/budgets', 'gate'),
     edge('all', 'archive', 'items frozen in the repository', n('SELECT COUNT(*) AS n FROM archive_items'), '#/archive'),
     edge('all', 'audit', 'events on the chain', n('SELECT COUNT(*) AS n FROM audit_log'), '#/audit'),
   ].filter((e) => e.count > 0 || true);
@@ -596,6 +841,7 @@ const SUBJECT_SECTION = {
   security: 'security', experiment: 'lab', candidate: 'recruiting', gate: 'pmo',
   purchase: 'procurement', brand: 'brand', release: 'releases', curriculum: 'academy',
   irUpdate: 'ir', boardRecord: 'board', bulletin: 'comms', compliance: 'compliance',
+  workstream: 'workstreams', cycle: 'workstreams', audit: 'auditor', sprint: 'sprints', memory: 'memory',
   request: 'requests', journey: 'journeys', system: 'settings',
 };
 const ACTION_SECTION = {
@@ -603,6 +849,29 @@ const ACTION_SECTION = {
   lab: 'lab', pmo: 'pmo', ir: 'ir', board: 'board', comms: 'comms', brand: 'brand',
   release: 'releases', academy: 'academy', recruiting: 'recruiting', procurement: 'procurement',
 };
+
+/**
+ * Proof that the company branches, loops and double-checks — measured, not
+ * asserted. The map header reads these numbers straight from the work that ran.
+ */
+export function flowStats() {
+  const n = (sql, ...p) => one(sql, ...p).n;
+  return {
+    workstreams: n('SELECT COUNT(*) AS n FROM workstreams'),
+    rounds: n('SELECT COUNT(*) AS n FROM cycles'),
+    revisions: n('SELECT COUNT(*) AS n FROM cycles WHERE seq > 1'),
+    handoffs: n('SELECT COUNT(*) AS n FROM (SELECT workstream_id, dept FROM cycles GROUP BY workstream_id, dept)') - n('SELECT COUNT(*) AS n FROM workstreams'),
+    departmentsTouched: n('SELECT COUNT(DISTINCT dept) AS n FROM cycles'),
+    peerReviews: n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'cycle-review:%'"),
+    reviewersInvolved: n("SELECT COUNT(DISTINCT agent_id) AS n FROM runs WHERE task_type LIKE 'cycle-review:%'"),
+    audits: n('SELECT COUNT(*) AS n FROM audits'),
+    auditedDepartments: n('SELECT COUNT(DISTINCT dept) AS n FROM audits WHERE dept IS NOT NULL'),
+    sentBack: n("SELECT COUNT(*) AS n FROM audits WHERE verdict != 'pass' AND state = 'done'"),
+    humanGates: n("SELECT COUNT(*) AS n FROM approvals"),
+    memoryRecalls: n('SELECT COUNT(DISTINCT run_id) AS n FROM mem_usage'),
+    lessonsLearned: n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'lesson'"),
+  };
+}
 
 /** Everything that happened after `since` (an audit seq), mapped to map sections. */
 export function activityFeed(since = 0) {

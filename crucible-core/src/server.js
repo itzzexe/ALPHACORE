@@ -34,6 +34,32 @@ import { seedPersonas } from './org.js';
 import { autonomyTick } from './autonomy.js';
 import { societyTick } from './society.js';
 import { syncExpansion } from './expansion.js';
+import { advanceWorkstreams, syncAudits } from './cycles.js';
+import { ensurePlaybooks, syncReflections, syncExternalMemory, gradeEpisodes } from './memory.js';
+import { ensureChannels, syncChat } from './chat.js';
+import { walletTick } from './wallet.js';
+import { commsTick, verifyWebhook, receiveMessage, receiveCall, twiml } from './comms.js';
+import { moneyWatch } from './money.js';
+import { seedMarketingTeam, syncMarketing } from './marketing.js';
+// The outside world: credentials, connectors, the gate, the queue, and the
+// systems that keep all of it honest.
+import { seedConnectors, callConnector } from './connectors/index.js';
+import { verifyState, exchangeCode, refreshExpiring } from './connectors/oauth.js';
+import { handle as handleJob, enqueue as enqueueJob, jobsTick, reclaimStuck } from './jobs.js';
+import { seedConstitution } from './constitution.js';
+import { vaultSweep, getSecret } from './vault.js';
+import { sealFinishedWork } from './provenance.js';
+import { runRedTeam } from './redteam.js';
+import { rebuildGraph } from './graph.js';
+import { syncSkills, harvestProposals, inviteProposals } from './skills.js';
+import { revenueTick, sourceFromIntel } from './revenue.js';
+import { handleMcp } from './mcp.js';
+import { handleUpgrade, liveTick } from './live.js';
+import { mcpTools } from './mcptools.js';
+import { one, exec } from './db.js';
+import { getSetting } from './settings.js';
+
+const PUBLIC_BASE = () => getSetting('PUBLIC_BASE_URL');
 import { handleApi } from './api.js';
 
 seedAgents();
@@ -44,7 +70,64 @@ seedAdmin();
 seedRisks();
 seedAutomations();
 seedPersonas();
+ensurePlaybooks();
+ensureChannels();
+seedMarketingTeam();
+seedConnectors();
+seedConstitution();
 startWorkers();
+
+// ---------------------------------------------------------------------------
+// The outside world runs on the job queue rather than on bare timers, because
+// anything that leaves this machine can fail halfway and must be retried
+// rather than repeated blindly.
+// ---------------------------------------------------------------------------
+handleJob('connector.call', async (p) => {
+  const r = await callConnector(p);
+  return { audit: { actorType: 'system', actorId: 'system:jobs', action: 'connector.called', subjectType: 'connector', subjectId: p.connector, payload: { capability: p.capability, verdict: r.verdict } } };
+});
+handleJob('oauth.refresh', async () => { await refreshExpiring(); });
+handleJob('provenance.seal', async () => { sealFinishedWork(); });
+handleJob('graph.rebuild', async () => { rebuildGraph(); });
+handleJob('redteam.sweep', async () => { await runRedTeam(); });
+handleJob('revenue.chase', async ({ dealId }) => {
+  const paid = one("SELECT id FROM invoices WHERE deal_id = ? AND state = 'paid'", dealId);
+  if (paid) return {};
+  const deal = one('SELECT name FROM deals WHERE id = ?', dealId);
+  return { audit: { actorType: 'system', actorId: 'system:revenue', action: 'revenue.unpaid', subjectType: 'deal', subjectId: dealId, payload: { name: deal?.name, waitingDays: 7 } } };
+});
+
+// One job of each recurring kind at a time: the idempotency key means a slow
+// sweep is never queued behind three copies of itself.
+const enqueue0 = (kind) => {
+  try { enqueueJob(kind, {}, { idempotency: `${kind}:${Math.floor(Date.now() / 60_000)}` }); }
+  catch { /* already queued this minute */ }
+};
+
+// The queue drains continuously; everything below only decides what to put on it.
+setInterval(() => { jobsTick().catch(() => { /* the queue retries on its own */ }); }, 2000).unref?.();
+setInterval(() => { try { reclaimStuck(); } catch { /* next sweep */ } }, 5 * 60_000).unref?.();
+setInterval(() => { enqueue0('oauth.refresh'); }, 5 * 60_000).unref?.();
+setInterval(() => { enqueue0('provenance.seal'); }, 90_000).unref?.();
+setInterval(() => { enqueue0('graph.rebuild'); }, 10 * 60_000).unref?.();
+// The red team runs nightly-ish rather than constantly: it is a check, not a load.
+setInterval(() => { enqueue0('redteam.sweep'); }, 6 * 3600 * 1000).unref?.();
+setInterval(() => { try { vaultSweep(); } catch { /* next sweep */ } }, 12 * 3600 * 1000).unref?.();
+// The revenue loop: source, then move every deal as far as its evidence allows.
+setInterval(() => { try { revenueTick(); } catch { /* next tick */ } }, 20_000).unref?.();
+setInterval(() => { try { sourceFromIntel({ limit: 2 }); } catch { /* next tick */ } }, 10 * 60_000).unref?.();
+// Skills: ask, harvest, settle. Slow on purpose — a method is not a hot path.
+setInterval(() => { try { syncSkills(); harvestProposals(); } catch { /* next tick */ } }, 60_000).unref?.();
+setInterval(() => { try { inviteProposals(1); } catch { /* next tick */ } }, 4 * 3600 * 1000).unref?.();
+setInterval(() => { try { syncMarketing(); } catch { /* next tick retries */ } }, 4000).unref?.();
+// Employees answer in the room they were mentioned in, as soon as their run lands.
+setInterval(() => { syncChat().catch(() => { /* next tick retries */ }); }, 2500).unref?.();
+// The treasury watches the chain: balances, incoming payments, invoices closing
+// themselves. Reading only — nothing here can move money.
+setInterval(() => { walletTick().catch(() => { /* next tick retries */ }); }, 20_000).unref?.();
+// Scripts and replies land as soon as the employee finishes writing them.
+setInterval(() => { commsTick().catch(() => { /* next tick retries */ }); }, 3000).unref?.();
+setInterval(() => { try { moneyWatch(); } catch { /* next tick retries */ } }, 30 * 60 * 1000).unref?.();
 setInterval(() => { try { syncTasks(); } catch { /* next tick retries */ } }, 3000).unref?.();
 setInterval(() => { try { ruleRiskReviews(); } catch { /* next tick retries */ } }, 6 * 3600 * 1000).unref?.();
 setInterval(() => { try { advancePipelines(); } catch { /* next tick retries */ } }, 2000).unref?.();
@@ -59,6 +142,11 @@ setInterval(() => { autonomyTick().catch(() => { /* next tick retries */ }); }, 
 setInterval(() => { societyTick().catch(() => { /* next tick retries */ }); }, 8 * 60_000).unref?.();
 setInterval(() => { try { advanceRequests(); } catch { /* next tick retries */ } }, 3000).unref?.();
 setInterval(() => { try { syncExpansion(); } catch { /* next tick retries */ } }, 3500).unref?.();
+// The iteration engine: audits land first, then workstreams move a phase.
+setInterval(() => { try { syncAudits(); advanceWorkstreams(); } catch { /* next tick retries */ } }, 3000).unref?.();
+// Memory: land reflections quickly; fold in knowledge and audit grades slowly.
+setInterval(() => { try { syncReflections(); } catch { /* next tick retries */ } }, 4000).unref?.();
+setInterval(() => { try { syncExternalMemory(); gradeEpisodes(); } catch { /* next tick retries */ } }, 60_000).unref?.();
 setInterval(() => { try { syncDepartments(); syncDisputes(); } catch { /* next tick retries */ } }, 3000).unref?.();
 setInterval(() => { try { ruleAssetRenewals(); ruleEnablementFromEvals(); ruleAutoDisputes(); } catch { /* next tick retries */ } }, 6 * 3600 * 1000).unref?.();
 setInterval(() => { try { advanceJourneys(); } catch { /* next tick retries */ } }, 2500).unref?.();
@@ -98,6 +186,96 @@ function serveStatic(res, urlPath) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
+    // Carrier callbacks. These cannot carry a session token — the phone network
+    // is calling us — so they are authenticated by the carrier's own signature
+    // instead, and they are the only unauthenticated write surface.
+    if (url.pathname.startsWith('/webhooks/')) {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const raw = Buffer.concat(chunks).toString('utf8');
+      const params = Object.fromEntries(new URLSearchParams(raw));
+      const full = `${PUBLIC_BASE() || `http://localhost:${PORT}`}${req.url}`;
+      if (!verifyWebhook(full, params, req.headers['x-twilio-signature'])) {
+        res.writeHead(403); res.end('signature check failed');
+        return;
+      }
+      const xml = (body) => { res.writeHead(200, { 'content-type': 'text/xml' }); res.end(body); };
+      if (url.pathname === '/webhooks/sms') {
+        receiveMessage({ from: params.From, to: params.To, body: params.Body, sid: params.MessageSid, channel: String(params.From || '').startsWith('whatsapp:') ? 'whatsapp' : 'sms' });
+        return xml('<?xml version="1.0" encoding="UTF-8"?><Response/>');
+      }
+      if (url.pathname === '/webhooks/voice') {
+        return xml(receiveCall({ from: params.From, to: params.To, sid: params.CallSid }).twiml);
+      }
+      if (url.pathname === '/webhooks/voice/twiml') {
+        const call = one('SELECT * FROM calls WHERE id = ?', Number(url.searchParams.get('call')));
+        return xml(call ? twiml(call) : '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>');
+      }
+      if (url.pathname === '/webhooks/voice/status' || url.pathname === '/webhooks/voice/transcript') {
+        const id = Number(url.searchParams.get('call'));
+        if (id) {
+          exec(`UPDATE calls SET state = CASE WHEN ? IN ('completed','failed','busy','no-answer') THEN 'completed' ELSE state END,
+                outcome = COALESCE(?, outcome), duration_s = COALESCE(?, duration_s),
+                transcript = COALESCE(?, transcript), recording = COALESCE(?, recording),
+                ended_at = COALESCE(ended_at, datetime('now')) WHERE id = ?`,
+          params.CallStatus || null, params.CallStatus === 'completed' ? 'reached' : params.CallStatus || null,
+          params.CallDuration ? Number(params.CallDuration) : null,
+          params.TranscriptionText || null, params.RecordingUrl || null, id);
+        }
+        return xml('<?xml version="1.0" encoding="UTF-8"?><Response/>');
+      }
+      res.writeHead(404); res.end('no such webhook');
+      return;
+    }
+    // The OAuth callback. It cannot carry a session token either — the identity
+    // provider is redirecting a browser here — so it is authenticated by the
+    // signed state parameter that this server issued minutes earlier.
+    if (url.pathname === '/oauth/callback') {
+      const state = url.searchParams.get('state');
+      const code = url.searchParams.get('code');
+      const connector = verifyState(state);
+      const page = (msg, ok) => {
+        res.writeHead(ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(`<!doctype html><meta charset="utf-8"><title>Crucible</title>
+          <body style="font:15px system-ui;padding:40px;background:#0e0e11;color:#eee">
+          <h2 style="color:${ok ? '#6fc487' : '#f0685a'}">${msg}</h2>
+          <p>You can close this tab and go back to the Integrations page.</p>`);
+      };
+      if (!connector || !code) return page('That callback did not come from here.', false);
+      const conn = one('SELECT config FROM connectors WHERE id = ?', connector);
+      const cfg = conn?.config ? JSON.parse(conn.config) : {};
+      const base = connector.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+      try {
+        await exchangeCode({
+          connector, provider: cfg.provider || 'google', code,
+          clientId: getSecret(`${base}_CLIENT_ID`) || cfg.clientId,
+          clientSecret: getSecret(`${base}_CLIENT_SECRET`),
+          redirectUri: `${PUBLIC_BASE() || `http://localhost:${PORT}`}/oauth/callback`,
+        });
+        return page(`${connector} is connected — in dry-run until you arm it.`, true);
+      } catch (err) {
+        return page(`Could not finish the handshake: ${String(err.message).slice(0, 200)}`, false);
+      }
+    }
+
+    // Crucible as an MCP server: an outside agent drives the company through
+    // the same permissions a person would have, using that person's token.
+    if (url.pathname === '/mcp') {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const raw = Buffer.concat(chunks).toString('utf8');
+      const token = req.headers['x-auth-token'] || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const user = userForToken(token);
+      const send = (obj) => {
+        res.writeHead(obj ? 200 : 202, { 'content-type': 'application/json' });
+        res.end(obj ? JSON.stringify(obj) : '');
+      };
+      if (!user) return send({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'authentication required — send a Crucible token' } });
+      let body;
+      try { body = JSON.parse(raw); } catch { return send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'that was not JSON' } }); }
+      return send(await handleMcp(body, { user, tools: mcpTools }));
+    }
+
     if (url.pathname.startsWith('/api/')) {
       let body = null;
       if (req.method === 'POST' || req.method === 'PUT') {
@@ -134,6 +312,14 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ error: String(err.message) }));
   }
 });
+
+// Live presence: the chain is the event source, so the feed can never invent an
+// event that did not happen.
+server.on('upgrade', (req, socket, head) => {
+  if (new URL(req.url, 'http://localhost').pathname === '/live') handleUpgrade(req, socket, head);
+  else socket.destroy();
+});
+setInterval(() => { try { liveTick(); } catch { /* a dropped socket costs a nicety, never a fact */ } }, 1500).unref?.();
 
 server.listen(PORT, () => {
   audit({ actorType: 'system', actorId: 'server', action: 'server.started', payload: { port: PORT, mockMode: mockMode() } });

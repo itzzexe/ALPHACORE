@@ -9,6 +9,7 @@ import { agentsConfig } from './env.js';
 import { audit } from './audit.js';
 import { route, parseAgentJson, RouterExhausted, BudgetExceeded } from './router.js';
 import { personaPrompt } from './org.js';
+import { recall, captureEpisode } from './memory.js';
 
 const MAX_ATTEMPTS = 3;
 const LEASE_MINUTES = 10;
@@ -31,7 +32,20 @@ export function seedAgents() {
 export function getAgentSpec(agentId) {
   const row = one('SELECT * FROM agents WHERE id = ?', agentId);
   if (!row) return null;
-  return { ...JSON.parse(row.spec), status: row.status };
+  let spec = {};
+  try { spec = JSON.parse(row.spec) || {}; } catch { /* a broken spec still gets defaults below */ }
+  // Employees written by the blueprint carry `tier` in their spec. Ones hired
+  // later — by recruiting, or seeded by a department — may name it differently
+  // or not at all, and a spec without a tier gives the router no chain to try:
+  // "Router exhausted for undefined". The column is the source of truth.
+  const tier = spec.tier || spec.modelTier || row.model_tier || 'T1';
+  return {
+    ...spec,
+    tier,
+    status: row.status,
+    system: spec.system || `You are ${row.name} at this company. ${spec.mission || ''} Answer only with the JSON you were asked for.`,
+    sensitivity: spec.sensitivity || 'internal',
+  };
 }
 
 export function enqueueRun({ agentId, taskType, input, decisionId = null, parentRunId = null, pipelineId = null, actor = 'human:admin' }) {
@@ -72,6 +86,24 @@ export function leaseNext() {
   return one('SELECT * FROM runs WHERE id = ?', row.id);
 }
 
+/**
+ * Did the employee refuse rather than fumble? Refusals arrive as prose in the
+ * first person, in either language; the first sentences carry the reason.
+ */
+const DECLINE_MARKERS = [
+  "i'm not going to", 'i am not going to', "i won't", 'i will not',
+  "i can't help", 'i cannot help', "i can't assist", 'i cannot assist',
+  'i must decline', 'i have to decline', "i'm declining", 'i refuse',
+  'لن أقوم', 'لا أستطيع المساعدة', 'أرفض', 'لن أنفذ',
+];
+function declinedReason(text) {
+  const t = String(text || '');
+  const head = t.slice(0, 400).toLowerCase();
+  if (!DECLINE_MARKERS.some((m) => head.includes(m))) return null;
+  const sentence = t.replace(/\s+/g, ' ').trim().split(/(?<=[.!?؟])\s/).slice(0, 2).join(' ');
+  return sentence.slice(0, 300);
+}
+
 /** Execute one leased run end-to-end. */
 export async function executeRun(run) {
   const spec = getAgentSpec(run.agent_id);
@@ -79,9 +111,18 @@ export async function executeRun(run) {
   setState(run.id, 'running');
   audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.started', subjectType: 'run', subjectId: run.id });
 
+  const taskText = input.prompt || input.task || JSON.stringify(input);
+  // Memory is injected here, at the single choke point every department's work
+  // passes through: the agent's own playbook plus what retrieval says is
+  // relevant. Never fatal — an employee with amnesia still does the job.
+  let memoryBlock = null;
+  try { memoryBlock = recall(run.agent_id, `${input.context || ''} ${taskText}`, { runId: run.id }); }
+  catch { /* memory is an advantage, not a dependency */ }
+
   const prompt = [
+    memoryBlock,
     input.context ? `Context:\n${input.context}` : null,
-    `Task (${run.task_type}):\n${input.prompt || input.task || JSON.stringify(input)}`,
+    `Task (${run.task_type}):\n${taskText}`,
   ].filter(Boolean).join('\n\n');
 
   try {
@@ -122,9 +163,22 @@ export async function executeRun(run) {
     const confidence = parsed?.confidence;
 
     if (parsed === null) {
-      // Structural validation failed — never silently pass malformed output.
-      setState(run.id, 'awaiting_human', { output, flags: result.flags, failureReason: 'output failed schema validation (no parseable JSON)' });
-      audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.awaiting_human', subjectType: 'run', subjectId: run.id, payload: { reason: 'schema' } });
+      // Two very different things produce unparseable output, and calling both
+      // "schema validation" hid the important one: an employee that declined
+      // the work and said why. A refusal is an answer, not a malformed reply,
+      // and the person who asked deserves to read it.
+      const declined = declinedReason(result.text);
+      setState(run.id, 'awaiting_human', {
+        output, flags: [...(result.flags || []), declined ? 'declined' : 'unparseable'],
+        failureReason: declined
+          ? `${run.agent_id} declined this work — ${declined}`
+          : 'output failed schema validation (no parseable JSON)',
+      });
+      audit({
+        actorType: 'agent', actorId: run.agent_id, action: 'run.awaiting_human',
+        subjectType: 'run', subjectId: run.id,
+        payload: { reason: declined ? 'declined' : 'schema', detail: declined ? declined.slice(0, 200) : undefined },
+      });
     } else if (forceHumanReason) {
       setState(run.id, 'awaiting_human', { output, flags: result.flags, failureReason: forceHumanReason });
       audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.awaiting_human', subjectType: 'run', subjectId: run.id, payload: { reason: 'same-family-review' } });
@@ -135,7 +189,11 @@ export async function executeRun(run) {
       setState(run.id, 'done', { output, flags: result.flags });
       audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.done', subjectType: 'run', subjectId: run.id, payload: { costUsd: result.costUsd, provider: result.provider } });
     }
-    return one('SELECT * FROM runs WHERE id = ?', run.id);
+    const finished = one('SELECT * FROM runs WHERE id = ?', run.id);
+    // Experience is kept whether the work passed or stopped at the gate —
+    // a run that needed a human is exactly the kind of thing worth remembering.
+    try { captureEpisode(finished); } catch { /* never fail a run over its diary */ }
+    return finished;
   } catch (err) {
     if (err instanceof BudgetExceeded) {
       // Hard budget stop = checkpoint + awaiting_human (Part 3 §5.2) — never silent truncation.

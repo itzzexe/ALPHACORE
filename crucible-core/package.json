@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "description": "Crucible Core — the internal operating platform for an AI-native SaaS company (Part 3 of the Crucible blueprint). Modular monolith: decision registry, budgets, multi-provider model router, run queue, mini-tribunal, hash-chained audit log, admin dashboard.",
   "type": "module",
-  "engines": { "node": ">=22.5.0" },
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "start": "node --experimental-sqlite src/server.js",
     "dev": "node --experimental-sqlite --watch src/server.js",
     "seed": "node --experimental-sqlite scripts/seed.js",
-    "test": "node --experimental-sqlite --test test/smoke.test.js"
+    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js",
+    "prove": "node --experimental-sqlite scripts/prove-world.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"

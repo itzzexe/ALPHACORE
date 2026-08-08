@@ -81,6 +81,37 @@ export const PERMS = [
   'board.view', 'board.manage',
   'ir.view', 'ir.manage',
   'comms.view', 'comms.manage',
+  // The iteration engine.
+  'workstreams.view', 'workstreams.manage',
+  'auditor.view', 'auditor.request',
+  'sprints.view', 'sprints.manage',
+  'memory.view', 'memory.manage',
+  'chat.view', 'chat.post',
+  // treasury.pay releases money and is deliberately separate from the rest.
+  'treasury.view', 'treasury.manage', 'treasury.pay',
+  'comms.view', 'comms.manage',
+  'contact.view', 'contact.manage',
+  'marketing.view', 'marketing.manage',
+  'money.view', 'money.manage',
+  // The outside world. These are the powers that can affect somebody who is not
+  // in this building, so each one is separate and none of them is implied by
+  // "view". vault.manage holds every credential the company has; egress.release
+  // is the hand that lets a held action through; constitution.amend rewrites
+  // the rules the gate enforces — all three belong to very few people.
+  'vault.manage',
+  'connectors.view', 'connectors.manage',
+  'egress.view', 'egress.release', 'scopes.grant',
+  'jobs.view', 'jobs.manage',
+  'web.view', 'web.use',
+  'mcp.view', 'mcp.manage',
+  'constitution.view', 'constitution.amend',
+  'provenance.view', 'provenance.issue',
+  'timemachine.view', 'timemachine.snapshot',
+  'simulation.view', 'simulation.run',
+  'skills.view', 'skills.manage',
+  'redteam.view', 'redteam.run',
+  'graph.view', 'graph.manage',
+  'revenue.view', 'revenue.manage', 'revenue.invoice',
 ];
 
 const hashPassword = (pw) => {

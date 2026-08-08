@@ -1,8 +1,19 @@
 node_modules/
-data/*.db
-data/*.db-journal
-data/*.db-wal
-data/*.db-shm
-data/backup-*/
-data/artifacts/
+
+# The whole data directory, without exception.
+#
+# The old rules listed `data/*.db` and friends, which is a single-level glob:
+# it did not match `data/simulations/sim-1.db` (a complete fork of the company
+# database, customers and all), and it said nothing at all about
+# `data/master.key` — the AES key that decrypts every credential in the vault.
+# Both were one `git add .` away from being public. Nothing in data/ belongs in
+# version control, so the rule is now the directory itself.
+data/
+
+# Secrets, wherever they land.
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+master.key

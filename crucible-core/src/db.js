@@ -8,7 +8,13 @@ import { ROOT } from './env.js';
 
 const dataDir = path.join(ROOT, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
-export const db = new DatabaseSync(path.join(dataDir, 'crucible.db'));
+// The tests used to delete data/crucible.db before importing this module, which
+// is a fine idea until the day somebody runs them on a machine that holds the
+// real company. The file is now nameable, and the test suite names its own.
+export const DB_FILE = process.env.CRUCIBLE_DB
+  ? path.resolve(ROOT, process.env.CRUCIBLE_DB)
+  : path.join(dataDir, 'crucible.db');
+export const db = new DatabaseSync(DB_FILE);
 
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
@@ -1070,6 +1076,428 @@ CREATE TABLE IF NOT EXISTS bulletins (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- The iteration engine: work that goes around until it is genuinely good.
+CREATE TABLE IF NOT EXISTS workstreams (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  title          TEXT NOT NULL,
+  goal           TEXT NOT NULL,
+  method         TEXT NOT NULL DEFAULT 'kaizen',   -- waterfall|scrum|kaizen
+  route          TEXT NOT NULL,                    -- JSON array of departments
+  quality_target REAL NOT NULL DEFAULT 0.85,
+  max_cycles     INTEGER NOT NULL DEFAULT 4,
+  reviewers      INTEGER NOT NULL DEFAULT 2,
+  current_cycle  INTEGER NOT NULL DEFAULT 0,
+  current_dept   TEXT,
+  best_score     REAL,
+  state          TEXT NOT NULL DEFAULT 'running',  -- running|awaiting_human|done|cancelled
+  note           TEXT,
+  subject_type   TEXT,
+  subject_id     TEXT,
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS cycles (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  workstream_id INTEGER NOT NULL REFERENCES workstreams(id),
+  seq           INTEGER NOT NULL,
+  dept          TEXT NOT NULL,
+  phase         TEXT NOT NULL DEFAULT 'produce',   -- produce|review|audit|done
+  produce_run   TEXT,
+  output        TEXT,
+  review_runs   TEXT,                              -- JSON array of run ids
+  reviews       TEXT,                              -- JSON array of verdicts
+  audit_id      INTEGER,
+  audit_score   REAL,
+  audit_verdict TEXT,
+  state         TEXT NOT NULL DEFAULT 'running',   -- running|done|blocked
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS workstream_notes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  workstream_id INTEGER NOT NULL REFERENCES workstreams(id),
+  body          TEXT NOT NULL,
+  author        TEXT NOT NULL,
+  applied       INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The universal AI auditor: any department, any artifact, one standard.
+CREATE TABLE IF NOT EXISTS audits (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_type TEXT NOT NULL,
+  subject_id   TEXT NOT NULL,
+  dept         TEXT,
+  criteria     TEXT,
+  score        REAL,
+  verdict      TEXT,                               -- pass|revise|fail
+  findings     TEXT,
+  summary      TEXT,
+  run_id       TEXT,
+  state        TEXT NOT NULL DEFAULT 'running',    -- running|done|failed
+  requested_by TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sprints (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  goal       TEXT,
+  state      TEXT NOT NULL DEFAULT 'planning',     -- planning|active|review|closed
+  starts_on  TEXT,
+  ends_on    TEXT,
+  velocity   INTEGER,
+  retro      TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Agent memory: episodes, lessons, playbooks and the retrieval index.
+CREATE TABLE IF NOT EXISTS mem_docs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind         TEXT NOT NULL,                      -- episode|lesson|playbook|knowledge|artifact|note
+  agent_id     TEXT,
+  dept         TEXT,
+  title        TEXT,
+  body         TEXT NOT NULL,
+  source_type  TEXT,
+  source_id    TEXT,
+  quality      REAL,                               -- audited score of the work it came from
+  verification TEXT NOT NULL DEFAULT 'unverified', -- unverified|verified|retracted
+  tokens       INTEGER NOT NULL DEFAULT 0,
+  created_by   TEXT NOT NULL DEFAULT 'system',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS mem_docs_kind ON mem_docs (kind, agent_id);
+
+CREATE TABLE IF NOT EXISTS mem_index (
+  term   TEXT NOT NULL,
+  doc_id INTEGER NOT NULL REFERENCES mem_docs(id),
+  tf     INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS mem_index_term ON mem_index (term);
+CREATE INDEX IF NOT EXISTS mem_index_doc ON mem_index (doc_id);
+
+CREATE TABLE IF NOT EXISTS mem_usage (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id     INTEGER NOT NULL,
+  run_id     TEXT NOT NULL,
+  agent_id   TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS mem_usage_run ON mem_usage (run_id);
+
+CREATE TABLE IF NOT EXISTS reflections (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id       TEXT NOT NULL,
+  run_id         TEXT,
+  episodes       INTEGER NOT NULL DEFAULT 0,
+  lessons        TEXT,
+  playbook_draft TEXT,
+  state          TEXT NOT NULL DEFAULT 'running',  -- running|done|failed
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The company floor: humans and AI employees in the same rooms.
+CREATE TABLE IF NOT EXISTS chat_channels (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  key          TEXT NOT NULL UNIQUE,           -- general, div-engine, dm-admin-AGT-..., ws-12
+  name         TEXT NOT NULL,
+  topic        TEXT,
+  kind         TEXT NOT NULL DEFAULT 'public', -- public|division|subject|dm
+  division     TEXT,
+  subject_type TEXT,
+  subject_id   TEXT,
+  archived     INTEGER NOT NULL DEFAULT 0,
+  created_by   TEXT NOT NULL DEFAULT 'system',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id  INTEGER NOT NULL REFERENCES chat_channels(id),
+  parent_id   INTEGER,                          -- threads
+  author_id   TEXT NOT NULL,                    -- human:admin | AGT-DOC-001 | system
+  author_kind TEXT NOT NULL DEFAULT 'human',    -- human|agent|system
+  body        TEXT NOT NULL,
+  mentions    TEXT,                             -- JSON array of ids
+  refs        TEXT,                             -- JSON [{type,id,label}]
+  action      TEXT,                             -- JSON: what this message made happen
+  run_id      TEXT,                             -- the run an agent answered with
+  state       TEXT NOT NULL DEFAULT 'sent',     -- sent|thinking|failed|deleted
+  pinned      INTEGER NOT NULL DEFAULT 0,
+  edited_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS chat_msg_channel ON chat_messages (channel_id, id);
+
+CREATE TABLE IF NOT EXISTS chat_members (
+  channel_id INTEGER NOT NULL,
+  member_id  TEXT NOT NULL,
+  kind       TEXT NOT NULL DEFAULT 'human',
+  PRIMARY KEY (channel_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_reactions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES chat_messages(id),
+  actor      TEXT NOT NULL,
+  emoji      TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (message_id, actor, emoji)
+);
+
+CREATE TABLE IF NOT EXISTS chat_reads (
+  channel_id INTEGER NOT NULL,
+  member_id  TEXT NOT NULL,
+  last_seen  INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (channel_id, member_id)
+);
+
+-- Treasury: the company's own crypto wallets, what it invoices, what arrives.
+CREATE TABLE IF NOT EXISTS wallets (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  label        TEXT NOT NULL,
+  chain        TEXT NOT NULL,                    -- bitcoin|ethereum|tron|solana|mock
+  asset        TEXT NOT NULL DEFAULT 'native',   -- native|USDT|USDC
+  address      TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'receiving',-- receiving|treasury
+  watch_only   INTEGER NOT NULL DEFAULT 1,       -- the platform never holds keys
+  balance      REAL NOT NULL DEFAULT 0,
+  balance_at   TEXT,
+  state        TEXT NOT NULL DEFAULT 'active',   -- active|retired
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (chain, address, asset)
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref          TEXT NOT NULL UNIQUE,             -- INV-2026-0001
+  customer_id  INTEGER,
+  deal_id      INTEGER,
+  wallet_id    INTEGER NOT NULL REFERENCES wallets(id),
+  description  TEXT NOT NULL,
+  amount       REAL NOT NULL,
+  asset        TEXT NOT NULL,
+  chain        TEXT NOT NULL,
+  memo         TEXT,                             -- the exact-amount tag used to match
+  state        TEXT NOT NULL DEFAULT 'open',     -- open|paid|underpaid|expired|cancelled
+  paid_amount  REAL NOT NULL DEFAULT 0,
+  paid_at      TEXT,
+  tx_hash      TEXT,
+  expires_at   TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS wallet_tx (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  wallet_id   INTEGER NOT NULL REFERENCES wallets(id),
+  tx_hash     TEXT NOT NULL,
+  direction   TEXT NOT NULL DEFAULT 'in',        -- in|out
+  amount      REAL NOT NULL,
+  asset       TEXT NOT NULL,
+  confirmations INTEGER NOT NULL DEFAULT 0,
+  invoice_id  INTEGER,
+  seen_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (wallet_id, tx_hash, direction, amount)
+);
+
+-- Outgoing money is prepared here and signed elsewhere. No key ever lands in
+-- this database, so nothing in this table can move funds on its own.
+CREATE TABLE IF NOT EXISTS payouts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  to_address  TEXT NOT NULL,
+  chain       TEXT NOT NULL,
+  asset       TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  reason      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'prepared',  -- prepared|approved|sent|rejected
+  approved_by TEXT,
+  tx_hash     TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Contact centre: the company's phone numbers, its voices, and every call and
+-- message in or out.
+CREATE TABLE IF NOT EXISTS phone_numbers (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  number      TEXT NOT NULL UNIQUE,             -- E.164, e.g. +9647xxxxxxxx
+  label       TEXT NOT NULL,
+  provider    TEXT NOT NULL DEFAULT 'simulated',-- twilio|simulated
+  voice_in    INTEGER NOT NULL DEFAULT 1,
+  sms_in      INTEGER NOT NULL DEFAULT 1,
+  country     TEXT,
+  state       TEXT NOT NULL DEFAULT 'active',
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS calls (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  direction    TEXT NOT NULL,                    -- out|in
+  from_number  TEXT NOT NULL,
+  to_number    TEXT NOT NULL,
+  customer_id  INTEGER,
+  agent_id     TEXT,                             -- the AI employee running it
+  voice        TEXT NOT NULL DEFAULT 'ava',
+  language     TEXT NOT NULL DEFAULT 'en',
+  purpose      TEXT,
+  script       TEXT,                             -- what will be said
+  state        TEXT NOT NULL DEFAULT 'queued',   -- queued|drafting|ringing|live|completed|failed|missed
+  outcome      TEXT,                             -- reached|voicemail|no-answer|busy|declined
+  duration_s   INTEGER NOT NULL DEFAULT 0,
+  transcript   TEXT,
+  recording    TEXT,
+  follow_up    TEXT,
+  run_id       TEXT,
+  provider_sid TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sms_messages (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  direction    TEXT NOT NULL,                    -- out|in
+  channel      TEXT NOT NULL DEFAULT 'sms',      -- sms|whatsapp
+  from_number  TEXT NOT NULL,
+  to_number    TEXT NOT NULL,
+  customer_id  INTEGER,
+  agent_id     TEXT,
+  body         TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'queued',   -- queued|drafting|sent|delivered|received|failed
+  thread_key   TEXT NOT NULL,
+  run_id       TEXT,
+  provider_sid TEXT,
+  created_by   TEXT NOT NULL DEFAULT 'system',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS sms_thread ON sms_messages (thread_key, id);
+
+-- The money desk: how cash is allocated, and what the company promised itself.
+CREATE TABLE IF NOT EXISTS money_policy (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  reserve_pct   REAL NOT NULL DEFAULT 40,
+  opex_pct      REAL NOT NULL DEFAULT 35,
+  growth_pct    REAL NOT NULL DEFAULT 25,
+  min_runway_mo REAL NOT NULL DEFAULT 6,
+  note          TEXT,
+  set_by        TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS money_moves (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                     -- allocation|transfer|writeoff|note
+  bucket      TEXT,                              -- reserve|opex|growth
+  amount      REAL NOT NULL DEFAULT 0,
+  asset       TEXT NOT NULL DEFAULT 'USD',
+  reason      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'recorded',
+  decided_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Marketing: the audience it is for, the promise it makes, the channels it
+-- buys, the words it publishes, and what any of it returned.
+CREATE TABLE IF NOT EXISTS personas (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  segment     TEXT,
+  job_title   TEXT,
+  pains       TEXT,
+  gains       TEXT,
+  objections  TEXT,
+  channels    TEXT,
+  evidence    TEXT,                              -- where this came from
+  state       TEXT NOT NULL DEFAULT 'draft',     -- draft|active|retired
+  run_id      TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS positioning (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id   TEXT,
+  audience     TEXT NOT NULL,
+  category     TEXT,
+  promise      TEXT NOT NULL,
+  proof        TEXT,
+  alternatives TEXT,
+  tagline      TEXT,
+  messages     TEXT,                             -- JSON pillars
+  state        TEXT NOT NULL DEFAULT 'draft',    -- draft|approved
+  run_id       TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS campaign_channels (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id  INTEGER NOT NULL,
+  channel      TEXT NOT NULL,                    -- search|social|email|content|events|partners|outbound
+  budget_usd   REAL NOT NULL DEFAULT 0,
+  spent_usd    REAL NOT NULL DEFAULT 0,
+  impressions  INTEGER NOT NULL DEFAULT 0,
+  clicks       INTEGER NOT NULL DEFAULT 0,
+  leads        INTEGER NOT NULL DEFAULT 0,
+  customers    INTEGER NOT NULL DEFAULT 0,
+  state        TEXT NOT NULL DEFAULT 'planned',  -- planned|running|paused|ended
+  notes        TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS content_calendar (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  title        TEXT NOT NULL,
+  channel      TEXT NOT NULL DEFAULT 'blog',
+  persona_id   INTEGER,
+  campaign_id  INTEGER,
+  stage        TEXT NOT NULL DEFAULT 'awareness',-- awareness|consideration|decision|retention
+  due_date     TEXT,
+  owner_agent  TEXT,
+  brief        TEXT,
+  content_id   INTEGER,                          -- the studio piece it became
+  state        TEXT NOT NULL DEFAULT 'idea',     -- idea|briefed|drafting|ready|published
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS seo_keywords (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword     TEXT NOT NULL,
+  language    TEXT NOT NULL DEFAULT 'en',
+  intent      TEXT,                              -- informational|commercial|transactional
+  volume      INTEGER,
+  difficulty  INTEGER,
+  priority    REAL NOT NULL DEFAULT 0,
+  target_url  TEXT,
+  calendar_id INTEGER,
+  state       TEXT NOT NULL DEFAULT 'tracked',
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS email_sequences (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  goal        TEXT,
+  audience    TEXT,
+  steps       TEXT,                              -- JSON [{day,subject,body}]
+  state       TEXT NOT NULL DEFAULT 'draft',     -- draft|ready|live|retired
+  sent        INTEGER NOT NULL DEFAULT 0,
+  opened      INTEGER NOT NULL DEFAULT 0,
+  replied     INTEGER NOT NULL DEFAULT 0,
+  run_id      TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   seq          INTEGER PRIMARY KEY AUTOINCREMENT,
   occurred_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1090,8 +1518,310 @@ CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 `);
 
+// ============================================================================
+// The outside world. Everything above this line is the company talking to
+// itself; everything below is the machinery that lets it touch anything real —
+// credentials, connectors, the gate every outbound effect must pass, the job
+// queue that survives a dropped connection, and the systems that keep all of
+// it honest.
+// ============================================================================
+db.exec(`
+-- Secrets, encrypted at rest. The ciphertext never leaves this table and the
+-- plaintext never enters an audit payload or an API response.
+CREATE TABLE IF NOT EXISTS vault_secrets (
+  name        TEXT PRIMARY KEY,
+  ciphertext  TEXT NOT NULL,           -- base64: iv | tag | data
+  kind        TEXT NOT NULL DEFAULT 'api_key',  -- api_key|oauth|password|webhook
+  connector   TEXT,
+  note        TEXT,
+  tail        TEXT,                    -- last 4 chars, safe to show
+  expires_at  TEXT,
+  last_used   TEXT,
+  rotated_at  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per service the company can reach. A connector is inert until it is
+-- armed: 'dry' means every call is recorded and nothing leaves.
+CREATE TABLE IF NOT EXISTS connectors (
+  id          TEXT PRIMARY KEY,        -- gmail, github, slack, http:acme
+  driver      TEXT NOT NULL,           -- which driver file handles it
+  label       TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'disconnected',  -- disconnected|dry|live|paused
+  config      TEXT,                    -- JSON, no secrets
+  scopes      TEXT,                    -- JSON array of granted capability ids
+  allowlist   TEXT,                    -- JSON array: domains, repos, channels
+  quota_day   INTEGER NOT NULL DEFAULT 200,
+  connected_by TEXT,
+  connected_at TEXT,
+  last_call   TEXT,
+  health      TEXT NOT NULL DEFAULT 'unknown',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS connector_accounts (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  connector_id TEXT NOT NULL REFERENCES connectors(id),
+  account      TEXT NOT NULL,          -- the email / login / workspace
+  secret_name  TEXT,                   -- points into vault_secrets
+  refresh_name TEXT,
+  expires_at   TEXT,
+  meta         TEXT,
+  state        TEXT NOT NULL DEFAULT 'active',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (connector_id, account)
+);
+
+-- Which employee may reach which capability, and how far. No wildcards.
+CREATE TABLE IF NOT EXISTS agent_scopes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id   TEXT NOT NULL,
+  connector  TEXT NOT NULL,
+  capability TEXT NOT NULL,            -- mail.send, repo.pr, post.publish
+  constraint_json TEXT,                -- JSON: {domain, repo, channel, maxValueUsd}
+  granted_by TEXT NOT NULL,
+  expires_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (agent_id, connector, capability)
+);
+
+-- Every attempt to affect anything outside this machine, allowed or not.
+CREATE TABLE IF NOT EXISTS egress_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  connector   TEXT NOT NULL,
+  capability  TEXT NOT NULL,
+  agent_id    TEXT,
+  run_id      TEXT,
+  actor       TEXT,
+  target      TEXT,                    -- who/what it would touch
+  reason      TEXT,
+  payload     TEXT,                    -- JSON, redacted
+  verdict     TEXT NOT NULL,           -- allowed|blocked|dry|gated
+  blocked_by  TEXT,                    -- which rule refused
+  result      TEXT,                    -- JSON of what came back
+  value_usd   REAL NOT NULL DEFAULT 0,
+  intent_hash TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Work that must survive a dropped line: attempts, backoff, idempotency.
+CREATE TABLE IF NOT EXISTS jobs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,
+  payload     TEXT,
+  state       TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|failed|dead
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 5,
+  run_after   TEXT NOT NULL DEFAULT (datetime('now')),
+  idempotency TEXT UNIQUE,
+  last_error  TEXT,
+  leased_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS jobs_pick ON jobs (state, run_after);
+
+-- The web, as a capability with a memory. Every fetch keeps its content hash so
+-- any claim traces back to what was actually on the page.
+CREATE TABLE IF NOT EXISTS web_fetches (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  url         TEXT NOT NULL,
+  mode        TEXT NOT NULL DEFAULT 'fetch',   -- fetch|search|browse
+  agent_id    TEXT,
+  run_id      TEXT,
+  status      INTEGER,
+  bytes       INTEGER,
+  content_hash TEXT,
+  title       TEXT,
+  text        TEXT,
+  screenshot  TEXT,
+  error       TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS web_url ON web_fetches (url, created_at);
+
+-- MCP: servers the company can reach, and the tools they expose.
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id         TEXT PRIMARY KEY,
+  label      TEXT NOT NULL,
+  transport  TEXT NOT NULL DEFAULT 'stdio',   -- stdio|http
+  command    TEXT,
+  args       TEXT,
+  url        TEXT,
+  env_names  TEXT,                     -- JSON array of vault secret names
+  state      TEXT NOT NULL DEFAULT 'registered',  -- registered|connected|failed
+  last_error TEXT,
+  tools_json TEXT,
+  last_sync  TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mcp_calls (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  server_id  TEXT NOT NULL,
+  tool       TEXT NOT NULL,
+  agent_id   TEXT,
+  run_id     TEXT,
+  args       TEXT,
+  result     TEXT,
+  ok         INTEGER NOT NULL DEFAULT 1,
+  ms         INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The constitution: rules the company must obey, written once and enforced by
+-- machine at the gate and by the auditor on the work.
+CREATE TABLE IF NOT EXISTS constitution (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  article     TEXT NOT NULL,
+  rule_id     TEXT NOT NULL UNIQUE,
+  text        TEXT NOT NULL,
+  machine     TEXT,                    -- JSON rule the gate can evaluate
+  severity    TEXT NOT NULL DEFAULT 'block',   -- block|gate|warn
+  version     INTEGER NOT NULL DEFAULT 1,
+  state       TEXT NOT NULL DEFAULT 'active',  -- active|retired
+  ruled_by    TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Anyone who asked to be left alone. Checked before every outbound message on
+-- every channel, permanently, with no expiry and no way for an agent to clear
+-- an entry — only a person can, and the removal is on the chain.
+CREATE TABLE IF NOT EXISTS suppression_list (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact    TEXT NOT NULL UNIQUE,     -- email, phone, handle, lower-cased
+  channel    TEXT NOT NULL DEFAULT 'all',
+  reason     TEXT,
+  added_by   TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS constitution_hits (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  rule_id    TEXT NOT NULL,
+  subject    TEXT,
+  verdict    TEXT NOT NULL,
+  detail     TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Provenance: a signed receipt for anything the company produced.
+CREATE TABLE IF NOT EXISTS provenance (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_type TEXT NOT NULL,
+  subject_id   TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  chain_hash   TEXT,
+  made_by      TEXT,
+  model        TEXT,
+  reviewers    TEXT,
+  cost_usd     REAL NOT NULL DEFAULT 0,
+  signature    TEXT NOT NULL,
+  public_key   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (subject_type, subject_id, content_hash)
+);
+
+-- The time machine: named marks on the chain you can stand at.
+CREATE TABLE IF NOT EXISTS snapshots (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  label      TEXT NOT NULL,
+  seq        INTEGER NOT NULL,
+  chain_hash TEXT NOT NULL,
+  counts     TEXT,
+  taken_by   TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The shadow company: a fork of reality, run fast, compared honestly.
+CREATE TABLE IF NOT EXISTS simulations (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  question    TEXT NOT NULL,
+  changes     TEXT,                    -- JSON: what we changed in the fork
+  horizon     TEXT,
+  state       TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|failed
+  db_file     TEXT,
+  baseline    TEXT,                    -- JSON metrics before
+  outcome     TEXT,                    -- JSON metrics after
+  verdict     TEXT,
+  started_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at    TEXT
+);
+
+-- Skills: reusable recipes an employee proposes, proven before adoption.
+CREATE TABLE IF NOT EXISTS skills (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug        TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  task_type   TEXT NOT NULL,
+  body        TEXT NOT NULL,           -- the recipe: prompt + tools
+  version     INTEGER NOT NULL DEFAULT 1,
+  proposed_by TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'proposed',  -- proposed|testing|adopted|rejected|retired
+  score       REAL,
+  baseline    REAL,
+  trials      INTEGER NOT NULL DEFAULT 0,
+  adopted_at  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (slug, version)
+);
+
+-- Model tournaments: which model actually wins which kind of work.
+CREATE TABLE IF NOT EXISTS tournaments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_type  TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'running',
+  entrants   TEXT,
+  results    TEXT,
+  winner     TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at   TEXT
+);
+
+-- The red team: attacks we run on ourselves before someone else does.
+CREATE TABLE IF NOT EXISTS redteam_runs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  attack     TEXT NOT NULL,
+  target     TEXT NOT NULL,
+  payload    TEXT,
+  outcome    TEXT NOT NULL DEFAULT 'pending',  -- pending|defended|breached
+  detail     TEXT,
+  severity   TEXT NOT NULL DEFAULT 'medium',
+  fixed_at   TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Knowledge graph: entities and the edges between them, built from real rows.
+CREATE TABLE IF NOT EXISTS graph_nodes (
+  id         TEXT PRIMARY KEY,         -- customer:12, agent:AGT-..., artifact:88
+  kind       TEXT NOT NULL,
+  label      TEXT NOT NULL,
+  props      TEXT,
+  embedding  TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS graph_edges (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  src        TEXT NOT NULL,
+  dst        TEXT NOT NULL,
+  rel        TEXT NOT NULL,
+  weight     REAL NOT NULL DEFAULT 1,
+  props      TEXT,
+  UNIQUE (src, dst, rel)
+);
+CREATE INDEX IF NOT EXISTS graph_src ON graph_edges (src);
+CREATE INDEX IF NOT EXISTS graph_dst ON graph_edges (dst);
+`);
+
 // Migrations for databases created before later features existed.
 try { db.exec('ALTER TABLE runs ADD COLUMN pipeline_id TEXT'); } catch { /* column exists */ }
+// Scrum: tasks belong to sprints and carry story points.
+try { db.exec('ALTER TABLE tasks ADD COLUMN sprint_id INTEGER'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE tasks ADD COLUMN points INTEGER'); } catch { /* column exists */ }
+// Cycles record when a round's runs were consumed while still at the gate.
+try { db.exec('ALTER TABLE cycles ADD COLUMN gated INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE pipelines ADD COLUMN product_id TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE tickets ADD COLUMN product_id TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE tickets ADD COLUMN incident_id INTEGER'); } catch { /* column exists */ }
