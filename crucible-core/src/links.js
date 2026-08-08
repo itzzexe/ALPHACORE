@@ -438,7 +438,37 @@ export function sectionCatalog() {
     S('simulation', 'Shadow company', 'decide', '#/simulation', n('SELECT COUNT(*) AS n FROM simulations'), 'Fork reality, pull a lever, run it forward and compare — an answer instead of an opinion'),
     S('skills', 'Skill market', 'talent', '#/skills', n('SELECT COUNT(*) AS n FROM skills'), 'An employee writes down how it works, the method is scored against the incumbent, the winner is adopted'),
     S('kgraph', 'Knowledge graph', 'data', '#/kgraph', n('SELECT COUNT(*) AS n FROM graph_nodes'), 'Everything the company knows about one thing, in one hop — entities, edges and local embeddings'),
+    // The platform: this installation running more than itself, and the rhythm
+    // that keeps it running without anybody present.
+    S('chief', 'Operating rhythm', 'exec', '#/chief', n('SELECT COUNT(*) AS n FROM periods'), 'The company deciding what to work on, reviewing what happened and correcting — day, week and quarter'),
+    S('observe', 'Watchtower', 'govern', '#/observe', n('SELECT COUNT(*) AS n FROM slos'), 'What the company promised itself, whether it is keeping it, and the remedy it applies when it is not'),
+    S('tenants', 'Companies', 'world', '#/tenants', n('SELECT COUNT(*) AS n FROM tenants'), 'More than one company on this installation — each with its own database file and its own process'),
+    S('keys', 'API keys', 'world', '#/keys', n("SELECT COUNT(*) AS n FROM api_keys WHERE state = 'active'"), 'How other software talks to this company: scoped keys, rate limits and a call ledger'),
+    S('webhooks', 'Webhooks', 'world', '#/webhooks', n("SELECT COUNT(*) AS n FROM webhooks WHERE state = 'active'"), 'The company telling other software what just happened, signed so the receiver can prove it came from here'),
+    S('packages', 'Department packages', 'build', '#/packages', n('SELECT COUNT(*) AS n FROM packages'), 'A department as an installable manifest — tables, employees, permissions and a place on the map'),
+    S('backups', 'Backups', 'govern', '#/backups', n('SELECT COUNT(*) AS n FROM backups'), 'Copies taken from a checkpointed database, hashed, verified by opening them again'),
+    ...packageSections(),
   ];
+}
+
+/**
+ * Sections contributed by installed packages. They appear on the map and in the
+ * navigation exactly like the built-in ones — that is what makes a package a
+ * department rather than a plugin bolted to the side.
+ */
+function packageSections() {
+  try {
+    return q("SELECT manifest FROM packages WHERE state = 'installed'").map((r) => {
+      const m = JSON.parse(r.manifest);
+      let count = 0;
+      try { count = one(`SELECT COUNT(*) AS n FROM ${m.tables?.[0]?.name}`).n; } catch { count = 0; }
+      return {
+        id: m.section.id, label: m.section.label, division: m.section.division,
+        href: `#/pkg/${m.id}`, count,
+        hint: m.section.hint || m.description || 'installed as a package',
+      };
+    });
+  } catch { return []; }
 }
 
 export const DIVISIONS = [
@@ -753,6 +783,43 @@ export function relationshipMatrix() {
     edge('kgraph', 'intel', 'organisations, people and what connects them', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'organisation'"), '#/intel'),
     edge('kgraph', 'customers', 'everything known about one customer, in one hop', n("SELECT COUNT(*) AS n FROM graph_nodes WHERE kind = 'customer'"), '#/customers'),
     edge('kgraph', 'knowledge', 'semantic search across the whole company', n('SELECT COUNT(*) AS n FROM graph_edges'), '#/knowledge'),
+
+    // ---- the platform ------------------------------------------------------
+    // The rhythm is the management layer, so it touches whatever it decides
+    // about — and everything it decides is written down as a period.
+    edge('chief', 'objectives', 'the quarter sets the company its own goals', n("SELECT COUNT(*) AS n FROM objectives WHERE owner = 'system:chief'"), '#/objectives'),
+    edge('chief', 'runs', 'the daily turn unblocks what is stuck', n("SELECT COUNT(*) AS n FROM periods WHERE kind = 'day'"), '#/runs', 'loop'),
+    edge('chief', 'budgets', 'the quarter divides the money across the goals', n("SELECT COUNT(*) AS n FROM periods WHERE kind = 'quarter'"), '#/budgets'),
+    edge('chief', 'workforce', 'load is spread off whoever is carrying too much', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'chief.turn'"), '#/workforce'),
+    edge('chief', 'audit', 'every turn is written down with the numbers it decided from', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'period.%' OR action = 'chief.turn'"), '#/audit', 'audit'),
+    edge('chief', 'autopilot', 'the rhythm only runs while autonomy is on', n("SELECT COUNT(*) AS n FROM periods"), '#/autopilot', 'gate'),
+    edge('chief', 'observe', 'what the rhythm sees becomes a measurement', n("SELECT COUNT(*) AS n FROM metrics WHERE at >= datetime('now','-1 day')"), '#/observe'),
+
+    edge('observe', 'runs', 'a stalled item is put back rather than left', n("SELECT COUNT(*) AS n FROM remedies WHERE action = 'requeue-stuck'"), '#/runs', 'loop'),
+    edge('observe', 'quality', 'too many failed audits and the quality desk is asked why', n("SELECT COUNT(*) AS n FROM remedies WHERE action = 'ask-quality'"), '#/quality'),
+    edge('observe', 'oversight', 'what it cannot fix safely, it pages a person about', n("SELECT COUNT(*) AS n FROM remedies WHERE action = 'page-a-person'"), '#/oversight', 'gate'),
+    edge('observe', 'budgets', 'speculative work is held near the cap', n("SELECT COUNT(*) AS n FROM remedies WHERE action = 'throttle-discretionary'"), '#/budgets'),
+    edge('observe', 'jobs', 'dead work is a measurement, not a mystery', n("SELECT COUNT(*) AS n FROM jobs WHERE state = 'dead'"), '#/jobs'),
+
+    edge('tenants', 'audit', 'starting and stopping a company is on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'tenant.%'"), '#/audit', 'audit'),
+    edge('tenants', 'budgets', 'a company past its cap is paused, not billed', n("SELECT COUNT(*) AS n FROM tenants WHERE state = 'paused'"), '#/budgets', 'gate'),
+    edge('tenants', 'backups', 'each company is its own file, so each is its own backup', n('SELECT COUNT(*) AS n FROM tenants'), '#/backups'),
+
+    edge('keys', 'egress', 'a key is another way in, and it is scoped like everything else', n("SELECT COUNT(*) AS n FROM api_keys WHERE state = 'active'"), '#/egress', 'gate'),
+    edge('keys', 'users', 'a key can only hold permissions that exist', n('SELECT COUNT(*) AS n FROM api_keys'), '#/users'),
+    edge('keys', 'observe', 'the error rate on the API is something the company promised', n("SELECT COUNT(*) AS n FROM api_calls WHERE created_at >= datetime('now','-1 day')"), '#/observe'),
+
+    edge('webhooks', 'audit', 'the chain is the event source, so nothing can be announced that did not happen', n('SELECT COUNT(*) AS n FROM webhook_deliveries'), '#/audit', 'audit'),
+    edge('webhooks', 'jobs', 'a receiver that is down costs a retry, not an event', n("SELECT COUNT(*) AS n FROM jobs WHERE kind = 'webhook.deliver'"), '#/jobs'),
+    edge('webhooks', 'vault', 'each subscription signs with its own secret', n('SELECT COUNT(*) AS n FROM webhooks'), '#/vault'),
+
+    edge('packages', 'agents', 'a package hires its own employees', n("SELECT COUNT(*) AS n FROM agents WHERE spec LIKE '%fromPackage%'"), '#/agents'),
+    edge('packages', 'users', 'and declares its own permissions, which must be new', n("SELECT COUNT(*) AS n FROM packages WHERE state = 'installed'"), '#/users'),
+    edge('packages', 'graph', 'an installed department appears on the map like any other', n("SELECT COUNT(*) AS n FROM packages WHERE state = 'installed'"), '#/graph'),
+
+    edge('backups', 'audit', 'a backup records the chain tip it was taken at', n('SELECT COUNT(*) AS n FROM backups'), '#/audit', 'audit'),
+    edge('backups', 'archive', 'what is kept, and for how long', n('SELECT COUNT(*) AS n FROM backups'), '#/archive'),
+    edge('backups', 'gate', 'restoring over a live company waits for a person', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'backup.restore_staged'"), '#/gate', 'gate'),
     edge('contact', 'sales', 'outbound calls chasing deals', n("SELECT COUNT(*) AS n FROM calls WHERE direction = 'out'"), '#/sales'),
     // The money desk reads every other ledger before it says anything.
     edge('money', 'treasury', 'crypto received is the cash line', n("SELECT COUNT(*) AS n FROM invoices WHERE state = 'paid'"), '#/treasury'),

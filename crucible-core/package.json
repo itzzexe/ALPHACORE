@@ -10,8 +10,9 @@
     "start": "node --experimental-sqlite src/server.js",
     "dev": "node --experimental-sqlite --watch src/server.js",
     "seed": "node --experimental-sqlite scripts/seed.js",
-    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js",
-    "prove": "node --experimental-sqlite scripts/prove-world.mjs"
+    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js",
+    "prove": "node --experimental-sqlite scripts/prove-world.mjs",
+    "prove:platform": "node --experimental-sqlite scripts/prove-platform.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"

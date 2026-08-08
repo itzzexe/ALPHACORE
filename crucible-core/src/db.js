@@ -1815,6 +1815,184 @@ CREATE INDEX IF NOT EXISTS graph_src ON graph_edges (src);
 CREATE INDEX IF NOT EXISTS graph_dst ON graph_edges (dst);
 `);
 
+// ============================================================================
+// The platform. Everything above runs one company; everything below runs many,
+// exposes them to other software, lets a department be shipped as a package,
+// and keeps the whole thing operating without somebody standing over it.
+// ============================================================================
+db.exec(`
+-- One row per company on this installation. Each gets its own database file:
+-- isolation by file is stronger than isolation by WHERE clause, and it cannot
+-- be forgotten in a query.
+CREATE TABLE IF NOT EXISTS tenants (
+  id           TEXT PRIMARY KEY,        -- slug: acme, basra-oil
+  name         TEXT NOT NULL,
+  db_file      TEXT NOT NULL,
+  port         INTEGER,
+  state        TEXT NOT NULL DEFAULT 'provisioning',  -- provisioning|running|paused|stopped|failed
+  plan         TEXT NOT NULL DEFAULT 'standard',
+  owner_email  TEXT,
+  locale       TEXT NOT NULL DEFAULT 'en',
+  monthly_cap_usd REAL NOT NULL DEFAULT 200,
+  settings     TEXT,
+  last_seen    TEXT,
+  last_error   TEXT,
+  created_by   TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  stopped_at   TEXT
+);
+
+-- What each tenant actually consumed. The billing question and the capacity
+-- question are the same question.
+CREATE TABLE IF NOT EXISTS tenant_usage (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id  TEXT NOT NULL,
+  day        TEXT NOT NULL,
+  runs       INTEGER NOT NULL DEFAULT 0,
+  tokens_in  INTEGER NOT NULL DEFAULT 0,
+  tokens_out INTEGER NOT NULL DEFAULT 0,
+  cost_usd   REAL NOT NULL DEFAULT 0,
+  api_calls  INTEGER NOT NULL DEFAULT 0,
+  egress     INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (tenant_id, day)
+);
+
+-- Programmatic access. A session token belongs to a person at a keyboard; a key
+-- belongs to another piece of software, and is scoped and rate-limited on its
+-- own terms.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  prefix      TEXT NOT NULL UNIQUE,    -- shown in listings: ck_live_a1b2…
+  hash        TEXT NOT NULL,           -- scrypt of the full key; the key itself is never stored
+  scopes      TEXT NOT NULL,           -- JSON array of permission keys
+  tenant_id   TEXT,
+  rate_per_min INTEGER NOT NULL DEFAULT 120,
+  expires_at  TEXT,
+  last_used   TEXT,
+  calls       INTEGER NOT NULL DEFAULT 0,
+  state       TEXT NOT NULL DEFAULT 'active',   -- active|revoked
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS api_calls (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  key_id     INTEGER,
+  method     TEXT NOT NULL,
+  path       TEXT NOT NULL,
+  status     INTEGER,
+  ms         INTEGER,
+  ip         TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS api_calls_key ON api_calls (key_id, created_at);
+
+-- Webhooks out: the company telling other software what just happened, with a
+-- signature so the receiver can prove it came from here.
+CREATE TABLE IF NOT EXISTS webhooks (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  url        TEXT NOT NULL,
+  events     TEXT NOT NULL,            -- JSON array of action patterns
+  secret_name TEXT NOT NULL,           -- points into the vault
+  state      TEXT NOT NULL DEFAULT 'active',
+  last_fired TEXT,
+  failures   INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  webhook_id INTEGER NOT NULL,
+  event      TEXT NOT NULL,
+  payload    TEXT,
+  status     INTEGER,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  error      TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A department as an installable unit: tables, employees, permissions, rules
+-- and a place on the map, declared in one manifest.
+CREATE TABLE IF NOT EXISTS packages (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  version     TEXT NOT NULL,
+  author      TEXT,
+  description TEXT,
+  manifest    TEXT NOT NULL,           -- the whole declaration, as JSON
+  state       TEXT NOT NULL DEFAULT 'available',  -- available|installed|failed|removed
+  installed_at TEXT,
+  installed_by TEXT,
+  last_error  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The operating rhythm: the company planning and correcting itself on a clock,
+-- with every move written down as a period a person can read afterwards.
+CREATE TABLE IF NOT EXISTS periods (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,            -- day|week|quarter
+  label      TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'open',   -- open|reviewed|closed
+  plan       TEXT,                     -- JSON: what the company decided to do
+  review     TEXT,                     -- JSON: what actually happened
+  corrections TEXT,                    -- JSON: what it changed as a result
+  opened_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at  TEXT,
+  UNIQUE (kind, label)
+);
+
+-- What the company is watching about itself, and what it promised.
+CREATE TABLE IF NOT EXISTS metrics (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  value      REAL NOT NULL,
+  unit       TEXT,
+  at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS metrics_name ON metrics (name, at);
+
+CREATE TABLE IF NOT EXISTS slos (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  describe   TEXT NOT NULL,
+  metric     TEXT NOT NULL,
+  target     REAL NOT NULL,
+  comparison TEXT NOT NULL DEFAULT 'lte',   -- lte|gte
+  window_h   INTEGER NOT NULL DEFAULT 24,
+  state      TEXT NOT NULL DEFAULT 'ok',    -- ok|at_risk|breached
+  breached_at TEXT,
+  last_value REAL,
+  remedy     TEXT,                     -- the fix the company applies to itself
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS remedies (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  slo        TEXT NOT NULL,
+  action     TEXT NOT NULL,
+  detail     TEXT,
+  outcome    TEXT NOT NULL DEFAULT 'applied',  -- applied|failed|escalated
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Backups: a platform that can lose the company is not a platform.
+CREATE TABLE IF NOT EXISTS backups (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  file       TEXT NOT NULL,
+  kind       TEXT NOT NULL DEFAULT 'scheduled',  -- scheduled|manual|pre-restore
+  bytes      INTEGER,
+  sha256     TEXT,
+  chain_tip  INTEGER,
+  chain_hash TEXT,
+  verified   INTEGER NOT NULL DEFAULT 0,
+  taken_by   TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
 // Migrations for databases created before later features existed.
 try { db.exec('ALTER TABLE runs ADD COLUMN pipeline_id TEXT'); } catch { /* column exists */ }
 // Scrum: tasks belong to sprints and carry story points.

@@ -55,6 +55,15 @@ import { syncSkills, harvestProposals, inviteProposals } from './skills.js';
 import { revenueTick, sourceFromIntel } from './revenue.js';
 import { handleMcp } from './mcp.js';
 import { handleUpgrade, liveTick } from './live.js';
+// The platform: many companies, a programmatic surface, installable
+// departments, and the rhythm that runs all of it without somebody present.
+import { superviseTenants, collectUsage, stopAll as stopTenants } from './tenants.js';
+import { authenticateKey, recordCall as recordApiCall } from './apikeys.js';
+import { webhookTick } from './webhooks.js';
+import { seedPackages } from './packages.js';
+import { chiefTick } from './chief.js';
+import { seedSlos, observeTick, trimMetrics } from './observe.js';
+import { takeBackup } from './backup.js';
 import { mcpTools } from './mcptools.js';
 import { one, exec } from './db.js';
 import { getSetting } from './settings.js';
@@ -75,7 +84,13 @@ ensureChannels();
 seedMarketingTeam();
 seedConnectors();
 seedConstitution();
+seedPackages();
+seedSlos();
 startWorkers();
+
+// A tenant process must never try to be a control plane too: it runs one
+// company, on the database file it was handed.
+const IS_TENANT = Boolean(process.env.CRUCIBLE_TENANT);
 
 // ---------------------------------------------------------------------------
 // The outside world runs on the job queue rather than on bare timers, because
@@ -119,6 +134,30 @@ setInterval(() => { try { sourceFromIntel({ limit: 2 }); } catch { /* next tick 
 // Skills: ask, harvest, settle. Slow on purpose — a method is not a hot path.
 setInterval(() => { try { syncSkills(); harvestProposals(); } catch { /* next tick */ } }, 60_000).unref?.();
 setInterval(() => { try { inviteProposals(1); } catch { /* next tick */ } }, 4 * 3600 * 1000).unref?.();
+
+// ---------------------------------------------------------------------------
+// The platform layer.
+// ---------------------------------------------------------------------------
+// The rhythm: the company deciding what to work on, reviewing what happened,
+// and correcting — the layer a person used to be. Each clock only acts when its
+// period has actually turned over, so calling this often is cheap.
+setInterval(() => { try { chiefTick(); } catch { /* the next turn tries again */ } }, 60_000).unref?.();
+// Watch itself, and apply the remedy rather than waiting to be noticed.
+setInterval(() => { try { observeTick(); } catch { /* next pass */ } }, 30_000).unref?.();
+setInterval(() => { try { trimMetrics(); } catch { /* next pass */ } }, 6 * 3600 * 1000).unref?.();
+// Tell other software what happened, off the same chain the dashboard reads.
+setInterval(() => { try { webhookTick(); } catch { /* the queue retries */ } }, 4000).unref?.();
+// A backup every six hours, and one on the way out.
+setInterval(() => { try { takeBackup({ kind: 'scheduled', actor: 'system:backup' }); } catch { /* next window */ } }, 6 * 3600 * 1000).unref?.();
+
+// Only the control plane runs other companies.
+if (!IS_TENANT) {
+  setInterval(() => { try { superviseTenants(); } catch { /* next sweep */ } }, 30_000).unref?.();
+  setInterval(() => { try { collectUsage(); } catch { /* next sweep */ } }, 5 * 60_000).unref?.();
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => { try { stopTenants(); } catch { /* going down anyway */ } process.exit(0); });
+  }
+}
 setInterval(() => { try { syncMarketing(); } catch { /* next tick retries */ } }, 4000).unref?.();
 // Employees answer in the room they were mentioned in, as soon as their run lands.
 setInterval(() => { syncChat().catch(() => { /* next tick retries */ }); }, 2500).unref?.();
@@ -298,12 +337,34 @@ const server = http.createServer(async (req, res) => {
         return json(200, { ok: true });
       }
 
-      const user = userForToken(token);
+      // Two ways in. A session token belongs to a person at a keyboard; an API
+      // key belongs to another piece of software and carries only the scopes it
+      // was granted. Everything downstream treats them identically, which is
+      // the point — a key cannot reach anything a person with the same
+      // permissions could not.
+      let user = userForToken(token);
+      let keyId = null;
+      if (!user) {
+        const presented = req.headers['x-api-key'] || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const asKey = authenticateKey(presented);
+        if (asKey?.rateLimited) {
+          return json(429, { error: `this key is limited to ${asKey.limit} calls a minute`, retryAfterSeconds: 60 });
+        }
+        if (asKey) { user = asKey; keyId = asKey.keyId; }
+      }
       if (!user) return json(401, { error: 'authentication required' });
       if (url.pathname === '/api/auth/me') return json(200, { user });
 
+      const started = Date.now();
       const handled = await handleApi(req, res, url, body, user);
       if (!handled) json(404, { error: 'no such endpoint' });
+      if (keyId) {
+        recordApiCall({
+          keyId, method: req.method, path: url.pathname,
+          status: res.statusCode, ms: Date.now() - started,
+          ip: req.socket?.remoteAddress || null,
+        });
+      }
       return;
     }
     serveStatic(res, url.pathname);

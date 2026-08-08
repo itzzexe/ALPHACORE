@@ -112,6 +112,16 @@ export const PERMS = [
   'redteam.view', 'redteam.run',
   'graph.view', 'graph.manage',
   'revenue.view', 'revenue.manage', 'revenue.invoice',
+  // The platform. Running other people's companies, minting keys that outlive
+  // any session, and restoring a database over the live one are each powers a
+  // person should have to be given on purpose.
+  'tenants.view', 'tenants.manage',
+  'keys.view', 'keys.manage',
+  'webhooks.view', 'webhooks.manage',
+  'packages.view', 'packages.install',
+  'chief.view', 'chief.run',
+  'observe.view', 'observe.run',
+  'backups.view', 'backups.take', 'backups.restore',
 ];
 
 const hashPassword = (pw) => {

@@ -183,7 +183,11 @@ export function getObjective(id) {
 }
 
 export function listObjectives() {
-  return q('SELECT id FROM objectives ORDER BY quarter DESC, id').map((r) => getObjective(r.id));
+  // A row that will not load must not blank the whole page. One bad objective
+  // is a bad objective; a null in this array was a broken screen.
+  return q('SELECT id FROM objectives WHERE id IS NOT NULL ORDER BY quarter DESC, id')
+    .map((r) => getObjective(r.id))
+    .filter(Boolean);
 }
 
 export function updateObjective(id, { krs = null, state = null, actor }) {

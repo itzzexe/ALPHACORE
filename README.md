@@ -3,12 +3,12 @@
 **Working name** (trademark search pending — Part 11 action 8) · An AI-native SaaS company operated by 2–3 human founders and a growing AI workforce under the FORGE method.
 
 <p align="center">
-  <img src="crucible-core/docs/mainboard.svg" alt="Crucible Core — the living map: 13 divisions, 95 departments, humans hold the gates" width="100%">
+  <img src="crucible-core/docs/mainboard.svg" alt="Crucible Core — the living map: 13 divisions, 102 departments, humans hold the gates" width="100%">
 </p>
 
 ```mermaid
 flowchart LR
-  BP["📘 The Blueprint<br/>Parts 1–11<br/>rules · roles · gates · finances"] --> CORE["⚙️ Crucible Core<br/>the running platform<br/>95 departments · 13 divisions"]
+  BP["📘 The Blueprint<br/>Parts 1–11<br/>rules · roles · gates · finances"] --> CORE["⚙️ Crucible Core<br/>the running platform<br/>102 departments · 13 divisions"]
   CORE --> OUT["📦 Real output on disk<br/>spec packages · designs<br/>intel exports · working code"]
   HUM(["👤 Humans<br/>approve · publish · sign · hire"]) --- CORE
   AUD[("🔗 Hash-chained<br/>audit log")] --- CORE
@@ -43,8 +43,8 @@ flowchart LR
 
 **[crucible-core/](crucible-core/README.md)** — the platform, built from Part 3 and expanded far past it into a complete AI-native company:
 
-- **95 departments across 13 divisions** (Engine, The World, Build, Decide, Data, Create, Commerce, Capital, Operate, Talent, Trust, Executive, Govern) — agents are the workforce, humans hold every gate.
-- **Login + fine-grained RBAC**: 188 atomic permissions (a user can hold exactly one), superadmin console for users and provider keys, server-side identity on every audited action.
+- **102 departments across 13 divisions** (Engine, The World, Build, Decide, Data, Create, Commerce, Capital, Operate, Talent, Trust, Executive, Govern) — agents are the workforce, humans hold every gate.
+- **Login + fine-grained RBAC**: 203 atomic permissions (a user can hold exactly one), superadmin console for users and provider keys, server-side identity on every audited action.
 - **A living map, two designs** (The Hive — what the company is and how it is joined; The Stream — where the work is right now): every relationship a real database join with a live count, click-to-open, right-click connection ledger with hop-by-hop flow tracing, clicking a line explains the relationship, and a real-time ticker — the map is a monitoring console.
 - **One guarded door to the outside world**: ten integrations plus any HTTP API you describe, MCP in both directions, the open web, and a single egress gate that checks scope, allowlist, quota and a machine-enforced constitution before anything leaves — with eight attacks run against it on a timer.
 - **The engine room**: multi-provider router (Claude subscription first — zero marginal cost — then Claude API, OpenAI, DeepSeek, Gemini, or a $0 mock), reservation-first budgets, run queue with a first-class human gate, blind-critic tribunal, FORGE pipelines producing real files on disk, hash-chained append-only audit log, immune system, and cross-department autopilot reflexes.

@@ -78,6 +78,14 @@ import { skillsOverview, proposeSkill, trialSkill, inviteProposals, runTournamen
 import { redteamOverview, runRedTeam, markFixed } from './redteam.js';
 import { graphOverview, rebuildGraph, semanticSearch, neighbourhood } from './graph.js';
 import { revenueOverview, sourceFromIntel, revenueTick, sendOutreach, invoiceDeal } from './revenue.js';
+// The platform.
+import { tenantsOverview, getTenant, createTenant, startTenant, stopTenant, deleteTenant } from './tenants.js';
+import { apiKeysOverview, createKey, revokeKey } from './apikeys.js';
+import { webhooksOverview, addWebhook, setWebhookState, removeWebhook } from './webhooks.js';
+import { packagesOverview, getPackage, addPackage, validateManifest, installPackage, uninstallPackage } from './packages.js';
+import { chiefOverview, chiefTick } from './chief.js';
+import { observeOverview, observeTick } from './observe.js';
+import { backupsOverview, takeBackup, verifyBackup, restoreBackup, exportAll } from './backup.js';
 import { enqueueRun, resolveRun, queueStats, getAgentSpec } from './workflow.js';
 import {
   createDecision, listDecisions, getDecision, addEvidence, verifyEvidence,
@@ -1060,6 +1068,67 @@ const routes = [
   ['POST', /^\/api\/revenue\/(\d+)\/invoice$/, ([id], body) => invoiceDeal({
     dealId: Number(id), amountUsd: Number(need(body, 'amountUsd')), actor: body.actor,
   })],
+
+  // ==========================================================================
+  // The platform: many companies, a programmatic surface, installable
+  // departments, and the rhythm that runs it all.
+  // ==========================================================================
+
+  // --- tenants ---
+  ['GET', /^\/api\/tenants$/, () => tenantsOverview()],
+  ['GET', /^\/api\/tenants\/([a-z0-9-]+)$/, ([id]) => getTenant(id) || (() => { throw new HttpError(404, 'no such company'); })()],
+  ['POST', /^\/api\/tenants$/, (_p, body) => createTenant({
+    id: body.id, name: need(body, 'name'), ownerEmail: body.ownerEmail,
+    plan: body.plan, locale: body.locale, monthlyCapUsd: body.monthlyCapUsd, actor: body.actor,
+  })],
+  ['POST', /^\/api\/tenants\/([a-z0-9-]+)\/start$/, ([id], body) => startTenant(id, { actor: body.actor })],
+  ['POST', /^\/api\/tenants\/([a-z0-9-]+)\/stop$/, ([id], body) => stopTenant(id, { actor: body.actor })],
+  ['DELETE', /^\/api\/tenants\/([a-z0-9-]+)$/, ([id], _b, url) => deleteTenant(id, {
+    confirm: url.searchParams.get('confirm'), actor: url.searchParams.get('actor'),
+  })],
+
+  // --- API keys ---
+  ['GET', /^\/api\/keys$/, () => apiKeysOverview()],
+  ['POST', /^\/api\/keys$/, (_p, body) => createKey({
+    name: need(body, 'name'), scopes: body.scopes || [], expiresAt: body.expiresAt || null,
+    ratePerMin: body.ratePerMin || 120, tenantId: body.tenantId || null, actor: body.actor,
+  })],
+  ['POST', /^\/api\/keys\/(\d+)\/revoke$/, ([id], body) => revokeKey(Number(id), { actor: body.actor })],
+
+  // --- webhooks out ---
+  ['GET', /^\/api\/webhooks$/, () => webhooksOverview()],
+  ['POST', /^\/api\/webhooks$/, (_p, body) => addWebhook({ url: need(body, 'url'), events: body.events || ['*'], actor: body.actor })],
+  ['POST', /^\/api\/webhooks\/(\d+)\/state$/, ([id], body) => setWebhookState(Number(id), need(body, 'state'), { actor: body.actor })],
+  ['DELETE', /^\/api\/webhooks\/(\d+)$/, ([id], _b, url) => removeWebhook(Number(id), { actor: url.searchParams.get('actor') })],
+
+  // --- department packages ---
+  ['GET', /^\/api\/packages$/, () => packagesOverview()],
+  ['GET', /^\/api\/packages\/([a-z0-9_]+)$/, ([id]) => getPackage(id) || (() => { throw new HttpError(404, 'no such package'); })()],
+  ['POST', /^\/api\/packages$/, (_p, body) => addPackage({ manifest: need(body, 'manifest'), actor: body.actor })],
+  ['POST', /^\/api\/packages\/validate$/, (_p, body) => validateManifest(need(body, 'manifest'))],
+  ['POST', /^\/api\/packages\/([a-z0-9_]+)\/install$/, ([id], body) => installPackage(id, { actor: body.actor })],
+  ['POST', /^\/api\/packages\/([a-z0-9_]+)\/uninstall$/, ([id], body) => uninstallPackage(id, { actor: body.actor, dropData: Boolean(body.dropData) })],
+
+  // --- the operating rhythm ---
+  ['GET', /^\/api\/chief$/, () => chiefOverview()],
+  ['POST', /^\/api\/chief\/turn$/, (_p, body) => chiefTick({ force: body.force || 'day' })],
+
+  // --- observability and self-healing ---
+  ['GET', /^\/api\/observe$/, () => observeOverview()],
+  ['POST', /^\/api\/observe\/check$/, () => ({ applied: observeTick() })],
+
+  // --- backups ---
+  ['GET', /^\/api\/backups$/, () => backupsOverview()],
+  ['POST', /^\/api\/backups$/, (_p, body) => takeBackup({ kind: 'manual', actor: body.actor })],
+  ['POST', /^\/api\/backups\/(\d+)\/verify$/, ([id]) => verifyBackup(Number(id))],
+  ['POST', /^\/api\/backups\/(\d+)\/restore$/, ([id], body) => restoreBackup(Number(id), { confirm: body.confirm, actor: body.actor })],
+  ['GET', /^\/api\/backups\/export$/, () => ({
+    __raw: {
+      contentType: 'application/json; charset=utf-8',
+      filename: `crucible-export-${new Date().toISOString().slice(0, 10)}.json`,
+      body: JSON.stringify(exportAll(), null, 1),
+    },
+  })],
 ];
 
 /** Path → permission key. One permission per capability; superadmin holds "*". */
@@ -1197,6 +1266,16 @@ function permFor(m, path) {
   if (path.startsWith('/api/kgraph')) return m === 'GET' ? 'graph.view' : 'graph.manage';
   if (is(/^\/api\/revenue\/\d+\/invoice$/)) return 'revenue.invoice';
   if (path.startsWith('/api/revenue')) return m === 'GET' ? 'revenue.view' : 'revenue.manage';
+  // The platform. Creating a company, minting a key and restoring a database
+  // are each their own power — none of them is implied by being able to look.
+  if (path.startsWith('/api/tenants')) return m === 'GET' ? 'tenants.view' : 'tenants.manage';
+  if (path.startsWith('/api/keys')) return m === 'GET' ? 'keys.view' : 'keys.manage';
+  if (path.startsWith('/api/webhooks')) return m === 'GET' ? 'webhooks.view' : 'webhooks.manage';
+  if (path.startsWith('/api/packages')) return m === 'GET' ? 'packages.view' : 'packages.install';
+  if (path.startsWith('/api/chief')) return m === 'GET' ? 'chief.view' : 'chief.run';
+  if (path.startsWith('/api/observe')) return m === 'GET' ? 'observe.view' : 'observe.run';
+  if (is(/^\/api\/backups\/\d+\/restore$/)) return 'backups.restore';
+  if (path.startsWith('/api/backups')) return m === 'GET' ? 'backups.view' : 'backups.take';
   return 'dashboard.view';
 }
 

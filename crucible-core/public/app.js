@@ -133,6 +133,9 @@ const navPerm = {
   timemachine: 'timemachine.view', simulation: 'simulation.view',
   skills: 'skills.view', redteam: 'redteam.view', kgraph: 'graph.view',
   revenue: 'revenue.view',
+  chief: 'chief.view', observe: 'observe.view', tenants: 'tenants.view',
+  keys: 'keys.view', webhooks: 'webhooks.view', packages: 'packages.view',
+  backups: 'backups.view', pkg: 'packages.view',
 };
 
 // ---------- shell v2: rail + flyout + command palette ----------
@@ -451,6 +454,15 @@ const routes = {
   redteam: { title: 'Red team — we attack ourselves first', render: renderRedteam, poll: 20000 },
   kgraph: { title: 'Knowledge graph — everything about one thing, in one hop', render: renderKnowledgeGraph, poll: 20000 },
   revenue: { title: 'Revenue loop — a name on a list to money in the account', render: renderRevenue, poll: 8000 },
+  // The platform.
+  chief: { title: 'Operating rhythm — the company deciding what to do next', render: renderChief, poll: 15000 },
+  observe: { title: 'Watchtower — what it promised itself, and what it does when it slips', render: renderObserve, poll: 10000 },
+  tenants: { title: 'Companies — more than one on this installation', render: renderTenants, poll: 10000 },
+  keys: { title: 'API keys — how other software talks to this company', render: renderKeys, poll: 15000 },
+  webhooks: { title: 'Webhooks — telling other software what just happened', render: renderWebhooks, poll: 10000 },
+  packages: { title: 'Department packages — a department you can install', render: renderPackages },
+  backups: { title: 'Backups — a platform that can lose the company is not a platform', render: renderBackups, poll: 20000 },
+  pkg: { title: 'Installed department', render: renderPackageSection },
 };
 
 // ---------- auto-refresh guard ----------
@@ -6835,6 +6847,527 @@ async function renderRevenue() {
     try { await api(`/api/revenue/${b.dataset.invoice}/invoice`, { method: 'POST', body: { amountUsd: Number(amount) } }); toast('Invoiced'); renderRevenue(); }
     catch (e) { toast(e.message, true); }
   }));
+}
+
+
+// ===========================================================================
+// THE PLATFORM — many companies, a programmatic surface, installable
+// departments, and the rhythm that runs all of it without anybody present.
+// ===========================================================================
+
+// ---------- The operating rhythm ----------
+async function renderChief() {
+  const d = await api('/api/chief');
+  const canRun = hasPermC('chief.run');
+  const s = d.situation;
+  const period = (p) => `
+    <tr>
+      <td><span class="chip ${p.kind === 'quarter' ? 'chip-ember' : p.kind === 'week' ? 'chip-steel' : 'chip-dim'}">${esc(p.kind)}</span></td>
+      <td class="mono"><b>${esc(p.label)}</b></td>
+      <td class="sub">${esc(short(
+        p.plan?.focus ? `focus: ${p.plan.focus} · target ${p.plan.targetRuns ?? '—'} on ${p.plan.budgetUsd ?? '—'}`
+          : p.plan?.objectives ? p.plan.objectives.join(' · ')
+            : (p.plan?.moves || []).join(' · ') || '—', 130,
+      ))}</td>
+      <td class="sub">${p.review ? esc(`${p.review.runsDone} done, ${p.review.runsFailed} failed, ${p.review.spentUsd}`) : '<span class="sub">still open</span>'}</td>
+      <td class="sub" style="color:var(--warn)">${(p.corrections || []).length ? esc(short(p.corrections.join(' · '), 90)) : ''}</td>
+      <td class="mono sub">${esc(String(p.opened_at).slice(5, 16))}</td>
+    </tr>`;
+
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Autonomy', esc(d.autonomy), d.autonomy === 'off' ? 'the rhythm follows it — it is not running' : 'the rhythm is keeping the clocks', d.autonomy === 'off' ? 'tile-warn' : 'tile-ok')}
+    ${tile('Days run', d.counts.days, `${d.counts.weeks} weeks · ${d.counts.quarters} quarters`)}
+    ${tile('Corrections made', d.counts.corrections, 'weeks where the plan and reality disagreed')}
+    <div class="panel tile"><div class="panel-title">Turn the clock now</div>
+      ${canRun ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        ${xbtn('/api/chief/turn', { force: 'day' }, 'Day', 'btn-primary')}
+        ${xbtn('/api/chief/turn', { force: 'week' }, 'Week')}
+        ${xbtn('/api/chief/turn', { force: 'quarter' }, 'Quarter')}
+      </div>` : '<div class="sub">chief.run required</div>'}
+      <div class="sub" style="margin-top:6px">Each clock only acts when its period has turned over.</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">What the company can see about itself right now</div>
+    <div class="grid grid-4" style="gap:var(--s3)">
+      <div><div class="panel-title">Queue</div><table><tbody>
+        <tr><td>waiting</td><td class="num mono">${s.queue.queued}</td></tr>
+        <tr><td>running</td><td class="num mono">${s.queue.running}</td></tr>
+        <tr><td>stalled</td><td class="num mono" style="${s.queue.stuck ? 'color:var(--bad)' : ''}">${s.queue.stuck}</td></tr>
+        <tr><td>at a human gate</td><td class="num mono">${s.queue.awaitingHuman}</td></tr>
+      </tbody></table></div>
+      <div><div class="panel-title">Money</div><table><tbody>
+        <tr><td>this month</td><td class="num mono">${Number(s.money.monthUsd).toFixed(2)}</td></tr>
+        <tr><td>cap</td><td class="num mono">${Number(s.money.capUsd).toFixed(0)}</td></tr>
+        <tr><td>today</td><td class="num mono">${Number(s.money.todayUsd).toFixed(2)}</td></tr>
+        <tr><td>frozen budgets</td><td class="num mono">${s.money.frozen}</td></tr>
+      </tbody></table></div>
+      <div><div class="panel-title">Work</div><table><tbody>
+        <tr><td>workstreams open</td><td class="num mono">${s.work.workstreamsOpen}</td></tr>
+        <tr><td>revision rounds</td><td class="num mono">${s.work.revisions}</td></tr>
+        <tr><td>failed audits</td><td class="num mono">${s.work.auditsFailed}</td></tr>
+        <tr><td>incidents open</td><td class="num mono">${s.work.incidentsOpen}</td></tr>
+      </tbody></table></div>
+      <div><div class="panel-title">Outside</div><table><tbody>
+        <tr><td>connectors live</td><td class="num mono">${s.outside.connectorsLive}</td></tr>
+        <tr><td>refused today</td><td class="num mono">${s.outside.egressBlocked}</td></tr>
+        <tr><td>waiting for a person</td><td class="num mono">${s.outside.gatedWaiting}</td></tr>
+        <tr><td>open breaches</td><td class="num mono" style="${s.outside.breaches ? 'color:var(--bad)' : ''}">${s.outside.breaches}</td></tr>
+      </tbody></table></div>
+    </div>
+    <div class="map-legend">This is the read the rhythm takes before it decides anything. Every move it makes is derived from these numbers, and the numbers are on the same page as the decision so the two can be checked against each other.</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Goals the company set itself</div>
+    <table><thead><tr><th>Objective</th><th>Quarter</th><th>How it will know</th></tr></thead><tbody>
+    ${d.objectives.map((o) => `<tr><td><b>${esc(o.title)}</b></td><td class="mono">${esc(o.quarter)}</td>
+      <td class="sub">${(o.krs || []).map((k) => `<span class="chip chip-dim">${esc(
+        // The rhythm writes key results as sentences; the ones a person entered
+        // earlier are objects with a target and a current value. Both are real
+        // key results, so both render.
+        typeof k === 'string' ? k : `${k.kr}: ${k.current ?? 0} / ${k.target}${k.unit ? ` ${k.unit}` : ''}`,
+      )}</span>`).join(' ')}</td></tr>`).join('')
+      || '<tr><td colspan="3" class="empty">No objectives yet — turn the quarter.</td></tr>'}
+    </tbody></table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">The record — every period, its plan, what happened, what changed</div>
+    <table><thead><tr><th>Clock</th><th>Period</th><th>Planned</th><th>Happened</th><th>Corrected</th><th>Opened</th></tr></thead>
+      <tbody>${d.periods.map(period).join('') || '<tr><td colspan="6" class="empty">Nothing yet.</td></tr>'}</tbody></table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">What autonomy does not cross</div>
+    <table><tbody>${d.limits.map((l) => `<tr><td>${esc(l)}</td></tr>`).join('')}</tbody></table>
+    <div class="map-legend">"Runs without intervention" means nobody has to be present for the work. It does not mean nobody is responsible for the consequences — which is why these four stay, and why every turn above is written down with the numbers it decided from.</div>
+  </div>`;
+  wireXact(renderChief);
+}
+
+// ---------- Watchtower ----------
+async function renderObserve() {
+  const d = await api('/api/observe');
+  const canRun = hasPermC('observe.run');
+  const spark = (series, colour) => {
+    if (!series.length) return '<div class="sub">no measurements yet</div>';
+    const max = Math.max(...series.map((p) => p.v), 0.0001);
+    return `<svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:36px">
+      <polyline fill="none" stroke="${colour}" stroke-width="1.5" vector-effect="non-scaling-stroke"
+        points="${series.map((p, i) => `${(i / Math.max(1, series.length - 1)) * 100},${28 - (p.v / max) * 26}`).join(' ')}"/>
+    </svg>`;
+  };
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Promises kept', d.counts.ok, `of ${d.counts.total} the company holds itself to`, d.counts.breached ? '' : 'tile-ok')}
+    ${tile('Broken now', d.counts.breached, 'each one has a remedy, not just a colour', d.counts.breached ? 'tile-bad' : '')}
+    ${tile('Remedies applied', d.counts.remediesApplied, 'the company fixing itself')}
+    <div class="panel tile"><div class="panel-title">Check now</div>
+      ${canRun ? xbtn('/api/observe/check', {}, 'Measure and act', 'btn-primary') : '<div class="sub">observe.run required</div>'}
+      <div class="sub" style="margin-top:6px">Runs every thirty seconds on its own.</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">What the company promised itself</div>
+    <table><thead><tr><th>Promise</th><th>Watching</th><th>Now</th><th>Target</th><th>State</th><th>If it breaks</th></tr></thead><tbody>
+    ${d.slos.map((s) => `<tr>
+      <td><b>${esc(s.describe)}</b><div class="sub mono">${esc(s.name)}</div></td>
+      <td class="mono sub">${esc(s.metric)} · ${s.window_h}h</td>
+      <td class="num mono">${s.last_value === null ? '—' : Number(s.last_value).toFixed(2)}</td>
+      <td class="num mono sub">${s.comparison === 'lte' ? '≤' : '≥'} ${s.target}</td>
+      <td><span class="chip ${s.state === 'ok' ? 'chip-ok' : 'chip-bad'}">${esc(s.state)}</span>${s.breached_at ? `<div class="sub mono">since ${esc(String(s.breached_at).slice(5, 16))}</div>` : ''}</td>
+      <td class="mono sub">${esc(s.remedy)}</td>
+    </tr>`).join('')}
+    </tbody></table>
+    <div class="map-legend">A dashboard that goes red and waits is a dashboard for a company with people watching it. Every promise here carries a specific, bounded remedy the company applies to itself — and the ones with no safe automatic fix page a person instead of pretending.</div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Last day</div>
+      <div class="sub">Queue depth</div>${spark(d.series.queue, 'var(--ember)')}
+      <div class="sub" style="margin-top:10px">Spend this month</div>${spark(d.series.spend, 'var(--warn)')}
+      <div class="sub" style="margin-top:10px">API error rate</div>${spark(d.series.errors, 'var(--bad)')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">What it fixed</div>
+      <table><thead><tr><th>Promise</th><th>Did</th><th>Result</th><th>When</th></tr></thead><tbody>
+      ${d.remedies.map((r) => `<tr><td class="mono">${esc(r.slo)}</td><td class="mono">${esc(r.action)}</td>
+        <td class="sub">${esc(short(r.detail || '', 50))}</td><td class="mono sub">${esc(String(r.created_at).slice(5, 16))}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="empty">Nothing has needed fixing.</td></tr>'}
+      </tbody></table>
+      <div class="panel-title" style="margin-top:14px">Health</div>
+      <table><tbody>
+        <tr><td>chain entries</td><td class="num mono">${d.health.chain}</td></tr>
+        <tr><td>jobs abandoned</td><td class="num mono" style="${d.health.jobsDead ? 'color:var(--bad)' : ''}">${d.health.jobsDead}</td></tr>
+        <tr><td>connectors failing</td><td class="num mono" style="${d.health.connectorsFailing ? 'color:var(--bad)' : ''}">${d.health.connectorsFailing}</td></tr>
+        <tr><td>webhooks paused</td><td class="num mono">${d.health.webhooksPaused}</td></tr>
+      </tbody></table>
+    </div>
+  </div>`;
+  wireXact(renderObserve);
+}
+
+// ---------- Companies (tenants) ----------
+async function renderTenants() {
+  const d = await api('/api/tenants');
+  const canM = hasPermC('tenants.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Companies here', d.counts.total, `${d.counts.running} running`)}
+    ${tile('Running', d.counts.running, 'each in its own process', d.counts.running ? 'tile-ok' : '')}
+    ${tile('Paused', d.counts.paused, 'over cap or stopped by hand', d.counts.paused ? 'tile-warn' : '')}
+    ${tile('Spend this month', `${Number(d.spendThisMonthUsd).toFixed(2)}`, 'across every company')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Companies on this installation</div>
+    <table><thead><tr><th>Company</th><th>State</th><th>Address</th><th>This month</th><th>Cap</th><th>Runs today</th><th></th></tr></thead><tbody>
+    ${d.tenants.map((t) => `<tr>
+      <td><b>${esc(t.name)}</b><div class="sub mono">${esc(t.id)} · ${esc(t.db_file)}</div></td>
+      <td><span class="chip ${t.up ? 'chip-ok' : t.state === 'failed' ? 'chip-bad' : 'chip-dim'}">${t.up ? 'running' : esc(t.state)}</span>${t.last_error ? `<div class="sub" style="color:var(--bad)">${esc(short(t.last_error, 40))}</div>` : ''}</td>
+      <td class="mono sub">${t.up ? `<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.url)}</a>` : esc(t.url)}</td>
+      <td class="num mono">${Number(t.monthUsd || 0).toFixed(2)}</td>
+      <td class="num mono sub">${Number(t.monthly_cap_usd).toFixed(0)}</td>
+      <td class="num mono">${t.todayRuns}</td>
+      <td>
+        ${canM && !t.up ? xbtn(`/api/tenants/${t.id}/start`, {}, 'Start', 'btn-primary') : ''}
+        ${canM && t.up ? xbtn(`/api/tenants/${t.id}/stop`, {}, 'Stop') : ''}
+        ${canM ? `<button class="btn btn-sm btn-bad" data-deltenant="${esc(t.id)}">Delete</button>` : ''}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">Only this company so far.</td></tr>'}
+    </tbody></table>
+    <div class="map-legend">${esc(d.isolation)}. The cost is a process per company; the benefit is that a forgotten <span class="mono">WHERE</span> clause cannot leak one company's customers into another's screen.</div>
+  </div>
+
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Add a company</div>
+    <div class="form-inline">
+      <input id="tn-name" placeholder="what it is called" style="width:200px">
+      <input id="tn-id" placeholder="id (optional — made from the name)" style="width:180px">
+      <input id="tn-email" placeholder="owner email" style="width:180px">
+      <input id="tn-cap" type="number" placeholder="monthly cap $" value="200" style="width:120px">
+      <button class="btn btn-sm btn-primary" id="tn-add">Provision</button>
+    </div>
+    <div class="map-legend">Provisioning creates the database file and reserves a port; starting it brings the company up on its own process. A company past its monthly cap is paused rather than allowed to keep spending.</div>
+  </div>` : ''}`;
+
+  wireXact(renderTenants);
+  $('#tn-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/tenants', { method: 'POST', body: {
+        name: $('#tn-name').value.trim(), id: $('#tn-id').value.trim() || undefined,
+        ownerEmail: $('#tn-email').value.trim() || null, monthlyCapUsd: Number($('#tn-cap').value || 200),
+      } });
+      toast('Provisioned'); renderTenants();
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-deltenant]').forEach((b) => b.addEventListener('click', async () => {
+    const id = b.dataset.deltenant;
+    const typed = prompt(`This deletes ${id} and its database. There is no undo.\n\nType the company id to confirm:`);
+    if (!typed) return;
+    try { await api(`/api/tenants/${id}?confirm=${encodeURIComponent(typed)}`, { method: 'DELETE' }); toast('Deleted'); renderTenants(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- API keys ----------
+async function renderKeys() {
+  const d = await api('/api/keys');
+  const canM = hasPermC('keys.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Keys in use', d.counts.active, `${d.counts.revoked} revoked`)}
+    ${tile('Calls today', d.counts.callsToday, 'from other software, not browsers')}
+    ${tile('Permissions available', d.availableScopes.length, 'a key may hold any subset, never the wildcard')}
+    <div class="panel tile"><div class="panel-title">How to call</div>
+      <div class="mono sub" style="margin-top:8px;font-size:10px">curl ${location.origin}/api/stats \\<br>&nbsp;&nbsp;-H "x-api-key: ck_…"</div></div>
+  </div>
+
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Mint a key</div>
+    <div class="form-inline">
+      <input id="ak-name" placeholder="what it is for, e.g. reporting script" style="width:220px">
+      <input id="ak-rate" type="number" value="120" title="calls per minute" style="width:110px">
+      <input id="ak-exp" type="date" title="expires">
+      <button class="btn btn-sm btn-primary" id="ak-make">Create</button>
+    </div>
+    <div class="sub" style="margin-top:8px">Scopes — pick only what it needs:</div>
+    <div id="ak-scopes" style="max-height:160px;overflow:auto;border:1px solid var(--seam);border-radius:8px;padding:8px;margin-top:6px">
+      ${d.availableScopes.map((s) => `<label class="chip chip-dim" style="cursor:pointer;margin:2px"><input type="checkbox" value="${esc(s)}" style="margin-inline-end:4px">${esc(s)}</label>`).join('')}
+    </div>
+    <div id="ak-out"></div>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title">Keys</div>
+    <table><thead><tr><th>Name</th><th>Key</th><th>May</th><th>Rate</th><th>Calls</th><th>Last used</th><th>State</th><th></th></tr></thead><tbody>
+    ${d.keys.map((k) => `<tr>
+      <td><b>${esc(k.name)}</b><div class="sub mono">by ${esc(k.created_by)}</div></td>
+      <td class="mono">${esc(k.prefix)}…</td>
+      <td class="sub">${k.scopes.slice(0, 3).map((s) => `<span class="chip chip-dim">${esc(s)}</span>`).join(' ')}${k.scopes.length > 3 ? ` +${k.scopes.length - 3}` : ''}</td>
+      <td class="num mono sub">${k.rate_per_min}/min</td>
+      <td class="num mono">${k.calls}</td>
+      <td class="mono sub">${k.last_used ? esc(String(k.last_used).slice(5, 16)) : 'never'}</td>
+      <td><span class="chip ${k.state === 'active' && !k.expired ? 'chip-ok' : 'chip-bad'}">${k.expired ? 'expired' : esc(k.state)}</span></td>
+      <td>${canM && k.state === 'active' ? xbtn(`/api/keys/${k.id}/revoke`, {}, 'Revoke', 'btn-bad') : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">No keys yet.</td></tr>'}
+    </tbody></table>
+    <div class="map-legend">A session token belongs to a person at a keyboard and carries their whole permission set. A key belongs to a script, lasts months, and should be able to do exactly one thing — so it is a separate mechanism with its own scopes, its own rate limit and its own ledger. What is stored is a hash: the key itself is shown once and never again.</div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Busiest endpoints</div>
+      <table><thead><tr><th>Endpoint</th><th>Calls</th><th>Avg ms</th></tr></thead><tbody>
+      ${d.busiest.map((b) => `<tr><td class="mono">${esc(b.method)} ${esc(b.path)}</td><td class="num mono">${b.n}</td><td class="num mono">${b.avg_ms}</td></tr>`).join('')
+        || '<tr><td colspan="3" class="empty">No calls yet.</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Recent calls</div>
+      <table><thead><tr><th>Key</th><th>Call</th><th>Status</th><th>ms</th></tr></thead><tbody>
+      ${d.recent.map((c) => `<tr><td class="mono sub">${esc(c.key_name || '—')}</td>
+        <td class="mono">${esc(c.method)} ${esc(short(c.path, 28))}</td>
+        <td class="mono" style="${c.status >= 400 ? 'color:var(--bad)' : ''}">${c.status}</td>
+        <td class="num mono">${c.ms}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Nothing yet.</td></tr>'}
+      </tbody></table>
+    </div>
+  </div>`;
+
+  wireXact(renderKeys);
+  $('#ak-make')?.addEventListener('click', async () => {
+    const scopes = [...view.querySelectorAll('#ak-scopes input:checked')].map((i) => i.value);
+    try {
+      const r = await api('/api/keys', { method: 'POST', body: {
+        name: $('#ak-name').value.trim(), scopes,
+        ratePerMin: Number($('#ak-rate').value || 120), expiresAt: $('#ak-exp').value || null,
+      } });
+      $('#ak-out').innerHTML = `<div class="chip chip-warn" style="margin-top:12px">${esc(r.note)}</div>${preBody(r.key)}`;
+      toast('Created — copy the key now');
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- Webhooks ----------
+async function renderWebhooks() {
+  const d = await api('/api/webhooks');
+  const canM = hasPermC('webhooks.manage');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Subscriptions', d.counts.active, `${d.counts.paused} paused`)}
+    ${tile('Delivered today', d.counts.deliveredToday, 'receiver answered 2xx', d.counts.deliveredToday ? 'tile-ok' : '')}
+    ${tile('Failed deliveries', d.counts.failing, 'retried on the queue, then paused', d.counts.failing ? 'tile-warn' : '')}
+    <div class="panel tile"><div class="panel-title">Verify a delivery</div>
+      <div class="sub" style="margin-top:8px">HMAC-SHA256 over <span class="mono">timestamp.body</span>, in <span class="mono">x-crucible-signature</span>. Five-minute replay window.</div></div>
+  </div>
+
+  ${canM ? `
+  <div class="panel">
+    <div class="panel-title">Subscribe</div>
+    <div class="form-inline">
+      <input id="wh-url" placeholder="https://your-service.example/hooks/crucible" style="width:44%">
+      <input id="wh-events" placeholder="run.*, egress.blocked, decision.*  (or * for everything)" style="width:34%">
+      <button class="btn btn-sm btn-primary" id="wh-add">Add</button>
+    </div>
+    <div id="wh-out"></div>
+    <div class="map-legend">The audit chain is the event source, so a webhook can never announce something that did not happen. Delivery runs on the job queue: a receiver that is down costs a retry, not an event. Twenty consecutive failures pause the subscription and say so on the chain.</div>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title">Subscriptions</div>
+    <table><thead><tr><th>Where</th><th>Listening for</th><th>State</th><th>Last fired</th><th>Failures</th><th></th></tr></thead><tbody>
+    ${d.webhooks.map((w) => `<tr>
+      <td class="mono">${esc(short(w.url, 46))}</td>
+      <td class="sub">${w.events.map((e) => `<span class="chip chip-dim">${esc(e)}</span>`).join(' ')}</td>
+      <td><span class="chip ${w.state === 'active' ? 'chip-ok' : 'chip-warn'}">${esc(w.state)}</span></td>
+      <td class="mono sub">${w.last_fired ? esc(String(w.last_fired).slice(5, 16)) : 'never'}</td>
+      <td class="num mono" style="${w.failures ? 'color:var(--bad)' : ''}">${w.failures}</td>
+      <td>${canM ? `${xbtn(`/api/webhooks/${w.id}/state`, { state: w.state === 'active' ? 'paused' : 'active' }, w.state === 'active' ? 'Pause' : 'Resume')}
+        <button class="btn btn-sm btn-bad" data-delhook="${w.id}">Remove</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">Nobody is listening yet.</td></tr>'}
+    </tbody></table>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Recent deliveries</div>
+      <table><thead><tr><th>Event</th><th>To</th><th>Status</th><th>Tries</th></tr></thead><tbody>
+      ${d.recent.map((r) => `<tr><td class="mono">${esc(r.event)}</td><td class="mono sub">${esc(short(r.url || '', 26))}</td>
+        <td class="mono" style="${r.status >= 400 || r.error ? 'color:var(--bad)' : ''}">${r.status || esc(short(r.error || 'pending', 18))}</td>
+        <td class="num mono">${r.attempts}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Nothing sent yet.</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">What you can listen for</div>
+      <table><thead><tr><th>Event</th><th>Last week</th></tr></thead><tbody>
+      ${d.commonEvents.map((e) => `<tr><td class="mono">${esc(e.action)}</td><td class="num mono">${e.n}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="map-legend">Anything on the chain can be subscribed to; these are simply the ones that happen most.</div>
+    </div>
+  </div>`;
+
+  wireXact(renderWebhooks);
+  $('#wh-add')?.addEventListener('click', async () => {
+    try {
+      const r = await api('/api/webhooks', { method: 'POST', body: {
+        url: $('#wh-url').value.trim(),
+        events: ($('#wh-events').value.trim() || '*').split(',').map((s) => s.trim()).filter(Boolean),
+      } });
+      $('#wh-out').innerHTML = `<div class="chip chip-warn" style="margin-top:12px">${esc(r.note)}</div>${preBody(r.secret)}`;
+      toast('Subscribed — copy the signing secret');
+    } catch (e) { toast(e.message, true); }
+  });
+  view.querySelectorAll('[data-delhook]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/webhooks/${b.dataset.delhook}`, { method: 'DELETE' }); toast('Removed'); renderWebhooks(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- Department packages ----------
+async function renderPackages() {
+  const d = await api('/api/packages');
+  const canI = hasPermC('packages.install');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Installed', d.counts.installed, 'departments running from a manifest', d.counts.installed ? 'tile-ok' : '')}
+    ${tile('Available', d.counts.available, 'registered, not yet installed')}
+    ${tile('Failed', d.counts.failed, 'rolled back, nothing left behind', d.counts.failed ? 'tile-bad' : '')}
+    ${tile('Sections contributed', d.sections.length, 'they appear on the map like any other')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Packages</div>
+    <table><thead><tr><th>Package</th><th>Version</th><th>State</th><th>What it adds</th><th></th></tr></thead><tbody>
+    ${d.packages.map((p) => `<tr>
+      <td><b>${esc(p.name)}</b><div class="sub">${esc(short(p.description || '', 80))}</div></td>
+      <td class="mono">${esc(p.version)}${p.author ? `<div class="sub">${esc(p.author)}</div>` : ''}</td>
+      <td><span class="chip ${p.state === 'installed' ? 'chip-ok' : p.state === 'failed' ? 'chip-bad' : 'chip-dim'}">${esc(p.state)}</span>${p.last_error ? `<div class="sub" style="color:var(--bad)">${esc(short(p.last_error, 50))}</div>` : ''}</td>
+      <td class="sub"><button class="btn btn-sm" data-pkgview="${esc(p.id)}">Read the manifest</button></td>
+      <td>${canI && p.state !== 'installed' ? xbtn(`/api/packages/${p.id}/install`, {}, 'Install', 'btn-primary') : ''}
+          ${canI && p.state === 'installed' ? xbtn(`/api/packages/${p.id}/uninstall`, {}, 'Uninstall') : ''}</td>
+    </tr>`).join('')}
+    </tbody></table>
+    <div id="pkg-detail"></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">What a package may and may not do</div>
+      <table><tbody>${d.rules.map((r) => `<tr><td>${esc(r)}</td></tr>`).join('')}</tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Write one</div>
+      ${canI ? `
+      <textarea id="pk-manifest" rows="10" placeholder="paste a manifest…" style="width:100%;font-family:var(--font-mono);font-size:11px"></textarea>
+      <div class="form-inline" style="margin-top:8px">
+        <button class="btn btn-sm" id="pk-check">Check it</button>
+        <button class="btn btn-sm btn-primary" id="pk-add">Register</button>
+        <button class="btn btn-sm" id="pk-example">Load the example</button>
+      </div>
+      <div id="pk-out"></div>` : '<div class="empty">packages.install required</div>'}
+    </div>
+  </div>`;
+
+  wireXact(renderPackages);
+  view.querySelectorAll('[data-pkgview]').forEach((b) => b.addEventListener('click', async () => {
+    const p = await api(`/api/packages/${b.dataset.pkgview}`);
+    $('#pkg-detail').innerHTML = `<div class="sub" style="margin-top:12px"><b>${esc(p.name)}</b> — ${Object.entries(p.rows).map(([t, n]) => `${t}: ${n ?? '—'} rows`).join(' · ') || 'no tables yet'}</div>${preBody(JSON.stringify(p.manifest, null, 1))}`;
+  }));
+  $('#pk-example')?.addEventListener('click', () => { $('#pk-manifest').value = JSON.stringify(d.example, null, 2); });
+  const readManifest = () => { try { return JSON.parse($('#pk-manifest').value); } catch { toast('That is not valid JSON', true); return null; } };
+  $('#pk-check')?.addEventListener('click', async () => {
+    const manifest = readManifest(); if (!manifest) return;
+    const r = await api('/api/packages/validate', { method: 'POST', body: { manifest } });
+    $('#pk-out').innerHTML = r.ok
+      ? '<div class="chip chip-ok" style="margin-top:10px">This manifest can be installed.</div>'
+      : `<div style="margin-top:10px">${r.problems.map((p) => `<div class="chip chip-bad" style="margin:2px">${esc(p)}</div>`).join('')}</div>`;
+  });
+  $('#pk-add')?.addEventListener('click', async () => {
+    const manifest = readManifest(); if (!manifest) return;
+    try { await api('/api/packages', { method: 'POST', body: { manifest } }); toast('Registered'); renderPackages(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- Backups ----------
+async function renderBackups() {
+  const d = await api('/api/backups');
+  const canTake = hasPermC('backups.take');
+  const canRestore = hasPermC('backups.restore');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Copies kept', d.counts.total, `newest ${d.newest ? `${d.newest.ageHours}h old` : 'none yet'}`, d.newest && d.newest.ageHours > 12 ? 'tile-warn' : '')}
+    ${tile('Verified', d.counts.verified, 'opened again and read', d.counts.verified ? 'tile-ok' : '')}
+    ${tile('Missing files', d.counts.missing, 'recorded but no longer on disk', d.counts.missing ? 'tile-bad' : '')}
+    <div class="panel tile"><div class="panel-title">Take one now</div>
+      ${canTake ? xbtn('/api/backups', {}, 'Back up the company', 'btn-primary') : '<div class="sub">backups.take required</div>'}
+      <div class="sub" style="margin-top:6px">Automatic every six hours · keeping ${d.keeping}</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Copies</div>
+    <table><thead><tr><th>#</th><th>File</th><th>Kind</th><th>Size</th><th>Chain tip</th><th>Verified</th><th>Taken</th><th></th></tr></thead><tbody>
+    ${d.backups.map((b) => `<tr>
+      <td class="mono">${b.id}</td>
+      <td class="mono sub">${esc(short(b.file, 44))}${!b.exists ? ' <span class="chip chip-bad">gone</span>' : ''}</td>
+      <td><span class="chip ${b.kind === 'pre-restore' ? 'chip-warn' : 'chip-dim'}">${esc(b.kind)}</span></td>
+      <td class="num mono">${((b.bytes || 0) / 1e6).toFixed(1)} MB</td>
+      <td class="num mono">${b.chain_tip}${b.chain_tip === d.chainNow ? ' <span class="chip chip-ok">current</span>' : ''}</td>
+      <td>${b.verified === 1 ? '<span class="chip chip-ok">yes</span>' : b.verified === -1 ? '<span class="chip chip-bad">failed</span>' : '<span class="chip chip-dim">not checked</span>'}</td>
+      <td class="mono sub">${esc(String(b.created_at).slice(5, 16))}</td>
+      <td>${xbtn(`/api/backups/${b.id}/verify`, {}, 'Verify')}
+          ${canRestore ? `<button class="btn btn-sm btn-bad" data-restore="${b.id}">Restore</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">No backups yet — take one.</td></tr>'}
+    </tbody></table>
+    <div id="bk-out"></div>
+    <div class="map-legend">Every copy is taken from a checkpointed database, so it is a whole file rather than a file plus whatever was still in the write-ahead log. Each records the chain entry it was taken at, so "which backup is this" has an answer that cannot drift. Verifying re-opens the file and reads its chain — a copy nobody has checked is a hope, not a backup.</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Take it somewhere that is not SQLite</div>
+    <button class="btn btn-sm" id="bk-export">Export everything as JSON</button>
+    <div class="map-legend">Every table, the chain verification, and no credentials — an export is for moving a company, not for moving its keys. Those are re-issued at the destination.</div>
+  </div>`;
+
+  wireXact(renderBackups);
+  $('#bk-export')?.addEventListener('click', () => downloadFile('/api/backups/export', 'crucible-export.json'));
+  view.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', async () => {
+    const typed = prompt('Restoring replaces the live database with this copy.\nA backup of the present is taken first.\n\nType RESTORE to continue:');
+    if (!typed) return;
+    try {
+      const r = await api(`/api/backups/${b.dataset.restore}/restore`, { method: 'POST', body: { confirm: typed } });
+      $('#bk-out').innerHTML = `<div class="chip chip-warn" style="margin-top:12px">Staged. ${esc(r.next)}</div>${preBody(`staged: ${r.staged}\nsafety copy: ${r.safetyBackup}`)}`;
+      toast('Staged — finish it with the server stopped');
+    } catch (e) { toast(e.message, true); }
+  }));
+}
+
+// ---------- A package's own page ----------
+async function renderPackageSection(id) {
+  const p = await api(`/api/packages/${id}`);
+  if (!p) { view.innerHTML = '<div class="empty">No such package.</div>'; return; }
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Department', esc(p.manifest.section.label), `installed from ${esc(p.name)} ${esc(p.version)}`)}
+    ${tile('Tables', Object.keys(p.rows).length, Object.entries(p.rows).map(([t, n]) => `${t}: ${n ?? '—'}`).join(' · '))}
+    ${tile('Employees', (p.manifest.agents || []).length, (p.manifest.agents || []).map((a) => a.id).join(' · '))}
+    ${tile('Relationships', (p.manifest.edges || []).length, 'drawn on the map like any other department')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">${esc(p.manifest.section.label)}</div>
+    <div class="ms-hint">${esc(p.manifest.section.hint || p.description || '')}</div>
+    ${Object.entries(p.rows).map(([t, n]) => `<div class="sub" style="margin-top:10px"><span class="mono">${esc(t)}</span> — ${n ?? '—'} row(s)</div>`).join('')}
+    <div class="map-legend">This department was installed from a manifest rather than written into the codebase. It has its own tables, its own employee and its own place on the map — and it can be uninstalled, which retires the employee and keeps the data.</div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">The manifest it came from</div>
+    ${preBody(JSON.stringify(p.manifest, null, 1))}
+  </div>`;
 }
 
 async function renderSecurity() {

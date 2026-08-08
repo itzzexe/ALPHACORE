@@ -5,17 +5,17 @@
 ### The company that runs itself — and proves every move on a hash chain.
 
 **An entire AI-native company inside a single Node process.**
-Ninety-five departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and two departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports, **hires its own new employees** — and now reaches the real world
 through one guarded door — while humans hold every gate that matters: approving, publishing,
 signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-95-ff6b2c?style=flat-square" alt="95 departments">
+<img src="https://img.shields.io/badge/departments-102-ff6b2c?style=flat-square" alt="102 departments">
 <img src="https://img.shields.io/badge/divisions-13-e8c547?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/integrations-10_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="10 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-4f9cf0?style=flat-square" alt="9 providers plus local">
-<img src="https://img.shields.io/badge/permissions-188_atomic-e07bd2?style=flat-square" alt="188 atomic permissions">
+<img src="https://img.shields.io/badge/permissions-203_atomic-e07bd2?style=flat-square" alt="203 atomic permissions">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/frameworks-zero-78bf6d?style=flat-square" alt="zero frameworks">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-5ec3c9?style=flat-square" alt="Node ≥ 22.5">
@@ -34,7 +34,7 @@ And when it reaches outside — Gmail, GitHub, Slack, Stripe, the open web, any 
 Born as the working implementation of **Part 3 — Technical Design** of the Crucible blueprint (see the repository root), then expanded far past it. Built with Node's standard library, `node:sqlite`, and a vanilla-JS dashboard.
 
 <p align="center">
-  <img src="docs/mainboard.svg" alt="The living map — 13 districts and 95 departments around the Harmony core" width="100%">
+  <img src="docs/mainboard.svg" alt="The living map — 13 districts and 102 departments around the Harmony core" width="100%">
 </p>
 
 ## The company at a glance
@@ -43,8 +43,8 @@ Born as the working implementation of **Part 3 — Technical Design** of the Cru
 flowchart TD
   CORE(("▲ HARMONY<br/>orchestrator +<br/>audit chain"))
   ENGINE["ENGINE · 9<br/>requests · agents · runs"] --> CORE
-  WORLD["THE WORLD · 6<br/>integrations · the gate<br/>vault · web · MCP · queue"] --> CORE
-  BUILD["BUILD · 9<br/>specs · products · lab"] --> CORE
+  WORLD["THE WORLD · 9<br/>integrations · the gate · vault<br/>web · MCP · queue · companies<br/>keys · webhooks"] --> CORE
+  BUILD["BUILD · 10<br/>specs · products · packages"] --> CORE
   DECIDE["DECIDE · 9<br/>gates · budgets · shadow company"] --> CORE
   DATA["DATA · 7<br/>intel · archive · knowledge graph"] --> CORE
   CREATE["CREATE · 7<br/>content · design · brand"] --> CORE
@@ -53,8 +53,8 @@ flowchart TD
   OPERATE["OPERATE · 7<br/>incidents · support · contact centre"] --> CORE
   TALENT["TALENT · 10<br/>HR · memory · the floor · skills"] --> CORE
   TRUST["TRUST · 5<br/>SOC · provenance · red team"] --> CORE
-  EXEC["EXECUTIVE · 3<br/>board · IR · comms"] --> CORE
-  GOVERN["GOVERN · 10<br/>oversight · constitution · time machine"] --> CORE
+  EXEC["EXECUTIVE · 4<br/>board · IR · operating rhythm"] --> CORE
+  GOVERN["GOVERN · 12<br/>constitution · watchtower · backups"] --> CORE
   classDef c1 fill:#ff6b2c,color:#14100c,stroke:none
   classDef c2 fill:#b78bff,color:#14100c,stroke:none
   classDef c3 fill:#5ec3c9,color:#14100c,stroke:none
@@ -148,7 +148,7 @@ sequenceDiagram
 ```
 
 - Session login (scrypt-hashed passwords, opaque 7-day tokens). Every `/api/*` route is authenticated; anonymous requests get 401.
-- **188 atomic permissions** in `section.action` form (`support.view`, `decisions.decide`, `security.manage`, …). A user can be granted **exactly one permission** and nothing else; navigation and pages gate themselves accordingly.
+- **203 atomic permissions** in `section.action` form (`support.view`, `decisions.decide`, `security.manage`, …). A user can be granted **exactly one permission** and nothing else; navigation and pages gate themselves accordingly.
 - **Identity is never client-supplied.** The server stamps every action with the session's account; the audit chain records who really acted.
 - The superadmin manages users (create, disable, reset password, edit grants) and provider connections from the UI.
 
@@ -163,7 +163,7 @@ The Overview page renders the whole company from live data (`/api/map`): every d
 
 One interaction engine drives both: **click** opens the department · **right-click** opens a real window over the map (the map underneath stops taking the pointer) listing everything it touches, with hop-by-hop **Trace flow** that survives closing the window · **clicking a relationship line** explains what kind of movement it is and how that mechanism works · drag/wheel pans and zooms · clicking a district name isolates it. A **live ticker** narrates the audit chain and departments **flash** the moment something happens in them.
 
-## The company — 13 divisions, 95 departments
+## The company — 13 divisions, 102 departments
 
 | Division | Departments |
 |---|---|
@@ -183,7 +183,7 @@ One interaction engine drives both: **click** opens the department · **right-cl
 
 Plus, folded into the divisions that own them: **Revenue loop** (Commerce), **Provenance** and **Red team** (Trust), **Shadow company** (Decide), **Skill market** (Talent), **Knowledge graph** (Data), **Treasury**, **Money desk**, **Contact centre**, **Agent memory**, **The floor**.
 
-Everything is cross-linked: 258 declared relationships, each a live SQL count, zero orphans, plus the universal rules — *everything ends on the audit chain; produced items freeze into the archive.*
+Everything is cross-linked: 285 declared relationships, each a live SQL count, zero orphans, plus the universal rules — *everything ends on the audit chain; produced items freeze into the archive.*
 
 **The company hires its own workforce** (Talent → Recruiting):
 
@@ -306,6 +306,119 @@ sensitivity level, because the data never leaves the machine. With the line cut,
 the company keeps working on local models — which in Iraq is the difference
 between a company that runs and one that waits.
 
+## The platform
+
+The layer above the company: this installation running more than one of them,
+exposing them to other software, letting a department be shipped as a package —
+and keeping all of it operating without somebody standing over it.
+
+### The operating rhythm — the part that makes "autonomous" true
+
+Autonomy used to mean: work arrives, the machine does it, nobody approves each
+step. That is a company that *executes* without intervention. It was not a
+company that *runs* without one, because nobody was deciding what should be
+worked on, whether last week went well, or what to change as a result. A person
+was still the management layer.
+
+`src/chief.js` is that layer, and it keeps three clocks:
+
+| Clock | What it does |
+|---|---|
+| **Day** | Requeues work that stalled, spreads load off whoever is carrying too much, puts an unfixed security finding in front of everything else, and holds speculative work when the month is nearly spent. |
+| **Week** | Compares what was planned against what landed, writes the corrections, and opens the next week with a target derived from the last four — not from hope. |
+| **Quarter** | Closes the old objectives honestly, sets new ones **from the company's own numbers**, and divides the money across them. |
+
+Every turn writes a *period*: the plan before, the review after, the corrections
+in between. Six months from now, "why did the company do that" has an answer
+with a date on it.
+
+Four limits stay, and are printed on the page rather than buried:
+
+- Money leaves only when a signed-in person releases it.
+- No bulk contact with people who never asked to hear from us.
+- Irreversible outbound actions stop at the gate for a person.
+- Everything the rhythm decides is written down with the numbers it decided from.
+
+"Runs without intervention" means nobody has to be present for the work. It does
+not mean nobody is responsible for the consequences.
+
+### Watchtower — noticing, and then doing something
+
+A dashboard that goes red and waits is a dashboard for a company with people
+watching it. Every service level objective here carries a **remedy**: a
+specific, bounded action the company applies to itself.
+
+| Promise | If it breaks |
+|---|---|
+| Work waiting stays under forty items | spread the load onto employees who are free |
+| Nothing sits in "running" for half an hour | requeue it |
+| Monthly spend stays inside the cap | hold speculative work until the month turns |
+| Fewer than ten audits fail in a day | ask the quality desk for the *pattern*, not the list |
+| The red team has nothing open | page a person — this one has no safe automatic fix |
+
+The remedies are deliberately small and reversible, and none of them can spend
+money or reach outside. A system that heals itself by taking bigger actions than
+a human would is not self-healing; it is unsupervised.
+
+### Many companies
+
+```mermaid
+flowchart TD
+  CP["Control plane<br/>:8484"] --> T1["acme<br/>data/tenants/acme.db<br/>:8500"]
+  CP --> T2["basra-oil<br/>data/tenants/basra-oil.db<br/>:8501"]
+  CP --> T3["…<br/>own file · own process"]
+  CP -.->|reads usage, pauses at cap| T1
+  style CP fill:#2fd6a8,color:#14100c
+```
+
+The obvious design is a `tenant_id` column and a `WHERE` clause on every query.
+Across 130 tables and 400 endpoints that is 130 chances to forget, and the
+failure mode is one company reading another's customers. So **isolation is by
+file**: each company gets its own SQLite database and its own worker process. A
+query cannot leak across tenants because no connection can see two of them — not
+as a matter of discipline, but as a matter of what is open. A company past its
+monthly cap is paused rather than allowed to keep spending.
+
+### The programmatic surface
+
+- **API keys** — a session token belongs to a person at a keyboard and carries
+  their whole permission set; a key belongs to a script, lasts months, and
+  should do exactly one thing. Separate mechanism, own scopes, own rate limit,
+  own ledger. Stored as a scrypt hash; shown once and never again.
+  `curl -H "x-api-key: ck_…"`.
+- **Webhooks out** — the audit chain is the event source, so a webhook can never
+  announce something that did not happen. Signed HMAC-SHA256 over
+  `timestamp.body` with a five-minute replay window, delivered on the job queue,
+  paused after twenty consecutive failures.
+
+### Departments as packages
+
+A department is tables, employees, permissions, relationships and a place on the
+map. Written down, that is a manifest — and a manifest is installable.
+
+```json
+{ "id": "legalhold", "version": "1.0.0",
+  "section": { "id": "legalhold", "label": "Legal hold", "division": "operate" },
+  "permissions": ["legalhold.view", "legalhold.manage"],
+  "tables": [{ "name": "legalhold_matters", "columns": [ … ] }],
+  "agents": [{ "id": "AGT-HOLD-001", "name": "Legal hold clerk", "roleGroup": "assure" }],
+  "edges": [{ "to": "legal", "label": "holds arise from open matters" }] }
+```
+
+Installing is deliberately narrow: tables must be prefixed with the package id,
+permissions must be new and namespaced, no code is executed, and the whole
+install runs in one transaction so a failure leaves nothing behind. Uninstalling
+retires the employees and **keeps the data** unless a person explicitly asks
+otherwise.
+
+### Backups
+
+Taken from a checkpointed database, so a copy is a whole file rather than a file
+plus whatever was still in the write-ahead log. Each records the chain entry it
+was taken at. Verifying re-opens the file and reads its chain back — a copy
+nobody has checked is a hope, not a backup. Restoring takes a backup of the
+present first.
+
 ## Factory reset (superadmin only)
 
 Settings → **Danger zone**. Three locks: superadmin role + typed phrase `WIPE ALL DATA` + password re-entry. Two levels — data wipe (operational records cleared; users, sessions, provider settings survive; defaults re-seeded; the audit chain restarts with a genesis entry naming who wiped) and **full factory reset** (users/sessions/settings go too; `admin`/`crucible` restored). An extra checkbox also deletes produced workspace files.
@@ -317,9 +430,9 @@ crucible-core/
 ├─ config/            providers, budgets, agents, pipelines, golden sets, rituals (all config, not code)
 ├─ src/
 │  ├─ server.js       one process: HTTP + static + workers + scheduled ticks
-│  ├─ api.js          route table + path→permission resolver (~390 endpoints)
-│  ├─ auth.js         sessions, scrypt, the permission catalog (188 keys)
-│  ├─ db.js           node:sqlite schema (~130 tables) + append-only audit triggers
+│  ├─ api.js          route table + path→permission resolver (~440 endpoints)
+│  ├─ auth.js         sessions, scrypt, the permission catalog (203 keys)
+│  ├─ db.js           node:sqlite schema (~145 tables) + append-only audit triggers
 │  ├─ router.js       tier chains, family separation, sensitivity, fallbacks
 │  ├─ policy.js       reservation-first budget engine
 │  ├─ workflow.js     run queue + workers
