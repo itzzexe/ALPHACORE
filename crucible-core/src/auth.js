@@ -145,12 +145,46 @@ export function verifyPassword(userId, password) {
   return Boolean(u) && checkPassword(password || '', u.pass);
 }
 
-/** First boot: create the superadmin (admin / crucible — change it). */
+/**
+ * First boot: create the owner account with a password nobody else can know.
+ *
+ * It used to be `alphacore`, printed on the login screen. That is a published
+ * credential: everybody who has read the repository has it, and on any machine
+ * reachable from a network it is an open door. The password is now generated,
+ * shown once in the console of the person who started the server, and the
+ * account is marked as needing a change — which the API enforces rather than
+ * suggests.
+ */
 export function seedAdmin() {
   if (one('SELECT id FROM users LIMIT 1')) return;
-  exec('INSERT INTO users (username, display_name, pass, role, perms) VALUES (?,?,?,?,?)',
-    'admin', 'Super Admin', hashPassword('crucible'), 'superadmin', JSON.stringify(['*']));
-  console.log('Seeded superadmin — username: admin · password: crucible (change it in Admin → Users)');
+  const password = `${randomBytes(9).toString('base64url')}`;
+  exec(
+    "INSERT INTO users (username, display_name, pass, role, perms, must_change) VALUES (?,?,?,?,?,1)",
+    'owner', 'Owner', hashPassword(password), 'superadmin', JSON.stringify(['*']),
+  );
+  audit({ actorType: 'system', actorId: 'system:auth', action: 'user.seeded', subjectType: 'user', subjectId: 'owner', payload: { generated: true } });
+  const line = '─'.repeat(58);
+  console.log(`\n${line}\n  First run. The owner account has been created.\n\n    username   owner\n    password   ${password}\n\n  This is shown once and is not stored anywhere in readable form.\n  You will be asked to change it the moment you sign in.\n${line}\n`);
+}
+
+/** Has this account still not chosen its own password? */
+export function mustChangePassword(userId) {
+  return Boolean(one('SELECT must_change FROM users WHERE id = ?', userId)?.must_change);
+}
+
+/** The account chooses its own password; the forced flag clears with it. */
+export function changeOwnPassword(userId, { current, next, actor }) {
+  const u = one('SELECT * FROM users WHERE id = ?', userId);
+  if (!u) throw new Error('no such account');
+  if (!checkPassword(current || '', u.pass)) throw new Error('the current password is not right');
+  if (!next || next.length < 10) throw new Error('a password needs at least ten characters');
+  if (next === current) throw new Error('that is the password you already have');
+  exec('UPDATE users SET pass = ?, must_change = 0 WHERE id = ?', hashPassword(next), userId);
+  // Changing a password ends every other session: if it was changed because it
+  // leaked, leaving the leaked session alive defeats the change.
+  exec('DELETE FROM sessions WHERE user_id = ?', userId);
+  audit({ actorType: 'human', actorId: actor, action: 'user.password_changed', subjectType: 'user', subjectId: userId });
+  return { ok: true, note: 'every session was signed out, including this one — sign in again with the new password' };
 }
 
 export function login(username, password) {
@@ -185,6 +219,9 @@ function publicUser(u) {
     // The superadmin is the owner of the company: every permission, plus the
     // powers that exist only for them — final rulings and the kill switches.
     isOwner, title: isOwner ? 'Owner' : 'Member',
+    // The interface asks for a new password on sight of this rather than
+    // trusting the account to get round to it.
+    mustChangePassword: Boolean(u.must_change),
   };
 }
 

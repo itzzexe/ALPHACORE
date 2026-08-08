@@ -1,7 +1,7 @@
 {
-  "name": "crucible-core",
+  "name": "alphacore",
   "version": "0.1.0",
-  "description": "Crucible Core — the internal operating platform for an AI-native SaaS company (Part 3 of the Crucible blueprint). Modular monolith: decision registry, budgets, multi-provider model router, run queue, mini-tribunal, hash-chained audit log, admin dashboard.",
+  "description": "AlphaCore — the internal operating platform for an AI-native SaaS company (Part 3 of the AlphaCore blueprint). Modular monolith: decision registry, budgets, multi-provider model router, run queue, mini-tribunal, hash-chained audit log, admin dashboard.",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"

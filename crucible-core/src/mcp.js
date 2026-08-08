@@ -6,7 +6,7 @@
 // company. This is the single cheapest way to multiply what the workforce can
 // physically do.
 //
-// Inward (server): Crucible describes itself as an MCP server, so Claude Code,
+// Inward (server): AlphaCore describes itself as an MCP server, so Claude Code,
 // Claude Desktop or any other agent can drive the company from outside. That is
 // what turns an application into a platform.
 //
@@ -87,7 +87,7 @@ async function httpCall(server, requests, timeoutMs = 20_000) {
 const rpc = (server, requests) => (server.transport === 'http' ? httpCall(server, requests) : stdioCall(server, requests));
 
 const handshake = () => [
-  { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: 'crucible-core', version: '1.0' } } },
+  { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: 'alphacore', version: '1.0' } } },
   { jsonrpc: '2.0', method: 'notifications/initialized' },
 ];
 
@@ -188,12 +188,12 @@ const SUGGESTED = [
 ];
 
 // ---------------------------------------------------------------- server ---
-// Crucible described as an MCP server. `handleMcp` answers JSON-RPC over the
+// AlphaCore described as an MCP server. `handleMcp` answers JSON-RPC over the
 // HTTP endpoint, so an outside agent gets the same view of the company that the
 // dashboard has — through the same permission checks, because the caller must
 // present a token that maps to a user.
 
-export const CRUCIBLE_TOOLS = [
+export const ALPHACORE_TOOLS = [
   { name: 'company_overview', description: 'The state of the whole company: queue, spend, decisions waiting, harmony score.', inputSchema: { type: 'object', properties: {} } },
   { name: 'list_sections', description: 'Every department, its division and how many live records it holds.', inputSchema: { type: 'object', properties: {} } },
   { name: 'submit_request', description: 'Put a request on the desk. It is routed, planned and executed like any other order.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title', 'body'] } },
@@ -212,12 +212,12 @@ export async function handleMcp(body, { user, tools }) {
       return reply({
         protocolVersion: PROTOCOL,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'crucible-core', version: '1.0.0' },
+        serverInfo: { name: 'alphacore', version: '1.0.0' },
       });
     case 'notifications/initialized':
       return null;
     case 'tools/list':
-      return reply({ tools: CRUCIBLE_TOOLS });
+      return reply({ tools: ALPHACORE_TOOLS });
     case 'tools/call': {
       const name = body.params?.name;
       const fn = tools[name];

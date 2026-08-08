@@ -27,7 +27,7 @@ function safeTarget(wsDir, rel) {
 }
 
 /** Each workspace is an isolated project: its own package.json stops Node
- *  module-type (and other config) inheritance from crucible-core itself. */
+ *  module-type (and other config) inheritance from alphacore itself. */
 function ensureWorkspace(wsName) {
   const wsDir = path.join(WS_ROOT, wsName);
   fs.mkdirSync(wsDir, { recursive: true });

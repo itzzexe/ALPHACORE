@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
+import { companyName } from './settings.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { WS_ROOT } from './artifacts.js';
@@ -75,7 +76,7 @@ export function createFinReport({ kind, title = null, subject = 'own', period = 
   const subj = spec.internal ? 'own' : (subject?.trim() || null);
   if (!spec.internal && !subj) throw new Error('a company name is required for external research');
   const per = period?.trim() || new Date().toISOString().slice(0, 7);
-  const name = title?.trim() || `${spec.label} — ${spec.internal ? 'Crucible Systems' : subj} (${per})`;
+  const name = title?.trim() || `${spec.label} — ${spec.internal ? companyName() : subj} (${per})`;
 
   // Internal reports are built on our own ledgers; external ones start empty.
   const figures = spec.internal ? ownFinancials(per) : (inputs || null);
@@ -94,7 +95,7 @@ export function createFinReport({ kind, title = null, subject = 'own', period = 
       prompt: `Prepare this financial document in full.
 
 Document: ${spec.label}
-Subject: ${spec.internal ? 'Crucible Systems (our own company)' : subj}
+Subject: ${spec.internal ? `${companyName()} (our own company)` : subj}
 Period: ${per}
 
 What it must contain:

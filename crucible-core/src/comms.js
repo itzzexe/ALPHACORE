@@ -17,7 +17,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
-import { getSecret, getSetting } from './settings.js';
+import { getSecret, getSetting, companyName } from './settings.js';
 
 const lastId = () => one('SELECT last_insert_rowid() AS id').id;
 const clean = (s) => String(s || '').trim();
@@ -253,7 +253,7 @@ export function receiveCall({ from, to, sid = null }) {
   const v = VOICES[voice];
   const greet = voice === 'hala'
     ? 'أهلًا بك في كروسيبل. من فضلك اترك رسالتك بعد الإشارة وسنعاود الاتصال بك.'
-    : 'Welcome to Crucible. Please leave your message after the tone and we will call you back.';
+    : `Welcome to ${companyName()}. Please leave your message after the tone and we will call you back.`;
   return { id, twiml: `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="${v.twilio}" language="${v.language}">${escXml(greet)}</Say>

@@ -1,4 +1,4 @@
-# Crucible Core — where it stands, and what it takes to finish it
+# AlphaCore — where it stands, and what it takes to finish it
 
 > **Status: built.** This document was the plan, written 2026-08-08. Everything
 > in sections 3, 4 and 5 below was implemented the same day and is running —
@@ -142,7 +142,7 @@ unscoped attempt.
 - *Client*: one adapter, and every MCP server on earth becomes tools the
   employees can call — browser, filesystem, Postgres, Figma, Sentry, Linear,
   Slack. One file buys an ecosystem.
-- *Server*: expose Crucible itself over MCP, so Claude Code, Claude Desktop or
+- *Server*: expose AlphaCore itself over MCP, so Claude Code, Claude Desktop or
   any agent can drive the company from outside. This is what turns an app into a
   platform.
 

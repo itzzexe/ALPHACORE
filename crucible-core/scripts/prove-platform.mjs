@@ -1,14 +1,30 @@
-// Prove the platform layer against the real database.
+// Prove the platform layer against a throwaway database, in mock mode.
 // Run: node --experimental-sqlite scripts/prove-platform.mjs
-import { createKey, authenticateKey, revokeKey, apiKeysOverview } from '../src/apikeys.js';
-import { addWebhook, sign, verify, webhookTick, webhooksOverview, removeWebhook } from '../src/webhooks.js';
-import { seedPackages, addPackage, validateManifest, installPackage, uninstallPackage, packagesOverview, EXAMPLE_MANIFEST } from '../src/packages.js';
-import { chiefTick, chiefOverview, situation } from '../src/chief.js';
-import { seedSlos, record, observeTick, observeOverview } from '../src/observe.js';
-import { takeBackup, verifyBackup, backupsOverview, exportAll } from '../src/backup.js';
-import { createTenant, tenantsOverview, deleteTenant } from '../src/tenants.js';
-import { verifyChain } from '../src/audit.js';
-import { one, exec, q } from '../src/db.js';
+//
+// It used to run against whatever database was configured, which on a normal
+// machine is the running company: the proof wrote test connectors, test keys
+// and fork simulations into real records, and refused to run at all while the
+// server held the file. A proof that damages what it inspects is not a proof.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+process.env.ALPHACORE_MOCK = 'true';
+process.env.ALPHACORE_DB = 'data/prove-platform.db';
+const proveRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+for (const suffix of ['', '-wal', '-shm']) {
+  try { fs.rmSync(path.join(proveRoot, process.env.ALPHACORE_DB + suffix)); } catch { /* first run */ }
+}
+
+const { createKey, authenticateKey, revokeKey, apiKeysOverview } = await import('../src/apikeys.js');
+const { addWebhook, sign, verify, webhookTick, webhooksOverview, removeWebhook } = await import('../src/webhooks.js');
+const { seedPackages, addPackage, validateManifest, installPackage, uninstallPackage, packagesOverview, EXAMPLE_MANIFEST } = await import('../src/packages.js');
+const { chiefTick, chiefOverview, situation } = await import('../src/chief.js');
+const { seedSlos, record, observeTick, observeOverview } = await import('../src/observe.js');
+const { takeBackup, verifyBackup, backupsOverview, exportAll } = await import('../src/backup.js');
+const { createTenant, tenantsOverview, deleteTenant } = await import('../src/tenants.js');
+const { verifyChain } = await import('../src/audit.js');
+const { one, exec, q } = await import('../src/db.js');
 
 const line = (s) => console.log(`\n=== ${s} ===`);
 let failures = 0;
@@ -37,7 +53,7 @@ revokeKey(keyRow.id, { actor: 'human:prove' });
 check(authenticateKey(made.key) === null, 'a revoked key stops working immediately');
 
 line('Webhooks: signed, and the signature actually verifies');
-const hook = addWebhook({ url: 'https://example.com/hooks/crucible', events: ['run.*', 'egress.blocked'], actor: 'human:prove' });
+const hook = addWebhook({ url: 'https://example.com/hooks/alphacore', events: ['run.*', 'egress.blocked'], actor: 'human:prove' });
 const ts = Math.floor(Date.now() / 1000);
 const body = JSON.stringify({ event: 'run.done', seq: 1 });
 const sig = sign(hook.secret, ts, body);

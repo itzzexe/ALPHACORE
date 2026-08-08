@@ -1,4 +1,4 @@
-﻿// Crucible Core console — vanilla SPA, hash routing, 5s polling on live pages.
+﻿// AlphaCore console — vanilla SPA, hash routing, 5s polling on live pages.
 import { t, lang, setLang, applyLang, translateDom, sectionName, divisionName, DIV_AR } from '/i18n.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -24,7 +24,7 @@ const linkFor = (type, id) => ({
 const short = (s, n = 80) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
 // ---------- auth ----------
-const TOKEN_KEY = 'crucible-token';
+const TOKEN_KEY = 'alphacore-token';
 let currentUser = null;
 const actor = () => (currentUser ? `human:${currentUser.username}` : 'human:unknown');
 const hasPermC = (p) => currentUser && (currentUser.role === 'superadmin' || currentUser.perms.includes('*') || currentUser.perms.includes(p));
@@ -89,16 +89,56 @@ function showLogin() {
   $('#login-user').focus();
 }
 
-$('#login-go').addEventListener('click', doLogin);
-$('#login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+/** Show the choose-a-password form instead of the sign-in one. */
+function showPasswordChange() {
+  $('#login').hidden = false;
+  $('#login-form').hidden = true;
+  $('#pw-form').hidden = false;
+  $('#login-err').textContent = '';
+  $('#pw-current').focus();
+}
+
+// Both forms submit rather than listening for clicks, so Enter works from any
+// field and the browser offers to save the credentials.
+$('#login-form').addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
 async function doLogin() {
   $('#login-err').textContent = '';
   try {
-    const r = await api('/api/auth/login', { method: 'POST', body: { username: $('#login-user').value, password: $('#login-pass').value } });
+    const r = await api('/api/auth/login', {
+      method: 'POST',
+      body: { username: $('#login-user').value, password: $('#login-pass').value },
+    });
     localStorage.setItem(TOKEN_KEY, r.token);
+    // A generated password gets you exactly this far.
+    if (r.user?.mustChangePassword) {
+      $('#pw-current').value = $('#login-pass').value;
+      showPasswordChange();
+      return;
+    }
     location.reload();
   } catch (e) { $('#login-err').textContent = e.message; }
 }
+
+$('#pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#login-err');
+  err.textContent = '';
+  const next = $('#pw-next').value;
+  if (next !== $('#pw-again').value) { err.textContent = t('Those two do not match'); return; }
+  try {
+    await api('/api/auth/password', { method: 'POST', body: { current: $('#pw-current').value, next } });
+    // Changing the password ends every session, including this one — so the
+    // honest next step is to sign in again rather than to pretend otherwise.
+    localStorage.removeItem(TOKEN_KEY);
+    $('#pw-form').hidden = true;
+    $('#login-form').hidden = false;
+    $('#login-user').value = '';
+    $('#login-pass').value = '';
+    err.style.color = 'var(--ok)';
+    err.textContent = t('Password set. Sign in with it.');
+    $('#login-user').focus();
+  } catch (e2) { err.textContent = e2.message; }
+});
 
 
 // Route → the permission that unlocks its page.
@@ -291,17 +331,17 @@ function initShell() {
   const applyTheme = (skin) => {
     if (skin === 'dark') document.documentElement.dataset.theme = 'dark';
     else delete document.documentElement.dataset.theme;
-    const btn = $('#theme-toggle');
-    if (btn) {
+    for (const btn of [$('#theme-toggle'), $('#login-theme')]) {
+      if (!btn) continue;
       btn.textContent = skin === 'dark' ? '◑' : '◐';
       btn.setAttribute('aria-pressed', skin === 'dark' ? 'true' : 'false');
       btn.title = skin === 'dark' ? t('Back to daylight') : t('After dark');
     }
   };
-  applyTheme(localStorage.getItem('crucible-theme') === 'dark' ? 'dark' : 'light');
+  applyTheme(localStorage.getItem('alphacore-theme') === 'dark' ? 'dark' : 'light');
   $('#theme-toggle')?.addEventListener('click', () => {
     const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('crucible-theme', next);
+    localStorage.setItem('alphacore-theme', next);
     applyTheme(next);
   });
 
@@ -311,6 +351,11 @@ function initShell() {
   };
   $('#lang-toggle')?.addEventListener('click', flipLang);
   $('#login-lang')?.addEventListener('click', flipLang);
+  $('#login-theme')?.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('alphacore-theme', next);
+    applyTheme(next);
+  });
   $('#lang-toggle') && ($('#lang-toggle').textContent = lang === 'ar' ? 'EN' : 'ع');
 
   $('#who-chip')?.addEventListener('click', async () => {
@@ -546,7 +591,7 @@ async function navigate() {
   const r = routes[key];
   const sec = CATALOG.sections.find((s) => routeOf(s.href) === key);
   $('#page-title').textContent = sec ? sectionName(sec.id, r.title) : t(r.title);
-  document.title = `${$('#page-title').textContent} · Crucible Core`;
+  document.title = `${$('#page-title').textContent} · AlphaCore`;
   const perm = navPerm[key];
   if (perm && !hasPermC(perm)) {
     view.innerHTML = `<div class="panel"><div class="empty">You need the <span class="mono" style="color:var(--warn)">${esc(perm)}</span> permission for this section — ask the superadmin.</div></div>`;
@@ -594,7 +639,7 @@ const mapEdge = (d, { label = '', lx = 0, ly = 0, dashed = false, anchor = 'midd
   ${label ? `<text class="me" x="${lx}" y="${ly}" text-anchor="${anchor}">${label}</text>` : ''}`;
 
 // ---------- system map · orbital design ----------
-// The crucible at the center: the audit chain is the core every section
+// The alphacore at the center: the audit chain is the core every section
 // feeds (dashed spokes). Inner orbit = the execution engine; outer orbit =
 // the company around it. Solid arcs = work flowing between sections.
 const polar = (deg, rx, ry, cx = 500, cy = 330) => {
@@ -1043,7 +1088,7 @@ const flowLegend = (flow) => !flow ? '' : `
 const ATLAS_R = { core: 66, trunk: 182, fork: 268, leaf: 330, rim: 476 };
 
 /** Which district the near view is showing, or null for the whole company. */
-let atlasZoom = localStorage.getItem('crucible-atlas-zoom') || null;
+let atlasZoom = localStorage.getItem('alphacore-atlas-zoom') || null;
 
 /**
  * A small, curated glyph set. Every department gets a mark; the mark is chosen
@@ -1313,8 +1358,8 @@ function buildMap(m) {
 /** Walking the rim, and going in and out. */
 function atlasGoTo(divId) {
   atlasZoom = divId;
-  if (divId) localStorage.setItem('crucible-atlas-zoom', divId);
-  else localStorage.removeItem('crucible-atlas-zoom');
+  if (divId) localStorage.setItem('alphacore-atlas-zoom', divId);
+  else localStorage.removeItem('alphacore-atlas-zoom');
   const r = routes[currentRoute().key];
   if (r) r.render(currentRoute().arg).then(() => translateDom(view)).catch(() => {});
 }
@@ -2031,7 +2076,7 @@ async function renderOverview() {
   // The map and the numbers are two different questions, so they are two
   // views rather than one long scroll. Both are rendered; the switch decides
   // which one is on screen, which keeps the toggle instant.
-  const tab = localStorage.getItem('crucible-overview-tab') === 'dashboards' ? 'dashboards' : 'map';
+  const tab = localStorage.getItem('alphacore-overview-tab') === 'dashboards' ? 'dashboards' : 'map';
   const here = atlasZoom && mapData ? mapData.divisions.find((d) => d.id === atlasZoom) : null;
 
   view.innerHTML = `
@@ -2130,7 +2175,7 @@ async function renderOverview() {
   </div>`;
   if (mapData) initAtlas(mapData); else initMapInteractivity();
   view.querySelectorAll('[data-ovtab]').forEach((b) => b.addEventListener('click', () => {
-    localStorage.setItem('crucible-overview-tab', b.dataset.ovtab);
+    localStorage.setItem('alphacore-overview-tab', b.dataset.ovtab);
     renderOverview();
   }));
   view.querySelector('[data-atlasout]')?.addEventListener('click', () => atlasGoTo(null));
@@ -2415,8 +2460,8 @@ async function renderDecisionDetail(id) {
 
 async function renderPipelines() {
   const [templates, pipes, products] = await Promise.all([api('/api/pipeline-templates'), api('/api/pipelines'), api('/api/products')]);
-  const preselect = localStorage.getItem('crucible-pl-product') || '';
-  localStorage.removeItem('crucible-pl-product');
+  const preselect = localStorage.getItem('alphacore-pl-product') || '';
+  localStorage.removeItem('alphacore-pl-product');
   const stepChip = (s) => {
     const st = s.runState || s.stepState;
     const cls = st === 'done' ? 'done' : st === 'awaiting_human' ? 'awaiting_human'
@@ -2564,7 +2609,7 @@ async function renderProducts() {
     } catch (e) { toast(e.message, true); }
   }));
   view.querySelectorAll('[data-plnew]').forEach((b) => b.addEventListener('click', () => {
-    localStorage.setItem('crucible-pl-product', b.dataset.plnew);
+    localStorage.setItem('alphacore-pl-product', b.dataset.plnew);
     location.hash = '#/pipelines';
   }));
   wireConnections();
@@ -4031,6 +4076,19 @@ async function renderSettings() {
   const s = await api('/api/settings');
   view.innerHTML = `
   <div class="panel">
+    <div class="panel-title">This company — the name every agent, report and letter uses</div>
+    <div class="map-legend">The platform is AlphaCore. The company it runs is yours: set the name here and
+      it replaces <span class="mono">this company</span> in every system prompt, investor update and
+      generated document. The public address is what outbound links and webhook callbacks point at.</div>
+    <div class="form-inline" style="margin-top:10px">
+      <div style="flex:1"><label class="fl">Company name</label>
+        <input type="text" id="s-company" value="${esc(s.company?.name || '')}" placeholder="e.g. Northwind Trading"></div>
+      <div style="flex:1"><label class="fl">Public address</label>
+        <input type="text" id="s-baseurl" value="${esc(s.company?.publicBaseUrl || '')}" placeholder="https://ops.yourcompany.com"></div>
+      <button class="btn btn-primary" id="s-identity">Save</button>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
     <div class="panel-title">AI providers — keys are stored locally (SQLite), never echoed back; a secret manager replaces this in real deployment (Part 3 §6.3)</div>
     <table>
       <thead><tr><th>Provider</th><th>Key / flag</th><th>Status</th><th>Set value</th><th></th></tr></thead>
@@ -4065,7 +4123,7 @@ async function renderSettings() {
     </p>
     <label style="display:block;margin:4px 0"><input type="checkbox" id="wipe-full">
       Full factory reset — also delete user accounts, sessions, and provider settings
-      (you will be signed out; <span class="mono">admin / crucible</span> is restored)</label>
+      (you will be signed out; a fresh owner account is created and its password printed once to the server console)</label>
     <label style="display:block;margin:4px 0 12px"><input type="checkbox" id="wipe-ws">
       Also delete produced workspace files (blueprints, designs, exports…)</label>
     <div class="form-inline">
@@ -4084,8 +4142,15 @@ async function renderSettings() {
   view.querySelectorAll('[data-sclear]').forEach((b) => b.addEventListener('click', async () => {
     try { await api('/api/settings', { method: 'POST', body: { key: b.dataset.sclear, value: null } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
   }));
+  $('#s-identity').addEventListener('click', async () => {
+    try {
+      await api('/api/settings', { method: 'POST', body: { key: 'COMPANY_NAME', value: $('#s-company').value.trim() } });
+      await api('/api/settings', { method: 'POST', body: { key: 'PUBLIC_BASE_URL', value: $('#s-baseurl').value.trim() } });
+      toast('Saved — the next run already uses it'); renderSettings();
+    } catch (e) { toast(e.message, true); }
+  });
   $('#s-mock').addEventListener('click', async () => {
-    try { await api('/api/settings', { method: 'POST', body: { key: 'CRUCIBLE_MOCK', value: s.mockForced ? null : 'true' } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
+    try { await api('/api/settings', { method: 'POST', body: { key: 'ALPHACORE_MOCK', value: s.mockForced ? null : 'true' } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
   });
   $('#s-probe').addEventListener('click', async (e) => {
     e.target.disabled = true; $('#s-probe-out').textContent = 'probing…';
@@ -4527,7 +4592,7 @@ async function renderSocial() {
       <div class="panel-title">Connect a channel</div>
       <div class="form-inline">
         <div><label class="fl">Platform</label><select id="ch-platform"><option>x</option><option>linkedin</option><option>instagram</option><option>facebook</option><option>tiktok</option><option>youtube</option><option>telegram</option></select></div>
-        <div><label class="fl">Handle</label><input type="text" id="ch-handle" placeholder="@crucible"></div>
+        <div><label class="fl">Handle</label><input type="text" id="ch-handle" placeholder="@alphacore"></div>
         <div style="flex:0.5"><label class="fl">Followers</label><input type="text" id="ch-followers" value="0"></div>
         <button class="btn btn-primary" id="ch-go">Connect</button>
       </div>
@@ -5771,7 +5836,7 @@ const DEPT_PAGES = {
     ],
     form: () => `
       <div class="form-inline">
-        <div style="flex:1.4"><label class="fl">Name</label><input type="text" id="as-name" placeholder="crucible.iq domain"></div>
+        <div style="flex:1.4"><label class="fl">Name</label><input type="text" id="as-name" placeholder="alphacore.iq domain"></div>
         <div><label class="fl">Kind</label><select id="as-kind"><option>domain</option><option>license</option><option>credential</option><option>device</option><option>repo</option><option>account</option><option>certificate</option></select></div>
         <div><label class="fl">Owner</label><input type="text" id="as-owner" value="${esc(currentUser?.username || '')}"></div>
         <div style="flex:0.6"><label class="fl">$/mo</label><input type="text" id="as-cost" value="0"></div>
@@ -6282,7 +6347,7 @@ async function renderMcp() {
     ${tile('Servers registered', d.counts.registered, `${d.counts.connected} answering`)}
     ${tile('Tools reachable', d.counts.tools, 'things the workforce can now do', d.counts.tools ? 'tile-ok' : '')}
     ${tile('Tool calls made', d.counts.calls, 'by employees, on real work')}
-    ${tile('Crucible exposes', 7, 'tools an outside agent can drive us with', 'tile-steel')}
+    ${tile('AlphaCore exposes', 7, 'tools an outside agent can drive us with', 'tile-steel')}
   </div>
 
   <div class="panel">
@@ -6317,14 +6382,14 @@ async function renderMcp() {
       </tr>`).join('')}</tbody></table>` : '<div class="empty">mcp.manage required</div>'}
     </div>
     <div class="panel">
-      <div class="panel-title">Crucible as a server — drive this company from outside</div>
-      <div class="map-legend">Point Claude Code, Claude Desktop or any MCP client at the endpoint below with your own Crucible token. You get exactly the permissions your account holds — there is no wider back door.</div>
+      <div class="panel-title">AlphaCore as a server — drive this company from outside</div>
+      <div class="map-legend">Point Claude Code, Claude Desktop or any MCP client at the endpoint below with your own AlphaCore token. You get exactly the permissions your account holds — there is no wider back door.</div>
       ${preBody(JSON.stringify({
         mcpServers: {
-          crucible: {
+          alphacore: {
             type: 'http',
             url: `${location.origin}/mcp`,
-            headers: { 'x-auth-token': 'YOUR-CRUCIBLE-TOKEN' },
+            headers: { 'x-auth-token': 'YOUR-ALPHACORE-TOKEN' },
           },
         },
       }, null, 2))}
@@ -7204,14 +7269,14 @@ async function renderWebhooks() {
     ${tile('Delivered today', d.counts.deliveredToday, 'receiver answered 2xx', d.counts.deliveredToday ? 'tile-ok' : '')}
     ${tile('Failed deliveries', d.counts.failing, 'retried on the queue, then paused', d.counts.failing ? 'tile-warn' : '')}
     <div class="panel tile"><div class="panel-title">Verify a delivery</div>
-      <div class="sub" style="margin-top:8px">HMAC-SHA256 over <span class="mono">timestamp.body</span>, in <span class="mono">x-crucible-signature</span>. Five-minute replay window.</div></div>
+      <div class="sub" style="margin-top:8px">HMAC-SHA256 over <span class="mono">timestamp.body</span>, in <span class="mono">x-alphacore-signature</span>. Five-minute replay window.</div></div>
   </div>
 
   ${canM ? `
   <div class="panel">
     <div class="panel-title">Subscribe</div>
     <div class="form-inline">
-      <input id="wh-url" placeholder="https://your-service.example/hooks/crucible" style="width:44%">
+      <input id="wh-url" placeholder="https://your-service.example/hooks/alphacore" style="width:44%">
       <input id="wh-events" placeholder="run.*, egress.blocked, decision.*  (or * for everything)" style="width:34%">
       <button class="btn btn-sm btn-primary" id="wh-add">Add</button>
     </div>
@@ -7376,7 +7441,7 @@ async function renderBackups() {
   </div>`;
 
   wireXact(renderBackups);
-  $('#bk-export')?.addEventListener('click', () => downloadFile('/api/backups/export', 'crucible-export.json'));
+  $('#bk-export')?.addEventListener('click', () => downloadFile('/api/backups/export', 'alphacore-export.json'));
   view.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', async () => {
     const typed = prompt('Restoring replaces the live database with this copy.\nA backup of the present is taken first.\n\nType RESTORE to continue:');
     if (!typed) return;
@@ -9339,7 +9404,7 @@ async function renderOwner() {
     try { await api('/api/harmony/mode', { method: 'POST', body: { mode: harmony.mode === 'live' ? 'dry-run' : 'live' } }); renderOwner(); } catch (e) { toast(e.message, true); }
   });
   $('#ow-mock')?.addEventListener('click', async () => {
-    try { await api('/api/settings', { method: 'POST', body: { key: 'CRUCIBLE_MOCK', value: settings.mockForced ? null : 'true' } }); toast(settings.mockForced ? 'Live models re-enabled' : 'Mock mode on — no further model spend'); renderOwner(); }
+    try { await api('/api/settings', { method: 'POST', body: { key: 'ALPHACORE_MOCK', value: settings.mockForced ? null : 'true' } }); toast(settings.mockForced ? 'Live models re-enabled' : 'Mock mode on — no further model spend'); renderOwner(); }
     catch (e) { toast(e.message, true); }
   });
 }
@@ -9408,6 +9473,9 @@ window.addEventListener('hashchange', () => {
   initShell();
   try {
     const me = await api('/api/auth/me');
+    // A live session on an account that never chose its own password gets the
+    // same treatment as a fresh sign-in: nothing else opens until it does.
+    if (me.user?.mustChangePassword) { showPasswordChange(); return; }
     currentUser = me.user;
     paintUser();
     await loadCatalog();

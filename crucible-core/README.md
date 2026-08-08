@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚙️ CRUCIBLE CORE
+# ⚙️ ALPHACORE
 
 ### The company that runs itself — and proves every move on a hash chain.
 
@@ -27,11 +27,11 @@ where you literally watch the company work.*
 
 ---
 
-**What makes it different:** most "AI agent" projects are a chat loop with tools. Crucible Core is an **operating company** — money is reserved before any model is called, reviewers are forced onto a different model family than authors, low-confidence work stops at a human gate, incidents demand postmortems, every produced file lands on disk through an explicit human apply, and the whole story is sealed into an append-only SHA-256 hash chain you can verify from the dashboard header. The AI does the work; the humans keep the authority; the chain keeps them both honest.
+**What makes it different:** most "AI agent" projects are a chat loop with tools. AlphaCore is an **operating company** — money is reserved before any model is called, reviewers are forced onto a different model family than authors, low-confidence work stops at a human gate, incidents demand postmortems, every produced file lands on disk through an explicit human apply, and the whole story is sealed into an append-only SHA-256 hash chain you can verify from the dashboard header. The AI does the work; the humans keep the authority; the chain keeps them both honest.
 
 And when it reaches outside — Gmail, GitHub, Slack, Stripe, the open web, any API you describe — **every single attempt passes one gate** that checks the employee's scope, the allowlist, the quota, and a constitution written in a form a machine can enforce. The intent is recorded *before* the call is made. A new integration runs in dry-run until a person deliberately arms it. And eight attacks run against all of it on a timer, because the day an employee can read a page and then send an email, a hostile page becomes a command channel.
 
-Born as the working implementation of **Part 3 — Technical Design** of the Crucible blueprint (see the repository root), then expanded far past it. Built with Node's standard library, `node:sqlite`, and a vanilla-JS dashboard.
+Born as the working implementation of **Part 3 — Technical Design** of the AlphaCore blueprint (see the repository root), then expanded far past it. Built with Node's standard library, `node:sqlite`, and a vanilla-JS dashboard.
 
 <p align="center">
   <img src="docs/mainboard.svg" alt="The living map — 13 districts and 102 departments around the Harmony core" width="100%">
@@ -109,12 +109,12 @@ flowchart LR
 
 ## Quick start
 
-**Windows, one double-click:** run `Start-Crucible.bat` in the repository root. It checks Node, installs dependencies on first run, seeds demo data, opens the browser, and starts the server. If the server is already running it just opens the dashboard.
+**Windows, one double-click:** run `Start-AlphaCore.bat` in the repository root. It checks Node, installs dependencies on first run, seeds demo data, opens the browser, and starts the server. If the server is already running it just opens the dashboard.
 
 **Manually:**
 
 ```powershell
-cd crucible-core
+cd alphacore
 npm install
 npm run seed     # optional: sample agents, runs, one tribunal case (mock, $0)
 npm start        # http://localhost:8484
@@ -122,7 +122,9 @@ npm start        # http://localhost:8484
 
 Requires **Node ≥ 22.5** (built-in `node:sqlite`; the npm scripts pass the flag).
 
-**First sign-in: `admin` / `crucible` — change it immediately** (Admin → Users). The seeded account is the superadmin: every permission, the owner powers, and the kill switches.
+**First run creates one account and prints its password to the console, once.** Username `owner`, superadmin: every permission, the owner powers, the kill switches. Copy the password when you see it — it is stored only as a hash, and until you replace it that account can do exactly two things: read itself, and choose a new password. That is enforced in the server, not merely asked for on screen.
+
+Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 **Going live:** paste provider API keys in **Settings** (stored locally in SQLite, never echoed back, effective immediately) or copy `.env.example` → `.env`. With zero keys the router runs a deterministic **mock mode** — the entire platform is demoable at $0.
 
@@ -317,7 +319,7 @@ mid-flight still leaves evidence of what was about to happen.
 | **Agent scopes** | Each employee holds named grants (`gmail.send` limited to one domain, `pr.create` limited to one repository). No wildcards. Revoking takes effect on the next call. |
 | **The queue** | Outbound work with attempts, exponential backoff and idempotency keys, so a retry can never double-send and a dead job is shelved for a person instead of repeated forever. |
 | **The open web** | Three graded abilities — fetch, search, browse (real Chromium over CDP) — behind the SSRF guard. Every page is kept with the **hash of what it actually said**, so a claim traces back to its source. Text that tries to give instructions is flagged, filed as an attack, and never obeyed. |
-| **MCP, both ways** | Register any MCP server and its tools become things the workforce can do. Crucible is *also* an MCP server at `POST /mcp` — point Claude Code at it with your own token and drive the company from outside, with exactly the permissions your account holds. |
+| **MCP, both ways** | Register any MCP server and its tools become things the workforce can do. AlphaCore is *also* an MCP server at `POST /mcp` — point Claude Code at it with your own token and drive the company from outside, with exactly the permissions your account holds. |
 | **The constitution** | Ten founding rules with two halves each: the sentence a person reads and a machine form the gate evaluates. Money needs a person, no unrequested bulk contact, no credential ever leaves, fetched text is data and never instruction. Amending requires the owner and leaves the old version in the record. |
 | **The red team** | Eight attacks run on a timer against our own machinery — prompt injection (English *and* Arabic), secret exfiltration, unscoped egress, bulk contact, autonomous payment, audit tampering, vault read-back, SSRF. A breach is a finding, not an incident. This is how the Arabic injection gap was found and closed. |
 | **Provenance** | An Ed25519 receipt for every artifact: content hash, chain entry, model, reviewers, cost. Anyone holding the public key verifies it offline, forever, without asking us anything. |
@@ -448,12 +450,12 @@ present first.
 
 ## Factory reset (superadmin only)
 
-Settings → **Danger zone**. Three locks: superadmin role + typed phrase `WIPE ALL DATA` + password re-entry. Two levels — data wipe (operational records cleared; users, sessions, provider settings survive; defaults re-seeded; the audit chain restarts with a genesis entry naming who wiped) and **full factory reset** (users/sessions/settings go too; `admin`/`crucible` restored). An extra checkbox also deletes produced workspace files.
+Settings → **Danger zone**. Three locks: superadmin role + typed phrase `WIPE ALL DATA` + password re-entry. Two levels — data wipe (operational records cleared; users, sessions, provider settings survive; defaults re-seeded; the audit chain restarts with a genesis entry naming who wiped) and **full factory reset** (users/sessions/settings go too; a fresh `owner` account is created and its password printed once to the server console). An extra checkbox also deletes produced workspace files.
 
 ## Layout
 
 ```
-crucible-core/
+alphacore/
 ├─ config/            providers, budgets, agents, pipelines, golden sets, rituals (all config, not code)
 ├─ src/
 │  ├─ server.js       one process: HTTP + static + workers + scheduled ticks
@@ -497,8 +499,8 @@ node --experimental-sqlite scripts/seed.js           # demo data (forced mock)
 node --experimental-sqlite scripts/rechain-audit.js  # audit-chain repair (content-preserving, self-recording)
 ```
 
-The test suites name their own database file (`CRUCIBLE_DB`) and delete it on
-start. They used to delete `data/crucible.db` — which is the running company —
+The test suites name their own database file (`ALPHACORE_DB`) and delete it on
+start. They used to delete `data/alphacore.db` — which is the running company —
 so the file is now nameable and the default is never the one that gets wiped.
 
 **Git hygiene for the database:** `data/` DB files are gitignored — including `-wal`/`-shm`. Never force-add them; a WAL copied between machines corrupts the database. Stop the server before committing anything near `data/`.

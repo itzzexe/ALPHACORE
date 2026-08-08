@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const db = new DatabaseSync(path.join(root, 'data', 'crucible.db'));
+const db = new DatabaseSync(path.join(root, 'data', 'alphacore.db'));
 
 const canon = (o) => {
   if (o === null || typeof o !== 'object') return JSON.stringify(o);

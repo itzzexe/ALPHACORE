@@ -15,6 +15,15 @@ export function setSetting(k, v) {
   else exec('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v', k, String(v));
 }
 
+/**
+ * The name of the company this install runs — not the name of the platform.
+ * A customer's investor update should say their name, so every prompt and
+ * generated document reads it from here rather than carrying ours.
+ */
+export function companyName() {
+  return getSetting('COMPANY_NAME') || 'this company';
+}
+
 export function getSecret(name) {
   if (!name) return null;
   return getSetting(name) || process.env[name] || null;
@@ -24,7 +33,7 @@ export function isProviderAvailable(name) {
   const p = providersConfig.providers[name];
   if (!p) return false;
   if (p.kind === 'mock') return true;
-  if (String(getSecret('CRUCIBLE_MOCK') || '').toLowerCase() === 'true') return false;
+  if (String(getSecret('ALPHACORE_MOCK') || '').toLowerCase() === 'true') return false;
   if (p.kind === 'claude-cli') return String(getSecret(p.enabledEnv) || '').toLowerCase() === 'true';
   return Boolean(p.keyEnv && getSecret(p.keyEnv));
 }
@@ -51,5 +60,10 @@ export function settingsOverview() {
       available: isProviderAvailable(name),
     });
   }
-  return { providers: rows, mockForced: String(getSecret('CRUCIBLE_MOCK') || '').toLowerCase() === 'true', mockMode: isMockMode() };
+  return {
+    providers: rows,
+    company: { name: getSetting('COMPANY_NAME') || '', publicBaseUrl: getSecret('PUBLIC_BASE_URL') || '' },
+    mockForced: String(getSecret('ALPHACORE_MOCK') || '').toLowerCase() === 'true',
+    mockMode: isMockMode(),
+  };
 }

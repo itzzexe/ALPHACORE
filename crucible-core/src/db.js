@@ -8,12 +8,12 @@ import { ROOT } from './env.js';
 
 const dataDir = path.join(ROOT, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
-// The tests used to delete data/crucible.db before importing this module, which
+// The tests used to delete data/alphacore.db before importing this module, which
 // is a fine idea until the day somebody runs them on a machine that holds the
 // real company. The file is now nameable, and the test suite names its own.
-export const DB_FILE = process.env.CRUCIBLE_DB
-  ? path.resolve(ROOT, process.env.CRUCIBLE_DB)
-  : path.join(dataDir, 'crucible.db');
+export const DB_FILE = process.env.ALPHACORE_DB
+  ? path.resolve(ROOT, process.env.ALPHACORE_DB)
+  : path.join(dataDir, 'alphacore.db');
 export const db = new DatabaseSync(DB_FILE);
 
 db.exec('PRAGMA journal_mode = WAL;');
@@ -412,6 +412,9 @@ CREATE TABLE IF NOT EXISTS users (
   role         TEXT NOT NULL DEFAULT 'member',  -- superadmin|member
   perms        TEXT NOT NULL DEFAULT '[]',  -- JSON permission keys; superadmin = ["*"]
   status       TEXT NOT NULL DEFAULT 'active',
+  -- Set on the account first run generates. While it is 1 the account can do
+  -- exactly two things: read itself, and replace its password.
+  must_change  INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -2112,6 +2115,9 @@ try { db.exec('ALTER TABLE tickets ADD COLUMN product_id TEXT'); } catch { /* co
 try { db.exec('ALTER TABLE tickets ADD COLUMN incident_id INTEGER'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE incidents ADD COLUMN postmortem_pipeline_id TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE journeys ADD COLUMN autopilot INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+// Accounts created before first-run passwords were generated have chosen their
+// own by definition, so upgrading in place leaves everyone at 0.
+try { db.exec('ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 // Intelligence v2 — structured criteria, multi-round collection, web enrichment.
 for (const sql of [
   'ALTER TABLE intel_queries ADD COLUMN criteria TEXT',

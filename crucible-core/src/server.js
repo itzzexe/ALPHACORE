@@ -1,4 +1,4 @@
-// Crucible Core server — one process: HTTP API + static dashboard + worker
+// AlphaCore server — one process: HTTP API + static dashboard + worker
 // loop + scheduled sweeps. No framework; node:http is enough at this scale.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ import { syncCampaignDrafts } from './commercial.js';
 import { syncDataRuns } from './data.js';
 import { syncIntel } from './intel.js';
 import { seedVendors, seedPeople } from './corporate.js';
-import { seedAdmin, login, logout, userForToken } from './auth.js';
+import { seedAdmin, login, logout, userForToken, changeOwnPassword } from './auth.js';
 import { seedRisks, syncTasks, ruleRiskReviews } from './pm.js';
 import { advanceJourneys } from './journey.js';
 import { syncOutreachDrafts, ruleStaleRelations } from './relations.js';
@@ -66,9 +66,14 @@ import { seedSlos, observeTick, trimMetrics } from './observe.js';
 import { takeBackup } from './backup.js';
 import { mcpTools } from './mcptools.js';
 import { one, exec } from './db.js';
-import { getSetting } from './settings.js';
+import { getSetting, setSetting } from './settings.js';
 
 const PUBLIC_BASE = () => getSetting('PUBLIC_BASE_URL');
+
+// Read once from the manifest rather than kept in a second place that drifts.
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'),
+).version;
 import { handleApi } from './api.js';
 
 seedAgents();
@@ -87,11 +92,19 @@ seedConnectors();
 seedConstitution();
 seedPackages();
 seedSlos();
+
+// Where the outside world should call us back. A blank here silently breaks
+// OAuth returns and carrier webhooks, so first run writes the only value it
+// can honestly know — this machine — and anyone deploying further out changes
+// it in Settings. A wrong-looking localhost URL on a callback screen is far
+// easier to notice than an empty one.
+if (!getSetting('PUBLIC_BASE_URL')) setSetting('PUBLIC_BASE_URL', `http://localhost:${PORT}`);
+
 startWorkers();
 
 // A tenant process must never try to be a control plane too: it runs one
 // company, on the database file it was handed.
-const IS_TENANT = Boolean(process.env.CRUCIBLE_TENANT);
+const IS_TENANT = Boolean(process.env.ALPHACORE_TENANT);
 
 // ---------------------------------------------------------------------------
 // The outside world runs on the job queue rather than on bare timers, because
@@ -276,7 +289,7 @@ const server = http.createServer(async (req, res) => {
       const connector = verifyState(state);
       const page = (msg, ok) => {
         res.writeHead(ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(`<!doctype html><meta charset="utf-8"><title>Crucible</title>
+        res.end(`<!doctype html><meta charset="utf-8"><title>AlphaCore</title>
           <body style="font:15px system-ui;padding:40px;background:#0e0e11;color:#eee">
           <h2 style="color:${ok ? '#6fc487' : '#f0685a'}">${msg}</h2>
           <p>You can close this tab and go back to the Integrations page.</p>`);
@@ -298,7 +311,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Crucible as an MCP server: an outside agent drives the company through
+    // AlphaCore as an MCP server: an outside agent drives the company through
     // the same permissions a person would have, using that person's token.
     if (url.pathname === '/mcp') {
       const chunks = [];
@@ -310,7 +323,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(obj ? 200 : 202, { 'content-type': 'application/json' });
         res.end(obj ? JSON.stringify(obj) : '');
       };
-      if (!user) return send({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'authentication required — send a Crucible token' } });
+      if (!user) return send({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'authentication required — send a AlphaCore token' } });
       let body;
       try { body = JSON.parse(raw); } catch { return send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'that was not JSON' } }); }
       return send(await handleMcp(body, { user, tools: mcpTools }));
@@ -327,6 +340,22 @@ const server = http.createServer(async (req, res) => {
 
       const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
       const token = req.headers['x-auth-token'] || null;
+
+      // Liveness — the only other unauthenticated surface, and deliberately
+      // the dullest endpoint in the system: it answers "is this process
+      // alive and can it read its own database", and nothing about the
+      // company. Load balancers, container healthchecks and CI need a probe
+      // that does not carry a credential; /api/health does carry one.
+      if (url.pathname === '/api/ping') {
+        let dbOk = true;
+        try { one('SELECT 1 AS ok'); } catch { dbOk = false; }
+        return json(dbOk ? 200 : 503, {
+          ok: dbOk,
+          name: 'alphacore',
+          version: VERSION,
+          uptimeSeconds: Math.round(process.uptime()),
+        });
+      }
 
       // Auth endpoints — the only unauthenticated surface.
       if (url.pathname === '/api/auth/login' && req.method === 'POST') {
@@ -355,6 +384,24 @@ const server = http.createServer(async (req, res) => {
       }
       if (!user) return json(401, { error: 'authentication required' });
       if (url.pathname === '/api/auth/me') return json(200, { user });
+
+      // An account still carrying its generated password can do exactly two
+      // things: look at itself, and replace that password. Enforced here rather
+      // than asked for in the interface, because a prompt the client can skip
+      // is not a requirement.
+      if (user.mustChangePassword && url.pathname !== '/api/auth/password') {
+        return json(403, {
+          error: 'this account is still using the password generated at first run — change it before anything else',
+          mustChangePassword: true,
+        });
+      }
+      if (url.pathname === '/api/auth/password' && req.method === 'POST') {
+        try {
+          return json(200, changeOwnPassword(user.id, {
+            current: body?.current, next: body?.next, actor: `human:${user.username}`,
+          }));
+        } catch (e) { return json(400, { error: e.message }); }
+      }
 
       const started = Date.now();
       const handled = await handleApi(req, res, url, body, user);
@@ -385,5 +432,5 @@ setInterval(() => { try { liveTick(); } catch { /* a dropped socket costs a nice
 
 server.listen(PORT, () => {
   audit({ actorType: 'system', actorId: 'server', action: 'server.started', payload: { port: PORT, mockMode: mockMode() } });
-  console.log(`Crucible Core running on http://localhost:${PORT} ${mockMode() ? '(mock mode — no provider keys configured)' : ''}`);
+  console.log(`AlphaCore running on http://localhost:${PORT} ${mockMode() ? '(mock mode — no provider keys configured)' : ''}`);
 });

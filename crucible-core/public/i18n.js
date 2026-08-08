@@ -11,7 +11,7 @@
 // (API, DPA, Sprint, RAG, SEV1) stay English on purpose — translating them
 // costs the reader more than it gains.
 export const LANGS = { en: 'English', ar: 'العربية' };
-const KEY = 'crucible-lang';
+const KEY = 'alphacore-lang';
 
 export let lang = localStorage.getItem(KEY) || 'en';
 
@@ -81,6 +81,14 @@ const AR = {
   '✎ auto-refresh paused': '✎ التحديث التلقائي متوقف',
   'Nothing found': 'لا نتائج',
   'After dark': 'الوضع الليلي', 'Back to daylight': 'العودة إلى النهار',
+  // the way in
+  'The company that runs itself': 'الشركة التي تدير نفسها',
+  'Current password': 'كلمة المرور الحالية', 'New password': 'كلمة المرور الجديدة',
+  'Type it again': 'أعد كتابتها', 'Set the password': 'اعتمد كلمة المرور',
+  'Those two do not match': 'الكلمتان غير متطابقتين',
+  'Password set. Sign in with it.': 'تم الاعتماد. سجّل الدخول بها.',
+  'This account is still using the password generated when the server first started. Choose your own before going any further.':
+    'هذا الحساب ما زال يستعمل كلمة المرور التي وُلّدت عند أول تشغيل للخادم. اختر كلمتك قبل أي شيء آخر.',
 
   // universal verbs and states
   Save: 'حفظ', Cancel: 'إلغاء', Create: 'إنشاء', Open: 'فتح', Close: 'إغلاق', Delete: 'حذف',
@@ -208,7 +216,7 @@ const AR = {
   'Fingerprint': 'البصمة', 'Mode': 'النمط', 'Page': 'الصفحة',
   // MCP
   'Servers registered': 'خوادم مسجّلة', 'Tools reachable': 'أدوات متاحة',
-  'Tool calls made': 'نداءات أدوات', 'Crucible exposes': 'كروسيبل تعرض',
+  'Tool calls made': 'نداءات أدوات', 'AlphaCore exposes': 'كروسيبل تعرض',
   'Servers the company can reach': 'الخوادم التي تصلها الشركة',
   'Add a server': 'أضف خادمًا', 'Register': 'سجّل', 'Sync': 'زامن',
   'Recent tool calls': 'آخر نداءات الأدوات',

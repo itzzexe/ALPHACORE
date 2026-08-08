@@ -7,7 +7,7 @@
 import { wire, need } from './wire.js';
 
 const API = 'https://api.github.com';
-const gh = (token) => ({ authorization: `Bearer ${token}`, 'user-agent': 'crucible-core', accept: 'application/vnd.github+json' });
+const gh = (token) => ({ authorization: `Bearer ${token}`, 'user-agent': 'alphacore', accept: 'application/vnd.github+json' });
 
 export default {
   id: 'github',

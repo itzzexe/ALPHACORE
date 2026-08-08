@@ -5,7 +5,7 @@
 // Mock mode is forced BEFORE any module import (imports are hoisted in ESM,
 // so these must be dynamic): the seed never spends real money, even when
 // provider keys exist in the environment.
-process.env.CRUCIBLE_MOCK = 'true';
+process.env.ALPHACORE_MOCK = 'true';
 
 const { seedAgents, enqueueRun, leaseNext, executeRun } = await import('../src/workflow.js');
 const { createDecision, addEvidence, verifyEvidence, getDecision } = await import('../src/registry.js');
@@ -15,7 +15,7 @@ seedAgents();
 console.log('Agents seeded.');
 
 const tasks = [
-  ['AGT-DOC-001', 'release-note', 'Draft the release note for Crucible Core v0.1.'],
+  ['AGT-DOC-001', 'release-note', 'Draft the release note for AlphaCore v0.1.'],
   ['AGT-RES-001', 'market-scan', 'Scan the renewal-tracking tool space for small MSPs; tag every claim.'],
   ['AGT-QA-001', 'qa-report', 'Verify the acceptance criteria for the run-queue feature.'],
   ['AGT-REV-001', 'code-review', 'Review the budget-reservation diff against the policy spec.'],

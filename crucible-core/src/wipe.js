@@ -66,7 +66,7 @@ export function wipeSystem({ actor, full = false, workspace = false }) {
   seedRituals();
   seedVendors();
   seedPeople();
-  seedAdmin(); // only recreates admin/crucible when users were wiped
+  seedAdmin(); // only recreates admin/alphacore when users were wiped
   seedRisks();
   seedAutomations();
   seedPersonas();
@@ -76,7 +76,7 @@ export function wipeSystem({ actor, full = false, workspace = false }) {
   // Genesis entry of the new audit chain: who wiped, and how deep.
   audit({
     actorType: 'human', actorId: actor, action: 'system.wiped',
-    subjectType: 'system', subjectId: 'crucible',
+    subjectType: 'system', subjectId: 'alphacore',
     payload: { full, workspace, tablesCleared: tables.length, workspaceEntriesRemoved: filesRemoved },
   });
 

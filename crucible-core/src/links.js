@@ -443,7 +443,7 @@ export function sectionCatalog() {
     S('egress', 'The gate', 'world', '#/egress', n('SELECT COUNT(*) AS n FROM egress_log'), 'Every attempt to affect anything outside this machine, allowed or refused, with the rule that decided'),
     S('vault', 'The vault', 'world', '#/vault', n('SELECT COUNT(*) AS n FROM vault_secrets'), 'Credentials encrypted at rest — the plaintext leaves only for the connector making the call'),
     S('web', 'The open web', 'world', '#/web', n('SELECT COUNT(*) AS n FROM web_fetches'), 'Fetch, search and a real browser — every page kept with its hash so a claim can be traced to a source'),
-    S('mcp', 'MCP', 'world', '#/mcp', n('SELECT COUNT(*) AS n FROM mcp_servers'), 'Any MCP server becomes tools the workforce can use, and Crucible itself is one that others can drive'),
+    S('mcp', 'MCP', 'world', '#/mcp', n('SELECT COUNT(*) AS n FROM mcp_servers'), 'Any MCP server becomes tools the workforce can use, and AlphaCore itself is one that others can drive'),
     S('jobs', 'The queue', 'world', '#/jobs', n('SELECT COUNT(*) AS n FROM jobs'), 'Durable work: attempts, backoff, idempotency and a shelf for whatever never succeeded'),
     S('revenue', 'Revenue loop', 'commerce', '#/revenue', n('SELECT COUNT(*) AS n FROM deals'), 'Name on a list to money in the account: source, approach, meeting, proposal, invoice, deliver'),
     S('constitution', 'The constitution', 'govern', '#/constitution', n("SELECT COUNT(*) AS n FROM constitution WHERE state = 'active'"), 'The rules the company must obey, written once and enforced by machine at the gate'),

@@ -99,7 +99,7 @@ function pick(system, prompt) {
   if (s.includes('"svg"')) {
     return {
       spec: '[mock] Dark graphite field, ember-orange triangle mark, tight letter-spaced wordmark. 1200×630 social banner ratio.',
-      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 315"><rect width="600" height="315" fill="#16130f"/><polygon points="300,70 380,220 220,220" fill="#ff6b2c"/><text x="300" y="262" fill="#e8e0d4" font-family="sans-serif" font-size="26" letter-spacing="8" text-anchor="middle">CRUCIBLE</text><text x="300" y="286" fill="#8d8477" font-family="monospace" font-size="11" letter-spacing="4" text-anchor="middle">MOCK DESIGN — CONNECT A KEY</text></svg>',
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 315"><rect width="600" height="315" fill="#16130f"/><polygon points="300,70 380,220 220,220" fill="#ff6b2c"/><text x="300" y="262" fill="#e8e0d4" font-family="sans-serif" font-size="26" letter-spacing="8" text-anchor="middle">ALPHACORE</text><text x="300" y="286" fill="#8d8477" font-family="monospace" font-size="11" letter-spacing="4" text-anchor="middle">MOCK DESIGN — CONNECT A KEY</text></svg>',
       confidence: 0.8,
     };
   }

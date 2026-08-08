@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 // Isolate: force mock mode and a fresh database before importing modules.
 // The database is named explicitly rather than defaulted, because this file
 // deletes it — and the default is the running company.
-process.env.CRUCIBLE_MOCK = 'true';
-process.env.CRUCIBLE_DB = 'data/test.db';
+process.env.ALPHACORE_MOCK = 'true';
+process.env.ALPHACORE_DB = 'data/test.db';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dbFile = path.join(root, 'data', 'test.db');
 try { fs.rmSync(dbFile); } catch { /* first run */ }

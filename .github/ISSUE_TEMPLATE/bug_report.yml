@@ -1,0 +1,76 @@
+name: Bug report
+description: Something behaves differently from how it reads
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **If this is a security issue, close this and read
+        [SECURITY.md](../blob/main/SECURITY.md) instead.** A public issue about
+        an exploitable hole tells the wrong people first.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, and what the system did back.
+      placeholder: |
+        I approved a decision on the Gate page and the budget reservation stayed held.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: Numbered steps. A curl command beats a paragraph.
+      placeholder: |
+        1. Sign in as an owner
+        2. Open Decisions → new decision, amount 500
+        3. Approve it
+        4. Check Budgets — the reservation is still there
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0, or the short SHA
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: "`node -v` — anything below 22.5 will not run at all"
+      placeholder: v22.14.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mock or live
+      options:
+        - Mock mode (no provider key)
+        - Live (a real provider key is configured)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output
+      description: >
+        From the terminal running the server, and the browser console if the
+        problem is on screen. Redact keys before pasting — this box is public.
+      render: text

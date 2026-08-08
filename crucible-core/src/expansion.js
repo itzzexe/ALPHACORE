@@ -10,6 +10,7 @@
 // every state change is audited; counts on the map are real queries.
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
+import { companyName } from './settings.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { providersConfig } from './env.js';
@@ -111,7 +112,7 @@ export function complianceOverview() {
     providers,
     contracts: q('SELECT state, COUNT(*) AS n FROM contracts GROUP BY state'),
     dataRegister: [
-      { store: 'SQLite (data/crucible.db)', contains: 'company records, customer names, intel records', basis: 'contract' },
+      { store: 'SQLite (data/alphacore.db)', contains: 'company records, customer names, intel records', basis: 'contract' },
       { store: 'workspace/ files', contains: 'agent-produced documents and exports', basis: 'legitimate interest' },
       { store: 'provider APIs', contains: 'prompts routed by sensitivity ceiling', basis: 'DPA-gated' },
     ],
@@ -261,7 +262,7 @@ export function createBrandAsset({ kind, name, content = null, actor }) {
     const agentId = writerAgent();
     if (agentId) runId = enqueueRun({
       agentId, taskType: `brand:${kind}`,
-      input: { prompt: `Draft a ${kind} brand asset named "${name}" for Crucible Systems — an AI-native company where agents are the workforce and humans hold the gates. Industrial, precise, ember-and-graphite identity. Reply as JSON {"text": "..."}.` },
+      input: { prompt: `Draft a ${kind} brand asset named "${name}" for ${companyName()} — an AI-native company where agents are the workforce and humans hold the gates. Industrial, precise, ember-and-graphite identity. Reply as JSON {"text": "..."}.` },
       actor,
     });
   }
@@ -504,7 +505,7 @@ export function generateInvestorUpdate({ period, actor }) {
   const agentId = writerAgent();
   const runId = agentId ? enqueueRun({
     agentId, taskType: `ir:${period}`,
-    input: { prompt: `Write a concise monthly investor update for ${period} for Crucible Systems.\nLive numbers: MRR $${s.mrr}, ${s.customers} active customers, pipeline $${s.pipeline}, model spend this month $${s.spendMonth}, ${s.agents} active AI employees, ${s.products} products, ${s.incidents} open incidents.\nSections: Highlights, Numbers, Lowlights, Asks. Honest tone; no invented facts beyond these numbers. Reply as JSON {"text": "..."}.` },
+    input: { prompt: `Write a concise monthly investor update for ${period} for ${companyName()}.\nLive numbers: MRR $${s.mrr}, ${s.customers} active customers, pipeline $${s.pipeline}, model spend this month $${s.spendMonth}, ${s.agents} active AI employees, ${s.products} products, ${s.incidents} open incidents.\nSections: Highlights, Numbers, Lowlights, Asks. Honest tone; no invented facts beyond these numbers. Reply as JSON {"text": "..."}.` },
     actor,
   }) : null;
   exec('INSERT INTO investor_updates (period, run_id, created_by) VALUES (?,?,?)', period.trim(), runId, actor);

@@ -25,7 +25,7 @@ export const agentsConfig = loadJson('config/agents.json');
 export const pipelinesConfig = loadJson('config/pipelines.json');
 
 export const PORT = Number(process.env.PORT || 8484);
-export const MOCK_FORCED = String(process.env.CRUCIBLE_MOCK || '').toLowerCase() === 'true';
+export const MOCK_FORCED = String(process.env.ALPHACORE_MOCK || '').toLowerCase() === 'true';
 // NOTE: runtime provider availability now lives in settings.js (DB-backed,
 // superadmin-editable); the env-based helpers below remain for boot paths
 // that must not touch the database.

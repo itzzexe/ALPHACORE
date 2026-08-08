@@ -1,4 +1,4 @@
-/* Crucible Core — the operations console.
+/* AlphaCore — the operations console.
 
    One surface: warm paper. The whole interface is ink on bone, and colour is
    held back until you point at something — which is what lets a hundred and two
@@ -1793,7 +1793,21 @@ input, select, textarea {
   padding: 6px 2px;
   transition: border-color var(--t-fast) var(--ease);
 }
+/* The pre-paper stylesheet gave input[type="text"] a filled box with a border,
+   and that selector outranks the bare `input` above it — so text fields looked
+   boxed while password, number and date fields beside them were a line. One
+   surface, one input. Width stays 100%: forms across the app depend on it. */
+input[type="text"] {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--seam);
+  border-radius: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 6px 2px;
+}
 input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: var(--ink); }
+input[type="text"]:focus { border-bottom-color: var(--ink); }
 input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 textarea { border: 1px solid var(--seam); border-radius: 2px; padding: var(--s3); }
 
@@ -1984,12 +1998,90 @@ html[lang="ar"] .at-core-label,
 html[lang="ar"] .at-foot { letter-spacing: 0; font-size: 10px; }
 html[lang="ar"] .at-nlabel { font-size: 10px; }
 
-/* The login screen carried its layout in six inline style attributes, which
-   meant those six values could not follow the theme or be changed in one place.
-   They are classes now. */
-.login-brand { border: none; justify-content: center; padding-bottom: 4px; }
-.login-gap { margin-top: 10px; }
-.login-go { width: 100%; margin-top: 16px; }
-.login-err { margin-top: 10px; text-align: center; }
-.login-hint { text-align: center; margin-top: 12px; border-top: none; }
-.login-foot { text-align: center; margin-top: 10px; }
+
+/* ==========================================================================
+   The way in.
+
+   The first screen anybody sees, so it carries the whole design in one panel:
+   paper, a hairline, the serif at wide tracking, and nothing else. It used to
+   print the default credentials underneath the form — which is a published
+   password, not a hint.
+   ========================================================================== */
+#login {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: var(--paper);
+  padding: var(--s5);
+}
+#login[hidden] { display: none; }
+
+#login::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(1200px 620px at 50% -12%, var(--grain-light), transparent 62%),
+    radial-gradient(700px 400px at 80% 112%, var(--grain-warm), transparent 60%);
+}
+
+.login-panel {
+  position: relative;
+  width: min(400px, 100%);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-sm);
+  background: var(--paper-veil);
+  box-shadow: var(--shadow-pop);
+  padding: var(--s7) var(--s6) var(--s5);
+  text-align: center;
+}
+
+.login-mark {
+  color: var(--accent);
+  font-size: 22px; line-height: 1;
+  margin-bottom: var(--s4);
+}
+.login-name {
+  font-family: var(--font-display);
+  font-size: 24px; font-weight: 400;
+  letter-spacing: var(--track-wide); text-transform: uppercase;
+  color: var(--ink);
+  /* Tracking pushes the word off-centre; half of it back on the end restores it. */
+  text-indent: var(--track-wide);
+}
+.login-tag {
+  font-size: 11.5px; color: var(--ink-faint);
+  margin-top: var(--s2) ;
+}
+html[lang="ar"] .login-name { letter-spacing: 0; text-indent: 0; font-size: 27px; }
+
+.login-form { display: block; text-align: start; margin-top: var(--s6); }
+.login-form[hidden] { display: none; }
+.login-form .fl {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 9.5px; font-weight: 400;
+  letter-spacing: var(--track-mid); text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: var(--s1);
+}
+html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size: 11px; }
+.login-form input { width: 100%; font-size: 14px; padding: 7px 2px; }
+.login-gap { margin-top: var(--s4); }
+.login-go { width: 100%; margin-top: var(--s5); }
+
+.login-note {
+  font-size: 12px; line-height: 1.6; color: var(--ink-mute);
+  border-inline-start: 2px solid var(--accent);
+  padding-inline-start: var(--s3);
+  margin-bottom: var(--s5);
+  text-align: start;
+}
+.login-err {
+  min-height: 18px; margin-top: var(--s3);
+  font-size: 12px; color: var(--bad); text-align: center;
+}
+.login-err:empty { min-height: 0; margin-top: 0; }
+
+.login-foot {
+  display: flex; justify-content: center; gap: var(--s2);
+  margin-top: var(--s5); padding-top: var(--s4);
+  border-top: 1px solid var(--seam-soft);
+}

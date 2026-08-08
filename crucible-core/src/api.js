@@ -78,7 +78,7 @@ import { getSetting } from './settings.js';
 import { egressOverview, releaseGated, denyGated, grantScope, revokeScope, scopesFor } from './egress.js';
 import { jobsOverview, retryJob, cancelJob } from './jobs.js';
 import { webOverview, readFetch, fetchPage, searchWeb, browsePage } from './web.js';
-import { mcpOverview, registerServer, syncServer, callTool, allTools, CRUCIBLE_TOOLS } from './mcp.js';
+import { mcpOverview, registerServer, syncServer, callTool, allTools, ALPHACORE_TOOLS } from './mcp.js';
 import { constitutionOverview, amendConstitution, retireRule } from './constitution.js';
 import { provenanceOverview, sealFinishedWork, verifyStored, verifyReceipt } from './provenance.js';
 import { timeMachineOverview, takeSnapshot, standAt, replay, reopenDecision } from './timemachine.js';
@@ -1011,7 +1011,7 @@ const routes = [
   ['POST', /^\/api\/mcp\/([a-z0-9:_-]+)\/call$/, ([id], body) => callTool({
     serverId: id, tool: need(body, 'tool'), args: body.args || {}, agentId: body.agentId || null,
   })],
-  ['GET', /^\/api\/mcp\/tools$/, () => ({ tools: allTools(), exposed: CRUCIBLE_TOOLS })],
+  ['GET', /^\/api\/mcp\/tools$/, () => ({ tools: allTools(), exposed: ALPHACORE_TOOLS })],
 
   // --- the constitution ---
   ['GET', /^\/api\/constitution$/, () => constitutionOverview()],
@@ -1196,7 +1196,7 @@ const routes = [
   ['GET', /^\/api\/backups\/export$/, () => ({
     __raw: {
       contentType: 'application/json; charset=utf-8',
-      filename: `crucible-export-${new Date().toISOString().slice(0, 10)}.json`,
+      filename: `alphacore-export-${new Date().toISOString().slice(0, 10)}.json`,
       body: JSON.stringify(exportAll(), null, 1),
     },
   })],

@@ -1,0 +1,46 @@
+name: Idea or change
+description: Something the platform should do and does not
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the problem
+      description: >
+        Describe the situation you are actually in, not the feature you have
+        already designed. The best changes here came from someone describing a
+        day that went badly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you think should happen
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the platform
+      options:
+        - A department or page
+        - The map or the shell
+        - Agents, runs and the router
+        - Money — budgets, treasury, payouts
+        - The outside world — connectors, egress, MCP, web
+        - Governance, audit, constitution
+        - The platform layer — tenants, keys, webhooks, backups
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: gates
+    attributes:
+      label: Does it touch a gate?
+      description: >
+        If it involves money leaving, a signature, contacting someone outside
+        the company, or writing to the audit chain, say so. Those changes need
+        a human gate and are reviewed differently.

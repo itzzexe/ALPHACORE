@@ -8,8 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-process.env.CRUCIBLE_MOCK = 'true';
-process.env.CRUCIBLE_DB = 'data/test-platform.db';
+process.env.ALPHACORE_MOCK = 'true';
+process.env.ALPHACORE_DB = 'data/test-platform.db';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 for (const suffix of ['', '-wal', '-shm']) {
   try { fs.rmSync(path.join(root, 'data', `test-platform.db${suffix}`)); } catch { /* first run */ }

@@ -27,7 +27,7 @@ export function takeBackup({ kind = 'manual', actor = 'human:admin' } = {}) {
   fs.mkdirSync(DIR, { recursive: true });
   const tip = one('SELECT seq, hash FROM audit_log ORDER BY seq DESC LIMIT 1');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const file = path.join(DIR, `crucible-${stamp}-${kind}.db`);
+  const file = path.join(DIR, `alphacore-${stamp}-${kind}.db`);
 
   // Fold the write-ahead log into the database before copying, or the copy is
   // a database that is missing its most recent minutes.
@@ -110,7 +110,7 @@ export function restoreBackup(id, { confirm, actor }) {
     staged: path.relative(ROOT, staged),
     safetyBackup: safety.file,
     // Honest about the last step rather than doing something clever and unsafe.
-    next: 'stop the server, replace data/crucible.db with the staged file (and delete -wal/-shm), then start it again',
+    next: 'stop the server, replace data/alphacore.db with the staged file (and delete -wal/-shm), then start it again',
   };
 }
 

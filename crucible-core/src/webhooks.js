@@ -83,9 +83,9 @@ handle('webhook.deliver', async ({ deliveryId }) => {
       method: 'POST', signal: ctl.signal,
       headers: {
         'content-type': 'application/json',
-        'x-crucible-event': d.event,
-        'x-crucible-timestamp': String(ts),
-        'x-crucible-signature': sign(secret, ts, body),
+        'x-alphacore-event': d.event,
+        'x-alphacore-timestamp': String(ts),
+        'x-alphacore-signature': sign(secret, ts, body),
       },
       body,
     });

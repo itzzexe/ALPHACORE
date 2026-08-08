@@ -1,26 +1,44 @@
-// Prove the outside-world layer behaves, against the real database.
+// Prove the outside-world layer against a throwaway database, in mock mode.
 // Run: node --experimental-sqlite scripts/prove-world.mjs
-import { putSecret, getSecret, listSecrets } from '../src/vault.js';
-import { seedConnectors, addConnector, connect, setConnectorState, callConnector, connectorsOverview } from '../src/connectors/index.js';
-import { grantScope, revokeScope, egressOverview } from '../src/egress.js';
-import { seedConstitution, checkConstitution, constitutionOverview } from '../src/constitution.js';
-import { handle, enqueue, jobsTick, jobsOverview } from '../src/jobs.js';
-import { runRedTeam, redteamOverview } from '../src/redteam.js';
-import { issueReceipt, verifyReceipt, sealFinishedWork, provenanceOverview } from '../src/provenance.js';
-import { takeSnapshot, standAt, replay, timeMachineOverview } from '../src/timemachine.js';
-import { startSimulation, simulationOverview } from '../src/simulation.js';
-import { rebuildGraph, semanticSearch, neighbourhood, graphOverview } from '../src/graph.js';
-import { skillsOverview, proposeSkill } from '../src/skills.js';
-import { revenueOverview, sourceFromIntel } from '../src/revenue.js';
-import { scanForInjection, webOverview } from '../src/web.js';
-import { verifyChain } from '../src/audit.js';
-import { one, exec } from '../src/db.js';
+//
+// It used to run against whatever database was configured, which on a normal
+// machine is the running company: the proof wrote test connectors, test keys
+// and fork simulations into real records, and refused to run at all while the
+// server held the file. A proof that damages what it inspects is not a proof.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+process.env.ALPHACORE_MOCK = 'true';
+process.env.ALPHACORE_DB = 'data/prove-world.db';
+const proveRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+for (const suffix of ['', '-wal', '-shm']) {
+  try { fs.rmSync(path.join(proveRoot, process.env.ALPHACORE_DB + suffix)); } catch { /* first run */ }
+}
+
+const { putSecret, getSecret, listSecrets } = await import('../src/vault.js');
+const { seedConnectors, addConnector, connect, setConnectorState, callConnector, connectorsOverview } = await import('../src/connectors/index.js');
+const { grantScope, revokeScope, egressOverview } = await import('../src/egress.js');
+const { seedConstitution, checkConstitution, constitutionOverview } = await import('../src/constitution.js');
+const { handle, enqueue, jobsTick, jobsOverview } = await import('../src/jobs.js');
+const { runRedTeam, redteamOverview } = await import('../src/redteam.js');
+const { issueReceipt, verifyReceipt, sealFinishedWork, provenanceOverview } = await import('../src/provenance.js');
+const { takeSnapshot, standAt, replay, timeMachineOverview } = await import('../src/timemachine.js');
+const { startSimulation, simulationOverview } = await import('../src/simulation.js');
+const { rebuildGraph, semanticSearch, neighbourhood, graphOverview } = await import('../src/graph.js');
+const { skillsOverview, proposeSkill } = await import('../src/skills.js');
+const { revenueOverview, sourceFromIntel } = await import('../src/revenue.js');
+const { scanForInjection, webOverview } = await import('../src/web.js');
+const { verifyChain } = await import('../src/audit.js');
+const { one, exec } = await import('../src/db.js');
+const { seedAgents } = await import('../src/workflow.js');
 
 const line = (s) => console.log(`\n=== ${s} ===`);
 const ok = (cond, msg) => console.log(`${cond ? '  PASS' : '  FAIL'}  ${msg}`);
 let failures = 0;
 const check = (cond, msg) => { if (!cond) failures++; ok(cond, msg); };
 
+seedAgents();      // the workforce the graph draws its edges between
 seedConnectors();
 seedConstitution();
 
@@ -107,6 +125,17 @@ console.log(`    runs ${sim.delta.runs.before} → ${sim.delta.runs.after}, cust
 check(one("SELECT COUNT(*) AS n FROM connectors WHERE state != 'disconnected'").n >= 0, 'the real connectors were untouched by the fork');
 
 line('the knowledge graph');
+// The graph draws its edges from work that has happened: a customer, a deal,
+// a finished run. On a database that has lived a while those exist; on a fresh
+// clone they do not, and this check used to fail for everyone who had just
+// installed the platform — proving nothing except that the machine was new.
+// So the proof lays down the rows it needs and then asserts on them.
+exec("INSERT INTO customers (name, company, plan, mrr_usd, state) VALUES ('Prove Customer', 'Prove Ltd', 'pro', 100, 'active')");
+const proveCustomer = one("SELECT id FROM customers WHERE name = 'Prove Customer'").id;
+const proveAgent = one("SELECT id FROM agents WHERE status = 'active' ORDER BY id LIMIT 1").id;
+exec("INSERT INTO deals (name, customer_id, owner, value_usd, stage) VALUES ('Prove Deal', ?, ?, 5000, 'qualified')", proveCustomer, proveAgent);
+exec("INSERT INTO runs (agent_id, task_type, state, input) VALUES (?, 'prove-graph', 'done', '{}')", proveAgent);
+
 const g = rebuildGraph();
 check(g.nodes > 0 && g.edges > 0, `${g.nodes} nodes, ${g.edges} edges built from real rows`);
 const found = semanticSearch('oil company in Basra', { k: 5 });

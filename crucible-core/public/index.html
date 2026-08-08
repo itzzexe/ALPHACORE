@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crucible Core — Operations Console</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 90,85 10,85' fill='%23ff6b2c'/></svg>">
+<title>AlphaCore — Operations Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%2314100c'/><polygon points='50,20 78,50 50,80 22,50' fill='%23e0714f'/></svg>">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
   <!-- Icon rail: one button per division. The 76 departments live one click
        deeper, so the shell stays quiet until you ask it for something. -->
   <aside class="rail" id="rail">
-    <a class="rail-brand" href="#/" title="Crucible Core">▲</a>
+    <a class="rail-brand" href="#/" title="AlphaCore">◆</a>
     <div id="rail-items"></div>
     <div class="rail-spacer"></div>
     <button class="rail-btn" id="rail-search" type="button" aria-label="Search">
@@ -62,21 +62,39 @@
   </div>
 </div>
 
+<!-- The way in. Two states in one panel: sign in, and — on first run — choose a
+     password, because the generated one was only ever meant to get you here. -->
 <div id="login" hidden>
   <div class="login-panel">
-    <div class="brand login-brand">
-      <div class="brand-glyph">▲</div>
-      <div class="brand-name"><span>CRUCIBLE</span><span class="brand-sub">CORE · OPS CONSOLE</span></div>
-    </div>
-    <label class="fl" data-i18n="Username">Username</label>
-    <input type="text" id="login-user" autocomplete="username">
-    <label class="fl login-gap" data-i18n="Password">Password</label>
-    <input type="password" id="login-pass" autocomplete="current-password">
-    <button class="btn btn-primary login-go" id="login-go" type="button" data-i18n="Sign in">Sign in</button>
-    <div id="login-err" class="reason login-err"></div>
-    <div class="map-legend login-hint">first boot: admin / crucible</div>
+    <div class="login-mark">◆</div>
+    <h1 class="login-name">ALPHACORE</h1>
+    <p class="login-tag" data-i18n="The company that runs itself">The company that runs itself</p>
+
+    <form id="login-form" class="login-form" autocomplete="on">
+      <label class="fl" for="login-user" data-i18n="Username">Username</label>
+      <input type="text" id="login-user" name="username" autocomplete="username" spellcheck="false" required>
+      <label class="fl login-gap" for="login-pass" data-i18n="Password">Password</label>
+      <input type="password" id="login-pass" name="password" autocomplete="current-password" required>
+      <button class="btn btn-primary login-go" id="login-go" type="submit" data-i18n="Sign in">Sign in</button>
+    </form>
+
+    <form id="pw-form" class="login-form" hidden autocomplete="on">
+      <p class="login-note" data-i18n="This account is still using the password generated when the server first started. Choose your own before going any further.">
+        This account is still using the password generated when the server first started. Choose your own before going any further.</p>
+      <label class="fl" for="pw-current" data-i18n="Current password">Current password</label>
+      <input type="password" id="pw-current" name="current-password" autocomplete="current-password" required>
+      <label class="fl login-gap" for="pw-next" data-i18n="New password">New password</label>
+      <input type="password" id="pw-next" name="new-password" autocomplete="new-password" minlength="10" required>
+      <label class="fl login-gap" for="pw-again" data-i18n="Type it again">Type it again</label>
+      <input type="password" id="pw-again" name="confirm-password" autocomplete="new-password" minlength="10" required>
+      <button class="btn btn-primary login-go" id="pw-go" type="submit" data-i18n="Set the password">Set the password</button>
+    </form>
+
+    <div id="login-err" class="login-err" role="alert" aria-live="polite"></div>
+
     <div class="login-foot">
       <button class="icon-btn wide" id="login-lang" type="button">العربية</button>
+      <button class="icon-btn" id="login-theme" type="button" title="Day / night">◐</button>
     </div>
   </div>
 </div>

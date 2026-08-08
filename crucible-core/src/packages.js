@@ -187,7 +187,7 @@ export const EXAMPLE_MANIFEST = {
   id: 'legalhold',
   name: 'Legal hold',
   version: '1.0.0',
-  author: 'Crucible',
+  author: 'AlphaCore',
   description: 'Freeze a customer record against deletion while a dispute or investigation is open, and say who froze it and why.',
   section: { id: 'legalhold', label: 'Legal hold', division: 'operate', hint: 'Records frozen against deletion while a matter is open' },
   permissions: ['legalhold.view', 'legalhold.manage'],

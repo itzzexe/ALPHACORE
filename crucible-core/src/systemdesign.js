@@ -292,7 +292,7 @@ export function buildBundle(id) {
     b.product_id ? `**Product:** ${b.product_id}` : null,
     `**Documents:** ${written.length}/${b.docs.length} · **Generated:** ${new Date().toISOString().slice(0, 10)}`,
     '',
-    'This package was produced by Crucible Core. Each document was written with its',
+    'This package was produced by AlphaCore. Each document was written with its',
     'dependencies in context, so the architecture, requirements and operations sections',
     'are consistent with one another. Hand the final section to an AI coding agent to',
     'build the system, or hand the whole file to an engineering team.',

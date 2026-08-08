@@ -11,6 +11,7 @@
 // "the SEO lead" is someone you can mention in chat and give work to.
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
+import { companyName } from './settings.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 
@@ -57,7 +58,7 @@ export function seedMarketingTeam() {
       m.id, m.name, 'create', JSON.stringify({
         id: m.id, name: m.name, roleGroup: 'create', speciality: m.speciality,
         tier: m.tier, mission: m.mission, failMode: 'escalate', confidenceFloor: 0.6,
-        system: `You are ${m.name} at Crucible Systems. ${m.mission} You write for a specific audience, you cite the evidence you were given, and you never invent a number.`,
+        system: `You are ${m.name} at ${companyName()}. ${m.mission} You write for a specific audience, you cite the evidence you were given, and you never invent a number.`,
       }), m.tier, 'CMO');
     audit({ actorType: 'system', actorId: 'marketing', action: 'agent.seeded', subjectType: 'agent', subjectId: m.id, payload: { speciality: m.speciality } });
   }

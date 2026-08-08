@@ -7,6 +7,7 @@
 import { q, one, exec, uuid } from './db.js';
 import { agentsConfig } from './env.js';
 import { audit } from './audit.js';
+import { companyName } from './settings.js';
 import { route, parseAgentJson, RouterExhausted, BudgetExceeded } from './router.js';
 import { personaPrompt } from './org.js';
 import { recall, captureEpisode } from './memory.js';
@@ -43,7 +44,11 @@ export function getAgentSpec(agentId) {
     ...spec,
     tier,
     status: row.status,
-    system: spec.system || `You are ${row.name} at this company. ${spec.mission || ''} Answer only with the JSON you were asked for.`,
+    // {{company}} in a blueprint prompt resolves here, so an install that names
+    // itself gets that name in every system prompt it sends — and one that has
+    // not been named yet says "this company" rather than ours.
+    system: (spec.system || `You are ${row.name} at {{company}}. ${spec.mission || ''} Answer only with the JSON you were asked for.`)
+      .replaceAll('{{company}}', companyName()),
     sensitivity: spec.sensitivity || 'internal',
   };
 }
@@ -233,8 +238,27 @@ let executing = 0;
 const CONCURRENCY = 2;
 
 /** Background worker loop: lease → execute, bounded concurrency. */
+/**
+ * A run marked "running" when this process starts is orphaned by definition:
+ * the only thing that could have been executing it was a worker in a process
+ * that is now gone. Left alone it sits in the queue for ever, holding a slot
+ * and quietly breaching the objective that says nothing stalls. Put it back.
+ */
+export function reclaimOrphanedRuns() {
+  const orphans = q("SELECT id, agent_id, task_type FROM runs WHERE state = 'running'");
+  if (!orphans.length) return 0;
+  exec("UPDATE runs SET state = 'queued' WHERE state = 'running'");
+  audit({
+    actorType: 'system', actorId: 'system:workers', action: 'runs.reclaimed',
+    payload: { count: orphans.length, runs: orphans.slice(0, 10).map((r) => `${r.agent_id}:${r.task_type}`) },
+  });
+  return orphans.length;
+}
+
 export function startWorkers(intervalMs = 1500) {
   if (workerTimer) return;
+  // Before taking any new work, take back what the last process dropped.
+  reclaimOrphanedRuns();
   workerTimer = setInterval(async () => {
     while (executing < CONCURRENCY) {
       const run = leaseNext();

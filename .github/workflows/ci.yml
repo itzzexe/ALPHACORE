@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.5 is the floor because node:sqlite does not exist below it.
+        os: [ubuntu-latest, windows-latest]
+        node: ['22.x', '24.x']
+
+    defaults:
+      run:
+        working-directory: crucible-core
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm test
+
+      # Both proofs run the real system end to end in mock mode: no provider
+      # key, no network, no cost — and they fail loudly rather than skipping.
+      - name: Prove the core promises
+        run: npm run prove
+
+      - name: Prove the platform layer
+        run: npm run prove:platform
+
+  audit:
+    name: Launch audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crucible-core
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - run: npm ci --no-audit --no-fund
+
+      # /api/ping is the one endpoint that needs no credential, so this is a
+      # real readiness check rather than a fixed sleep dressed up as one.
+      - name: Start the server
+        run: |
+          npm start &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8484/api/ping; then exit 0; fi
+            sleep 1
+          done
+          echo "the server never came up"
+          exit 1
+        env:
+          ALPHACORE_MOCK: 'true'
+
+      # Blocks the build on a released secret, a broken chain, an unwired
+      # department or an endpoint nobody guards.
+      - name: Audit
+        run: node scripts/launch-audit.mjs
+
+  secrets:
+    name: No secrets in the tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nothing under data/, no keys, no .env
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)data/|\.env$|\.env\..*|\.key$|\.pem$' | grep -v '\.env\.example$' || true)
+          if [ -n "$bad" ]; then
+            echo "These files must never be committed:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "clean"

@@ -144,8 +144,21 @@ export function observeTick() {
       state, value, state, state, slo.id,
     );
 
-    if (state === 'breached' && was !== 'breached') {
-      audit({ actorType: 'system', actorId: ACTOR, action: 'slo.breached', subjectType: 'slo', subjectId: slo.name, payload: { value, target: slo.target, describe: slo.describe } });
+    // Acting only on the transition into breach was a system that healed once
+    // and then watched. A problem that persists is a problem that was not
+    // fixed, so the remedy re-applies while the objective is still missed —
+    // on a cooldown, so a remedy that cannot help does not become a loop.
+    const REAPPLY_MINUTES = 10;
+    const lastTried = one(
+      "SELECT created_at FROM remedies WHERE slo = ? ORDER BY id DESC LIMIT 1", slo.name,
+    )?.created_at;
+    const cooledDown = !lastTried
+      || (Date.now() - new Date(`${lastTried.replace(' ', 'T')}Z`)) > REAPPLY_MINUTES * 60_000;
+
+    if (state === 'breached' && (was !== 'breached' || cooledDown)) {
+      if (was !== 'breached') {
+        audit({ actorType: 'system', actorId: ACTOR, action: 'slo.breached', subjectType: 'slo', subjectId: slo.name, payload: { value, target: slo.target, describe: slo.describe } });
+      }
       const fn = REMEDIES[slo.remedy];
       if (fn) {
         let out;

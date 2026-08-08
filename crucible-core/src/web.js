@@ -18,7 +18,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { getSecret } from './vault.js';
 
-const UA = 'CrucibleCore/1.0 (+company research agent)';
+const UA = 'AlphaCore/1.0 (+company research agent)';
 const TIMEOUT_MS = 15_000;
 const MAX_BYTES = 900_000;
 const BAD_HOSTS = /^(localhost|.*\.local|.*\.internal|metadata\.google\.internal)$/i;

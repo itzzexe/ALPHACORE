@@ -64,9 +64,9 @@ export function startTenant(id, { actor = 'system:tenants' } = {}) {
     cwd: ROOT,
     env: {
       ...process.env,
-      CRUCIBLE_DB: t.db_file,
+      ALPHACORE_DB: t.db_file,
       PORT: String(t.port),
-      CRUCIBLE_TENANT: id,
+      ALPHACORE_TENANT: id,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,

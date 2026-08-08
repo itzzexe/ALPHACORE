@@ -14,7 +14,7 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
-const UA = 'CrucibleCore/0.4 (+intelligence enrichment; contact discovery)';
+const UA = 'AlphaCore/0.4 (+intelligence enrichment; contact discovery)';
 const TIMEOUT_MS = 8000;
 const MAX_BYTES = 1_500_000;
 const MAX_PAGES = 5;
