@@ -282,12 +282,28 @@ function initShell() {
     else if (e.key === 'Enter') { const h = palHits[palIndex]; if (h) { location.hash = h.href; closePalette(); } }
   });
 
-  // One surface, on purpose: warm paper. A design that commits to a single set
-  // of conditions is better than one that hedges across two, and every colour
-  // decision here is made for this light. Any theme somebody set before is
-  // cleared rather than silently honoured.
-  delete document.documentElement.dataset.theme;
-  localStorage.removeItem('crucible-theme');
+  // Two skins of one design: warm paper by day, the same paper after dark. The
+  // choice is explicit and remembered — the operating system is not asked,
+  // because somebody working at night on a bright machine means it, and being
+  // overruled by a setting they did not make is worse than either default.
+  // The parameter is not called `t`: that is the translation function, and
+  // shadowing it here would turn every title into a call on a string.
+  const applyTheme = (skin) => {
+    if (skin === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    const btn = $('#theme-toggle');
+    if (btn) {
+      btn.textContent = skin === 'dark' ? '◑' : '◐';
+      btn.setAttribute('aria-pressed', skin === 'dark' ? 'true' : 'false');
+      btn.title = skin === 'dark' ? t('Back to daylight') : t('After dark');
+    }
+  };
+  applyTheme(localStorage.getItem('crucible-theme') === 'dark' ? 'dark' : 'light');
+  $('#theme-toggle')?.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('crucible-theme', next);
+    applyTheme(next);
+  });
 
   const flipLang = () => {
     setLang(lang === 'ar' ? 'en' : 'ar');

@@ -80,6 +80,7 @@ const AR = {
   'chain —': 'السلسلة —',
   '✎ auto-refresh paused': '✎ التحديث التلقائي متوقف',
   'Nothing found': 'لا نتائج',
+  'After dark': 'الوضع الليلي', 'Back to daylight': 'العودة إلى النهار',
 
   // universal verbs and states
   Save: 'حفظ', Cancel: 'إلغاء', Create: 'إنشاء', Open: 'فتح', Close: 'إغلاق', Delete: 'حذف',

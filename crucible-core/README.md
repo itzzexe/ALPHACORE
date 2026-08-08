@@ -161,9 +161,13 @@ instead: a light serif at wide tracking for names and places, a quiet sans for
 the interface, a mono for anything that is a figure or an identifier. One
 border weight exists, a hairline, and there are no boxes.
 
-Light only, deliberately. A design that commits to one set of conditions is
-better than one that hedges across two, so every colour decision is made for
-this light and the theme toggle is gone.
+Two skins of one design, switched from the top bar and remembered. Dark is not
+a black interface — it is the same warm paper seen at night: the greys keep
+their brown cast, the terracotta accent lifts because at eighteen per cent
+luminance on a dark ground it reads as mud, and the status colours come up
+enough to stay legible without becoming the neon the light skin was designed to
+avoid. Only tokens are redefined; no component knows which skin it is wearing,
+which is what stops the two drifting apart.
 
 The density is split on purpose: the shell, the map and the summaries are as
 airy as the reference that inspired them; the tables where work actually

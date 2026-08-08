@@ -6,8 +6,11 @@
    light serif with wide tracking for names and places, a quiet sans for the
    interface, a mono for anything that is a figure or an identifier.
 
-   Light only, on purpose. A design that commits to one set of conditions is
-   better than one that hedges across two. */
+   Two skins now, and the second is the same design after dark rather than a
+   different one: ink on bone becomes bone on ink. Every value below is
+   redefined once in the dark block and nowhere else, so a component cannot
+   drift between them — if a colour is hard-coded in a rule instead of read
+   from a token, it is a bug in both. */
 
 :root {
   /* Paper and ink */
@@ -46,11 +49,18 @@
   --shadow-pop: 0 18px 48px rgba(25, 23, 20, 0.10);
   --shadow-soft: 0 2px 10px rgba(25, 23, 20, 0.04);
 
+  /* The three values that describe how light falls on the page. They were
+     literals until the dark skin arrived and proved that a hard-coded colour is
+     a component that cannot follow the theme. */
+  --grain-light: rgba(255, 253, 248, 0.9);   /* the sheet catching light top-left */
+  --grain-warm: rgba(184, 80, 58, 0.035);    /* the faintest warmth bottom-right */
+  --scrim: rgba(242, 240, 234, 0.72);        /* what a dialog lays over the page */
+
   /* Type. The serif carries the identity; on Arabic it falls to Sakkal Majalla,
      which is the closest thing to this voice that ships with the system. */
   --font-display: 'Cambria', 'Constantia', 'Sakkal Majalla', Georgia, 'Times New Roman', serif;
   --font-ui: 'Segoe UI', -apple-system, 'Sakkal Majalla', Tahoma, system-ui, sans-serif;
-  --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, 'IBM Plex Mono', monospace;
+  --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, 'Courier New', monospace;
 
   /* Tracking is a design element here, not a flourish: it is what makes a
      six-letter word read as a place rather than a label. */
@@ -65,6 +75,51 @@
   --t-fast: 140ms; --t-mid: 260ms; --t-slow: 520ms;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   color-scheme: light;
+}
+
+/* ---------------------------------------------------------------------------
+   After dark.
+
+   Not a black interface — the same warm paper seen at night. The greys keep
+   their brown cast, the accent lifts because terracotta at 18% luminance on a
+   dark ground reads as mud, and the status colours come up enough to be legible
+   without becoming the neon that light-mode was designed to avoid.
+
+   Only tokens are redefined. Nothing below this block knows which skin it is
+   wearing, which is the whole point: one design, two lights.
+   --------------------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  --paper: #16150f;          /* the page — warm charcoal, never pure black */
+  --paper-raise: #1d1b15;
+  --paper-sunk: #100f0b;
+  --paper-veil: #211f18;
+  --seam: #322e25;           /* the hairline still reads as one weight */
+  --seam-soft: #262319;
+  --ink: #efe9dc;            /* bone, the colour the page used to be */
+  --ink-mute: #a49b8a;
+  --ink-faint: #746c5e;
+  --ink-ghost: #2b2820;      /* the huge type behind the map, now barely raised */
+
+  /* Terracotta held at the same hue and lifted in luminance until it carries
+     on a dark ground. Same role, same restraint: live state and nothing else. */
+  --accent: #e0714f;
+  --accent-soft: #f0977a;
+  --accent-wash: rgba(224, 113, 79, 0.12);
+
+  --ok: #86ab86;
+  --warn: #cfa257;
+  --bad: #e0776a;
+  --steel: #7fa7b0;
+
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.28);
+
+  /* The same light, at night: a cool lift from the top-left instead of a warm
+     one, and a scrim that darkens rather than washes out. */
+  --grain-light: rgba(255, 250, 235, 0.045);
+  --grain-warm: rgba(224, 113, 79, 0.05);
+  --scrim: rgba(10, 9, 6, 0.72);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -181,7 +236,7 @@ nav a.active {
   padding: 20px 28px 14px;
   border-bottom: 1px solid var(--seam);
   position: sticky; top: 0; z-index: 5;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  background: var(--bg); background: color-mix(in srgb, var(--bg) 88%, transparent);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
@@ -201,10 +256,10 @@ nav a.active {
   border: 1px solid var(--seam); border-radius: 3px; padding: 3px 8px;
   color: var(--ink-mute); background: var(--bg-raise);
 }
-.chip-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--seam)); }
-.chip-bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--seam)); }
-.chip-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--seam)); }
-.chip-ember { color: var(--ember-soft); border-color: color-mix(in srgb, var(--ember) 45%, var(--seam)); }
+.chip-ok { color: var(--ok); border-color: var(--seam); border-color: color-mix(in srgb, var(--ok) 40%, var(--seam)); }
+.chip-bad { color: var(--bad); border-color: var(--seam); border-color: color-mix(in srgb, var(--bad) 40%, var(--seam)); }
+.chip-warn { color: var(--warn); border-color: var(--seam); border-color: color-mix(in srgb, var(--warn) 40%, var(--seam)); }
+.chip-ember { color: var(--ember-soft); border-color: var(--seam); border-color: color-mix(in srgb, var(--ember) 45%, var(--seam)); }
 .chip-dim { opacity: 0.8; }
 
 .state { font-family: var(--font-mono); font-size: 11px; padding: 2px 7px; border-radius: 3px; }
@@ -298,9 +353,9 @@ th.num { text-align: right; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--ember); border-color: var(--ember); color: #170b04; }
 .btn-primary:hover { background: var(--ember-soft); color: #170b04; box-shadow: 0 0 16px rgba(255, 138, 40, 0.4); }
-.btn-ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--seam)); color: var(--ok); }
+.btn-ok { border-color: var(--seam); border-color: color-mix(in srgb, var(--ok) 50%, var(--seam)); color: var(--ok); }
 .btn-ok:hover { border-color: var(--ok); color: var(--ok); box-shadow: 0 0 12px rgba(120, 191, 109, 0.25); }
-.btn-bad { border-color: color-mix(in srgb, var(--bad) 50%, var(--seam)); color: var(--bad); }
+.btn-bad { border-color: var(--seam); border-color: color-mix(in srgb, var(--bad) 50%, var(--seam)); color: var(--bad); }
 .btn-bad:hover { border-color: var(--bad); color: var(--bad); box-shadow: 0 0 12px rgba(229, 83, 61, 0.25); }
 .btn-sm { padding: 4px 10px; font-size: 10.5px; }
 
@@ -309,7 +364,7 @@ input[type="text"], textarea, select {
   color: var(--ink); font-family: var(--font-mono); font-size: 12.5px;
   padding: 8px 10px; width: 100%;
 }
-input:focus, textarea:focus, select:focus { outline: none; border-color: color-mix(in srgb, var(--ember) 60%, var(--seam)); }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--seam); border-color: color-mix(in srgb, var(--ember) 60%, var(--seam)); }
 textarea { resize: vertical; min-height: 70px; }
 .form-row { display: grid; gap: 10px; margin-bottom: 10px; }
 .form-inline { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
@@ -353,11 +408,11 @@ pre.json {
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
   border: 1px solid var(--seam); color: var(--ink-mute); background: var(--bg-raise);
 }
-.round-advocate .round-badge { color: var(--steel); border-color: color-mix(in srgb, var(--steel) 45%, var(--seam)); }
-.round-critic .round-badge { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--seam)); }
-.round-judge .round-badge { color: var(--ember-soft); border-color: color-mix(in srgb, var(--ember) 50%, var(--seam)); }
-.round-validator .round-badge { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--seam)); }
-.round-redteam .round-badge { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--seam)); }
+.round-advocate .round-badge { color: var(--steel); border-color: var(--seam); border-color: color-mix(in srgb, var(--steel) 45%, var(--seam)); }
+.round-critic .round-badge { color: var(--warn); border-color: var(--seam); border-color: color-mix(in srgb, var(--warn) 45%, var(--seam)); }
+.round-judge .round-badge { color: var(--ember-soft); border-color: var(--seam); border-color: color-mix(in srgb, var(--ember) 50%, var(--seam)); }
+.round-validator .round-badge { color: var(--ok); border-color: var(--seam); border-color: color-mix(in srgb, var(--ok) 45%, var(--seam)); }
+.round-redteam .round-badge { color: var(--bad); border-color: var(--seam); border-color: color-mix(in srgb, var(--bad) 50%, var(--seam)); }
 .round-body { min-width: 0; flex: 1; }
 .round-label { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 4px; font-weight: 600; }
 
@@ -372,10 +427,10 @@ pre.json {
 .sysmap { width: 100%; height: auto; display: block; }
 .sysmap .map-node rect { fill: var(--bg-raise); stroke: var(--seam); transition: stroke 0.15s, filter 0.15s; }
 .sysmap a:hover .map-node rect { stroke: var(--ember); filter: drop-shadow(0 0 6px rgba(255, 107, 44, 0.25)); }
-.sysmap .map-node.warn rect { stroke: color-mix(in srgb, var(--warn) 45%, var(--seam)); }
-.sysmap .map-node.ember rect { stroke: color-mix(in srgb, var(--ember) 45%, var(--seam)); }
-.sysmap .map-node.steel rect { stroke: color-mix(in srgb, var(--steel) 45%, var(--seam)); }
-.sysmap .map-node.ok rect { stroke: color-mix(in srgb, var(--ok) 40%, var(--seam)); }
+.sysmap .map-node.warn rect { stroke: var(--seam); stroke: color-mix(in srgb, var(--warn) 45%, var(--seam)); }
+.sysmap .map-node.ember rect { stroke: var(--seam); stroke: color-mix(in srgb, var(--ember) 45%, var(--seam)); }
+.sysmap .map-node.steel rect { stroke: var(--seam); stroke: color-mix(in srgb, var(--steel) 45%, var(--seam)); }
+.sysmap .map-node.ok rect { stroke: var(--seam); stroke: color-mix(in srgb, var(--ok) 40%, var(--seam)); }
 .sysmap .map-node.bad rect { stroke: var(--bad); }
 .sysmap .mt { fill: var(--ink); font-family: var(--font-ui); font-size: 12px; font-weight: 650; letter-spacing: 0.08em; }
 .sysmap .mt.small { font-size: 10.5px; }
@@ -405,7 +460,7 @@ pre.json {
 #login {
   position: fixed; inset: 0; z-index: 100;
   display: grid; place-items: center;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 #login[hidden] { display: none; }
@@ -543,7 +598,7 @@ pre.json {
   transition: border-color 0.15s, color 0.15s;
 }
 .route-stop:hover { border-color: var(--ember); color: var(--ink); }
-.route-stop.done { border-color: color-mix(in srgb, var(--ok) 45%, var(--edge)); color: var(--ink); }
+.route-stop.done { border-color: var(--edge); border-color: color-mix(in srgb, var(--ok) 45%, var(--edge)); color: var(--ink); }
 .route-stop.done .rs-mark { color: var(--ok); }
 .route-stop.active { border-color: var(--ember); color: var(--ink); animation: js-blink 1.6s ease-in-out infinite; }
 .route-stop.active .rs-mark { color: var(--ember); }
@@ -570,7 +625,7 @@ pre.json {
    screen; pan/zoom handles detail. */
 .constellation.atlas {
   height: clamp(460px, calc(100vh - 235px), 900px);
-  touch-action: none; user-select: none; cursor: grab;
+  touch-action: none; -webkit-user-select: none; user-select: none; cursor: grab;
 }
 .constellation.atlas:active { cursor: grabbing; }
 .constellation .cx-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
@@ -629,7 +684,7 @@ pre.json {
 .map-ticker {
   position: absolute; left: 12px; bottom: 36px; width: 330px; z-index: 4;
   font-family: var(--font-mono); font-size: 9.5px; line-height: 1.5;
-  background: color-mix(in srgb, var(--bg-raise) 82%, transparent);
+  background: var(--bg-raise); background: color-mix(in srgb, var(--bg-raise) 82%, transparent);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   border: 1px solid var(--edge); border-radius: 8px; padding: 7px 10px;
   pointer-events: none;
@@ -777,7 +832,7 @@ pre.json {
 .doc-chip:hover { border-color: var(--ember); color: var(--ink); }
 .doc-chip .dc-seq { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
 .doc-chip .dc-state { text-align: right; }
-.doc-chip.done { color: var(--ink); border-color: color-mix(in srgb, var(--ok) 40%, var(--edge)); }
+.doc-chip.done { color: var(--ink); border-color: var(--edge); border-color: color-mix(in srgb, var(--ok) 40%, var(--edge)); }
 .doc-chip.done .dc-state { color: var(--ok); }
 .doc-chip.writing { border-color: var(--ember); animation: js-blink 1.6s ease-in-out infinite; }
 .doc-chip.awaiting_human { border-color: var(--warn); }
@@ -912,7 +967,7 @@ pre.json {
   position: sticky; top: 0; z-index: 15;
   display: flex; align-items: center; gap: var(--s3);
   padding: var(--s3) var(--s5);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  background: var(--bg); background: color-mix(in srgb, var(--bg) 88%, transparent);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--seam);
 }
@@ -1127,11 +1182,11 @@ html[lang="ar"] { font-variant-numeric: lining-nums tabular-nums; }
   display: inline-block; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 1px 5px; border-radius: var(--r-sm); border: 1px solid var(--seam); color: var(--ink-faint);
 }
-.edge-tag.edge-loop { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--seam)); }
-.edge-tag.edge-review { color: var(--steel); border-color: color-mix(in srgb, var(--steel) 45%, var(--seam)); }
-.edge-tag.edge-audit { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--seam)); }
+.edge-tag.edge-loop { color: var(--bad); border-color: var(--seam); border-color: color-mix(in srgb, var(--bad) 45%, var(--seam)); }
+.edge-tag.edge-review { color: var(--steel); border-color: var(--seam); border-color: color-mix(in srgb, var(--steel) 45%, var(--seam)); }
+.edge-tag.edge-audit { color: var(--warn); border-color: var(--seam); border-color: color-mix(in srgb, var(--warn) 45%, var(--seam)); }
 .edge-tag.edge-gate { color: var(--ink); }
-.edge-tag.edge-memory { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--seam)); }
+.edge-tag.edge-memory { color: var(--ok); border-color: var(--seam); border-color: color-mix(in srgb, var(--ok) 45%, var(--seam)); }
 .constellation .cx-hit { cursor: pointer; }
 
 /* v11 circle (circos) */
@@ -1225,7 +1280,7 @@ body.map-modal-open .map-ctl, body.map-modal-open .map-style-picker { pointer-ev
   width: min(880px, calc(100vw - 120px));
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4);
   padding: var(--s2) var(--s3);
-  background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+  background: var(--bg-panel); background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   border: 1px solid var(--ember); border-radius: var(--r-md);
   box-shadow: var(--shadow-pop);
@@ -1298,8 +1353,8 @@ body.map-modal-open .map-ctl, body.map-modal-open .map-style-picker { pointer-ev
   width: 34px; height: 34px; border-radius: var(--r-md); display: grid; place-items: center;
   font: 700 12px var(--font-mono); background: var(--seam); color: var(--ink-mute);
 }
-.chat-msg.agent .cm-avatar { background: color-mix(in srgb, var(--ember) 22%, var(--seam)); color: var(--ember); }
-.chat-msg.human .cm-avatar { background: color-mix(in srgb, var(--steel) 22%, var(--seam)); color: var(--steel); }
+.chat-msg.agent .cm-avatar { background: var(--seam); background: color-mix(in srgb, var(--ember) 22%, var(--seam)); color: var(--ember); }
+.chat-msg.human .cm-avatar { background: var(--seam); background: color-mix(in srgb, var(--steel) 22%, var(--seam)); color: var(--steel); }
 .cm-head { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; }
 .cm-head b { font-size: 13px; }
 .cm-kind { font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
@@ -1396,7 +1451,7 @@ body.map-modal-open .map-ctl, body.map-modal-open .map-style-picker { pointer-ev
 }
 .hive .hv-glow { fill: none; stroke-width: 0; opacity: 0; transition: opacity var(--t-fast) var(--ease); }
 .hive a:hover .hv-hex,
-.hive [data-node].lit .hv-hex { fill: color-mix(in srgb, currentColor 16%, var(--bg-raise)); stroke-width: 2.6; }
+.hive [data-node].lit .hv-hex { fill: var(--bg-raise); fill: color-mix(in srgb, currentColor 16%, var(--bg-raise)); stroke-width: 2.6; }
 .hive a:hover .hv-glow,
 .hive [data-node].lit .hv-glow { opacity: 0.5; stroke-width: 9; filter: blur(7px); }
 .hive [data-node].dimmed { opacity: 0.14; }
@@ -1443,7 +1498,7 @@ body.map-modal-open .map-ctl, body.map-modal-open .map-style-picker { pointer-ev
   fill: var(--bg-raise); stroke-width: 2;
   transition: fill var(--t-fast) var(--ease), stroke-width var(--t-fast) var(--ease);
 }
-.stream a:hover .st-pillar { fill: color-mix(in srgb, currentColor 18%, var(--bg-raise)); stroke-width: 3; }
+.stream a:hover .st-pillar { fill: var(--bg-raise); fill: color-mix(in srgb, currentColor 18%, var(--bg-raise)); stroke-width: 3; }
 .stream [data-node].lit .st-pillar { stroke-width: 3; }
 .stream [data-node].dimmed { opacity: 0.25; }
 .stream [data-node].ping .st-pillar { animation: chip-ping 1.8s ease-out; }
@@ -1487,7 +1542,7 @@ body.map-modal-open .map-ctl, body.map-modal-open .map-style-picker { pointer-ev
   transform: translateX(-50%); z-index: 90;
   display: flex; align-items: center; gap: var(--s3);
   padding: 6px var(--s4); border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  background: var(--bg-panel); background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
   border: 1px solid var(--seam); box-shadow: var(--shadow-pop);
   font-size: 11.5px; color: var(--ink-mute);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
@@ -1538,8 +1593,8 @@ body::before {
   content: "";
   position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(1400px 700px at 12% -8%, rgba(255, 253, 248, 0.9), transparent 60%),
-    radial-gradient(900px 500px at 92% 108%, rgba(184, 80, 58, 0.035), transparent 62%);
+    radial-gradient(1400px 700px at 12% -8%, var(--grain-light), transparent 60%),
+    radial-gradient(900px 500px at 92% 108%, var(--grain-warm), transparent 62%);
 }
 
 :where(a, button, input, select, textarea):focus-visible {
@@ -1613,7 +1668,7 @@ body::before {
 
 /* ---------- the top bar: a masthead ---------- */
 .topbar, .topbar2 {
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  background: var(--paper); background: color-mix(in srgb, var(--paper) 92%, transparent);
   border-bottom: 1px solid var(--seam);
   padding: var(--s5) var(--s6) var(--s4);
 }
@@ -1719,11 +1774,11 @@ html[lang="ar"] .btn { letter-spacing: 0; text-transform: none; font-size: 12.5p
   letter-spacing: var(--track-tight);
   padding: 2px 9px;
 }
-.chip-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--seam)); }
-.chip-bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--seam)); }
-.chip-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--seam)); }
-.chip-ember { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--seam)); }
-.chip-steel { color: var(--steel); border-color: color-mix(in srgb, var(--steel) 35%, var(--seam)); }
+.chip-ok { color: var(--ok); border-color: var(--seam); border-color: color-mix(in srgb, var(--ok) 35%, var(--seam)); }
+.chip-bad { color: var(--bad); border-color: var(--seam); border-color: color-mix(in srgb, var(--bad) 35%, var(--seam)); }
+.chip-warn { color: var(--warn); border-color: var(--seam); border-color: color-mix(in srgb, var(--warn) 35%, var(--seam)); }
+.chip-ember { color: var(--accent); border-color: var(--seam); border-color: color-mix(in srgb, var(--accent) 35%, var(--seam)); }
+.chip-steel { color: var(--steel); border-color: var(--seam); border-color: color-mix(in srgb, var(--steel) 35%, var(--seam)); }
 .chip-dim { color: var(--ink-faint); opacity: 1; }
 
 /* ---------- inputs: a line to write on ---------- */
@@ -1764,7 +1819,7 @@ textarea { border: 1px solid var(--seam); border-radius: 2px; padding: var(--s3)
 .pal-item.on, .pal-item:hover { background: var(--paper-sunk); }
 
 /* ---------- dialogs and the live bar, on paper ---------- */
-#map-dialog { background: rgba(242, 240, 234, 0.72); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+#map-dialog { background: var(--scrim); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 #map-dialog .md-box {
   background: var(--paper-veil);
   border: 1px solid var(--seam);
@@ -1778,7 +1833,7 @@ textarea { border: 1px solid var(--seam); border-radius: 2px; padding: var(--s3)
   border-top: 1px solid var(--seam);
 }
 #live-bar {
-  background: color-mix(in srgb, var(--paper-veil) 94%, transparent);
+  background: var(--paper-veil); background: color-mix(in srgb, var(--paper-veil) 94%, transparent);
   border: 1px solid var(--seam);
   box-shadow: var(--shadow-soft);
   color: var(--ink-faint);
@@ -1880,7 +1935,7 @@ html[lang="ar"] .atlas-switch button { letter-spacing: var(--track-tight); font-
   font-family: var(--font-display); font-weight: 400;
   letter-spacing: var(--track-wide); text-transform: uppercase;
   fill: var(--ink-ghost); opacity: 0.5; text-anchor: middle;
-  pointer-events: none; user-select: none;
+  pointer-events: none; -webkit-user-select: none; user-select: none;
 }
 .at-cluster {
   font-family: var(--font-display); font-size: 9.5px; letter-spacing: var(--track-mid);
@@ -1928,3 +1983,13 @@ html[lang="ar"] .at-ghost { letter-spacing: 0; }
 html[lang="ar"] .at-core-label,
 html[lang="ar"] .at-foot { letter-spacing: 0; font-size: 10px; }
 html[lang="ar"] .at-nlabel { font-size: 10px; }
+
+/* The login screen carried its layout in six inline style attributes, which
+   meant those six values could not follow the theme or be changed in one place.
+   They are classes now. */
+.login-brand { border: none; justify-content: center; padding-bottom: 4px; }
+.login-gap { margin-top: 10px; }
+.login-go { width: 100%; margin-top: 16px; }
+.login-err { margin-top: 10px; text-align: center; }
+.login-hint { text-align: center; margin-top: 12px; border-top: none; }
+.login-foot { text-align: center; margin-top: 10px; }

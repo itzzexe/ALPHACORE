@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Crucible Core — Operations Console</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 90,85 10,85' fill='%23ff6b2c'/></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wdth,wght@62.5..100,300..800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -38,6 +35,7 @@
         <span id="poll-chip" class="chip chip-warn" title="This page normally refreshes itself; it is paused so your typing is not lost" hidden>✎ auto-refresh paused</span>
         <span id="chain-chip" class="chip chip-dim" title="Audit hash-chain integrity">chain —</span>
         <button class="icon-btn wide" id="lang-toggle" type="button" title="العربية / English">ع</button>
+        <button class="icon-btn" id="theme-toggle" type="button" title="Day / night" aria-pressed="false">◐</button>
         <button class="who-chip" id="who-chip" type="button" title="Sign out">
           <span class="avatar" id="who-avatar">—</span>
           <span>
@@ -66,18 +64,18 @@
 
 <div id="login" hidden>
   <div class="login-panel">
-    <div class="brand" style="border:none;justify-content:center;padding-bottom:4px">
+    <div class="brand login-brand">
       <div class="brand-glyph">▲</div>
       <div class="brand-name"><span>CRUCIBLE</span><span class="brand-sub">CORE · OPS CONSOLE</span></div>
     </div>
     <label class="fl" data-i18n="Username">Username</label>
     <input type="text" id="login-user" autocomplete="username">
-    <label class="fl" style="margin-top:10px" data-i18n="Password">Password</label>
+    <label class="fl login-gap" data-i18n="Password">Password</label>
     <input type="password" id="login-pass" autocomplete="current-password">
-    <button class="btn btn-primary" id="login-go" style="width:100%;margin-top:16px" data-i18n="Sign in">Sign in</button>
-    <div id="login-err" class="reason" style="margin-top:10px;text-align:center"></div>
-    <div class="map-legend" style="text-align:center;margin-top:12px">first boot: admin / crucible</div>
-    <div style="text-align:center;margin-top:10px">
+    <button class="btn btn-primary login-go" id="login-go" type="button" data-i18n="Sign in">Sign in</button>
+    <div id="login-err" class="reason login-err"></div>
+    <div class="map-legend login-hint">first boot: admin / crucible</div>
+    <div class="login-foot">
       <button class="icon-btn wide" id="login-lang" type="button">العربية</button>
     </div>
   </div>
