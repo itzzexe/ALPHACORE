@@ -12,9 +12,8 @@
 //
 //   npm run reset-password            # the owner account
 //   npm run reset-password -- alice   # somebody else
-import { randomBytes } from 'node:crypto';
 import { one, exec } from '../src/db.js';
-import { hashPassword } from '../src/auth.js';
+import { hashPassword, generatePassword } from '../src/auth.js';
 import { audit } from '../src/audit.js';
 
 const username = (process.argv[2] || 'owner').trim().toLowerCase();
@@ -29,7 +28,7 @@ if (!user) {
   process.exit(1);
 }
 
-const password = randomBytes(9).toString('base64url');
+const password = generatePassword();
 exec('UPDATE users SET pass = ?, must_change = 1 WHERE id = ?', hashPassword(password), user.id);
 // Every existing session dies with the old password. If this reset happened
 // because somebody else got in, leaving their session alive defeats it.

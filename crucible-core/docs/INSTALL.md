@@ -43,7 +43,7 @@ account and prints it:
   First run. The owner account has been created.
 
     username   owner
-    password   7Kd2xQm4Vt9
+    password   78jv-n9n7-azvr-68dx
 
   This is shown once and is not stored anywhere in readable form.
   You will be asked to change it the moment you sign in.
@@ -51,7 +51,9 @@ account and prints it:
 ```
 
 **Copy it now.** It is stored only as a hash; nobody — not you, not the
-platform — can read it back.
+platform — can read it back. It is lowercase letters and digits in groups of
+four, with the characters nobody can tell apart left out, because the screen it
+is read from and the screen it is typed into are often not the same one.
 
 If you miss it, you are not locked out. From the machine the company runs on:
 

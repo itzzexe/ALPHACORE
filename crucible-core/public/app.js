@@ -101,22 +101,37 @@ function showPasswordChange() {
 // Both forms submit rather than listening for clicks, so Enter works from any
 // field and the browser offers to save the credentials.
 $('#login-form').addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+let failedLogins = 0;
+
 async function doLogin() {
   $('#login-err').textContent = '';
   try {
     const r = await api('/api/auth/login', {
       method: 'POST',
-      body: { username: $('#login-user').value, password: $('#login-pass').value },
+      // Trimmed, because a password copied from a console or a message often
+      // arrives with a space on the end, and "invalid credentials" is a cruel
+      // way to report a space.
+      body: { username: $('#login-user').value.trim(), password: $('#login-pass').value.trim() },
     });
     localStorage.setItem(TOKEN_KEY, r.token);
+    failedLogins = 0;
     // A generated password gets you exactly this far.
     if (r.user?.mustChangePassword) {
-      $('#pw-current').value = $('#login-pass').value;
+      $('#pw-current').value = $('#login-pass').value.trim();
       showPasswordChange();
       return;
     }
     location.reload();
-  } catch (e) { $('#login-err').textContent = e.message; }
+  } catch (e) {
+    failedLogins++;
+    // "Invalid credentials" twice in a row usually means one of three things,
+    // and none of them is visible from the screen: the browser filled in a
+    // password it saved earlier, the one being typed is from an older reset,
+    // or a character went astray. Say so rather than repeating the refusal.
+    $('#login-err').innerHTML = failedLogins >= 2
+      ? `${esc(e.message)}<span class="login-hint">${esc(t('If your browser filled the password in for you, clear the field and type it by hand. A new one can be issued on the machine itself with: npm run reset-password'))}</span>`
+      : esc(e.message);
+  }
 }
 
 $('#pw-form').addEventListener('submit', async (e) => {

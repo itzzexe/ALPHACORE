@@ -85,6 +85,8 @@ const AR = {
   'The company that runs itself': 'الشركة التي تدير نفسها',
   // the bar at the bottom of a phone
   'Departments': 'الأقسام', 'Search': 'بحث', 'Account': 'الحساب',
+  'If your browser filled the password in for you, clear the field and type it by hand. A new one can be issued on the machine itself with: npm run reset-password':
+    'إن ملأ المتصفح كلمة المرور نيابةً عنك، امسح الحقل واكتبها بيدك. ويمكن إصدار واحدة جديدة على الجهاز نفسه بالأمر: npm run reset-password',
   'No connection to the company — this is the last thing your phone kept.':
     'لا اتصال بالشركة — هذا آخر ما احتفظ به هاتفك.',
   'Current password': 'كلمة المرور الحالية', 'New password': 'كلمة المرور الجديدة',

@@ -2324,3 +2324,12 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
   .fn-step { flex: 1 1 44%; }
   .fn-step + .fn-step { margin-inline-start: 0; }
 }
+
+/* Said only after the second refusal, when a plain 'no' has stopped being
+   information and started being a wall. */
+.login-hint {
+  display: block; margin-top: var(--s3);
+  font-size: 11px; line-height: 1.6; color: var(--ink-faint);
+  text-align: start;
+}
+.login-hint::first-line { font-weight: inherit; }

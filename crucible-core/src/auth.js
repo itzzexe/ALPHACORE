@@ -155,9 +155,33 @@ export function verifyPassword(userId, password) {
  * account is marked as needing a change — which the API enforces rather than
  * suggests.
  */
+/**
+ * A password meant to be read off one screen and typed into another — often a
+ * phone, which is where this console is opened as much as anywhere.
+ *
+ * base64url looked fine in a terminal and was miserable in practice: mixed
+ * case, and `-` and `_` that live behind a symbol layer on a phone keyboard.
+ * A one-character slip reads back as "invalid credentials" with no way to tell
+ * a typo from a wrong password. So: lowercase and digits only, with the five
+ * characters nobody can reliably tell apart removed, in groups of four.
+ *
+ * Sixteen characters from an alphabet of thirty-one is about 79 bits — more
+ * than the thing it protects needs, given it is single-use and the account
+ * cannot do anything until it has been replaced.
+ */
+const TYPEABLE = 'abcdefghjkmnpqrstuvwxyz23456789';   // no i, l, o, 0, 1
+
+export function generatePassword() {
+  const bytes = randomBytes(16);
+  // Rejection-free and unbiased enough: 256 % 31 skews the first four letters
+  // by under 4%, which costs a fraction of a bit out of seventy-nine.
+  const chars = [...bytes].map((b) => TYPEABLE[b % TYPEABLE.length]);
+  return [0, 4, 8, 12].map((i) => chars.slice(i, i + 4).join('')).join('-');
+}
+
 export function seedAdmin() {
   if (one('SELECT id FROM users LIMIT 1')) return;
-  const password = `${randomBytes(9).toString('base64url')}`;
+  const password = generatePassword();
   exec(
     "INSERT INTO users (username, display_name, pass, role, perms, must_change) VALUES (?,?,?,?,?,1)",
     'owner', 'Owner', hashPassword(password), 'superadmin', JSON.stringify(['*']),
