@@ -5,6 +5,10 @@ import { q, one } from './db.js';
 import { verifyChain, audit } from './audit.js';
 import { providersConfig, budgetsConfig } from './env.js';
 import { isProviderAvailable as providerAvailable, isMockMode as mockMode, settingsOverview, setSetting } from './settings.js';
+import {
+  vapidKeys, pushOverview, subscribe as pushSubscribe,
+  unsubscribe as pushUnsubscribe, deliver as pushDeliver,
+} from './push.js';
 import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword } from './auth.js';
 import { wipeSystem } from './wipe.js';
 import { activityFeed } from './links.js';
@@ -362,6 +366,30 @@ const routes = [
   // --- Notifications ---
   ['GET', /^\/api\/notifications$/, (_p, _b, url) => ({ unread: unreadCount(), items: listNotifications({ unreadOnly: url.searchParams.get('unread') === '1' }) })],
   ['POST', /^\/api\/notifications\/read$/, () => { markAllRead(); return { ok: true }; }],
+
+  // --- Push: the only way to reach somebody who is not looking at a tab ---
+  ['GET', /^\/api\/push\/key$/, () => ({ publicKey: vapidKeys().publicKey })],
+  ['GET', /^\/api\/push$/, () => pushOverview()],
+  ['POST', /^\/api\/push\/subscribe$/, (_p, body, _u, user) =>
+    pushSubscribe({ userId: user.id, subscription: need(body, 'subscription'), agent: body.userAgent })],
+  ['POST', /^\/api\/push\/unsubscribe$/, (_p, body, _u, user) =>
+    pushUnsubscribe({ userId: user.id, endpoint: need(body, 'endpoint') })],
+  ['POST', /^\/api\/push\/resubscribe$/, (_p, body, _u, user) => {
+    // The browser rotated the subscription on its own; drop the old row first
+    // so a dead endpoint is not retried forever.
+    if (body.old) pushUnsubscribe({ userId: user.id, endpoint: body.old });
+    return pushSubscribe({ userId: user.id, subscription: need(body, 'subscription'), agent: body.userAgent });
+  }],
+  // Sending one to yourself is the only honest way to find out whether the
+  // whole path works: permission, browser, push service, lock screen.
+  ['POST', /^\/api\/push\/test$/, async (_p, _b, _u, user) => {
+    const subs = q('SELECT * FROM push_subscriptions WHERE user_id = ? AND retired_at IS NULL', user.id);
+    if (!subs.length) throw new HttpError(400, 'this account has no subscribed browser');
+    const results = await Promise.all(subs.map((sub) => pushDeliver(sub, {
+      title: 'AlphaCore', body: 'This is what an approval will look like.', route: '#/gate',
+    })));
+    return { tried: results.length, delivered: results.filter((r) => r.ok).length, results };
+  }],
 
   // --- Planning: Projects / Tasks / Risks / Quality ---
   ['GET', /^\/api\/projects$/, () => listProjects()],
@@ -1207,6 +1235,10 @@ function permFor(m, path) {
   const is = (re) => re.test(path);
   if (['/api/health', '/api/stats', '/api/audit/verify', '/api/notifications', '/api/inbox'].includes(path)) return 'dashboard.view';
   if (path === '/api/notifications/read') return 'notifications.read';
+  // Your own browser's subscription is your own business — any signed-in
+  // account may manage it. Seeing everybody's is not.
+  if (path === '/api/push') return 'users.manage';
+  if (path.startsWith('/api/push/')) return null;
   if (path === '/api/providers') return 'providers.view';
   if (path === '/api/providers/test') return 'providers.test';
   if (is(/^\/api\/agents\/[\w-]+\/status$/)) return 'agents.manage';

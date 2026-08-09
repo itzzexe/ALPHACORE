@@ -10,7 +10,7 @@
 //
 // Nothing under /api is cached, ever. A stale run count or a cached approval
 // queue is worse than an error message — it looks like the truth.
-const VERSION = 'alphacore-v1';
+const VERSION = 'alphacore-v2';
 
 // Enough to paint the shell and reach the login screen offline.
 const SHELL = [
@@ -74,5 +74,71 @@ self.addEventListener('fetch', (e) => {
       }
       throw new Error('offline and not cached');
     }
+  })());
+});
+
+// ---------------------------------------------------------------------------
+// Push.
+//
+// The company's throughput is bounded by how fast a human answers a gate, and
+// a person who is not looking at a tab cannot answer one. This is the only
+// part of the app that can reach them there.
+//
+// The payload carries a title, a line and a route — never a record. It is
+// end-to-end encrypted and the push service cannot read it, but it still
+// crosses a machine we do not own, and "an approval is waiting" is all anybody
+// needs from a lock screen.
+// ---------------------------------------------------------------------------
+self.addEventListener('push', (e) => {
+  let msg = {};
+  try { msg = e.data ? e.data.json() : {}; } catch { msg = { title: 'AlphaCore', body: e.data?.text?.() || '' }; }
+  e.waitUntil(self.registration.showNotification(msg.title || 'AlphaCore', {
+    body: msg.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    // Same tag replaces rather than stacks: five reminders about one approval
+    // is how people learn to swipe the whole app away.
+    tag: msg.tag || msg.route || 'alphacore',
+    renotify: Boolean(msg.renotify),
+    requireInteraction: msg.urgency === 'high',
+    dir: 'auto',
+    data: { route: msg.route || '/', at: Date.now() },
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const route = e.notification.data?.route || '/';
+  const url = new URL(route.startsWith('#') ? `/${route}` : route, self.location.origin).href;
+  e.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Reuse the tab that is already open rather than piling up new ones.
+    for (const c of windows) {
+      if (new URL(c.url).origin === self.location.origin) {
+        await c.focus();
+        if ('navigate' in c) await c.navigate(url).catch(() => {});
+        return;
+      }
+    }
+    await self.clients.openWindow(url);
+  })());
+});
+
+// A subscription can expire on its own; when it does, ask for a new one and
+// hand it back, so a phone does not go quietly deaf.
+self.addEventListener('pushsubscriptionchange', (e) => {
+  e.waitUntil((async () => {
+    try {
+      const key = await (await fetch('/api/push/key')).json();
+      const sub = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key.publicKey,
+      });
+      await fetch('/api/push/resubscribe', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ old: e.oldSubscription?.endpoint || null, subscription: sub }),
+      });
+    } catch { /* the next sign-in will re-subscribe */ }
   })());
 });

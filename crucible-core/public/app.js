@@ -455,6 +455,60 @@ function paintUser() {
   $('#who-role').textContent = currentUser.isOwner ? t('Owner') || 'Owner' : currentUser.role;
 }
 
+/* ---------- push ----------
+   The company stops at a gate until a person answers, and a person who is not
+   looking at a tab cannot answer. This is the only path to them. */
+
+const b64ToBytes = (s) => {
+  const pad = '='.repeat((4 - (s.length % 4)) % 4);
+  const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+/** What this browser can do about notifications right now. */
+async function pushState() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return { supported: false, why: t('This browser cannot receive notifications') };
+  }
+  if (!window.isSecureContext) {
+    // The single most common surprise: it works on localhost and silently
+    // does not over a LAN address, because only localhost is a secure origin.
+    return { supported: false, why: t('Notifications need HTTPS — over plain http only localhost counts as secure') };
+  }
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  return { supported: true, permission: Notification.permission, subscribed: Boolean(sub), subscription: sub, registration: reg };
+}
+
+async function enablePush() {
+  const state = await pushState();
+  if (!state.supported) { toast(state.why, true); return false; }
+  if (state.subscribed) return true;
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    toast(t('Notifications were refused — the browser will not ask again until you clear it in site settings'), true);
+    return false;
+  }
+  const { publicKey } = await api('/api/push/key');
+  const sub = await state.registration.pushManager.subscribe({
+    userVisibleOnly: true,               // required, and honest: every push shows
+    applicationServerKey: b64ToBytes(publicKey),
+  });
+  await api('/api/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON(), userAgent: navigator.userAgent } });
+  toast(t('This device will now be told when something is waiting on you'));
+  return true;
+}
+
+async function disablePush() {
+  const state = await pushState();
+  if (!state.subscribed) return;
+  const endpoint = state.subscription.endpoint;
+  await state.subscription.unsubscribe();
+  try { await api('/api/push/unsubscribe', { method: 'POST', body: { endpoint } }); } catch { /* already gone */ }
+  toast(t('This device will no longer be told'));
+}
+
 function toast(msg, isErr = false) {
   let host = $('#toast');
   if (!host) { host = document.createElement('div'); host.id = 'toast'; document.body.appendChild(host); }
@@ -4197,6 +4251,19 @@ async function renderSettings() {
     </div>
   </div>
   <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Being told — notifications on this device</div>
+    <div class="map-legend">The company stops at a gate until a person answers it. Somebody who is not looking at a tab
+      cannot answer, so autonomy waits, and nothing appears to be wrong. This is the only path to them: a title, a line,
+      and a route — never a record. Turn it on once per device.</div>
+    <div class="form-inline" style="margin-top:10px">
+      <span id="push-state" class="chip chip-dim">…</span>
+      <button class="btn" id="push-on">Turn on for this device</button>
+      <button class="btn btn-sm" id="push-off">Turn off</button>
+      <button class="btn btn-sm" id="push-test">Send myself one</button>
+    </div>
+    <div id="push-list" class="sub" style="margin-top:10px"></div>
+  </div>
+  <div class="panel" style="margin-top:16px">
     <div class="panel-title">AI providers — keys are stored locally (SQLite), never echoed back; a secret manager replaces this in real deployment (Part 3 §6.3)</div>
     <table>
       <thead><tr><th>Provider</th><th>Key / flag</th><th>Status</th><th>Set value</th><th></th></tr></thead>
@@ -4250,6 +4317,34 @@ async function renderSettings() {
   view.querySelectorAll('[data-sclear]').forEach((b) => b.addEventListener('click', async () => {
     try { await api('/api/settings', { method: 'POST', body: { key: b.dataset.sclear, value: null } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
   }));
+  (async () => {
+    const chip = $('#push-state');
+    if (!chip) return;
+    const st = await pushState();
+    chip.textContent = !st.supported ? t('unavailable')
+      : st.subscribed ? t('on for this device')
+      : st.permission === 'denied' ? t('blocked in this browser')
+      : t('off for this device');
+    chip.className = 'chip ' + (st.subscribed ? 'chip-ok' : st.supported ? 'chip-warn' : 'chip-dim');
+    if (!st.supported) chip.title = st.why;
+    $('#push-on').disabled = !st.supported || st.subscribed;
+    $('#push-off').disabled = !st.subscribed;
+    $('#push-test').disabled = !st.subscribed;
+    try {
+      const o = await api('/api/push');
+      $('#push-list').innerHTML = o.subscriptions.length
+        ? o.subscriptions.map((x) => `<div>${esc(x.username || '—')} · <span class="mono">${esc(x.service)}</span>${x.retiredAt ? ' · <span style="color:var(--ink-faint)">retired</span>' : ''}${x.lastError ? ` · <span style="color:var(--bad)">${esc(x.lastError)}</span>` : ''}</div>`).join('')
+        : `<div style="color:var(--ink-faint)">${esc(t('No device is subscribed yet.'))}</div>`;
+    } catch { /* not permitted to see everybody's, which is fine */ }
+  })();
+  $('#push-on')?.addEventListener('click', async () => { if (await enablePush()) renderSettings(); });
+  $('#push-off')?.addEventListener('click', async () => { await disablePush(); renderSettings(); });
+  $('#push-test')?.addEventListener('click', async () => {
+    try {
+      const r = await api('/api/push/test', { method: 'POST', body: {} });
+      toast(r.delivered ? t('Sent — it should appear in a moment') : t('The push service refused it; the Settings list says why'), !r.delivered);
+    } catch (e) { toast(e.message, true); }
+  });
   $('#s-identity').addEventListener('click', async () => {
     try {
       await api('/api/settings', { method: 'POST', body: { key: 'COMPANY_NAME', value: $('#s-company').value.trim() } });

@@ -2118,6 +2118,25 @@ try { db.exec('ALTER TABLE journeys ADD COLUMN autopilot INTEGER NOT NULL DEFAUL
 // Accounts created before first-run passwords were generated have chosen their
 // own by definition, so upgrading in place leaves everyone at 0.
 try { db.exec('ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+
+// Web Push: one row per browser that asked to be told. The endpoint is unique
+// because a browser reissues the same one until the subscription dies.
+db.exec(`
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  endpoint   TEXT NOT NULL UNIQUE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  user_agent TEXT,
+  failures   INTEGER NOT NULL DEFAULT 0,
+  last_ok    TEXT,
+  last_error TEXT,
+  retired_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS push_by_user ON push_subscriptions(user_id);
+`);
 // Intelligence v2 — structured criteria, multi-round collection, web enrichment.
 for (const sql of [
   'ALTER TABLE intel_queries ADD COLUMN criteria TEXT',

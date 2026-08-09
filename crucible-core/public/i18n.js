@@ -85,6 +85,23 @@ const AR = {
   'The company that runs itself': 'الشركة التي تدير نفسها',
   // the bar at the bottom of a phone
   'Departments': 'الأقسام', 'Search': 'بحث', 'Account': 'الحساب',
+  // being told
+  'Being told — notifications on this device': 'أن تُبلَّغ — الإشعارات على هذا الجهاز',
+  'Turn on for this device': 'فعّل على هذا الجهاز', 'Turn off': 'أوقف',
+  'Send myself one': 'أرسل لي واحداً',
+  'on for this device': 'مفعّل على هذا الجهاز', 'off for this device': 'متوقف على هذا الجهاز',
+  'blocked in this browser': 'محجوب في هذا المتصفح', 'unavailable': 'غير متاح',
+  'No device is subscribed yet.': 'لا جهاز مشترك بعد.',
+  'This browser cannot receive notifications': 'هذا المتصفح لا يستقبل الإشعارات',
+  'Notifications need HTTPS — over plain http only localhost counts as secure':
+    'الإشعارات تحتاج HTTPS — على http العادي لا يُعدّ آمناً إلا localhost',
+  'Notifications were refused — the browser will not ask again until you clear it in site settings':
+    'رُفضت الإشعارات — لن يسأل المتصفح مجدداً حتى تمسح ذلك من إعدادات الموقع',
+  'This device will now be told when something is waiting on you':
+    'سيُبلَّغ هذا الجهاز حين ينتظرك شيء',
+  'This device will no longer be told': 'لن يُبلَّغ هذا الجهاز بعد الآن',
+  'Sent — it should appear in a moment': 'أُرسل — سيظهر بعد لحظة',
+  'The push service refused it; the Settings list says why': 'رفضته خدمة الدفع؛ القائمة في الإعدادات تبيّن السبب',
   'If your browser filled the password in for you, clear the field and type it by hand. A new one can be issued on the machine itself with: npm run reset-password':
     'إن ملأ المتصفح كلمة المرور نيابةً عنك، امسح الحقل واكتبها بيدك. ويمكن إصدار واحدة جديدة على الجهاز نفسه بالأمر: npm run reset-password',
   'No connection to the company — this is the last thing your phone kept.':
