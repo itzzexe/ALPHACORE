@@ -5,6 +5,7 @@
 import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
+import { newSecret, verifyCode, otpauthUrl, newRecoveryCodes, hashRecovery, checkRecovery } from './totp.js';
 
 // The permission catalog — section.action, grantable individually.
 export const PERMS = [
@@ -211,15 +212,192 @@ export function changeOwnPassword(userId, { current, next, actor }) {
   return { ok: true, note: 'every session was signed out, including this one — sign in again with the new password' };
 }
 
-export function login(username, password) {
-  const u = one('SELECT * FROM users WHERE username = ?', String(username || '').toLowerCase().trim());
+// ---------------------------------------------------------------------------
+// Signing in.
+//
+// A password check on its own is a door with no lock on the handle. Three
+// things are added here, and each closes a hole that a real deployment finds
+// within a week of being reachable from a network:
+//
+//   rate limiting  an unthrottled login endpoint is an offline password
+//                  cracker with better uptime than the attacker's own hardware
+//   lockout        after enough failures, stop answering at all for a while
+//   a second factor  because passwords are reused, and you will never know
+//
+// The counters are per account *and* per address. Per account alone lets one
+// address work through every username; per address alone lets a botnet work
+// through one password.
+// ---------------------------------------------------------------------------
+
+const WINDOW_MINUTES = 15;
+const MAX_PER_ACCOUNT = 8;
+const MAX_PER_IP = 25;
+const LOCKOUT_MINUTES = 15;
+
+function recordAttempt({ username, ip, ok, reason }) {
+  exec('INSERT INTO login_attempts (username, ip, ok, reason) VALUES (?,?,?,?)', username || null, ip || null, ok ? 1 : 0, reason || null);
+}
+
+function recentFailures({ username, ip }) {
+  const since = `-${WINDOW_MINUTES} minutes`;
+  return {
+    account: username
+      ? one("SELECT COUNT(*) AS n FROM login_attempts WHERE username = ? AND ok = 0 AND at > datetime('now', ?)", username, since).n
+      : 0,
+    address: ip
+      ? one("SELECT COUNT(*) AS n FROM login_attempts WHERE ip = ? AND ok = 0 AND at > datetime('now', ?)", ip, since).n
+      : 0,
+  };
+}
+
+/** Thrown when the caller should be told to wait rather than told they were wrong. */
+export class TooManyAttempts extends Error {
+  constructor(seconds) {
+    super(`too many attempts — wait ${Math.ceil(seconds / 60)} minute(s) and try again`);
+    this.retryAfterSeconds = seconds;
+  }
+}
+
+/** Thrown when the password was right and a code is still needed. */
+export class SecondFactorRequired extends Error {
+  constructor(methods) {
+    super('a one-time code is required');
+    this.methods = methods;
+  }
+}
+
+export function totpEnabled(userId) {
+  return Boolean(one('SELECT user_id FROM user_totp WHERE user_id = ? AND confirmed_at IS NOT NULL', userId));
+}
+
+export function login(username, password, { code = null, ip = null } = {}) {
+  const name = String(username || '').toLowerCase().trim();
+
+  // Address first: somebody spraying a hundred usernames never trips a
+  // per-account counter, because no single account sees enough failures.
+  const before = recentFailures({ username: name, ip });
+  if (before.address >= MAX_PER_IP) {
+    recordAttempt({ username: name, ip, ok: false, reason: 'address rate limit' });
+    throw new TooManyAttempts(LOCKOUT_MINUTES * 60);
+  }
+
+  const u = one('SELECT * FROM users WHERE username = ?', name);
+
+  if (u?.locked_until && one("SELECT datetime('now') < ? AS locked", u.locked_until).locked) {
+    recordAttempt({ username: name, ip, ok: false, reason: 'locked' });
+    throw new TooManyAttempts(LOCKOUT_MINUTES * 60);
+  }
+
   if (!u || u.status !== 'active' || !checkPassword(password || '', u.pass)) {
+    recordAttempt({ username: name, ip, ok: false, reason: u ? 'wrong password' : 'no such account' });
+    // Count *after* recording, so this attempt is included in the total.
+    if (u && recentFailures({ username: name, ip }).account >= MAX_PER_ACCOUNT) {
+      exec("UPDATE users SET locked_until = datetime('now', ?) WHERE id = ?", `+${LOCKOUT_MINUTES} minutes`, u.id);
+      audit({
+        actorType: 'system', actorId: 'system:auth', action: 'auth.locked',
+        subjectType: 'user', subjectId: u.id,
+        payload: { minutes: LOCKOUT_MINUTES, failures: MAX_PER_ACCOUNT, ip: ip || null },
+      });
+      notifyLockout(u, ip);
+    }
+    // The same message either way. "No such account" tells an attacker which
+    // usernames are real, which is half of what they came for.
     throw new Error('invalid credentials');
   }
-  const token = randomUUID() + randomBytes(16).toString('hex');
-  exec("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", token, u.id);
-  audit({ actorType: 'human', actorId: `human:${u.username}`, action: 'auth.login', subjectType: 'user', subjectId: u.id });
+
+  // The password was right. If a second factor is set up, it is not enough.
+  if (totpEnabled(u.id)) {
+    if (!code) {
+      recordAttempt({ username: name, ip, ok: false, reason: 'second factor required' });
+      throw new SecondFactorRequired(['totp', 'recovery']);
+    }
+    const accepted = acceptSecondFactor(u, code);
+    if (!accepted.ok) {
+      recordAttempt({ username: name, ip, ok: false, reason: accepted.reason });
+      if (recentFailures({ username: name, ip }).account >= MAX_PER_ACCOUNT) {
+        exec("UPDATE users SET locked_until = datetime('now', ?) WHERE id = ?", `+${LOCKOUT_MINUTES} minutes`, u.id);
+      }
+      // "Already used" and "wrong" are different facts, and the person needs to
+      // know which. Told only that a correct code is wrong — which is what
+      // happens for thirty seconds after setting it up — they will check the
+      // clock, re-scan the QR, and eventually turn the whole thing off.
+      throw new Error(accepted.reason === 'code already used'
+        ? 'that code has already been used — wait for the next one'
+        : 'that code is not right');
+    }
+  }
+
+  exec('UPDATE users SET locked_until = NULL WHERE id = ?', u.id);
+  recordAttempt({ username: name, ip, ok: true, reason: null });
+  return issueSession(u, ip);
+}
+
+/**
+ * A TOTP code, or one of the recovery codes — each accepted exactly once.
+ *
+ * The single-use rule is not fussiness. A six-digit code is valid for a full
+ * period; anybody who reads it over a shoulder, or off a screen share, or out
+ * of a phishing form, has thirty seconds to use it — and without this, they can
+ * use it after the person whose code it was already has.
+ */
+function acceptSecondFactor(u, code) {
+  const row = one('SELECT * FROM user_totp WHERE user_id = ?', u.id);
+  if (row) {
+    const counter = verifyCode(row.secret, code);
+    if (counter !== null) {
+      // Spent — including by the setup that confirmed it a moment ago.
+      if (row.last_counter !== null && counter <= row.last_counter) return { ok: false, reason: 'code already used' };
+      exec('UPDATE user_totp SET last_counter = ? WHERE user_id = ?', counter, u.id);
+      return { ok: true };
+    }
+  }
+  for (const r of q('SELECT * FROM user_recovery WHERE user_id = ? AND used_at IS NULL', u.id)) {
+    if (checkRecovery(code, r.code)) {
+      exec("UPDATE user_recovery SET used_at = datetime('now') WHERE id = ?", r.id);
+      const left = one('SELECT COUNT(*) AS n FROM user_recovery WHERE user_id = ? AND used_at IS NULL', u.id).n;
+      audit({
+        actorType: 'human', actorId: `human:${u.username}`, action: 'auth.recovery_used',
+        subjectType: 'user', subjectId: u.id, payload: { remaining: left },
+      });
+      return { ok: true, viaRecovery: true };
+    }
+  }
+  return { ok: false, reason: 'wrong one-time code' };
+}
+
+/**
+ * Sessions carry two clocks: an idle one that slides forward while you are
+ * using it, and an absolute one that does not. Without the second, a token
+ * that leaks is good forever as long as something keeps touching it.
+ */
+const IDLE_DAYS = 7;
+const ABSOLUTE_DAYS = 30;
+
+function issueSession(u, ip) {
+  const token = randomUUID() + randomBytes(24).toString('hex');
+  exec(
+    `INSERT INTO sessions (token, user_id, expires_at, absolute_expires_at, last_seen, ip)
+     VALUES (?, ?, datetime('now', ?), datetime('now', ?), datetime('now'), ?)`,
+    token, u.id, `+${IDLE_DAYS} days`, `+${ABSOLUTE_DAYS} days`, ip || null,
+  );
+  audit({
+    actorType: 'human', actorId: `human:${u.username}`, action: 'auth.login',
+    subjectType: 'user', subjectId: u.id,
+    payload: { ip: ip || null, secondFactor: totpEnabled(u.id) },
+  });
   return { token, user: publicUser(u) };
+}
+
+function notifyLockout(u, ip) {
+  // Imported lazily: notify() pulls in push, and auth is loaded during boot
+  // before any of that is wanted.
+  import('./notify.js')
+    .then(({ notify }) => notify({
+      level: 'warn', source: 'security',
+      message: `${u.username} was locked after ${MAX_PER_ACCOUNT} failed sign-ins${ip ? ` from ${ip}` : ''}`,
+      subjectType: 'user', subjectId: String(u.id),
+    }))
+    .catch(() => { /* the attempt log is the record; this is the courtesy */ });
 }
 
 export function logout(token) {
@@ -228,10 +406,105 @@ export function logout(token) {
 
 export function userForToken(token) {
   if (!token) return null;
-  const s = one("SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')", token);
+  const s = one(
+    `SELECT * FROM sessions
+     WHERE token = ? AND expires_at > datetime('now')
+       AND (absolute_expires_at IS NULL OR absolute_expires_at > datetime('now'))`,
+    token,
+  );
   if (!s) return null;
   const u = one("SELECT * FROM users WHERE id = ? AND status = 'active'", s.user_id);
-  return u ? publicUser(u) : null;
+  if (!u) return null;
+  // Slide the idle clock, but never past the absolute one. Writing on every
+  // request would be wasteful, so only once a minute has passed.
+  if (!s.last_seen || one("SELECT ? < datetime('now', '-1 minute') AS stale", s.last_seen).stale) {
+    exec(
+      `UPDATE sessions SET last_seen = datetime('now'),
+         expires_at = MIN(datetime('now', ?), COALESCE(absolute_expires_at, datetime('now', ?)))
+       WHERE token = ?`,
+      `+${IDLE_DAYS} days`, `+${IDLE_DAYS} days`, token,
+    );
+  }
+  return publicUser(u);
+}
+
+// ------------------------------------------------------------ second factor --
+
+/** Begin setting up TOTP: a secret, unconfirmed until a code proves it works. */
+export function beginTotp(userId) {
+  const u = one('SELECT * FROM users WHERE id = ?', userId);
+  if (!u) throw new Error('no such account');
+  if (totpEnabled(userId)) throw new Error('this account already has a one-time code set up');
+  const secret = newSecret();
+  exec(
+    'INSERT INTO user_totp (user_id, secret, confirmed_at, last_counter) VALUES (?,?,NULL,NULL) ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, confirmed_at = NULL, last_counter = NULL',
+    userId, secret,
+  );
+  return { secret, otpauth: otpauthUrl({ secret, account: u.username }) };
+}
+
+/**
+ * Confirm it, and only then hand over the recovery codes.
+ *
+ * Order matters: issuing recovery codes before a working code is proved is how
+ * somebody ends up with ten pieces of paper that unlock an account whose second
+ * factor never actually worked.
+ */
+export function confirmTotp(userId, code) {
+  const row = one('SELECT * FROM user_totp WHERE user_id = ?', userId);
+  if (!row) throw new Error('nothing to confirm — start again');
+  const counter = verifyCode(row.secret, code);
+  if (counter === null) throw new Error('that code is not right — check the clock on the phone');
+  exec("UPDATE user_totp SET confirmed_at = datetime('now'), last_counter = ? WHERE user_id = ?", counter, userId);
+
+  exec('DELETE FROM user_recovery WHERE user_id = ?', userId);
+  const codes = newRecoveryCodes();
+  for (const c of codes) exec('INSERT INTO user_recovery (user_id, code) VALUES (?,?)', userId, hashRecovery(c));
+
+  const u = one('SELECT username FROM users WHERE id = ?', userId);
+  audit({ actorType: 'human', actorId: `human:${u.username}`, action: 'auth.totp_enabled', subjectType: 'user', subjectId: userId });
+  return { ok: true, recoveryCodes: codes, note: 'These are shown once. A lost phone without them is a lost account.' };
+}
+
+/** Turning it off needs the current password: a hijacked session must not. */
+export function disableTotp(userId, password) {
+  const u = one('SELECT * FROM users WHERE id = ?', userId);
+  if (!u) throw new Error('no such account');
+  if (!checkPassword(password || '', u.pass)) throw new Error('the password is not right');
+  exec('DELETE FROM user_totp WHERE user_id = ?', userId);
+  exec('DELETE FROM user_recovery WHERE user_id = ?', userId);
+  audit({ actorType: 'human', actorId: `human:${u.username}`, action: 'auth.totp_disabled', subjectType: 'user', subjectId: userId });
+  return { ok: true };
+}
+
+export function securityOverview(userId) {
+  const totp = one('SELECT confirmed_at FROM user_totp WHERE user_id = ?', userId);
+  const sessions = q(
+    `SELECT token, created_at, last_seen, expires_at, absolute_expires_at, ip FROM sessions
+     WHERE user_id = ? ORDER BY created_at DESC`, userId,
+  );
+  return {
+    totp: { enabled: Boolean(totp?.confirmed_at), pending: Boolean(totp && !totp.confirmed_at) },
+    recoveryRemaining: one('SELECT COUNT(*) AS n FROM user_recovery WHERE user_id = ? AND used_at IS NULL', userId).n,
+    sessions: sessions.map((s) => ({
+      // Never the token itself, not even to its owner: this list is read on
+      // screens that get shared.
+      id: s.token.slice(0, 8), createdAt: s.created_at, lastSeen: s.last_seen,
+      expiresAt: s.expires_at, absoluteExpiresAt: s.absolute_expires_at, ip: s.ip,
+    })),
+    recentAttempts: q(
+      `SELECT ok, ip, reason, at FROM login_attempts WHERE username = (SELECT username FROM users WHERE id = ?)
+       ORDER BY id DESC LIMIT 20`, userId,
+    ),
+  };
+}
+
+/** Sign every other session out — the button somebody needs at 2am. */
+export function endOtherSessions(userId, keepToken) {
+  const n = exec('DELETE FROM sessions WHERE user_id = ? AND token != ?', userId, keepToken || '').changes;
+  const u = one('SELECT username FROM users WHERE id = ?', userId);
+  audit({ actorType: 'human', actorId: `human:${u.username}`, action: 'auth.sessions_ended', subjectType: 'user', subjectId: userId, payload: { ended: n } });
+  return { ended: n };
 }
 
 function publicUser(u) {

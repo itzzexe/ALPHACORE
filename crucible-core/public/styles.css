@@ -2333,3 +2333,10 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
   text-align: start;
 }
 .login-hint::first-line { font-weight: inherit; }
+
+/* The line under the one-time code field: quieter than an error, and it is
+   there before anything has gone wrong. */
+.login-note-quiet {
+  font-size: 11px; line-height: 1.55; color: var(--ink-faint);
+  margin-top: var(--s2); text-align: start;
+}

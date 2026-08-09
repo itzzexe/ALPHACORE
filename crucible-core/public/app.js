@@ -110,9 +110,23 @@ async function doLogin() {
       method: 'POST',
       // Trimmed, because a password copied from a console or a message often
       // arrives with a space on the end, and "invalid credentials" is a cruel
-      // way to report a space.
-      body: { username: $('#login-user').value.trim(), password: $('#login-pass').value.trim() },
+      // way to report a space. The code too: authenticator apps show it as
+      // "123 456" and people copy the space with it.
+      body: {
+        username: $('#login-user').value.trim(),
+        password: $('#login-pass').value.trim(),
+        code: $('#login-code')?.value.trim() || undefined,
+      },
     });
+
+    // The password was right and a second factor is set up. Ask for it here
+    // rather than throwing them back to an empty form.
+    if (r.secondFactorRequired) {
+      $('#login-2fa').hidden = false;
+      $('#login-code').focus();
+      $('#login-err').textContent = t('Enter the code from your authenticator');
+      return;
+    }
     localStorage.setItem(TOKEN_KEY, r.token);
     failedLogins = 0;
     // A generated password gets you exactly this far.
@@ -149,6 +163,7 @@ $('#pw-form').addEventListener('submit', async (e) => {
     $('#login-form').hidden = false;
     $('#login-user').value = '';
     $('#login-pass').value = '';
+    if ($('#login-code')) { $('#login-code').value = ''; $('#login-2fa').hidden = true; }
     err.style.color = 'var(--ok)';
     err.textContent = t('Password set. Sign in with it.');
     $('#login-user').focus();
@@ -4251,6 +4266,14 @@ async function renderSettings() {
     </div>
   </div>
   <div class="panel" style="margin-top:16px">
+    <div class="panel-title">This account — a second factor, and where it is signed in</div>
+    <div class="map-legend">A password is one secret, and it is reused, phished and leaked more often than
+      anybody admits. A one-time code from a phone is the cheapest thing that makes a stolen password
+      useless on its own. Recovery codes are shown once, when it is switched on: a lost phone must not
+      mean a lost company.</div>
+    <div id="sec-body" class="sub" style="margin-top:10px">…</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
     <div class="panel-title">Being told — notifications on this device</div>
     <div class="map-legend">The company stops at a gate until a person answers it. Somebody who is not looking at a tab
       cannot answer, so autonomy waits, and nothing appears to be wrong. This is the only path to them: a title, a line,
@@ -4317,6 +4340,66 @@ async function renderSettings() {
   view.querySelectorAll('[data-sclear]').forEach((b) => b.addEventListener('click', async () => {
     try { await api('/api/settings', { method: 'POST', body: { key: b.dataset.sclear, value: null } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
   }));
+  (async () => {
+    const box = $('#sec-body');
+    if (!box) return;
+    const paint = async () => {
+      const sec = await api('/api/account/security');
+      box.innerHTML = `
+        <div class="form-inline" style="align-items:center">
+          <span class="chip ${sec.totp.enabled ? 'chip-ok' : 'chip-warn'}">${esc(sec.totp.enabled ? t('one-time code is on') : t('password only'))}</span>
+          ${sec.totp.enabled ? `<span class="sub">${sec.recoveryRemaining} ${esc(t('recovery codes left'))}</span>` : ''}
+          ${sec.totp.enabled
+            ? `<input type="password" id="sec-pw" placeholder="${esc(t('your password'))}" style="width:180px"><button class="btn btn-sm btn-bad" id="sec-off">${esc(t('Turn it off'))}</button>`
+            : `<button class="btn btn-primary" id="sec-on">${esc(t('Set up a one-time code'))}</button>`}
+          <button class="btn btn-sm" id="sec-purge">${esc(t('Sign out everywhere else'))}</button>
+        </div>
+        <div id="sec-setup" style="margin-top:12px"></div>
+        <div style="margin-top:14px">
+          <div class="fl">${esc(t('Signed in'))}</div>
+          ${sec.sessions.map((x) => `<div><span class="mono">${esc(x.id)}</span> · ${esc(x.ip || '—')} · ${esc(t('last seen'))} ${esc(x.lastSeen || x.createdAt)}</div>`).join('') || `<div style="color:var(--ink-faint)">—</div>`}
+        </div>
+        <div style="margin-top:14px">
+          <div class="fl">${esc(t('Recent sign-in attempts'))}</div>
+          ${sec.recentAttempts.slice(0, 8).map((x) => `<div><span style="color:var(--${x.ok ? 'ok' : 'bad'})">${x.ok ? '✓' : '✗'}</span> ${esc(x.at)} · ${esc(x.ip || '—')}${x.reason ? ' · ' + esc(x.reason) : ''}</div>`).join('') || `<div style="color:var(--ink-faint)">—</div>`}
+        </div>`;
+
+      $('#sec-on')?.addEventListener('click', async () => {
+        try {
+          const b = await api('/api/account/totp/begin', { method: 'POST', body: {} });
+          $('#sec-setup').innerHTML = `
+            <div class="login-note" style="max-width:70ch">
+              ${esc(t('Add this to your authenticator, then type the code it shows to prove it works.'))}
+            </div>
+            <div class="form-inline" style="margin-top:8px">
+              <div style="flex:2"><label class="fl">${esc(t('Secret'))}</label><input type="text" class="mono" value="${esc(b.secret)}" readonly></div>
+              <div><label class="fl">${esc(t('Code'))}</label><input type="text" id="sec-code" inputmode="numeric" maxlength="6" placeholder="000000"></div>
+              <button class="btn btn-primary" id="sec-confirm">${esc(t('Confirm'))}</button>
+            </div>
+            <div class="sub" style="margin-top:6px;word-break:break-all">${esc(b.otpauth)}</div>`;
+          $('#sec-confirm').addEventListener('click', async () => {
+            try {
+              const c = await api('/api/account/totp/confirm', { method: 'POST', body: { code: $('#sec-code').value } });
+              // Shown once, and never again — so it is not a toast.
+              $('#sec-setup').innerHTML = `<div class="login-note" style="max-width:70ch"><b>${esc(t('Write these down now.'))}</b> ${esc(c.note)}</div>
+                <div class="mono" style="margin-top:8px;line-height:2">${c.recoveryCodes.map(esc).join('<br>')}</div>`;
+            } catch (e) { toast(e.message, true); }
+          });
+        } catch (e) { toast(e.message, true); }
+      });
+      $('#sec-off')?.addEventListener('click', async () => {
+        try { await api('/api/account/totp/disable', { method: 'POST', body: { password: $('#sec-pw').value } }); toast(t('Turned off')); paint(); }
+        catch (e) { toast(e.message, true); }
+      });
+      $('#sec-purge')?.addEventListener('click', async () => {
+        try {
+          const r = await api('/api/account/sessions/end-others', { method: 'POST', body: { keep: localStorage.getItem(TOKEN_KEY) } });
+          toast(`${r.ended} ${t('other session(s) signed out')}`); paint();
+        } catch (e) { toast(e.message, true); }
+      });
+    };
+    paint().catch(() => { box.textContent = t('could not read this account'); });
+  })();
   (async () => {
     const chip = $('#push-state');
     if (!chip) return;

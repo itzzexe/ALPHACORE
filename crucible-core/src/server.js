@@ -17,7 +17,10 @@ import { syncCampaignDrafts } from './commercial.js';
 import { syncDataRuns } from './data.js';
 import { syncIntel } from './intel.js';
 import { seedVendors, seedPeople } from './corporate.js';
-import { seedAdmin, login, logout, userForToken, changeOwnPassword } from './auth.js';
+import {
+  seedAdmin, login, logout, userForToken, changeOwnPassword,
+  SecondFactorRequired, TooManyAttempts,
+} from './auth.js';
 import { seedRisks, syncTasks, ruleRiskReviews } from './pm.js';
 import { advanceJourneys } from './journey.js';
 import { syncOutreachDrafts, ruleStaleRelations } from './relations.js';
@@ -71,6 +74,23 @@ import { one, exec, q } from './db.js';
 import { getSetting, setSetting } from './settings.js';
 
 const PUBLIC_BASE = () => getSetting('PUBLIC_BASE_URL');
+
+/**
+ * The address a request came from, for rate limiting.
+ *
+ * X-Forwarded-For is trusted only when TRUST_PROXY is on. Trusting it by
+ * default would let anybody send a fresh header on every attempt and turn the
+ * whole limit into an ornament; ignoring it behind a real proxy would lump the
+ * entire internet into one bucket. Both failure modes are silent, so it is a
+ * setting the operator makes on purpose.
+ */
+function callerIp(req) {
+  if (String(getSetting('TRUST_PROXY') ?? 'false') === 'true') {
+    const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (fwd) return fwd;
+  }
+  return req.socket?.remoteAddress || null;
+}
 
 // Read once from the manifest rather than kept in a second place that drifts.
 const VERSION = JSON.parse(
@@ -383,8 +403,20 @@ const server = http.createServer(async (req, res) => {
 
       // Auth endpoints — the only unauthenticated surface.
       if (url.pathname === '/api/auth/login' && req.method === 'POST') {
-        try { return json(200, login(body?.username, body?.password)); }
-        catch (e) { return json(401, { error: e.message }); }
+        try {
+          return json(200, login(body?.username, body?.password, { code: body?.code, ip: callerIp(req) }));
+        } catch (e) {
+          // Three different answers, because they mean three different things
+          // and the caller has to do something different about each.
+          if (e instanceof SecondFactorRequired) {
+            return json(200, { secondFactorRequired: true, methods: e.methods });
+          }
+          if (e instanceof TooManyAttempts) {
+            res.setHeader?.('retry-after', String(e.retryAfterSeconds));
+            return json(429, { error: e.message, retryAfterSeconds: e.retryAfterSeconds });
+          }
+          return json(401, { error: e.message });
+        }
       }
       if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
         if (token) logout(token);

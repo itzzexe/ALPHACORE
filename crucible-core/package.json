@@ -10,7 +10,7 @@
     "start": "node --experimental-sqlite src/server.js",
     "dev": "node --experimental-sqlite --watch src/server.js",
     "seed": "node --experimental-sqlite scripts/seed.js",
-    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js test/push.test.js test/anchor.test.js",
+    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js test/push.test.js test/anchor.test.js test/identity.test.js",
     "prove": "node --experimental-sqlite scripts/prove-world.mjs",
     "prove:platform": "node --experimental-sqlite scripts/prove-platform.mjs",
     "reset-password": "node --experimental-sqlite scripts/reset-password.mjs",

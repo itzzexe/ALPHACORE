@@ -81,6 +81,26 @@ Set the **public address** in the same panel if this machine is reachable from
 outside — OAuth callbacks and carrier webhooks have nowhere to return to
 without it.
 
+### Turn on a second factor
+
+Settings → *This account* → **Set up a one-time code**. Scan or paste the secret
+into any authenticator, type the code it shows, and it is on. Ten recovery
+codes appear once at that moment — write them down. A lost phone without them
+is a lost account, and the only alternative would be a back door, which is a
+worse thing to own than the risk it removes.
+
+Signing in is rate-limited whether or not you turn this on: eight failures
+locks the account for fifteen minutes, and twenty-five failures from one
+address stops that address regardless of which usernames it is trying. Every
+attempt is recorded with its address, so "somebody tried you four hundred times
+last night" is a sentence the system can actually say.
+
+**Behind a reverse proxy**, set `TRUST_PROXY=true` — otherwise every request
+appears to come from the proxy and the per-address limit lumps the whole
+internet into one bucket. Do *not* set it when the server is directly reachable:
+anybody could then send a fresh `X-Forwarded-For` on each attempt and the limit
+becomes an ornament.
+
 ---
 
 ## 3. Going live
@@ -400,6 +420,7 @@ environment when a machine should be configured before it first starts.
 | `PORT` | Listening port. Default `8484`. |
 | `ALPHACORE_DB` | Path to the database file, relative to `crucible-core/`. Default `data/alphacore.db`. |
 | `ALPHACORE_MOCK` | `true` forces mock mode even when a key is present. |
+| `TRUST_PROXY` | `true` only when a reverse proxy sits in front, so `X-Forwarded-For` can be believed for rate limiting. |
 | `ANCHOR_WITNESS` | `rfc3161` (default), `webhook` or `file`. |
 | `ANCHOR_TSA_URL` | The timestamping authority. Defaults to DigiCert's free service. |
 | `ANCHOR_EVERY_HOURS` | How often to anchor. Default 6. |

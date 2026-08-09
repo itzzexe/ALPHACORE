@@ -10,6 +10,11 @@ import {
   unsubscribe as pushUnsubscribe, deliver as pushDeliver,
 } from './push.js';
 import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anchor.js';
+// Aliased: securityOverview already means the SOC department in this file,
+// and an account's own second factor is a different thing entirely.
+import {
+  securityOverview as accountSecurity, beginTotp, confirmTotp, disableTotp, endOtherSessions,
+} from './auth.js';
 import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword } from './auth.js';
 import { wipeSystem } from './wipe.js';
 import { activityFeed } from './links.js';
@@ -371,6 +376,16 @@ const routes = [
   // --- Push: the only way to reach somebody who is not looking at a tab ---
   ['GET', /^\/api\/push\/key$/, () => ({ publicKey: vapidKeys().publicKey })],
   ['GET', /^\/api\/push$/, () => pushOverview()],
+
+  // --- Your own account: second factor, sessions, attempts ---
+  // Under /api/account, not /api/security: the latter is the SOC department,
+  // and sharing the prefix shadowed its overview route and would have dragged
+  // its permission rule down with these.
+  ['GET', /^\/api\/account\/security$/, (_p, _b, _u, user) => accountSecurity(user.id)],
+  ['POST', /^\/api\/account\/totp\/begin$/, (_p, _b, _u, user) => beginTotp(user.id)],
+  ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
+  ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
+  ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
 
   // --- Anchoring: the record answering to something other than itself ---
   ['GET', /^\/api\/anchors$/, () => anchorsOverview()],
@@ -1244,6 +1259,11 @@ function permFor(m, path) {
   if (path === '/api/notifications/read') return 'notifications.read';
   // Your own browser's subscription is your own business — any signed-in
   // account may manage it. Seeing everybody's is not.
+  // Nobody needs a permission to protect their own account, and requiring one
+  // would mean the accounts most worth protecting are the last able to. The
+  // namespace matters: /api/security is the SOC department, and putting these
+  // there unauthenticated its entire prefix.
+  if (path.startsWith('/api/account/')) return null;
   if (path === '/api/anchors/verify') return 'audit.view';
   if (path.startsWith('/api/anchors')) return m === 'GET' ? 'audit.view' : 'settings.manage';
   if (path === '/api/push') return 'users.manage';

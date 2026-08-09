@@ -2154,7 +2154,50 @@ CREATE TABLE IF NOT EXISTS anchors (
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS anchors_by_height ON anchors(chain_seq);
+
+-- Second factor. The secret is stored beside the account rather than in the
+-- vault on purpose: the vault's master key is a file on the same disk, so
+-- putting it there would buy the appearance of protection and not the fact.
+CREATE TABLE IF NOT EXISTS user_totp (
+  user_id     INTEGER PRIMARY KEY,
+  secret      TEXT NOT NULL,
+  confirmed_at TEXT,                   -- NULL until a code has been proved once
+  last_counter INTEGER,                -- refuses the same code twice
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Recovery codes: a lost phone must not mean a lost company. One row per code,
+-- hashed, deleted as it is used.
+CREATE TABLE IF NOT EXISTS user_recovery (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id  INTEGER NOT NULL,
+  code     TEXT NOT NULL,              -- scrypt salt:hash
+  used_at  TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS recovery_by_user ON user_recovery(user_id);
+
+-- Every attempt to sign in, successful or not. This is what rate limiting and
+-- lockout are computed from, and what says "somebody tried you 400 times last
+-- night" afterwards.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  username  TEXT,
+  ip        TEXT,
+  ok        INTEGER NOT NULL DEFAULT 0,
+  reason    TEXT,
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS attempts_by_user ON login_attempts(username, at);
+CREATE INDEX IF NOT EXISTS attempts_by_ip ON login_attempts(ip, at);
 `);
+
+// Sessions gain an absolute ceiling and a last-seen, so a token cannot be
+// renewed forever and an idle one can be expired without waiting a week.
+try { db.exec('ALTER TABLE sessions ADD COLUMN last_seen TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE sessions ADD COLUMN absolute_expires_at TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE sessions ADD COLUMN ip TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN locked_until TEXT'); } catch { /* column exists */ }
 // Intelligence v2 — structured criteria, multi-round collection, web enrichment.
 for (const sql of [
   'ALTER TABLE intel_queries ADD COLUMN criteria TEXT',

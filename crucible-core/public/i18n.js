@@ -85,6 +85,25 @@ const AR = {
   'The company that runs itself': 'الشركة التي تدير نفسها',
   // the bar at the bottom of a phone
   'Departments': 'الأقسام', 'Search': 'بحث', 'Account': 'الحساب',
+  // the second factor
+  'One-time code': 'رمز لمرة واحدة',
+  'Six digits from your authenticator, or one of your recovery codes.':
+    'ستة أرقام من تطبيق المصادقة، أو أحد رموز الاسترداد.',
+  'Enter the code from your authenticator': 'أدخل الرمز من تطبيق المصادقة',
+  'This account — a second factor, and where it is signed in':
+    'هذا الحساب — عامل ثانٍ، وأين هو مسجَّل الدخول',
+  'one-time code is on': 'الرمز المؤقّت مفعّل', 'password only': 'كلمة مرور فقط',
+  'recovery codes left': 'رموز استرداد متبقية', 'your password': 'كلمة مرورك',
+  'Turn it off': 'أوقفه', 'Set up a one-time code': 'فعّل الرمز المؤقّت',
+  'Sign out everywhere else': 'سجّل الخروج من كل مكان آخر',
+  'other session(s) signed out': 'جلسة أخرى سُجّل خروجها',
+  'Signed in': 'الجلسات المفتوحة', 'last seen': 'آخر ظهور',
+  'Recent sign-in attempts': 'محاولات الدخول الأخيرة',
+  'Add this to your authenticator, then type the code it shows to prove it works.':
+    'أضف هذا إلى تطبيق المصادقة، ثم اكتب الرمز الذي يظهر لإثبات أنه يعمل.',
+  'Secret': 'السرّ', 'Code': 'الرمز', 'Confirm': 'تأكيد',
+  'Write these down now.': 'اكتب هذه الآن.',
+  'Turned off': 'أُوقف', 'could not read this account': 'تعذّرت قراءة هذا الحساب',
   // being told
   'Being told — notifications on this device': 'أن تُبلَّغ — الإشعارات على هذا الجهاز',
   'Turn on for this device': 'فعّل على هذا الجهاز', 'Turn off': 'أوقف',
