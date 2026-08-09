@@ -18,6 +18,8 @@ door — while humans hold every gate that matters: approving, publishing, signi
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
+<img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
+<img src="https://img.shields.io/badge/tests-95-78bf6d?style=flat-square" alt="95 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
@@ -39,6 +41,7 @@ where you watch the company work.*
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
 | [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 122 departments](#the-company--13-divisions-122-departments) | the shape |
 | [The engine room](#the-engine-room) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
+| [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
 | [The API](#the-api) · [MCP](#mcp--both-directions) · [Webhooks](#webhooks) · [Command line](#the-command-line) | the surfaces |
 | [Configuration](#configuration) · [Data on disk](#data-on-disk) · [Layout](#layout) | the operations |
@@ -62,6 +65,10 @@ incidents, postmortems, and a permanent record.
 - **Anything that leaves the machine passes one gate**, and the intent is
   written to the chain *before* the call goes out — so a blocked attempt leaves
   a record too.
+- **The record answers to something outside this machine.** A timestamping
+  authority witnesses the chain's head on a schedule, because a hash chain
+  proves the record agrees with *itself* — which is exactly what a rewritten
+  record does.
 
 The AI does the work. The humans keep the authority. The chain keeps them both
 honest.
@@ -464,6 +471,18 @@ degrading.
 **Reviewers are pushed onto a different provider family than the author.** Two
 instances of one model reviewing each other is not review.
 
+**Changing a tier's chain is a decision, not an edit.** It changes every
+employee on that tier at once, invisibly, until quality drops in a way nobody
+attributes to it — so a candidate is proposed, canaried against the chain in
+service *on the same day*, and promoted by a person who has been told what
+regressed. An untested chain cannot be promoted, and a canary that proved
+nothing does not count as evidence.
+
+**Every run records what actually answered it** — provider, model, family, and
+the content hash of the system prompt it was sent. Providers move what a name
+points at without announcing it, and a run that cannot name its model and its
+prompt is a run nobody can reproduce or account for.
+
 ### Budgets, reservation-first
 
 ```
@@ -627,17 +646,32 @@ not a feature request — see [SECURITY.md](../SECURITY.md) for how to report on
 | Guarantee | How |
 |---|---|
 | The record cannot be edited | SQL triggers abort `UPDATE`/`DELETE` on `audit_log`; every row hashes the one before it |
-| Money leaves only by a human | Autonomy cannot reach payout resolution; wallets are watch-only; no private key, seed or mnemonic is ever stored |
+| …and cannot be rewritten either | The chain's head is witnessed by an RFC 3161 authority outside this disk. Internal consistency is what a *rewritten* record also has; this is the check that cannot be forged locally |
+| Money leaves only by a human | Autonomy cannot reach payout resolution; wallets are watch-only; no private key, seed or mnemonic is ever stored. A refund is a payment and meets the same gate |
 | The gate is failure-closed | Six checks in order, intent chained before the call, unevaluable rule ⇒ no call |
 | Identity comes from the server | The session's user is injected and overrides anything in the request body |
-| Secrets are encrypted at rest | AES-256-GCM, master key outside the database, API masks to the last four characters |
+| A password is not enough | Optional TOTP, single-use; ten recovery codes; sign-in rate-limited per account **and** per address; lockout after eight failures |
+| A session cannot live forever | An idle clock that slides and an absolute one that does not, so a leaked token expires even if something keeps touching it |
+| Secrets are encrypted at rest | AES-256-GCM, master key outside the database and optionally outside the machine, rotatable without losing a credential; the API masks to the last four characters |
+| A person can be forgotten | Crypto-shredding: their data is sealed under their own key before the payload is hashed, so destroying it leaves every hash verifying |
 | No shipped credential | First run generates its own password; an unclaimed account can only read itself and replace it |
 | Nothing leaks to git | `data/`, `workspace/`, `.env*`, `*.key`, `*.pem` are ignored, and CI fails the build if one is ever committed |
 
-**What it does not guarantee**, stated plainly: it is built to run on a machine
-you control; `data/master.key` is a file on disk; the injection scanner is a
-filter and not a proof; and the server speaks plain HTTP, so put TLS in front of
-it before exposing it to a network.
+**What it does not guarantee**, stated plainly:
+
+- It is built to run on a machine you control. Tenants are separated by *file
+  and process*, not by a `WHERE` clause — do not put two parties who distrust
+  each other behind one instance.
+- `data/master.key` is a file on disk by default. `ALPHACORE_MASTER_KEY_COMMAND`
+  moves it to a secret manager; without that, theft of the disk is theft of both.
+- The injection scanner catches **shapes, not meaning**. Fuzzing put its miss
+  rate at 0 of 320 mutated payloads in two languages, and that is not a claim of
+  effectiveness — text fetched from the web is treated as data everywhere
+  regardless.
+- The server speaks plain HTTP. Put TLS in front of it before a network sees it;
+  installing to a phone's home screen needs it anyway.
+- Stripe's refund, dispute and tax paths are wired and gated but **not verified
+  against a live account**. Paper trading exists to exercise them first.
 
 ### The constitution
 
@@ -693,9 +727,27 @@ curl -H "x-auth-token: $TOKEN" http://localhost:8484/api/audit/verify
 set, rate-limited per minute, with per-call logging. A revoked key stops working
 immediately.
 
-**`GET /api/ping`** is the one endpoint that carries no credential — version,
-uptime, and whether the database answers. Deliberately the dullest endpoint in
-the system: a health check that can read your company is not a health check.
+**`GET /api/openapi.json`** is the whole surface described, generated from the
+server's own route table so it cannot drift — each path carrying the permission
+it actually demands, because the generator *runs* the real resolver rather than
+reimplementing it. Served without a token: an API description is not a secret,
+and needing a token to read the document that explains how to get a token is a
+joke that costs somebody an afternoon. Request and response bodies are marked as
+undescribed rather than guessed at, because a spec that invents a schema is one
+that tooling generates clients from.
+
+**`GET /api/ping`** carries no credential — version, uptime, and whether the
+database answers. Deliberately the dullest endpoint in the system: a health check
+that can read your company is not a health check.
+
+**`GET /metrics`** is Prometheus text, hand-written because the format has four
+rules. It answers only localhost until `METRICS_TOKEN` is set — this endpoint is
+conventionally open and that convention is wrong here, since it carries model
+spend, queue depth, incident counts and how long the record has gone unwitnessed.
+
+**Web Push** reaches somebody who is not looking at a tab. VAPID and aes128gcm
+on `node:crypto`, no dependency. A push carries a title, a line and a route —
+never a record, because it crosses a machine nobody here owns.
 
 ### MCP — both directions
 
@@ -742,8 +794,12 @@ presence, the live ticker, and floor chat.
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
-| `npm run reset-password` | issue a new password for an account |
-| `npm run icons` | redraw the app icons |
+| `npm run reset-password` | issue a new password for an account — the way back in |
+| `npm run rotate-key` | re-seal every secret under a new master key (`-- --dry-run` first) |
+| `npm run anchor` | have a third party witness the chain's head now |
+| `npm run openapi` | regenerate the API description (`openapi:check` fails on drift) |
+| `npm run verify` | check a chain — **works copied out of this repository** |
+| `npm run icons` | redraw the app icons from scratch, no image library |
 | `node scripts/launch-audit.mjs` | the pre-flight audit — exits non-zero on a blocker |
 
 ---
@@ -760,9 +816,27 @@ machine must be configured before it first starts.
 | `ALPHACORE_MOCK` | `true` forces mock mode even with a key present |
 | `ALPHACORE_TENANT` | set by the platform when it spawns a tenant; you do not set this |
 | `ANTHROPIC_API_KEY` | and the equivalents per provider — but prefer Settings, where keys are encrypted |
+| `ALPHACORE_MASTER_KEY_COMMAND` | any command printing the master key material: `vault read`, `op read`, `aws kms decrypt`. The KMS door |
+| `ALPHACORE_MASTER_KEY` | the material directly, base64, for a container secret |
+| `TRUST_PROXY` | `true` only behind a reverse proxy, so `X-Forwarded-For` can be believed for rate limiting |
+| `METRICS_TOKEN` | required to scrape `/metrics` from anywhere but localhost |
+| `DRAIN_SECONDS` | how long in-flight work may finish on SIGTERM (default 20) |
 
-Settings the console owns: `COMPANY_NAME`, `PUBLIC_BASE_URL`, every provider
-key, and the mock-mode flag.
+Settings the console owns, all editable without a restart:
+
+| | |
+|---|---|
+| `COMPANY_NAME` · `PUBLIC_BASE_URL` | who this install is, and where the world calls back |
+| Provider keys · `ALPHACORE_MOCK` | encrypted at rest, never echoed back |
+| `PAPER_TRADING` | real reads, nothing sent — the setting between mock and live |
+| `ANCHOR_WITNESS` · `ANCHOR_TSA_URL` · `ANCHOR_EVERY_HOURS` | who witnesses the chain, and how often |
+| `ALERT_CHANNEL` + its config | how a person is reached at 3am: Telegram, a webhook, or a command |
+| `BACKUP_SHIP_COMMAND` | gets a backup off this machine; the path is appended |
+| `EMBEDDING_MODEL` · `OLLAMA_URL` | a local model for recall that understands a rephrased question |
+| `MAIL_DOMAIN` · `DKIM_SELECTOR` | what signed mail speaks for |
+| `APPROVAL_SLA_HOURS` | how long anything should wait for a person (default 24) |
+| `RETENTION_ENABLED` · `SLOW_QUERY_MS` | housekeeping, and what counts as blocking |
+| `TIER_OVERRIDES` | a promoted model chain — written by the canary, not by hand |
 
 Config files:
 
@@ -779,7 +853,12 @@ data/
   alphacore.db          every record, including the audit chain
   alphacore.db-wal      write-ahead log
   master.key            the AES key for the vault — NOT in the database, on purpose
+  master.key.retired-*  previous keys, kept: a backup from before a rotation
+                        is still sealed under one, and deleting it makes that
+                        backup unreadable
   backups/              taken from the console, each with its hash and chain tip
+  wal-archive/          the log between backups, 48 segments — the difference
+                        between losing a day and losing four minutes
   simulations/          shadow-company forks
   tenants/              one database per company
 
@@ -804,9 +883,20 @@ crucible-core/
     router.js         tier → provider chain, with reviewer separation
     policy.js         reservation-first budgets
     workflow.js       agents, runs, leases, retries, reclamation
-    egress.js         the gate
-    vault.js          AES-256-GCM secrets
+    egress.js         the gate, and paper trading
+    vault.js          AES-256-GCM secrets, and rotating the key under them
+    masterkey.js      where that key comes from: a file, the environment, a KMS
     constitution.js   the ten rules, enforced
+    anchor.js         the chain witnessed outside this disk (RFC 3161, by hand)
+    erasure.js        crypto-shredding, so a person can be forgotten
+    approvals.js      the queue of what is waiting, and the roles that may act
+    canary.js         prompt versions, and proving a model chain before it lands
+    push.js           VAPID and aes128gcm, so an approval reaches a phone
+    embeddings.js     recall by meaning when a local model is there
+    observability.js  metrics, retention, and the synchronous-SQLite hazard
+    lifecycle.js      draining, alerting, and getting a backup off the machine
+    deliverability.js DKIM, and whether a recording is lawful
+    totp.js           RFC 6238, checked against the reference vectors
     connectors/       nine integrations + a generic HTTP driver
     …
   public/
@@ -818,10 +908,15 @@ crucible-core/
     manifest.webmanifest
   scripts/
     launch-audit.mjs  the pre-flight audit
+    verify-chain.mjs  a verifier that works copied out of this repository
+    openapi.mjs       the API description, generated from the route table
+    rotate-key.mjs    re-seal everything under a new master key
     reset-password.mjs
     make-icons.mjs    writes PNG bytes with no image library
     prove-world.mjs   end-to-end proof of the outside-world layer
     prove-platform.mjs
+  deploy/             a systemd unit, and Windows scripts that drain rather
+                      than kill
   test/               95 tests across nine files
   docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
   config/             agents, providers, rituals
@@ -844,17 +939,37 @@ All three proofs run in **mock mode**: no key, no network, no cost.
 
 **The launch audit** asks the questions somebody should have to answer before
 handing this to anyone — of the running system, not of the code. Security (no
-guessable password, no unfenced live connector, nothing the red team has open),
-record (the chain verifies, the triggers exist, a backup is recent), wiring
-(every department joined, every department opens a real page, every permission
-the API demands exists), health (nothing dead, stalled or breached) and
-readiness (a provider configured, the public URL set, the licence files present,
-no test residue).
+guessable password, nobody still holding a generated one, no unfenced live
+connector, nothing the red team has open), record (the chain verifies, the
+triggers exist, **a third party has witnessed it recently**, a backup exists and
+has left this machine), wiring (every department joined, every department opens
+a real page, every permission the API demands exists), health (nothing dead,
+stalled or breached; somebody can be reached at 3am) and readiness (a provider
+configured, the public URL set, the licence files present, no test residue).
+
+**The tests** are not only examples. Alongside the unit and integration suites:
+
+- **Property tests** — three thousand generated inputs through the constitution,
+  asserting it never throws and never returns an unknown verdict. A gate that
+  throws fails open in any caller with a `try/catch` around it, and every caller
+  has one.
+- **Fuzzing** — mutated injection payloads in English and Arabic. This found a
+  real hole at 25%: the list had "ignore" and "disregard" and no third synonym,
+  so `forget everything above` walked straight through, in both languages.
+- **Contention** — sixteen workers leasing two hundred runs at once, each taken
+  exactly once. Every lease bug in history looks fine with one worker.
+- **The forgery** — the anchoring test rewrites history, recomputes the whole
+  chain properly, asserts that `verifyChain()` is *fooled* by it, and only then
+  asserts that the anchor catches it anyway.
+- **The browser's half** — the push tests build a subscription keypair, hand the
+  public half to the encrypter, then walk RFC 8291 backwards and read the
+  plaintext out.
 
 **The browser sweep** opens all 122 departments in both themes and both
 languages, at 1440×900 and again at 390×844 — 488 renders each — and fails on a
-blank page, a console error, a horizontal overflow, or a request to any host but
-its own.
+blank page, a console error, a horizontal overflow, a request to any host but its
+own, **or any control without an accessible name**. An accessibility pass
+somebody runs once is a state the code leaves within a month.
 
 **CI** runs the tests and both proofs on Node 22 and 24, on Ubuntu and Windows,
 boots the server and runs the audit against it, and fails the build if anything
@@ -901,6 +1016,25 @@ Choices that shaped this, and what they cost:
 - **`crucible-genesis` survives the rename.** It is the first link of every
   chain ever written, including the backups already on disk. Renaming it would
   make an old export fail verification for no visible gain.
+- **The chain is anchored outside the disk.** Hash-linking detects an editor; it
+  cannot detect the owner of the file, who can rewrite everything and recompute
+  every hash. Internal consistency is exactly what a careful forger produces.
+- **Erasure destroys a key rather than a row.** Deleting from an append-only
+  chain is impossible by design, and "our architecture does not allow it" is not
+  a lawful answer to an erasure request.
+- **The queue's order cannot be gamed by waiting.** Urgency strictly outranks
+  age; age only breaks ties inside a band. The first version added a capped age
+  bonus, and a thirty-hour-old item scored level with a payout awaiting a
+  signature.
+- **A batch is recorded as one act.** Twelve entries that read like twelve
+  judgements would misrepresent how much thought was applied.
+- **Anything unrecognised is a write.** In paper trading, a capability nobody
+  thought about is held rather than sent — the opposite default would let one
+  new verb quietly undo the whole mode.
+- **Vectors from two spaces are never compared.** A ranked list of nonsense looks
+  exactly like a ranked list, which is worse than an error.
+- **A verifier that must be run by the system it checks is worth little.**
+  `verify-chain.mjs` imports nothing from `src/` and can be copied away.
 
 ---
 
