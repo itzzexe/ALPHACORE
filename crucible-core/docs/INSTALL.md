@@ -165,7 +165,74 @@ The company itself is always read live.
 
 ---
 
-## 5. Backups
+## 5. Anchoring the record
+
+The hash chain catches anybody who edits the record through the application.
+It does not catch the person who owns the disk.
+
+They can open the database with any SQLite tool, drop the append-only triggers
+— the factory reset does exactly that, legitimately — rewrite whatever they
+like, and recompute every hash forward from the genesis string. `verifyChain()`
+will then report that everything is consistent, because it *is*. Internal
+consistency was never evidence of anything: it is precisely what a careful
+forger produces.
+
+The fix is to put a copy of the chain's head somewhere you cannot reach, at a
+time you did not choose. Afterwards, rewriting history means producing a chain
+whose hash at entry N disagrees with what a third party wrote down on Tuesday —
+a contradiction against the world rather than against itself.
+
+### Turning it on
+
+Platform → **Anchors** → *Anchor now*, or:
+
+```bash
+npm run anchor
+```
+
+It runs itself every six hours after that. A company that has done nothing
+since the last one is skipped rather than asking an authority to sign its own
+footprints.
+
+### The three witnesses, and what each is worth
+
+| | |
+|---|---|
+| **`rfc3161`** (default) | A timestamping authority signs "this digest existed at this time". Cryptographic, third-party, and the strongest thing available without paying anybody. Defaults to DigiCert's free service; set `ANCHOR_TSA_URL` for another. |
+| **`webhook`** | POSTs the digest to a URL you do not control. Worth exactly as much as that endpoint's independence and its logs. Set `ANCHOR_WEBHOOK_URL`. |
+| **`file`** | Appends to a local file. Worth **nothing** against the owner of the disk, and labelled as such everywhere it appears. It exists so the mechanism can be exercised without a network. |
+
+### Checking it
+
+Platform → Anchors shows two answers that are deliberately kept apart:
+
+- **Internally consistent** — the chain agrees with itself. `verifyChain()`.
+- **Matches what was witnessed** — the chain agrees with the outside world.
+
+The second is the one that cannot be forged locally. If history was rewritten
+after an anchor, this is where it shows, naming the height where the two
+accounts part company.
+
+### Verifying without us
+
+Every anchor keeps the authority's token whole, so somebody who does not trust
+this platform can check it with tools that are not ours:
+
+```bash
+curl -H "x-auth-token: $TOKEN" localhost:8484/api/anchors/1/evidence   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(Buffer.from(JSON.parse(s).evidence,'base64')))" > token.tsr
+
+openssl ts -reply -in token.tsr -text      # the digest and the authority's time
+openssl ts -verify -in token.tsr -CAfile /path/to/authority-ca.pem
+```
+
+The `Message data` in that output must equal the anchor's `digest`, which is
+SHA-256 over `alphacore-anchor-v1|<height>|<chain hash>`. The height is inside
+the digest on purpose: anchoring the hash alone would let somebody replay an
+old anchor against a truncated chain and call it a match.
+
+---
+
+## 6. Backups
 
 The whole company is `crucible-core/data/`. Two things live there:
 
@@ -209,7 +276,7 @@ Rituals.
 
 ---
 
-## 6. Upgrading
+## 7. Upgrading
 
 ```bash
 git pull
@@ -230,7 +297,7 @@ ignored.
 
 ---
 
-## 7. Running it as a service
+## 8. Running it as a service
 
 The server is a plain Node process. Any supervisor works.
 
@@ -268,7 +335,7 @@ sit as permanently "running".
 
 ---
 
-## 8. When something is wrong
+## 9. When something is wrong
 
 Start here, in this order:
 
@@ -305,7 +372,7 @@ All three run in mock mode: no key, no network, no cost.
 
 ---
 
-## 9. Multiple companies on one machine
+## 10. Multiple companies on one machine
 
 Tenancy is by file and process, not by a `WHERE` clause — two companies never
 share a table:
@@ -323,7 +390,7 @@ machine. The isolation is real, the blast radius of a compromised host is not.
 
 ---
 
-## 10. Environment variables
+## 11. Environment variables
 
 Everything below can also be set in Settings, which takes precedence. Use the
 environment when a machine should be configured before it first starts.
@@ -333,6 +400,9 @@ environment when a machine should be configured before it first starts.
 | `PORT` | Listening port. Default `8484`. |
 | `ALPHACORE_DB` | Path to the database file, relative to `crucible-core/`. Default `data/alphacore.db`. |
 | `ALPHACORE_MOCK` | `true` forces mock mode even when a key is present. |
+| `ANCHOR_WITNESS` | `rfc3161` (default), `webhook` or `file`. |
+| `ANCHOR_TSA_URL` | The timestamping authority. Defaults to DigiCert's free service. |
+| `ANCHOR_EVERY_HOURS` | How often to anchor. Default 6. |
 | `ALPHACORE_TENANT` | Set by the platform when it spawns a tenant process. You do not set this. |
 | `ANTHROPIC_API_KEY` | And the equivalents for other providers. Prefer Settings — keys in Settings are encrypted; keys in the environment are not. |
 

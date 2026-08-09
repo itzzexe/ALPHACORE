@@ -9,6 +9,7 @@ import {
   vapidKeys, pushOverview, subscribe as pushSubscribe,
   unsubscribe as pushUnsubscribe, deliver as pushDeliver,
 } from './push.js';
+import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anchor.js';
 import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword } from './auth.js';
 import { wipeSystem } from './wipe.js';
 import { activityFeed } from './links.js';
@@ -370,6 +371,12 @@ const routes = [
   // --- Push: the only way to reach somebody who is not looking at a tab ---
   ['GET', /^\/api\/push\/key$/, () => ({ publicKey: vapidKeys().publicKey })],
   ['GET', /^\/api\/push$/, () => pushOverview()],
+
+  // --- Anchoring: the record answering to something other than itself ---
+  ['GET', /^\/api\/anchors$/, () => anchorsOverview()],
+  ['GET', /^\/api\/anchors\/verify$/, () => verifyAnchors()],
+  ['GET', /^\/api\/anchors\/(\d+)\/evidence$/, ([id]) => anchorEvidence(Number(id))],
+  ['POST', /^\/api\/anchors$/, (_p, body) => anchorNow({ kind: body.witness || null, actor: need(body, 'actor') })],
   ['POST', /^\/api\/push\/subscribe$/, (_p, body, _u, user) =>
     pushSubscribe({ userId: user.id, subscription: need(body, 'subscription'), agent: body.userAgent })],
   ['POST', /^\/api\/push\/unsubscribe$/, (_p, body, _u, user) =>
@@ -1237,6 +1244,8 @@ function permFor(m, path) {
   if (path === '/api/notifications/read') return 'notifications.read';
   // Your own browser's subscription is your own business — any signed-in
   // account may manage it. Seeing everybody's is not.
+  if (path === '/api/anchors/verify') return 'audit.view';
+  if (path.startsWith('/api/anchors')) return m === 'GET' ? 'audit.view' : 'settings.manage';
   if (path === '/api/push') return 'users.manage';
   if (path.startsWith('/api/push/')) return null;
   if (path === '/api/providers') return 'providers.view';

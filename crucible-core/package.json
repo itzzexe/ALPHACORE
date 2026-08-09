@@ -10,11 +10,12 @@
     "start": "node --experimental-sqlite src/server.js",
     "dev": "node --experimental-sqlite --watch src/server.js",
     "seed": "node --experimental-sqlite scripts/seed.js",
-    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js test/push.test.js",
+    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js test/push.test.js test/anchor.test.js",
     "prove": "node --experimental-sqlite scripts/prove-world.mjs",
     "prove:platform": "node --experimental-sqlite scripts/prove-platform.mjs",
     "reset-password": "node --experimental-sqlite scripts/reset-password.mjs",
-    "icons": "node --experimental-sqlite scripts/make-icons.mjs"
+    "icons": "node --experimental-sqlite scripts/make-icons.mjs",
+    "anchor": "node --experimental-sqlite -e \"import(\"./src/anchor.js\").then(async A=>{const r=await A.anchorNow({actor:\"human:console\"});console.log(JSON.stringify(r,null,2))})\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"

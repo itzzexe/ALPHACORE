@@ -76,6 +76,28 @@ const chain = verifyChain();
 if (!chain.ok) note('BLOCKER', 'record', 'the audit chain does not verify', `broken at entry ${chain.brokenAt}`);
 else pass('record', `the chain verifies across ${chain.checked} entries`);
 
+// The chain verifying against itself is necessary and not sufficient: anybody
+// who owns the file can rewrite history and recompute every hash, and the
+// result verifies perfectly. Only a witness outside this disk can tell the
+// difference, so the audit asks whether there is one.
+const { verifyAnchors, anchorsOverview } = await import('../src/anchor.js');
+const anchoring = anchorsOverview();
+const anchorCheck = verifyAnchors();
+if (!anchorCheck.ok && anchorCheck.findings.length) {
+  note('BLOCKER', 'record', 'the chain no longer matches what an outside witness recorded', anchorCheck.findings[0]);
+} else if (!anchoring.last) {
+  note('HIGH', 'record', 'the chain has never been anchored outside this machine',
+    'verifyChain() only proves the record agrees with itself — which is exactly what a rewritten record does. Platform → Anchors');
+} else if (!anchoring.witnessIsExternal) {
+  note('HIGH', 'record', `the only witness is "${anchoring.witness}", which is not external`,
+    'a local file is rewritable by anyone who can rewrite the database; use a timestamping authority');
+} else if (anchoring.ageHours !== null && anchoring.ageHours > 48) {
+  note('MEDIUM', 'record', `the newest external anchor is ${anchoring.ageHours} hours old`,
+    'everything since then is provable only against itself');
+} else {
+  pass('record', `the chain is witnessed outside this machine by ${anchoring.witness}, ${anchoring.ageHours}h ago at height ${anchoring.last.height}`);
+}
+
 const trig = q("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'audit_no_%'");
 if (trig.length < 2) note('BLOCKER', 'record', 'the append-only triggers are missing', 'the audit log can be edited');
 else pass('record', 'the audit log refuses UPDATE and DELETE at the database level');

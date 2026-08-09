@@ -2136,6 +2136,24 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS push_by_user ON push_subscriptions(user_id);
+
+-- External anchoring. One row per attempt to have a third party write down
+-- where the chain had got to — including the attempts that failed, because a
+-- gap with no explanation looks exactly like a period nobody was watching.
+CREATE TABLE IF NOT EXISTS anchors (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  witness      TEXT NOT NULL,          -- rfc3161 | webhook | file
+  chain_seq    INTEGER NOT NULL,       -- the height that was witnessed
+  chain_hash   TEXT NOT NULL,
+  digest       TEXT NOT NULL,          -- sha256 over height+hash, what the witness signed
+  external_ref TEXT,                   -- the authority, the URL, the file
+  external_at  TEXT,                   -- the time the WITNESS claims, not ours
+  evidence     TEXT,                   -- the token itself, for a verifier that is not us
+  note         TEXT,
+  ok           INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS anchors_by_height ON anchors(chain_seq);
 `);
 // Intelligence v2 — structured criteria, multi-round collection, web enrichment.
 for (const sql of [

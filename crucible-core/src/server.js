@@ -65,6 +65,7 @@ import { seedPackages } from './packages.js';
 import { chiefTick } from './chief.js';
 import { seedSlos, observeTick, trimMetrics } from './observe.js';
 import { takeBackup } from './backup.js';
+import { anchorNow } from './anchor.js';
 import { mcpTools } from './mcptools.js';
 import { one, exec, q } from './db.js';
 import { getSetting, setSetting } from './settings.js';
@@ -132,6 +133,7 @@ handleJob('oauth.refresh', async () => { await refreshExpiring(); });
 handleJob('provenance.seal', async () => { sealFinishedWork(); });
 handleJob('graph.rebuild', async () => { rebuildGraph(); });
 handleJob('redteam.sweep', async () => { await runRedTeam(); });
+handleJob('chain.anchor', async () => { await anchorNow({ actor: 'system:anchor' }); });
 handleJob('revenue.chase', async ({ dealId }) => {
   const paid = one("SELECT id FROM invoices WHERE deal_id = ? AND state = 'paid'", dealId);
   if (paid) return {};
@@ -154,6 +156,10 @@ setInterval(() => { enqueue0('provenance.seal'); }, 90_000).unref?.();
 setInterval(() => { enqueue0('graph.rebuild'); }, 10 * 60_000).unref?.();
 // The red team runs nightly-ish rather than constantly: it is a check, not a load.
 setInterval(() => { enqueue0('redteam.sweep'); }, 6 * 3600 * 1000).unref?.();
+// The record is worth as much as the last time somebody outside wrote down
+// where it had got to. A company that has done nothing since the last one
+// skips it rather than asking an authority to sign its own footprints.
+setInterval(() => { enqueue0('chain.anchor'); }, Math.max(1, Number(getSetting('ANCHOR_EVERY_HOURS') || 6)) * 3600 * 1000).unref?.();
 setInterval(() => { try { vaultSweep(); } catch { /* next sweep */ } }, 12 * 3600 * 1000).unref?.();
 // The revenue loop: source, then move every deal as far as its evidence allows.
 setInterval(() => { try { revenueTick(); } catch { /* next tick */ } }, 20_000).unref?.();
