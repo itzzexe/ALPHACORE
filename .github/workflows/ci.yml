@@ -42,6 +42,11 @@ jobs:
       - name: Prove the platform layer
         run: npm run prove:platform
 
+      # A generated spec nobody regenerates is a hand-written spec with extra
+      # steps, and it will be wrong within a fortnight and trusted anyway.
+      - name: The API description is current
+        run: npm run openapi:check
+
   audit:
     name: Launch audit
     runs-on: ubuntu-latest

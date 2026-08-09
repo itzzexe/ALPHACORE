@@ -319,7 +319,56 @@ notice claims to cover.
 
 ---
 
-## 7. Backups
+## 7. Checking it without trusting it
+
+Two tools that owe the platform nothing.
+
+### The API description
+
+```bash
+npm run openapi          # regenerate public/openapi.json
+npm run openapi:check    # fail if it has drifted
+```
+
+Generated from the server's own route table — 477 routes across 397 paths, each
+carrying the permission it actually demands, because the generator runs the real
+resolver rather than a second copy of its logic. Served at
+**`GET /api/openapi.json`**, without a token: an API description is not a
+secret, and needing a token to read the document that explains how to get a
+token is a joke that costs somebody an afternoon.
+
+Request and response bodies are marked as undescribed rather than guessed at.
+A spec that invents a schema is worse than one that admits it has none, because
+tooling generates clients from it. CI fails if the file is out of date.
+
+### The chain verifier
+
+```bash
+node scripts/verify-chain.mjs data/alphacore.db
+node scripts/verify-chain.mjs company-export.json
+```
+
+**Copy this file out of the repository and it still works.** It imports nothing
+from `src/`, opens no settings, and needs no keys — because a verifier that
+has to be run by the system it is checking is a system marking its own homework.
+Hand it to an auditor with an export and they can check the record on their own
+machine.
+
+It answers in descending order of worth:
+
+1. **Does every hash follow from the one before it?** Necessary — and passed
+   just as happily by a rewritten history, so not evidence on its own.
+2. **Does the chain still hash to what a witness wrote down?** This is the one
+   that cannot be forged on the machine holding the file.
+3. **Do the timestamping tokens actually contain those hashes?**
+
+Exit code 0 when both hold, 1 when either fails, so it drops into a cron line
+without ceremony. With no anchors at all it says so plainly rather than
+reporting a clean bill of health.
+
+---
+
+## 8. Backups
 
 The whole company is `crucible-core/data/`. Two things live there:
 
@@ -363,7 +412,7 @@ Rituals.
 
 ---
 
-## 8. Upgrading
+## 9. Upgrading
 
 ```bash
 git pull
@@ -384,7 +433,7 @@ ignored.
 
 ---
 
-## 9. Running it as a service
+## 10. Running it as a service
 
 The server is a plain Node process. Any supervisor works.
 
@@ -422,7 +471,7 @@ sit as permanently "running".
 
 ---
 
-## 10. When something is wrong
+## 11. When something is wrong
 
 Start here, in this order:
 
@@ -459,7 +508,7 @@ All three run in mock mode: no key, no network, no cost.
 
 ---
 
-## 11. Multiple companies on one machine
+## 12. Multiple companies on one machine
 
 Tenancy is by file and process, not by a `WHERE` clause — two companies never
 share a table:
@@ -477,7 +526,7 @@ machine. The isolation is real, the blast radius of a compromised host is not.
 
 ---
 
-## 12. Environment variables
+## 13. Environment variables
 
 Everything below can also be set in Settings, which takes precedence. Use the
 environment when a machine should be configured before it first starts.

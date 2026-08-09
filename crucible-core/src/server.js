@@ -390,6 +390,18 @@ const server = http.createServer(async (req, res) => {
       // alive and can it read its own database", and nothing about the
       // company. Load balancers, container healthchecks and CI need a probe
       // that does not carry a credential; /api/health does carry one.
+      // The API description. Public on purpose: it lists paths and the
+      // permission each needs, which is what a well-written manual would say
+      // anyway, and requiring a token to read how to get a token is a joke
+      // that costs somebody an afternoon.
+      if (url.pathname === '/api/openapi.json') {
+        const spec = path.join(publicDir, 'openapi.json');
+        if (!fs.existsSync(spec)) return json(404, { error: 'not generated — run: npm run openapi' });
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(fs.readFileSync(spec));
+        return;
+      }
+
       if (url.pathname === '/api/ping') {
         let dbOk = true;
         try { one('SELECT 1 AS ok'); } catch { dbOk = false; }
