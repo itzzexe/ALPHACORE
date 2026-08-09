@@ -2205,6 +2205,44 @@ try { db.exec('ALTER TABLE users ADD COLUMN locked_until TEXT'); } catch { /* co
 try { db.exec('ALTER TABLE runs ADD COLUMN provider TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE runs ADD COLUMN model TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE runs ADD COLUMN model_family TEXT'); } catch { /* column exists */ }
+// Which system prompt produced this answer. The model was already recorded;
+// the prompt is the other half of being able to reproduce anything.
+try { db.exec('ALTER TABLE runs ADD COLUMN prompt_version TEXT'); } catch { /* column exists */ }
+
+db.exec(`
+-- Content-addressed, so an edit and a revert give the same version rather than
+-- a third one, and two installs running the same prompt agree without talking.
+CREATE TABLE IF NOT EXISTS prompt_versions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id   TEXT NOT NULL,
+  hash       TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  chars      INTEGER NOT NULL DEFAULT 0,
+  uses       INTEGER NOT NULL DEFAULT 0,
+  first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (agent_id, hash)
+);
+
+-- A proposed change to a tier's model chain, and what the canary made of it.
+-- Proposing is not applying: something that takes effect the moment it is typed
+-- cannot be looked at first.
+CREATE TABLE IF NOT EXISTS tier_proposals (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  tier            TEXT NOT NULL,
+  current_chain   TEXT NOT NULL,
+  candidate_chain TEXT NOT NULL,
+  note            TEXT,
+  state           TEXT NOT NULL DEFAULT 'proposed',   -- proposed|tested|promoted
+  results         TEXT,
+  summary         TEXT,
+  proposed_by     TEXT,
+  promoted_by     TEXT,
+  tested_at       TEXT,
+  promoted_at     TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
 
 // Crypto-shredding. One row per person the company holds data about, holding
 // their key wrapped under the vault's master key. Erasing them sets

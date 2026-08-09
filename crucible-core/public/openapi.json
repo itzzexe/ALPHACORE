@@ -3509,6 +3509,339 @@
         ]
       }
     },
+    "/api/tiers": {
+      "get": {
+        "summary": "GET /api/tiers",
+        "tags": [
+          "tiers"
+        ],
+        "description": "Requires the `providers.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `providers.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/prompts/{promptId}": {
+      "get": {
+        "summary": "GET /api/prompts/{promptId}",
+        "tags": [
+          "prompts"
+        ],
+        "description": "Requires the `providers.view` permission.",
+        "parameters": [
+          {
+            "name": "promptId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "matched by `[\\w-]+`"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `providers.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/tiers/propose": {
+      "post": {
+        "summary": "POST /api/tiers/propose",
+        "tags": [
+          "tiers"
+        ],
+        "description": "Requires the `providers.test` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `providers.test` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/tiers/{tierId}/canary": {
+      "post": {
+        "summary": "POST /api/tiers/{tierId}/canary",
+        "tags": [
+          "tiers"
+        ],
+        "description": "Requires the `providers.test` permission.",
+        "parameters": [
+          {
+            "name": "tierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `providers.test` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/tiers/{tierId}/promote": {
+      "post": {
+        "summary": "POST /api/tiers/{tierId}/promote",
+        "tags": [
+          "tiers"
+        ],
+        "description": "Requires the `providers.test` permission.",
+        "parameters": [
+          {
+            "name": "tierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `providers.test` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/tiers/revert": {
+      "post": {
+        "summary": "POST /api/tiers/revert",
+        "tags": [
+          "tiers"
+        ],
+        "description": "Requires the `providers.test` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `providers.test` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
     "/api/observability": {
       "get": {
         "summary": "GET /api/observability",

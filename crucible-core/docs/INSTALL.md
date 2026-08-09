@@ -565,6 +565,57 @@ model and family, as columns rather than inferred later. Providers move what a
 name points at without announcing it, and a run that cannot name its model is a
 run nobody can reproduce or account for.
 
+### Changing which model does the work
+
+A tier is a chain of provider/model candidates, and changing one changes the
+behaviour of every employee on that tier at once — invisibly, until output
+quality drops in a way nobody attributes to it.
+
+```bash
+POST /api/tiers/propose        {"tier":"T1","chain":[{"provider":"groq","model":"..."}]}
+POST /api/tiers/:id/canary     # run the same tasks against both chains, today
+POST /api/tiers/:id/promote    # a person, having been told what regressed
+POST /api/tiers/revert         {"tier":"T1"}
+```
+
+Five deliberately boring tasks: emit clean JSON, obey an explicit constraint,
+say "I do not know" rather than invent, add two numbers, and answer in Arabic
+when asked in Arabic. Not a benchmark — a regression check on the three ways a
+model swap breaks a pipeline quietly, plus the one that makes it unusable in
+half the company.
+
+Both chains run **in the same pass, on the same day**. Comparing a candidate
+today against the incumbent's score from last month measures the weather as
+much as the model.
+
+Three rules worth knowing before you need them:
+
+- **Promoting an untested chain is refused.** That is the thing this exists to
+  prevent.
+- **A canary that proved nothing does not count as evidence.** In mock mode both
+  sides compare a stub with itself, score zero, show no regression, and would
+  otherwise sail through — which is exactly the "it looked fine" failure. The
+  run records that it was inconclusive and promotion refuses it.
+- **Promoting over a regression is allowed, and has to be said out loud.**
+  Sometimes it is the right call, and the reason belongs on the record.
+
+The promoted chain lives in settings, not in `providers.json`. A change made by
+editing a file that ships with the repository is a change the next `git pull`
+silently reverts.
+
+### Which prompt produced this
+
+Every run already recorded the model that answered it; it now records the system
+prompt too, content-addressed. A system prompt is the largest single input to
+what an employee produces and it gets edited casually — and without a version,
+"why did this get worse last Tuesday" has no answer, because nothing recorded
+that anything changed.
+
+Hashed rather than numbered, so an edit and a revert give the same version
+rather than a third one. A *change* goes on the chain; first sight does not,
+or fifty entries would appear at every boot and teach everybody to scroll past
+them. `GET /api/prompts/:agentId` lists the history.
+
 ### Keeping the database from growing forever
 
 A chain that is never deleted, plus a run history that only grows, is a

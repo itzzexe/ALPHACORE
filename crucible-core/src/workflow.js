@@ -11,6 +11,7 @@ import { companyName } from './settings.js';
 import { route, parseAgentJson, RouterExhausted, BudgetExceeded } from './router.js';
 import { personaPrompt } from './org.js';
 import { recall, captureEpisode } from './memory.js';
+import { promptVersion } from './canary.js';
 
 const MAX_ATTEMPTS = 3;
 const LEASE_MINUTES = 10;
@@ -77,6 +78,7 @@ function setState(runId, state, extra = {}) {
   if (extra.provider !== undefined) { sets.push('provider = ?'); vals.push(extra.provider); }
   if (extra.model !== undefined) { sets.push('model = ?'); vals.push(extra.model); }
   if (extra.family !== undefined) { sets.push('model_family = ?'); vals.push(extra.family); }
+  if (extra.promptVersion !== undefined) { sets.push('prompt_version = ?'); vals.push(extra.promptVersion); }
   if (['done', 'failed', 'cancelled', 'escalated'].includes(state)) sets.push("ended_at = datetime('now')");
   vals.push(runId);
   exec(`UPDATE runs SET ${sets.join(', ')} WHERE id = ?`, ...vals);
@@ -137,6 +139,10 @@ export async function executeRun(run) {
 
   try {
     const decision = run.decision_id ? one('SELECT id, tier FROM decisions WHERE id = ?', run.decision_id) : null;
+    // The prompt is the other half of reproducibility — the model was already
+    // recorded. Stamped here, once, before anything is sent, so a run that
+    // fails still says what it was asked with.
+    const promptV = promptVersion(run.agent_id, spec.system);
     const baseReq = {
       tier: spec.tier,
       agentId: run.agent_id,
@@ -190,13 +196,13 @@ export async function executeRun(run) {
         payload: { reason: declined ? 'declined' : 'schema', detail: declined ? declined.slice(0, 200) : undefined },
       });
     } else if (forceHumanReason) {
-      setState(run.id, 'awaiting_human', { output, flags: result.flags, failureReason: forceHumanReason, provider: result.provider, model: result.model, family: result.family });
+      setState(run.id, 'awaiting_human', { output, flags: result.flags, failureReason: forceHumanReason, provider: result.provider, model: result.model, family: result.family, promptVersion: promptV });
       audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.awaiting_human', subjectType: 'run', subjectId: run.id, payload: { reason: 'same-family-review' } });
     } else if (floor > 0 && typeof confidence === 'number' && confidence < floor) {
-      setState(run.id, 'awaiting_human', { output, flags: result.flags, failureReason: `confidence ${confidence} below floor ${floor}`, provider: result.provider, model: result.model, family: result.family });
+      setState(run.id, 'awaiting_human', { output, flags: result.flags, failureReason: `confidence ${confidence} below floor ${floor}`, provider: result.provider, model: result.model, family: result.family, promptVersion: promptV });
       audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.awaiting_human', subjectType: 'run', subjectId: run.id, payload: { reason: 'confidence', confidence } });
     } else {
-      setState(run.id, 'done', { output, flags: result.flags, provider: result.provider, model: result.model, family: result.family });
+      setState(run.id, 'done', { output, flags: result.flags, provider: result.provider, model: result.model, family: result.family, promptVersion: promptV });
       audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.done', subjectType: 'run', subjectId: run.id, payload: { costUsd: result.costUsd, provider: result.provider, model: result.model } });
     }
     const finished = one('SELECT * FROM runs WHERE id = ?', run.id);

@@ -11,6 +11,7 @@ import * as gemini from './providers/gemini.js';
 import * as mock from './providers/mock.js';
 import { reserve, settle, release, providerAllowedFor, perTaskCap, BudgetExceeded } from './policy.js';
 import { exec } from './db.js';
+import { tierChain } from './canary.js';
 
 export class RouterExhausted extends Error {
   constructor(tier, mode, tried) {
@@ -43,9 +44,12 @@ function costOf(providerName, model, tokensIn, tokensOut) {
   return (tokensIn / 1e6) * price.priceIn + (tokensOut / 1e6) * price.priceOut;
 }
 
-function eligibleChain(tier, { sensitivity = 'internal', familyNot = null } = {}) {
+function eligibleChain(tier, { sensitivity = 'internal', familyNot = null, chainOverride = null } = {}) {
   if (mockMode()) return [{ provider: 'mock', model: 'mock-large' }];
-  const chain = providersConfig.tiers[tier]?.chain || [];
+  // A promoted chain beats the file. Editing providers.json to change a tier is
+  // a change that the next `git pull` silently reverts, so a decision that was
+  // canaried and signed lives in settings instead.
+  const chain = chainOverride || tierChain(tier) || providersConfig.tiers[tier]?.chain || [];
   return chain.filter((step) => {
     const p = providersConfig.providers[step.provider];
     if (!p || !providerAvailable(step.provider)) return false;
@@ -84,11 +88,14 @@ export async function route({
   tier, agentId, decisionId = null, governance = false,
   sensitivity = 'internal', familyNot = null,
   system, prompt, maxTokens = 4096, runId = null, _degraded = false,
+  // A canary names the chain it wants to test, because the point is to try one
+  // that is not in service yet.
+  chainOverride = null,
 }) {
   const reservation = reserve({ agentId, decisionId, estUsd: perTaskCap(agentId), governance });
   const tried = [];
   try {
-    const chain = eligibleChain(tier, { sensitivity, familyNot });
+    const chain = eligibleChain(tier, { sensitivity, familyNot, chainOverride });
     let lastErr = null;
     for (const step of chain) {
       tried.push(`${step.provider}/${step.model}`);
