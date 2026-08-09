@@ -33,7 +33,7 @@ function isPrivateIp(ip) {
   return v === '::1' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80') || v === '::';
 }
 
-async function assertPublicUrl(raw) {
+export async function assertPublicUrl(raw) {
   const url = new URL(raw);
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('only http and https are allowed');
   if (url.port && !['80', '443', ''].includes(url.port)) throw new Error('that port is not allowed');

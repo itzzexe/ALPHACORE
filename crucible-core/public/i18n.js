@@ -67,6 +67,7 @@ export const SECTION_AR = {
   backups: 'النسخ الاحتياطية',
   // الدفاتر والبحث العميق
   ledger: 'دفتر الأستاذ', bookkeeper: 'المحاسبة الآلية', hunt: 'البحث العميق',
+  browser: 'المتصفح',
 };
 
 // ---------- interface strings ----------
@@ -123,6 +124,34 @@ const AR = {
   'events turned into entries': 'أحداث تحوّلت إلى قيود',
   'above the limit, so drafted not posted': 'فوق الحد، فصيغت مسودة ولم تُرحّل',
   'per entry, unattended': 'لكل قيد، دون إشراف',
+
+  // المتصفح الذي يقوده الوكلاء
+  'Give it something to do': 'أعطه مهمة',
+  'What should it do? e.g. find the pricing page for acme.com and tell me the top tier': 'ما المطلوب؟ مثلًا: افتح صفحة الأسعار لـ acme.com وأخبرني بأعلى باقة',
+  'What should the browser do?': 'ما المطلوب من المتصفح؟',
+  'start at (optional)': 'ابدأ من (اختياري)',
+  'Start URL': 'رابط البداية',
+  'Send it': 'أرسله',
+  'Sessions': 'الجلسات',
+  'What it will not do': 'ما لن يفعله',
+  'This step needs you': 'هذه الخطوة تحتاجك',
+  'Approve this step': 'وافق على هذه الخطوة',
+  'Open': 'افتح',
+  'Goal': 'الهدف',
+  'State': 'الحالة',
+  'Steps': 'الخطوات',
+  'Outcome': 'النتيجة',
+  'no browser attached': 'لا متصفح موصول',
+  'nothing held': 'لا شيء محجوز',
+  'a step that leaves the building': 'خطوة تغادر المبنى',
+  'across every session': 'عبر كل الجلسات',
+  'no steps yet': 'لا خطوات بعد',
+  'nothing yet': 'لا شيء بعد',
+  'working — watch the browser window…': 'يعمل — راقب نافذة المتصفح…',
+  'held': 'محجوزة',
+  'approved': 'موافق عليها',
+  'refused': 'مرفوضة',
+  'Why not?': 'لماذا لا؟',
 
   // البحث العميق
   'Ask': 'اسأل',

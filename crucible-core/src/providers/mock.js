@@ -43,6 +43,21 @@ function pick(system, prompt) {
       confidence: 0.3,
     };
   }
+  // Driving a browser. Mock has no eyes: it cannot look at a screenshot and
+  // decide what to click. So it does the one thing it can do honestly — reports
+  // what it can see of the page and stops. It never guesses at an element
+  // number, because a wrong click on a real website is a real consequence.
+  if (s.includes('"do": "navigate|click') || (s.includes('ELEMENTS YOU CAN ACT ON') && s.includes('"think"'))) {
+    const url = ((prompt || '').match(/^(https?:\/\/\S+)/m) || [])[1] || 'the current page';
+    const count = ((prompt || '').match(/^\[\d+\]/gm) || []).length;
+    return {
+      think: '[mock] Reached ' + url + ' and found ' + count + ' element(s) that can be acted on.',
+      do: 'stuck',
+      why: '[mock] Deciding what to click needs a model that can read the page and the screenshot — connect a provider key. '
+        + 'Everything else on this path is real: the browser was driven, the page was perceived, and the picture was kept.',
+    };
+  }
+
   // The hunt. Mock cannot judge whether evidence answers a question, so it never
   // says it does — but it can pull the distinctive words out of what was found,
   // which is exactly what a real model does with the "next" field. That way the

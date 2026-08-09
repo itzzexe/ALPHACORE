@@ -26,6 +26,7 @@ export const PERMS = [
   'finance.view', 'finance.export',
   'ledger.view', 'ledger.post', 'ledger.close',
   'hunt.view', 'hunt.run',
+  'browser.view', 'browser.drive', 'browser.approve',
   'marketing.view', 'marketing.manage',
   'customers.view', 'customers.manage',
   'people.view', 'people.manage',

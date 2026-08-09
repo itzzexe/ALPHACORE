@@ -136,6 +136,9 @@ import {
 } from './ledger.js';
 import { bookkeep, reconcile, closeMonth, bookkeeperOverview } from './bookkeeper.js';
 import { hunt, lookup, huntsList, huntDetail, huntOverview } from './hunt.js';
+import {
+  drive, approveStep, refuseStep, stopSession, sessionDetail, sessionsList, browserOverview,
+} from './browser.js';
 import { listNotifications, unreadCount, markAllRead } from './notify.js';
 import {
   createCampaign, listCampaigns, approveCampaign, updateCampaign,
@@ -428,6 +431,26 @@ const routes = [
     allowWeb: body?.allowWeb !== false,
     sources: Array.isArray(body?.sources) ? body.sources : null,
   })],
+
+  // --- The browser the employees drive ---
+  ['GET', /^\/api\/browser$/, () => browserOverview()],
+  ['GET', /^\/api\/browser\/list$/, () => ({ sessions: sessionsList({}) })],
+  ['GET', /^\/api\/browser\/(\d+)$/, ([id]) => sessionDetail(Number(id))],
+  ['POST', /^\/api\/browser$/, (_p, body) => drive({
+    goal: need(body, 'goal'), actor: need(body, 'actor'),
+    startUrl: body?.startUrl || null,
+    maxSteps: body?.maxSteps ? Number(body.maxSteps) : undefined,
+    maxUsd: body?.maxUsd ? Number(body.maxUsd) : undefined,
+  })],
+  // Approving is its own permission and its own act: the signature is for the
+  // step that was shown, never for the session.
+  ['POST', /^\/api\/browser\/(\d+)\/approve$/, ([id], body) => approveStep({
+    id: Number(id), actor: need(body, 'actor'), note: body?.note || null,
+  })],
+  ['POST', /^\/api\/browser\/(\d+)\/refuse$/, ([id], body) => refuseStep({
+    id: Number(id), actor: need(body, 'actor'), why: body?.why || '',
+  })],
+  ['POST', /^\/api\/browser\/(\d+)\/stop$/, ([id], body) => stopSession({ id: Number(id), actor: need(body, 'actor') })],
 
   // --- Notifications ---
   ['GET', /^\/api\/notifications$/, (_p, _b, url) => ({ unread: unreadCount(), items: listNotifications({ unreadOnly: url.searchParams.get('unread') === '1' }) })],
@@ -1452,6 +1475,10 @@ function permFor(m, path) {
   // A hunt spends money and reaches outside; reading one that already ran does
   // neither. Different permissions for genuinely different acts.
   if (path.startsWith('/api/hunt')) return m === 'GET' ? 'hunt.view' : 'hunt.run';
+  // Watching a browser session, steering one, and signing off the step that
+  // leaves the building are three different amounts of authority.
+  if (/^\/api\/browser\/\d+\/(approve|refuse)$/.test(path)) return 'browser.approve';
+  if (path.startsWith('/api/browser')) return m === 'GET' ? 'browser.view' : 'browser.drive';
   if (path.startsWith('/api/campaigns')) return m === 'GET' ? 'marketing.view' : 'marketing.manage';
   if (path.startsWith('/api/customers')) return m === 'GET' ? 'customers.view' : 'customers.manage';
   if (path.startsWith('/api/contracts')) return m === 'GET' ? 'legal.view' : 'legal.manage';

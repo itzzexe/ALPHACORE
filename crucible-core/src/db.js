@@ -2284,6 +2284,46 @@ BEGIN SELECT RAISE(ABORT, 'a posted entry cannot lose a line'); END;
 
 -- What the bookkeeper has already turned into entries, so a restart does not
 -- post everything a second time.
+-- A browser session an employee drove: the goal, and every step it took.
+-- Kept in full, with the picture, because "an agent did something on the web"
+-- is not an acceptable answer to a question about your own company.
+CREATE TABLE IF NOT EXISTS browser_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal        TEXT NOT NULL,
+  agent_id    TEXT,
+  opened_by   TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'running',  -- running|waiting|done|stopped|out-of-steps
+  start_url   TEXT,
+  steps       INTEGER DEFAULT 0,
+  max_steps   INTEGER,
+  max_usd     REAL,
+  cost_usd    REAL DEFAULT 0,
+  outcome     TEXT,
+  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS browser_steps (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id   INTEGER NOT NULL,
+  step         INTEGER NOT NULL,
+  url          TEXT,
+  title        TEXT,
+  action       TEXT,        -- what it did, with the secret's NAME never its value
+  thought      TEXT,        -- why, in its own words, at the time
+  result       TEXT,
+  screenshot   TEXT,        -- what it was actually looking at
+  elements     TEXT,        -- the numbered list it chose from
+  gated        INTEGER NOT NULL DEFAULT 0,
+  gate_reason  TEXT,
+  egress_id    INTEGER,
+  resolved     TEXT,        -- approved|refused
+  resolved_by  TEXT,
+  resolve_note TEXT,
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS browser_steps_by_session ON browser_steps(session_id, step);
+
 -- A hunt: a question, and every round it took to answer it or fail to.
 -- Kept because "we looked and could not find it" is a finding, and the next
 -- person to ask deserves to see what was already tried rather than repeating it.

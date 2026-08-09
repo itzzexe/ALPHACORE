@@ -179,7 +179,7 @@ const navPerm = {
   quality: 'quality.view', incidents: 'incidents.view', support: 'support.view', intel: 'intel.view',
   segments: 'segments.view', data: 'datasets.view', archive: 'archive.view', marketing: 'marketing.view',
   customers: 'customers.view', finance: 'finance.view', people: 'people.view', legal: 'legal.view',
-  ledger: 'ledger.view', bookkeeper: 'ledger.view', hunt: 'hunt.view',
+  ledger: 'ledger.view', bookkeeper: 'ledger.view', hunt: 'hunt.view', browser: 'browser.view',
   vendors: 'vendors.view', knowledge: 'knowledge.view', objectives: 'objectives.view', evals: 'evals.view',
   agents: 'agents.view', budgets: 'budgets.view', audit: 'audit.view', providers: 'providers.view',
   oversight: 'oversight.view', users: 'users.manage', settings: 'settings.manage',
@@ -1135,6 +1135,125 @@ async function renderHunt() {
   $('#hunt-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#hunt-go').click(); });
 }
 
+// The browser the employees drive. Every step is here with the picture it was
+// looking at — you can read back exactly what it saw when it did the thing you
+// are asking about, rather than taking its word for it.
+async function renderBrowser() {
+  const b = await api('/api/browser');
+  const row = (s) => `<tr>
+      <td class="mono">${s.id}</td>
+      <td>${esc(s.goal)}</td>
+      <td><span class="chip ${{ done: 'chip-ok', waiting: 'chip-warn', running: 'chip-steel' }[s.state] || 'chip-dim'}">${esc(s.state)}</span></td>
+      <td class="num">${s.steps || 0}</td>
+      <td class="num">${esc(money4(s.cost_usd || 0))}</td>
+      <td class="sub">${esc(String(s.outcome || '').slice(0, 90))}</td>
+      <td><button class="btn btn-sm" data-open="${s.id}">Open</button></td>
+    </tr>`;
+
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title">
+      <span>Give it something to do</span>
+      <span class="chip ${b.live.attached ? 'chip-ok' : 'chip-bad'}">${b.live.attached ? esc(b.live.browser) : 'no browser attached'}</span>
+    </div>
+    ${b.live.attached ? '' : `<div class="empty" style="text-align:left">${esc(b.live.how)}</div>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+      <input id="br-goal" class="input" placeholder="What should it do? e.g. find the pricing page for acme.com and tell me the top tier" aria-label="What should the browser do?" style="flex:1;min-width:240px">
+      <input id="br-url" class="input input-sm" placeholder="start at (optional)" aria-label="Start URL" style="width:190px">
+      <button class="btn btn-primary" id="br-go" ${b.live.attached ? '' : 'disabled'}>Send it</button>
+    </div>
+    <div class="map-legend" style="margin-top:8px">
+      It looks at the page, picks one action, does it, then looks again — up to ${b.maxSteps} steps or ${esc(money(b.maxUsd))}.
+      You can watch it happen in the browser window; every step is kept here with its screenshot.
+    </div>
+    <div id="br-out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="panel tile"><div class="panel-title">Sessions</div><div class="big">${b.total}</div><div class="sub">${b.done} finished the job</div></div>
+    <div class="panel tile ${b.waiting.length ? 'tile-warn' : ''}"><div class="panel-title">Waiting on you</div><div class="big">${b.waiting.length}</div><div class="sub">${b.waiting.length ? 'a step that leaves the building' : 'nothing held'}</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Spent</div><div class="big">${esc(money(b.spentUsd))}</div><div class="sub">across every session</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">What it will not do</div>
+    ${b.refuses.map((r) => `<div class="meter-label"><span>${esc(r)}</span></div>`).join('')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Sessions</div>
+    ${b.recent.length
+    ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Goal</th><th>State</th><th class="num">Steps</th><th class="num">Cost</th><th>Outcome</th><th></th></tr></thead><tbody>${b.recent.map(row).join('')}</tbody></table></div>`
+    : '<div class="empty">nothing yet</div>'}
+  </div>`;
+
+  const out = $('#br-out');
+
+  // One session, step by step: the picture, what it was thinking, what it did.
+  const showSession = async (id) => {
+    const s = await api(`/api/browser/${id}`);
+    const step = (x) => `<div class="panel" style="margin:0 0 10px">
+        <div class="panel-title">
+          <span>${x.step}. ${esc(x.action || '')}</span>
+          <span>${x.gated ? '<span class="chip chip-warn">held</span> ' : ''}${x.resolved ? `<span class="chip ${x.resolved === 'approved' ? 'chip-ok' : 'chip-bad'}">${esc(x.resolved)}</span>` : ''}</span>
+        </div>
+        <div class="sub mono" style="font-size:11px">${esc(String(x.url || '').slice(0, 120))}</div>
+        ${x.thought ? `<p class="lede" style="margin:6px 0">${esc(x.thought)}</p>` : ''}
+        ${x.gate_reason ? `<div class="meter-label" style="color:var(--warn)">${esc(x.gate_reason)}</div>` : ''}
+        <div class="sub">${esc(x.result || '')}</div>
+        ${x.screenshot ? `<img src="${esc(x.screenshot)}" alt="What the browser was looking at on step ${x.step}: ${esc(String(x.title || x.url || '').slice(0, 80))}" style="max-width:100%;border:1px solid var(--seam);border-radius:6px;margin-top:8px">` : ''}
+        ${x.elements?.length ? `<details style="margin-top:8px"><summary class="sub">the ${x.elements.length} element(s) it was choosing from</summary>
+          <div class="mono" style="font-size:11px;line-height:1.7;margin-top:6px">${x.elements.map((e) => `[${e.n}] ${esc(e.kind)} ${esc(e.label || '')}${e.onScreen ? '' : ' (below the fold)'}`).join('<br>')}</div>
+        </details>` : ''}
+      </div>`;
+    out.innerHTML = `
+      <div class="panel-title">
+        <span>Session ${s.id} — ${esc(s.goal)}</span>
+        <span class="chip ${s.state === 'done' ? 'chip-ok' : (s.state === 'waiting' ? 'chip-warn' : 'chip-dim')}">${esc(s.state)}</span>
+      </div>
+      ${s.state === 'waiting' ? `<div class="panel" style="border-color:var(--warn)">
+        <div class="panel-title">This step needs you</div>
+        <p class="lede">${esc(s.steps.filter((x) => x.gated && !x.resolved).slice(-1)[0]?.gate_reason || 'a step that leaves the building')}</p>
+        <div><button class="btn btn-primary" id="br-ok">Approve this step</button> <button class="btn btn-bad" id="br-no">Refuse</button></div>
+      </div>` : ''}
+      ${s.steps.map(step).join('') || '<div class="empty">no steps yet</div>'}`;
+
+    const ok = $('#br-ok');
+    if (ok) {
+      ok.addEventListener('click', async () => {
+        // The approval is for the step on screen. The next one that commits
+        // stops again — a session-wide yes would mean this screenshot
+        // authorised every click after it.
+        if (!confirm('Approve this one step? The next step that leaves the building will stop again.')) return;
+        try { await api(`/api/browser/${id}/approve`, { method: 'POST', body: {} }); toast('approved — carrying on'); showSession(id); }
+        catch (e) { toast(e.message, true); }
+      });
+      $('#br-no').addEventListener('click', async () => {
+        const why = prompt('Why not?');
+        if (why === null) return;
+        try { await api(`/api/browser/${id}/refuse`, { method: 'POST', body: { why } }); toast('refused'); showSession(id); }
+        catch (e) { toast(e.message, true); }
+      });
+    }
+  };
+
+  view.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => showSession(btn.dataset.open)));
+
+  $('#br-go').addEventListener('click', async () => {
+    const goal = $('#br-goal').value.trim();
+    if (!goal) return;
+    out.innerHTML = '<div class="empty">working — watch the browser window…</div>';
+    try {
+      const r = await api('/api/browser', { method: 'POST', body: { goal, startUrl: $('#br-url').value.trim() || null } });
+      toast(r.say || r.state);
+      await showSession(r.id);
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  });
+  $('#br-goal').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#br-go').click(); });
+
+  if (b.waiting.length) showSession(b.waiting[0].id);
+}
+
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
@@ -1165,6 +1284,7 @@ const routes = {
   ledger: { title: 'Ledger', render: renderLedger },
   bookkeeper: { title: 'Bookkeeper', render: renderBookkeeper },
   hunt: { title: 'Hunt', render: renderHunt },
+  browser: { title: 'Browser', render: renderBrowser },
   oversight: { title: 'Oversight', render: renderOversight, poll: 10000 },
   users: { title: 'Users & Roles', render: renderUsers },
   settings: { title: 'Settings', render: renderSettings },

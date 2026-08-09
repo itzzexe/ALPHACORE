@@ -9,7 +9,7 @@ One hundred and twenty-two departments across thirteen divisions, staffed by an 
 researches, sells, supports, **hires its own new employees** — and reaches the real world through one guarded
 door — while humans hold every gate that matters: approving, publishing, signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-125-c0563a?style=flat-square" alt="125 departments">
+<img src="https://img.shields.io/badge/departments-126-c0563a?style=flat-square" alt="126 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/relationships-344-8d8477?style=flat-square" alt="344 declared relationships">
 <img src="https://img.shields.io/badge/API-498_routes-4f9cf0?style=flat-square" alt="498 API routes">
@@ -19,7 +19,7 @@ door — while humans hold every gate that matters: approving, publishing, signi
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-118-78bf6d?style=flat-square" alt="118 tests">
+<img src="https://img.shields.io/badge/tests-131-78bf6d?style=flat-square" alt="131 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
@@ -39,7 +39,7 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 125 departments](#the-company--13-divisions-125-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 126 departments](#the-company--13-divisions-126-departments) | the shape |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
@@ -198,7 +198,7 @@ library to a project whose whole point is that it has none.
 flowchart TD
   CORE(("◆ HARMONY<br/>orchestrator +<br/>audit chain"))
   ENGINE["ENGINE · 9<br/>requests · agents · runs<br/>pipelines · providers"] --> CORE
-  WORLD["THE WORLD · 9<br/>integrations · the gate · vault<br/>web · MCP · queue"] --> CORE
+  WORLD["THE WORLD · 10<br/>integrations · the gate · vault<br/>web · browser · MCP · queue"] --> CORE
   BUILD["BUILD · 10<br/>system design · products<br/>projects · releases · packages"] --> CORE
   DECIDE["DECIDE · 9<br/>human gate · decisions · budgets<br/>risks · evals · shadow company"] --> CORE
   DATA["DATA · 9<br/>intelligence · segments · datasets<br/>archive · knowledge graph · deep search"] --> CORE
@@ -241,7 +241,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **353 relationships** that the map
+Those declarations are data, not decoration: **358 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -289,7 +289,7 @@ connectivity audit and live flow counts — as JSON.
 
 ---
 
-## The company — 13 divisions, 125 departments
+## The company — 13 divisions, 126 departments
 
 <details open>
 <summary><b>ENGINE · 10</b> — the workforce and the work</summary>
@@ -444,12 +444,15 @@ verifiable from the header.
 </details>
 
 <details>
-<summary><b>THE WORLD · 9</b> — everything outside this machine</summary>
+<summary><b>THE WORLD · 10</b> — everything outside this machine</summary>
 
-**Integrations** · **The gate** · **The vault** · **The open web** · **MCP** ·
-**The queue** · **Companies** · **API keys** · **Webhooks**
+**Integrations** · **The gate** · **The vault** · **The open web** ·
+**The browser** · **MCP** · **The queue** · **Companies** · **API keys** ·
+**Webhooks**
 
-One door out, and everything that guards it.
+One door out, and everything that guards it. The browser lives here rather than
+with the tools, because an employee clicking buttons on somebody else's website
+is the company reaching outside, whatever it happens to be clicking.
 </details>
 
 ---
@@ -629,6 +632,56 @@ Credentials live in the **vault**: AES-256-GCM at rest, with the master key in
 for the connector making the call. Listings show the last four characters and
 nothing else. OAuth flows verify state and refresh expiring tokens on the queue.
 
+### The browser the employees drive
+
+Reading a page is not using the web. The price is behind a form, the document is
+behind a login, and the thing you need is three clicks past a dropdown that only
+exists after JavaScript runs. An employee that can only read is an employee you
+have to do the clicking for.
+
+So there is a real browser, and an agent is given a goal in words. Each step is
+the three moves a person makes without noticing:
+
+| | |
+|---|---|
+| **look** | a screenshot, plus **every element it could actually act on, numbered**. Not the HTML — a page is forty thousand tokens of markup and about fifteen things you can click, and handing a model the markup is how it starts inventing selectors. Given a numbered list of real, visible, hit-testable elements, it can only choose one that exists. |
+| **decide** | one action, with its reasoning, recorded |
+| **act** | through the browser, then look again at what changed |
+
+Everything is kept: the picture it saw, the numbered list it was choosing from,
+what it picked, why, and what happened. You can watch it live in the browser
+window and read the whole thing back afterwards. *"An agent did something on the
+web"* is not an acceptable answer to a question about your own company.
+
+**What stops it, by construction rather than by prompt:**
+
+- **Anything irreversible or outward-facing waits for a person.** Submitting,
+  signing up, signing in, sending, buying, publishing, deleting — the step stops
+  with the screenshot attached, so whoever signs can see the button. The
+  approval is for *the step that was shown*, not for the session: the next thing
+  that commits stops again. An agent that can click "Buy" unattended is not a
+  capability, it is an incident with a countdown.
+- **The check reads Arabic too**, because a button labelled `إنشاء حساب` commits
+  exactly as much as one labelled *Create account*.
+- **A click inside a form with a password field is a sign-in**, whatever the
+  button says — real sign-in buttons are labelled "→" and "Continue" as often as
+  anything useful.
+- **An action nobody thought about is treated as a write.** The same default as
+  the egress gate: a verb the code does not recognise does not become an
+  unreviewed capability.
+- **Credentials never touch the model.** It asks for a vault entry *by name*;
+  the value is fetched and typed here, and the record stores the name. The model
+  never sees it, and neither does anyone reading the step log.
+- **A CAPTCHA ends the session.** Not attempted, not worked around. A site that
+  says it does not want machines has said so, and going around it would poison
+  every other thing this company does on the web.
+- **Private addresses are unreachable** — the same DNS-resolving SSRF check the
+  rest of the web layer uses. A browser an agent steers is the most convincing
+  SSRF tool anyone could hand it.
+- **Page text is scanned for injection before the model reads it.** This is the
+  one place where a hostile page gets to talk directly to the thing deciding
+  what to click next.
+
 ### The open web
 
 Fetch, search, and a real browser. Every page is kept with its hash so a claim
@@ -697,7 +750,7 @@ department rather than buried in Settings.
 | **Anchors** | The chain's head witnessed by an RFC 3161 timestamping authority, outside this disk. Verifying the chain proves it agrees with *itself*, which is exactly what a rewritten record also does — anybody who owns the file can edit it and recompute every hash. This is the only check that cannot be forged locally. |
 | **Erasure** | Crypto-shredding: a person's data sealed under their own key *before* the payload is hashed, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. |
 | **The desk** | Everything waiting on a person, ordered by what it blocks. Batches are recorded as one act naming every item, never as a dozen entries that read like a dozen judgements. |
-| **Roles** | Seven templates over the 209 permissions, with each irreversible power in exactly one of them. |
+| **Roles** | Seven templates over the 212 permissions, with each irreversible power in exactly one of them. |
 | **Model chains** | Which model does the work, and a canary that must pass — on the same day, against the chain in service — before it changes. An untested chain cannot be promoted, and an inconclusive canary does not count as evidence. |
 | **Recall** | Local embeddings via ollama, so search finds "the tool that reads receipts" from "invoice OCR platform" — trigrams score that pair at 0.000. Nothing leaves the machine. |
 | **Deliverability** | DKIM signing, and a preflight that reads live DNS to say what a receiver would conclude. Plus whether a call may lawfully be recorded, by jurisdiction. |
@@ -792,7 +845,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**521 routes** — all JSON, all
+**528 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -868,7 +921,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 118 tests, on their own database files |
+| `npm test` | 131 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -916,6 +969,7 @@ Settings the console owns, all editable without a restart:
 | `RETENTION_ENABLED` · `SLOW_QUERY_MS` | housekeeping, and what counts as blocking |
 | `BOOKKEEPER_LIMIT_USD` | what an AI employee may post to the books unattended (default 500). Above it, they draft and a person posts |
 | `HUNT_MAX_ROUNDS` · `HUNT_MAX_USD` | how long a deep search may keep going, and what it may spend doing it |
+| `BROWSER_PORT` · `BROWSER_MAX_STEPS` · `BROWSER_MAX_USD` | where the browser is listening, and how far an employee may drive it before stopping |
 | `TIER_OVERRIDES` | a promoted model chain — written by the canary, not by hand |
 
 Config files:
@@ -955,16 +1009,17 @@ credential — keep them together.
 
 ```
 crucible-core/
-  src/                109 modules, ~26,700 lines
+  src/                110 modules, ~27,300 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
     db.js             165 tables, forward-only migrations
     audit.js          the hash chain
-    auth.js           sessions, 209 permissions, password generation
+    auth.js           sessions, 212 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
     policy.js         reservation-first budgets
     ledger.js         double-entry books: the chart, the journal, four statements
     bookkeeper.js     the AI employees who write the entries, and the limit
     hunt.js           deep search that keeps going, and says so when it fails
+    browser.js        a real browser the employees drive, and what stops them
     workflow.js       agents, runs, leases, retries, reclamation
     egress.js         the gate, and paper trading
     vault.js          AES-256-GCM secrets, and rotating the key under them
@@ -1000,7 +1055,7 @@ crucible-core/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               118 tests across eleven files
+  test/               131 tests across twelve files
   docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
   config/             agents, providers, rituals
 ```
@@ -1012,7 +1067,7 @@ crucible-core/
 Nothing here is claimed from inspection. Every number is measured.
 
 ```bash
-npm test                        # 118 tests
+npm test                        # 131 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
@@ -1056,8 +1111,14 @@ configured, the public URL set, the licence files present, no test residue).
   never be read, then asserts the bait is really there before asserting it was
   not returned. A guard test that quietly fails to plant its bait proves nothing
   while looking like it passed.
+- **Thirteen labels and one form** — the browser suite puts every commit word
+  through the gate in both languages, checks that a meaningless button label is
+  still stopped when the form takes a password, and checks that an unrecognised
+  action fails closed. Then it drives a real browser at a real page with a real
+  form and puts all thirteen perceived elements through the real gate: twelve
+  proceed, and "Submit order" stops.
 
-**The browser sweep** opens all 125 departments in both themes and both
+**The browser sweep** opens all 126 departments in both themes and both
 languages, at 1440×900 and again at 390×844 — 488 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
@@ -1142,6 +1203,15 @@ Choices that shaped this, and what they cost:
   that monitoring does not page somebody at three in the morning because an
   accountant mistyped an amount. A 500 from that module means the ledger itself
   is broken, which *is* worth waking up for.
+- **The browser gate is not the egress gate.** The connector gate is built
+  around a named service with an allowlist and a quota, and a browser is none of
+  those. Forcing it through would have recorded every held step as *blocked by
+  an unknown connector*, which is a worse record than no record.
+- **An approval is for one step, not for a session.** A session-wide yes would
+  mean the first screenshot authorised every click after it.
+- **The element list is kept, not just the click.** Without the menu it was
+  choosing from, "why did it click that" is unanswerable — you would be looking
+  at the choice without the alternatives.
 - **A hunt that cannot stop is not a feature.** Round ceiling, cost cap, and a
   dry round all end it — otherwise "keep going until it finds it" is a promise to
   search forever, and a loop that must produce something eventually produces
