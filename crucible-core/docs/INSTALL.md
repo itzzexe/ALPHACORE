@@ -123,6 +123,30 @@ To do real work:
    fenced by an allowlist; a live connector with an empty allowlist is a
    finding, not a convenience.
 
+### Paper trading — real reads, nothing sent
+
+There are two settings and the gap between them is a cliff. Mock mode proves the
+plumbing and nothing about the economics: every answer is a stub, so a pipeline
+can look like it works while being fed invented numbers. Live mode proves
+everything, and can also email four hundred people.
+
+```bash
+PAPER_TRADING=true
+```
+
+Reads go out against the real APIs with real credentials, so the data is your
+actual data. Anything that would *change* something out there runs the whole
+path — scopes, allowlist, quota, constitution, the payload assembled — and then
+is not sent, recorded with the verdict `paper` and what it would have done.
+
+**Anything unrecognised counts as a write.** That default is the entire safety
+of the mode: a capability added next month that nobody thought about is held
+rather than sent, and the opposite default would let one new verb quietly undo
+the whole thing.
+
+This is the honest way to run one vertical for a fortnight before it touches
+anybody.
+
 ### What the platform will never do on its own
 
 Worth knowing before you leave it running overnight:
@@ -703,6 +727,36 @@ The promoted chain lives in settings, not in `providers.json`. A change made by
 editing a file that ships with the repository is a change the next `git pull`
 silently reverts.
 
+### Recall that understands a question phrased differently
+
+The knowledge graph and the memory playbooks retrieve by trigram overlap. That
+finds "invoice OCR platform" from "invoice ocr" and does **not** find "the tool
+that reads receipts" — measured at 0.000 similarity between those two phrases,
+which is a ceiling on the quality of every answer the workforce gives, not a
+rough edge on a search box.
+
+```bash
+# Any local ollama embedding model. Nothing leaves the machine.
+EMBEDDING_MODEL=nomic-embed-text
+OLLAMA_URL=http://127.0.0.1:11434     # if it is not the default
+```
+
+Then `POST /api/embeddings/reindex` until it reports done — in bounded batches,
+for the same reason retention is.
+
+Without a model configured this stays on trigrams and `GET /api/embeddings`
+says so in those words rather than implying it understands anything.
+
+**Vectors from two models are never compared.** Each row records the space it
+belongs to, and a comparison across spaces returns nothing rather than a number
+— a 768-dimension model vector against a 256-bucket trigram sketch produces a
+confident score for a ranked list of nonsense, which looks exactly like a ranked
+list. Rows in the old space are dropped from results until the reindex reaches
+them.
+
+If the local model is unreachable, recall degrades to trigrams and says so on
+the chain — once an hour, not once a call.
+
 ### Which prompt produced this
 
 Every run already recorded the model that answered it; it now records the system
@@ -882,6 +936,8 @@ environment when a machine should be configured before it first starts.
 | `ALPHACORE_MASTER_KEY_COMMAND` | A command printing the master key material. The KMS door. |
 | `ALPHACORE_MASTER_KEY` | The material directly, base64. For container secrets. |
 | `DRAIN_SECONDS` | How long to let in-flight work finish on SIGTERM. Default 20. |
+| `PAPER_TRADING` | `true` reads the real world and changes nothing. |
+| `EMBEDDING_MODEL` | A local ollama model for semantic recall. |
 | `ALERT_CHANNEL` | `telegram`, `webhook` or `command`. |
 | `BACKUP_SHIP_COMMAND` | Gets a backup off this machine. The path is appended. |
 | `TRUST_PROXY` | `true` only when a reverse proxy sits in front, so `X-Forwarded-For` can be believed for rate limiting. |

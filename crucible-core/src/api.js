@@ -84,6 +84,7 @@ import { lifecycleOverview, alert } from './lifecycle.js';
 import { observabilityOverview, applyRetention } from './observability.js';
 import { canaryOverview, promptHistory, proposeChain, runCanary, promoteChain, revertChain } from './canary.js';
 import { approvalsOverview, roleTemplates, applyTemplate, delegate, endDelegation } from './approvals.js';
+import { embeddingsOverview, reindex } from './embeddings.js';
 import {
   DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
   getConnector, connectorsOverview, callConnector,
@@ -391,6 +392,10 @@ const routes = [
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
   ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
+
+  // Recall, and which of the two kinds of it is in use.
+  ['GET', /^\/api\/embeddings$/, () => embeddingsOverview()],
+  ['POST', /^\/api\/embeddings\/reindex$/, () => reindex()],
 
   // Everything waiting on a person, and who may sit at that desk.
   ['GET', /^\/api\/approvals$/, (_p, _b, _u, user) => approvalsOverview(user)],
@@ -1335,6 +1340,7 @@ function permFor(m, path) {
   if (path.startsWith('/api/tiers') || path.startsWith('/api/prompts')) return m === 'GET' ? 'providers.view' : 'providers.test';
   // Reading your own queue needs nothing beyond a session — it only ever shows
   // what you personally could act on. Handing out a role is users.manage.
+  if (path.startsWith('/api/embeddings')) return m === 'GET' ? 'graph.view' : 'graph.manage';
   if (path === '/api/approvals') return null;
   if (path.startsWith('/api/roles')) return m === 'GET' ? 'users.manage' : 'users.manage';
   if (path.startsWith('/api/delegations')) return null;

@@ -38,7 +38,13 @@ export function embed(text) {
   return v.map((x) => Number((x / norm).toFixed(4)));
 }
 
-const cosine = (a, b) => a.reduce((sum, x, i) => sum + x * (b[i] || 0), 0);
+// Refuses across spaces rather than padding with zeros. The old version
+// happily compared a 768-dimension model vector against a 256-bucket trigram
+// sketch and returned a confident number for it.
+const cosine = (a, b) => {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return null;
+  return a.reduce((sum, x, i) => sum + x * b[i], 0);
+};
 
 function upsertNode(id, kind, label, props = {}) {
   exec(
@@ -118,8 +124,13 @@ export function semanticSearch(query, { k = 10, kind = null } = {}) {
     ? q('SELECT id, kind, label, props, embedding FROM graph_nodes WHERE kind = ?', kind)
     : q('SELECT id, kind, label, props, embedding FROM graph_nodes');
   return rows
-    .map((r) => ({ id: r.id, kind: r.kind, label: r.label, props: JSON.parse(r.props || '{}'), score: Number(cosine(qv, JSON.parse(r.embedding || '[]')).toFixed(4)) }))
-    .filter((r) => r.score > 0.05)
+    .map((r) => {
+      const score = cosine(qv, JSON.parse(r.embedding || '[]'));
+      return { id: r.id, kind: r.kind, label: r.label, props: JSON.parse(r.props || '{}'), score: score === null ? null : Number(score.toFixed(4)) };
+    })
+    // A null score means that row is in a different space; it is dropped rather
+    // than ranked, and the reindex puts it back.
+    .filter((r) => r.score !== null && r.score > 0.05)
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
 }

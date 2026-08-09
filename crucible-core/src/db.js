@@ -2208,6 +2208,10 @@ try { db.exec('ALTER TABLE runs ADD COLUMN model_family TEXT'); } catch { /* col
 // Which system prompt produced this answer. The model was already recorded;
 // the prompt is the other half of being able to reproduce anything.
 try { db.exec('ALTER TABLE runs ADD COLUMN prompt_version TEXT'); } catch { /* column exists */ }
+// Which space a vector belongs to. Two models produce incomparable vectors even
+// at the same dimension, and a search that mixes them returns a ranked list of
+// nonsense — which looks exactly like a ranked list.
+try { db.exec('ALTER TABLE graph_nodes ADD COLUMN embedding_space TEXT'); } catch { /* column exists */ }
 
 db.exec(`
 -- Somebody is always on holiday. Bounded in time on purpose: a delegation with

@@ -17,7 +17,36 @@
 import { createHash } from 'node:crypto';
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
+import { getSetting } from './settings.js';
 import { checkConstitution } from './constitution.js';
+
+/**
+ * Paper trading: real reads, no writes.
+ *
+ * Mock mode proves the plumbing and nothing about the economics — every answer
+ * is a stub, so a pipeline can look like it works while being fed invented
+ * numbers. Live mode proves everything and can also email four hundred people.
+ * This is the setting in between, and it is the only honest way to run a
+ * vertical for a fortnight before it touches anybody.
+ */
+export const paperTrading = () => String(getSetting('PAPER_TRADING') ?? 'false') === 'true';
+
+/**
+ * Does this capability only look?
+ *
+ * The list is of verbs that *read*, and anything unrecognised is treated as a
+ * write. That default is the whole safety of this feature: a capability added
+ * next month that nobody thought about must be held, not sent — the opposite
+ * default would let one new verb quietly undo the entire mode.
+ */
+const READ_VERBS = /(?:^|\.)(?:get|list|read|search|fetch|check|verify|balance|status|history|profile|lookup|watch|poll|inbox|threads?)$/i;
+export function isRead(capability) {
+  const c = String(capability || '');
+  if (READ_VERBS.test(c)) return true;
+  // "request" is the generic HTTP driver's capability and can be either; a
+  // GET-shaped operation says so in its op name, which the caller passes.
+  return false;
+}
 
 /** What a capability can cost before a person has to say yes. */
 const VALUE_GATE_USD = 50;
@@ -178,6 +207,28 @@ export async function attempt({
   if (conn.state === 'dry') {
     const id = record('dry', { result: { dryRun: true, wouldCall: capability, target } });
     return { verdict: 'dry', id, result: { dryRun: true }, why: `${connectorId} is in dry-run — nothing left the machine` };
+  }
+
+  // 8b. Paper trading: the middle setting between "nothing is real" and
+  //     "everything is". Reads go out against the real APIs with real
+  //     credentials — so the data is the company's actual data — and anything
+  //     that would change something out there is executed up to the last step
+  //     and then not sent.
+  //
+  //     Mock mode proves the plumbing and nothing about the economics: every
+  //     answer is a stub, so a pipeline can be "working" while being fed
+  //     invented numbers. This is the bridge, and the only honest way to run a
+  //     vertical for a fortnight before letting it touch anybody.
+  if (paperTrading() && !isRead(capability)) {
+    const id = record('paper', {
+      result: { paperTrading: true, wouldCall: capability, target, valueUsd },
+    });
+    return {
+      verdict: 'paper',
+      id,
+      result: { paperTrading: true, wouldCall: capability, target },
+      why: 'paper trading: this read the real world and did not change it',
+    };
   }
 
   // 9. Do it, and record what came back either way.
