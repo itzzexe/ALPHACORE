@@ -83,6 +83,7 @@ import { listSecrets, putSecret, dropSecret, getSecret as vaultGet, keyHealth } 
 import { lifecycleOverview, alert } from './lifecycle.js';
 import { observabilityOverview, applyRetention } from './observability.js';
 import { canaryOverview, promptHistory, proposeChain, runCanary, promoteChain, revertChain } from './canary.js';
+import { approvalsOverview, roleTemplates, applyTemplate, delegate, endDelegation } from './approvals.js';
 import {
   DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
   getConnector, connectorsOverview, callConnector,
@@ -390,6 +391,20 @@ const routes = [
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
   ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
+
+  // Everything waiting on a person, and who may sit at that desk.
+  ['GET', /^\/api\/approvals$/, (_p, _b, _u, user) => approvalsOverview(user)],
+  ['GET', /^\/api\/roles$/, () => ({ templates: roleTemplates() })],
+  ['POST', /^\/api\/roles\/(\d+)$/, ([userId], body) => applyTemplate({
+    userId: Number(userId), template: need(body, 'template'),
+    replace: body.replace !== false, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/delegations$/, (_p, body, _u, user) => delegate({
+    fromUserId: body.fromUserId ? Number(body.fromUserId) : user.id,
+    toUserId: Number(need(body, 'toUserId')),
+    untilHours: body.hours, reason: body.reason || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/delegations\/(\d+)\/end$/, ([id], body) => endDelegation({ id: Number(id), actor: need(body, 'actor') })],
 
   // Prompt versions, and not changing a model chain on a hunch.
   ['GET', /^\/api\/tiers$/, () => canaryOverview()],
@@ -1318,6 +1333,11 @@ function permFor(m, path) {
   // Changing which model serves a tier changes every employee on it at once,
   // so it sits with providers rather than with ordinary settings.
   if (path.startsWith('/api/tiers') || path.startsWith('/api/prompts')) return m === 'GET' ? 'providers.view' : 'providers.test';
+  // Reading your own queue needs nothing beyond a session — it only ever shows
+  // what you personally could act on. Handing out a role is users.manage.
+  if (path === '/api/approvals') return null;
+  if (path.startsWith('/api/roles')) return m === 'GET' ? 'users.manage' : 'users.manage';
+  if (path.startsWith('/api/delegations')) return null;
   if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
   if (path === '/api/erasure/erase') return 'compliance.manage';
   if (path === '/api/anchors/verify') return 'audit.view';

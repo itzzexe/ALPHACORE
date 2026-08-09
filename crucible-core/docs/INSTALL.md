@@ -565,6 +565,72 @@ model and family, as columns rather than inferred later. Providers move what a
 name points at without announcing it, and a run that cannot name its model is a
 run nobody can reproduce or account for.
 
+### The approval desk
+
+The design says humans hold the gates. That is a promise on one side and a
+bottleneck on the other, and the bottleneck is structural: 114 departments
+feeding one person is a queue that only grows. Past the point where somebody
+will read it, both outcomes are bad — everything waits, or somebody starts
+approving in bulk without looking, which is worse than having no gate at all
+because it produces a signature that means nothing.
+
+`GET /api/approvals` is everything waiting on *you*, gathered from the places
+that actually stop — runs at the gate, undecided decisions, prepared payouts,
+calls the egress gate held — rather than from a queue table, which would be a
+second source of truth that drifts the first time somebody resolves something
+directly.
+
+**Ordering is by what it blocks, not by who asked.** Self-declared priority is
+always high. This reads the consequence: money that cannot move, an open
+incident, somebody outside waiting. Urgency strictly dominates age, and age only
+breaks ties inside a band — a queue whose ordering can be gamed by waiting is a
+queue that teaches people to wait.
+
+**Groups of three or more alike items can be decided at once**, and the chain
+records that as *one act naming every id*, flagged `decidedTogether`. Never as
+twelve entries that read like twelve separate judgements. Somebody looking back
+should be able to tell considered from batched, because those are different
+facts about how much thought was applied. Batches never mix kinds: a payout and
+a draft reply in one click is a "select all" in the costume of a decision.
+
+**`APPROVAL_SLA_HOURS`** (24 by default) is the promise, and overdue items are
+counted. Unmeasured latency is the bottleneck hiding.
+
+**Delegation** is bounded in time and never open-ended — an unbounded delegation
+is a permission grant with extra paperwork. Both names go on the chain, because
+"who acted" and "whose authority" are two different questions afterwards.
+
+### Roles, instead of 204 checkboxes
+
+A fresh install used to ask somebody to assemble a job out of 204 individual
+permissions before anybody could do anything, and nobody does that carefully at
+nine in the morning.
+
+```bash
+GET  /api/roles              # the templates, what each is for, what it costs
+POST /api/roles/:userId      {"template":"approver"}
+```
+
+| | |
+|---|---|
+| **Observer** | reads everything, changes nothing — verified: not one permission outside `.view` |
+| **Approver** | sits at the gates; cannot move money or open a door outward |
+| **Operator** | runs the day; deliberately without a single irreversible power |
+| **Finance** | the books — and `treasury.pay`, which is here and nowhere else |
+| **Security** | the SOC, the constitution, the red team, and `egress.release` |
+| **Marketing** | the twenty desks; can publish, cannot approve a press statement |
+| **Platform** | keys, backups, tenants — holds the vault, spends nothing |
+
+Each irreversible power — releasing money, letting something out, reading every
+credential, restoring a backup, amending the constitution — appears in **exactly
+one** template. Spreading them across convenient bundles is how they end up held
+by people nobody meant to give them to. The list of what a template carries is
+shown before it is granted.
+
+Templates use patterns like `*.view` rather than fixed lists, so one does not
+silently stop covering a department added next month — the failure mode of every
+hand-written permission list ever committed.
+
 ### Changing which model does the work
 
 A tier is a chain of provider/model candidates, and changing one changes the

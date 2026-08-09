@@ -2210,6 +2210,22 @@ try { db.exec('ALTER TABLE runs ADD COLUMN model_family TEXT'); } catch { /* col
 try { db.exec('ALTER TABLE runs ADD COLUMN prompt_version TEXT'); } catch { /* column exists */ }
 
 db.exec(`
+-- Somebody is always on holiday. Bounded in time on purpose: a delegation with
+-- no end is a permission grant with extra paperwork.
+CREATE TABLE IF NOT EXISTS delegations (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_user  INTEGER NOT NULL,
+  to_user    INTEGER NOT NULL,
+  reason     TEXT,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS delegations_to ON delegations(to_user);
+`);
+
+db.exec(`
 -- Content-addressed, so an edit and a revert give the same version rather than
 -- a third one, and two installs running the same prompt agree without talking.
 CREATE TABLE IF NOT EXISTS prompt_versions (
