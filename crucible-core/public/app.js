@@ -583,6 +583,327 @@ setInterval(refreshShell, 7000);
 
 // ---------- router ----------
 let pollTimer = null;
+/* ---------- the eight subsystems that had an API and no way in ----------
+   Each was built, tested and reachable only by curl. In a design whose whole
+   claim is that the map is the company, a department nobody can open does not
+   exist — so these are pages, not panels bolted onto Settings. */
+
+async function renderAnchors() {
+  const d = await api('/api/anchors');
+  const v = d.verification;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Witnessed', d.anchors.filter((a) => a.ok).length, 'times the chain was written down elsewhere')}
+    ${tile('Height', v.highestAnchoredHeight || 0, 'the last entry a third party saw')}
+    ${tile('Unwitnessed', v.unanchoredEntries || 0, 'entries provable only against themselves', v.unanchoredEntries > 500 ? 'tile-warn' : '')}
+    ${tile('Agrees with the world', v.ok ? 'yes' : 'NO', v.ok ? 'and with itself' : 'history was rewritten after it was anchored', v.ok ? 'tile-ok' : 'tile-bad')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Two questions, deliberately kept apart</div>
+    <div class="map-legend">
+      <b>${v.internallyConsistent ? '✓' : '✗'} It agrees with itself.</b> Every hash follows from the one before it.
+      This is necessary and it is not evidence: anybody who owns this file can rewrite history and recompute every
+      hash, and the result passes this check perfectly.<br><br>
+      <b>${v.ok ? '✓' : '✗'} It agrees with the world.</b> The chain still hashes to what ${esc(d.witness)} wrote
+      down, at a time nobody here chose. This is the one that cannot be forged on the machine holding the file.
+    </div>
+    ${!d.witnessIsExternal ? `<div class="login-note" style="margin-top:10px">The witness is <b>${esc(d.witness)}</b>, which is not external. A local file is rewritable by anybody who can rewrite the database — it exists to exercise the mechanism, not to prove anything.</div>` : ''}
+    <div class="form-inline" style="margin-top:10px">
+      <span class="chip ${d.last ? 'chip-ok' : 'chip-warn'}">${d.last ? `witnessed ${d.ageHours}h ago` : 'never witnessed'}</span>
+      <span class="sub">every ${d.everyHours}h · ${esc(d.witness)}</span>
+      ${hasPermC('settings.manage') ? '<button class="btn btn-primary" id="an-now">Anchor now</button>' : ''}
+    </div>
+  </div>
+  ${v.findings.length ? `<div class="panel" style="margin-top:16px;border-color:var(--bad)">
+    <div class="panel-title" style="color:var(--bad)">History was rewritten after it was witnessed</div>
+    ${v.findings.map((f) => `<div>${esc(f)}</div>`).join('')}</div>` : ''}
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Every attempt, including the ones that failed</div>
+    <table><thead><tr><th>When</th><th>Witness</th><th>Height</th><th></th><th>Evidence</th></tr></thead><tbody>
+    ${d.anchors.map((a) => `<tr>
+      <td class="mono">${esc(a.at || a.createdAt)}</td>
+      <td>${esc(a.witness)}</td><td class="mono">${a.height}</td>
+      <td><span class="chip ${a.ok ? 'chip-ok' : 'chip-bad'}">${a.ok ? 'witnessed' : 'failed'}</span></td>
+      <td class="sub">${esc(a.note || a.ref || '')}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing has been witnessed yet.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  $('#an-now')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try { const r = await api('/api/anchors', { method: 'POST', body: {} }); toast(r.ok ? `witnessed at height ${r.height}` : r.reason || r.error, !r.ok); renderAnchors(); }
+    catch (err) { toast(err.message, true); }
+  });
+}
+
+async function renderErasure() {
+  const d = await api('/api/erasure');
+  view.innerHTML = `
+  <div class="grid grid-3">
+    ${tile('People on file', d.known, 'known to this install by a one-way reference')}
+    ${tile('Erased', d.erased, 'keys destroyed; the rows and their hashes remain')}
+    ${tile('Columns walked', d.columnsCovered.length, 'a list, never a guess')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Forgetting somebody inside a record that cannot forget</div>
+    <div class="map-legend">Their details are sealed under a key that belongs only to them, before the audit
+      payload is hashed — so the chain covers the ciphertext and never knew the plaintext. Erasing destroys the
+      key: the rows stay byte for byte as they were, every hash still verifies, and what was inside them is gone
+      in the only sense that matters. What survives is that somebody existed under a reference, that they asked,
+      and when it was done. The identifier itself is never written down.</div>
+    ${hasPermC('compliance.view') ? `<div class="form-inline" style="margin-top:10px">
+      <div style="flex:1"><label class="fl" for="er-id">Email or telephone number</label>
+        <input type="text" id="er-id" placeholder="someone@example.com"></div>
+      <button class="btn" id="er-find">What do we hold?</button>
+      ${hasPermC('compliance.manage') ? '<button class="btn btn-bad" id="er-go">Erase</button>' : ''}
+    </div><div id="er-out" style="margin-top:12px"></div>` : '<div class="empty">compliance.view required</div>'}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">What an erasure walks</div>
+    <div class="sub">${d.columnsCovered.map(esc).join(' · ')}</div>
+    <div class="map-legend">Anything not on this list is not touched. A regex that decides at runtime what counts
+      as personal data is a regex that will one day decide wrongly and silently.</div>
+  </div>`;
+  const show = (r) => { $('#er-out').innerHTML = `<pre class="mono" style="white-space:pre-wrap;font-size:11.5px">${esc(JSON.stringify(r, null, 2))}</pre>`; };
+  $('#er-find')?.addEventListener('click', async () => {
+    try { show(await api('/api/erasure/find', { method: 'POST', body: { identifier: $('#er-id').value } })); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#er-go')?.addEventListener('click', async () => {
+    if (!confirm('This destroys their key. It cannot be undone, and it is meant not to be.')) return;
+    try {
+      show(await api('/api/erasure/erase', { method: 'POST', body: { identifier: $('#er-id').value, reason: 'requested' } }));
+      renderErasure();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderApprovals() {
+  const d = await api('/api/approvals');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Waiting on you', d.yours, 'that you personally can act on')}
+    ${tile('Waiting on somebody', d.total, 'across the whole company')}
+    ${tile('Overdue', d.overdue, `past the ${d.slaHours}h promise`, d.overdue ? 'tile-warn' : '')}
+    ${tile('Oldest', `${Math.round(d.oldestHours)}h`, 'the longest anything has waited')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Ordered by what it blocks, not by who asked</div>
+    <div class="map-legend">Self-declared priority is always high, so this reads the consequence instead. Urgency
+      strictly outranks age; age only breaks ties inside a band, because a queue whose order can be gamed by
+      waiting is a queue that teaches people to wait.</div>
+    <div class="form-inline" style="margin-top:8px">
+      ${d.byUrgency.filter((u) => u.count).map((u) => `<span class="chip ${u.id === 'money' ? 'chip-bad' : u.id === 'incident' ? 'chip-warn' : 'chip-dim'}" title="${esc(u.why)}">${esc(u.id)} ${u.count}</span>`).join('') || '<span class="chip chip-ok">nothing is waiting</span>'}
+    </div>
+  </div>
+  ${d.groups.length ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">Alike enough to decide together</div>
+    <div class="map-legend">A batch is recorded as <b>one act naming every item</b>, never as a dozen entries that
+      read like a dozen separate judgements. Somebody looking back must be able to tell considered from batched.</div>
+    <table><thead><tr><th>Kind</th><th>Because</th><th>Count</th><th>Oldest</th></tr></thead><tbody>
+    ${d.groups.map((g) => `<tr><td>${esc(g.kind)}</td><td class="sub">${esc(g.because)}</td><td class="mono">${g.count}</td><td class="mono">${Math.round(g.oldestHours)}h</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">The queue</div>
+    <table><thead><tr><th>Urgency</th><th>Kind</th><th>What</th><th>Because</th><th>Waiting</th><th></th></tr></thead><tbody>
+    ${d.items.map((i) => `<tr>
+      <td><span class="chip ${i.urgency === 'money' ? 'chip-bad' : i.urgency === 'incident' ? 'chip-warn' : 'chip-dim'}" title="${esc(i.whyUrgent)}">${esc(i.urgency)}</span></td>
+      <td>${esc(i.kind)}</td><td>${esc(i.title)}</td><td class="sub">${esc(i.because)}</td>
+      <td class="mono">${i.ageHours}h ${i.overdue ? '<span style="color:var(--bad)">overdue</span>' : ''}</td>
+      <td><a class="btn btn-sm" href="${esc(i.route)}">Open</a></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing is waiting on anybody.</td></tr>'}
+    </tbody></table>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Delegation — because somebody is always on holiday</div>
+    <div class="map-legend">Bounded in time, always. A delegation with no end is a permission grant with extra
+      paperwork, and both names go on the chain: who acted, and whose authority they were carrying.</div>
+    <div style="margin-top:8px">${[...d.delegations.toMe.map((x) => `<div>carrying <b>${esc(x.from_username)}</b>'s authority until ${esc(x.expires_at)}</div>`),
+      ...d.delegations.fromMe.map((x) => `<div>lent to <b>${esc(x.to_username)}</b> until ${esc(x.expires_at)}</div>`)].join('') || '<div class="sub">nobody is standing in for anybody</div>'}</div>
+  </div>`;
+}
+
+async function renderRoles() {
+  const d = await api('/api/roles');
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title">Jobs, instead of two hundred and four checkboxes</div>
+    <div class="map-legend">A fresh install otherwise asks somebody to assemble a job out of 204 individual
+      permissions before anybody can do anything, and nobody does that carefully at nine in the morning.
+      Each irreversible power — releasing money, letting something out, reading every credential, restoring a
+      backup, amending the constitution — sits in <b>exactly one</b> template. Spreading them across convenient
+      bundles is how they end up held by people nobody meant to give them to.</div>
+  </div>
+  <div class="grid grid-2" style="margin-top:16px">
+  ${d.templates.map((t) => `<div class="panel">
+    <div class="panel-title">${esc(t.label)} <span class="chip chip-dim">${t.count} permissions</span></div>
+    <div class="sub" style="margin-top:6px">${esc(t.describes)}</div>
+    ${t.irreversible.length ? `<div style="margin-top:10px">${t.irreversible.map((p) => `<span class="chip chip-bad" title="irreversible">${esc(p)}</span> `).join('')}</div>` : '<div class="sub" style="margin-top:10px;color:var(--ink-faint)">nothing irreversible</div>'}
+  </div>`).join('')}
+  </div>`;
+}
+
+async function renderTiers() {
+  const d = await api('/api/tiers');
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title">Which model actually does the work</div>
+    <div class="map-legend">A tier is a chain of candidates, tried in order. Changing one changes every employee
+      on that tier at once — invisibly, until output quality drops in a way nobody attributes to it. So a change
+      is proposed, canaried against the chain in service on the same day, and promoted by a person who has been
+      told what regressed.</div>
+    <table style="margin-top:10px"><thead><tr><th>Tier</th><th>For</th><th>Chain</th><th></th></tr></thead><tbody>
+    ${d.tiers.map((t) => `<tr><td class="mono">${esc(t.tier)}</td><td class="sub">${esc(t.purpose || '')}</td>
+      <td class="mono" style="font-size:11px">${t.chain.map((c) => esc(`${c.provider}/${c.model}`)).join(' → ')}</td>
+      <td>${t.overridden ? '<span class="chip chip-warn">promoted over the file</span>' : '<span class="chip chip-dim">from the file</span>'}</td></tr>`).join('')}
+    </tbody></table>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">What a candidate has to answer first</div>
+    <div class="map-legend">Deliberately boring: a regression check, not a benchmark. These are the ways a model
+      swap breaks a pipeline quietly.</div>
+    ${d.tasks.map((t) => `<div style="margin-top:8px"><b class="mono">${esc(t.id)}</b><div class="sub">${esc(t.why)}</div></div>`).join('')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Proposals</div>
+    <table><thead><tr><th>Tier</th><th>Candidate</th><th>State</th><th>Canary</th><th>Who</th></tr></thead><tbody>
+    ${d.proposals.map((p) => `<tr><td class="mono">${esc(p.tier)}</td>
+      <td class="mono" style="font-size:11px">${p.candidate.map((c) => esc(`${c.provider}/${c.model}`)).join(' → ')}</td>
+      <td><span class="chip ${p.state === 'promoted' ? 'chip-ok' : p.state === 'tested' ? 'chip-warn' : 'chip-dim'}">${esc(p.state)}</span></td>
+      <td class="sub">${p.summary ? (p.summary.conclusive === false ? esc(`inconclusive — ${p.summary.inconclusiveBecause || ''}`).slice(0, 90) : `${p.summary.candidate}/${p.summary.total} vs ${p.summary.current}/${p.summary.total}${p.summary.regressions?.length ? ` · ${p.summary.regressions.length} regression(s)` : ''}`) : '—'}</td>
+      <td class="sub">${esc(p.promotedBy || p.proposedBy || '')}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing has been proposed.</td></tr>'}
+    </tbody></table>
+  </div>
+  ${d.prompts.length ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">Employees whose instructions have changed</div>
+    <div class="map-legend">A system prompt is the largest single input to what an employee produces, and it gets
+      edited casually. Without a version, "why did this get worse last Tuesday" has no answer.</div>
+    <table><thead><tr><th>Employee</th><th>Versions</th><th>Last seen</th></tr></thead><tbody>
+    ${d.prompts.map((p) => `<tr><td class="mono">${esc(p.agent_id)}</td><td class="mono">${p.versions}</td><td class="sub">${esc(p.last || '')}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}`;
+}
+
+async function renderEmbeddings() {
+  const d = await api('/api/embeddings');
+  view.innerHTML = `
+  <div class="grid grid-3">
+    ${tile('Space', d.space.split(':')[0], d.model ? esc(d.model) : 'string overlap', d.model ? 'tile-ok' : 'tile-warn')}
+    ${tile('Indexed', d.spaces.reduce((n, s) => n + s.n, 0), 'things the graph can find')}
+    ${tile('Needs reindexing', d.needsReindex, 'in a space that is no longer current', d.needsReindex ? 'tile-warn' : '')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Whether search understands the question, or only its letters</div>
+    <div class="map-legend">${esc(d.quality)}<br><br>
+      Trigram overlap finds "invoice OCR platform" from "invoice ocr". It does <b>not</b> find "the tool that
+      reads receipts" — measured at 0.000 similarity between those two phrases, which is a ceiling on every
+      answer the workforce gives rather than a rough edge on a search box. A local model fixes that without
+      anything leaving this machine.<br><br>
+      Vectors from two models are never compared: each row records the space it belongs to, and a comparison
+      across spaces returns nothing rather than a number. A ranked list of nonsense looks exactly like a ranked
+      list, which makes that worse than an error.</div>
+    <div class="form-inline" style="margin-top:10px">
+      ${d.spaces.map((s) => `<span class="chip ${s.space === d.space ? 'chip-ok' : 'chip-warn'}">${esc(s.space)} · ${s.n}</span>`).join('')}
+      ${hasPermC('graph.manage') && d.needsReindex ? '<button class="btn btn-primary" id="em-reindex">Reindex</button>' : ''}
+    </div>
+    ${d.lastDegraded ? `<div class="login-note" style="margin-top:10px">The local model was unreachable at ${esc(d.lastDegraded.occurred_at)} and recall fell back to string overlap.</div>` : ''}
+  </div>`;
+  $('#em-reindex')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try { const r = await api('/api/embeddings/reindex', { method: 'POST', body: {} }); toast(`${r.reindexed} reindexed, ${r.remaining} to go`); renderEmbeddings(); }
+    catch (err) { toast(err.message, true); }
+  });
+}
+
+async function renderDeliverability() {
+  const d = await api('/api/deliverability');
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title">Whether mail arrives, or silently goes to spam</div>
+    <div class="map-legend">An unsigned message from a domain with no policy goes to spam, and spam is
+      indistinguishable from "they ignored us" in every report this company will produce. Nothing fails, the send
+      is recorded as successful, and the pipeline reports a healthy rate into a void.</div>
+    <div class="form-inline" style="margin-top:10px">
+      <span class="chip ${d.domain ? 'chip-ok' : 'chip-warn'}">${d.domain ? esc(d.domain) : 'no MAIL_DOMAIN set'}</span>
+      <span class="chip ${d.signing ? 'chip-ok' : 'chip-warn'}">${d.signing ? 'signing' : 'no key yet'}</span>
+      <button class="btn" id="dl-pre">Check what the world can see</button>
+    </div>
+    ${d.publishThis ? `<div style="margin-top:12px">
+      <div class="fl">Publish this in your DNS — it cannot be done from here</div>
+      <div class="mono" style="font-size:11px;word-break:break-all;margin-top:4px">${esc(d.publishThis.name)} &nbsp; TXT &nbsp; ${esc(String(d.publishThis.value).slice(0, 120))}…</div>
+    </div>` : ''}
+    <div id="dl-out" style="margin-top:12px"></div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Whether a call may be recorded</div>
+    <div class="map-legend">It depends on where the other party is, and getting it wrong is criminal in several
+      places rather than a compliance finding. ${d.recording.countriesKnown} jurisdictions are listed, plus the
+      ${d.recording.usAllPartyStates} US states that require everybody's consent — a single "US" answer is wrong
+      often enough to be dangerous. Anywhere not listed gets <b>${esc(d.recording.defaultForUnknown)}</b>.
+      A starting position from where the other party is, not legal advice.</div>
+    <div class="form-inline" style="margin-top:10px">
+      <div><label class="fl" for="dl-cc">Country</label><input type="text" id="dl-cc" placeholder="GB" maxlength="2"></div>
+      <div><label class="fl" for="dl-rg">Region</label><input type="text" id="dl-rg" placeholder="WA" maxlength="3"></div>
+      <button class="btn" id="dl-consent">May we record?</button>
+    </div>
+    <div id="dl-consent-out" style="margin-top:10px"></div>
+  </div>`;
+  $('#dl-pre')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try {
+      const r = await api('/api/deliverability/preflight');
+      $('#dl-out').innerHTML = `<div class="chip ${r.ok ? 'chip-ok' : 'chip-bad'}">${r.ok ? 'a receiver would accept this' : 'mail from here will be treated as suspicious'}</div>
+        ${(r.findings || []).map((f) => `<div style="margin-top:6px"><b style="color:var(--${f.level === 'blocker' ? 'bad' : f.level === 'warn' ? 'warn' : 'ink-mute'})">${esc(f.what)}</b><div class="sub">${esc(f.why)}</div></div>`).join('')}
+        <div class="sub" style="margin-top:10px">${esc(r.note || '')}</div>`;
+    } catch (err) { toast(err.message, true); }
+    e.target.disabled = false;
+  });
+  $('#dl-consent')?.addEventListener('click', async () => {
+    try {
+      const r = await api('/api/deliverability/consent', { method: 'POST', body: { country: $('#dl-cc').value, region: $('#dl-rg').value || null } });
+      $('#dl-consent-out').innerHTML = `<span class="chip ${r.mayRecord ? 'chip-ok' : 'chip-warn'}">${r.mayRecord ? 'one-party — may record' : 'all parties must agree'}</span>
+        ${r.announcement ? `<div style="margin-top:8px">Say first: <b>"${esc(r.announcement)}"</b></div>` : ''}
+        <div class="sub" style="margin-top:6px">${esc(r.note)}</div>`;
+    } catch (err) { toast(err.message, true); }
+  });
+}
+
+async function renderObservability() {
+  const d = await api('/api/observability');
+  const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Database', mb(d.size.bytes), `${d.size.totalRows.toLocaleString()} rows`)}
+    ${tile('Write-ahead log', mb(d.size.walBytes), 'folded in at every backup')}
+    ${tile('Event loop lag', `${d.loop.lagMs} ms`, 'how late everything is running', d.loop.lagMs > 200 ? 'tile-bad' : d.loop.lagMs > 80 ? 'tile-warn' : 'tile-ok')}
+    ${tile('Worst since boot', `${d.loop.worstLagMs} ms`, 'the longest anything blocked')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">The hazard, said out loud</div>
+    <div class="map-legend">${esc(d.loop.note)}</div>
+    ${d.loop.slowest.length ? `<table style="margin-top:10px"><thead><tr><th>Operation</th><th>Blocked for</th><th>When</th></tr></thead><tbody>
+      ${d.loop.slowest.map((s) => `<tr><td class="mono">${esc(s.label)}</td><td class="mono">${s.ms} ms</td><td class="sub">${esc(s.at)}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="sub" style="margin-top:10px">Nothing has blocked longer than the threshold since this process started.</div>'}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Retention — and what is never deleted</div>
+    <div class="map-legend">A chain that is never deleted plus a history that only grows is a disk-full outage
+      with a long fuse, and a full disk stops the database dead. Deleting happens in bounded batches, because a
+      single DELETE of two million rows would hold the event loop for as long as it takes — housekeeping causing
+      the outage it exists to prevent.<br><br>
+      <b>Never touched:</b> ${d.retention.neverDeleted.map(esc).join(', ')}. Deleting a chain entry breaks every
+      hash after it.</div>
+    <table style="margin-top:10px"><thead><tr><th>Table</th><th>Kept for</th><th>Held now</th><th>Due</th><th>Why</th></tr></thead><tbody>
+    ${d.retention.plan.filter((p) => !p.missing).map((p) => `<tr><td class="mono">${esc(p.table)}</td><td class="mono">${p.days}d</td>
+      <td class="mono">${p.total}</td><td class="mono">${p.due}</td><td class="sub">${esc(p.why)}</td></tr>`).join('')}
+    </tbody></table>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Biggest tables</div>
+    <table><thead><tr><th>Table</th><th>Rows</th></tr></thead><tbody>
+    ${d.size.tables.slice(0, 12).map((t) => `<tr><td class="mono">${esc(t.table)}</td><td class="mono">${t.rows.toLocaleString()}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="map-legend">Scraped by Prometheus at <span class="mono">${esc(d.metricsEndpoint)}</span>, which
+      answers only this machine until METRICS_TOKEN is set.</div>
+  </div>`;
+}
+
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
@@ -695,6 +1016,14 @@ const routes = {
   keys: { title: 'API keys — how other software talks to this company', render: renderKeys, poll: 15000 },
   webhooks: { title: 'Webhooks — telling other software what just happened', render: renderWebhooks, poll: 10000 },
   packages: { title: 'Department packages — a department you can install', render: renderPackages },
+  anchors: { title: 'Anchors — the record answering to something other than itself', render: renderAnchors, poll: 30000 },
+  erasure: { title: 'Erasure — forgetting a person inside a record that cannot forget', render: renderErasure },
+  approvals: { title: 'The desk — everything waiting on a person', render: renderApprovals, poll: 10000 },
+  roles: { title: 'Roles — jobs instead of two hundred and four checkboxes', render: renderRoles },
+  tiers: { title: 'Model chains — and the canary that has to pass first', render: renderTiers, poll: 20000 },
+  embeddings: { title: 'Recall — whether search understands the question', render: renderEmbeddings },
+  deliverability: { title: 'Deliverability — whether mail arrives, and whether a recording is lawful', render: renderDeliverability },
+  observability: { title: 'Instruments — size, retention, and how late the loop is', render: renderObservability, poll: 15000 },
   backups: { title: 'Backups — a platform that can lose the company is not a platform', render: renderBackups, poll: 20000 },
   pkg: { title: 'Installed department', render: renderPackageSection },
   // Marketing, desk by desk.

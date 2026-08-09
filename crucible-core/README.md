@@ -5,14 +5,14 @@
 ### The company that runs itself — and proves every move on a hash chain.
 
 **An entire AI-native company inside a single Node process.**
-One hundred and fourteen departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and twenty-two departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports, **hires its own new employees** — and reaches the real world through one guarded
 door — while humans hold every gate that matters: approving, publishing, signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-114-c0563a?style=flat-square" alt="114 departments">
+<img src="https://img.shields.io/badge/departments-122-c0563a?style=flat-square" alt="122 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
-<img src="https://img.shields.io/badge/relationships-314-8d8477?style=flat-square" alt="314 declared relationships">
-<img src="https://img.shields.io/badge/API-458_routes-4f9cf0?style=flat-square" alt="458 API routes">
+<img src="https://img.shields.io/badge/relationships-344-8d8477?style=flat-square" alt="344 declared relationships">
+<img src="https://img.shields.io/badge/API-498_routes-4f9cf0?style=flat-square" alt="498 API routes">
 <img src="https://img.shields.io/badge/permissions-204_atomic-e07bd2?style=flat-square" alt="204 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
@@ -37,7 +37,7 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 114 departments](#the-company--13-divisions-114-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 122 departments](#the-company--13-divisions-122-departments) | the shape |
 | [The engine room](#the-engine-room) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
 | [The API](#the-api) · [MCP](#mcp--both-directions) · [Webhooks](#webhooks) · [Command line](#the-command-line) | the surfaces |
@@ -234,7 +234,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **314 relationships** that the map
+Those declarations are data, not decoration: **344 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -282,13 +282,13 @@ connectivity audit and live flow counts — as JSON.
 
 ---
 
-## The company — 13 divisions, 114 departments
+## The company — 13 divisions, 122 departments
 
 <details open>
-<summary><b>ENGINE · 9</b> — the workforce and the work</summary>
+<summary><b>ENGINE · 10</b> — the workforce and the work</summary>
 
 **Request desk** · **Agents** · **Workforce** · **Run queue** · **Pipelines** ·
-**Providers** · **Artifacts** · **Capacity** · **Workstreams**
+**Providers** · **Artifacts** · **Capacity** · **Workstreams** · **Model chains**
 
 Where work is asked for and carried out. 51 AI employees seeded from
 `config/agents.json`, each with a mission, a tier, a sensitivity class and a
@@ -310,9 +310,9 @@ Department packages install and uninstall whole departments from a manifest.
 </details>
 
 <details>
-<summary><b>DECIDE · 9</b> — where a person is required</summary>
+<summary><b>DECIDE · 10</b> — where a person is required</summary>
 
-**Human gate** · **Decisions** · **Budgets** · **Risks** · **Quality** ·
+**Human gate** · **The desk** · **Decisions** · **Budgets** · **Risks** · **Quality** ·
 **Evals** · **PMO gates** · **AI Auditor** · **Shadow company**
 
 The decision registry with evidence and verification. Reservation-first budgets:
@@ -323,10 +323,10 @@ tried without touching the real one.
 </details>
 
 <details>
-<summary><b>DATA · 7</b> — what the company knows</summary>
+<summary><b>DATA · 8</b> — what the company knows</summary>
 
 **Intelligence** · **Segments** · **Datasets** · **Archive** · **Knowledge** ·
-**Insights** · **Knowledge graph**
+**Insights** · **Knowledge graph** · **Recall**
 
 Multi-round intelligence collection that proposes organisations, then harvests
 their real details from their own websites — and never invents an email, a phone
@@ -375,10 +375,10 @@ can reach.
 </details>
 
 <details>
-<summary><b>OPERATE · 7</b> — keeping the lights on</summary>
+<summary><b>OPERATE · 8</b> — keeping the lights on</summary>
 
 **Incidents** · **Support** · **Assets** · **Legal** · **Vendors** ·
-**Objectives** · **Contact centre**
+**Objectives** · **Contact centre** · **Deliverability**
 
 Incidents demand postmortems. Support drafts replies and graduates an agent to
 sending unedited only after a hundred sent at ninety-five per cent unedited —
@@ -401,10 +401,10 @@ capabilities.
 </details>
 
 <details>
-<summary><b>TRUST · 5</b> — the company checking itself</summary>
+<summary><b>TRUST · 6</b> — the company checking itself</summary>
 
 **Security (SOC)** · **Compliance** · **Sustainability** · **Provenance** ·
-**Red team**
+**Red team** · **Erasure**
 
 Provenance issues **Ed25519 receipts** over canonically serialised content that
 anyone can verify without this platform. The red team attacks the company on a
@@ -424,11 +424,11 @@ facts, internal announcements, and the rhythm that runs the day.
 </details>
 
 <details>
-<summary><b>GOVERN · 12</b> — the rules and the record</summary>
+<summary><b>GOVERN · 15</b> — the rules and the record</summary>
 
 **Harmony** · **Autopilot** · **Governance** · **Oversight** · **Scorecard** ·
-**Users & roles** · **Settings** · **Audit chain** · **The constitution** ·
-**Time machine** · **Watchtower** · **Backups**
+**Users & roles** · **Roles** · **Settings** · **Audit chain** · **Anchors** ·
+**The constitution** · **Time machine** · **Watchtower** · **Instruments** · **Backups**
 
 The constitution is enforced by machine at the gate, not written on a poster.
 The time machine snapshots the company and replays it: stand at any past moment
@@ -589,6 +589,36 @@ backup you have never restored is a hope.
 
 ---
 
+## What a real deployment needs
+
+The bones above are the company. These are what a deployment discovers it needs,
+usually at the worst moment — each one built, and each reachable as its own
+department rather than buried in Settings.
+
+| | |
+|---|---|
+| **Anchors** | The chain's head witnessed by an RFC 3161 timestamping authority, outside this disk. Verifying the chain proves it agrees with *itself*, which is exactly what a rewritten record also does — anybody who owns the file can edit it and recompute every hash. This is the only check that cannot be forged locally. |
+| **Erasure** | Crypto-shredding: a person's data sealed under their own key *before* the payload is hashed, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. |
+| **The desk** | Everything waiting on a person, ordered by what it blocks. Batches are recorded as one act naming every item, never as a dozen entries that read like a dozen judgements. |
+| **Roles** | Seven templates over the 204 permissions, with each irreversible power in exactly one of them. |
+| **Model chains** | Which model does the work, and a canary that must pass — on the same day, against the chain in service — before it changes. An untested chain cannot be promoted, and an inconclusive canary does not count as evidence. |
+| **Recall** | Local embeddings via ollama, so search finds "the tool that reads receipts" from "invoice OCR platform" — trigrams score that pair at 0.000. Nothing leaves the machine. |
+| **Deliverability** | DKIM signing, and a preflight that reads live DNS to say what a receiver would conclude. Plus whether a call may lawfully be recorded, by jurisdiction. |
+| **Instruments** | Prometheus at `/metrics`, retention that never touches the chain, and the event-loop lag that explains "the server was down" when the process never stopped. |
+
+Also: **Web Push**, so an approval reaches somebody who is not looking at a tab —
+the company's throughput is bounded by how fast a human answers a gate. **TOTP,
+rate limiting and lockout** on sign-in. **Master key rotation** and a KMS door.
+**A graceful drain** on SIGTERM. **Offsite backups** with write-ahead-log
+archiving. And **paper trading**: real reads against real APIs, nothing sent —
+the setting between "the plumbing works" and "the economics work".
+
+Two tools that owe the platform nothing: a generated [OpenAPI
+description](public/openapi.json) served at `/api/openapi.json`, and
+[`scripts/verify-chain.mjs`](scripts/verify-chain.mjs) — copy it out of this
+repository and it still checks an export, because a verifier that has to be run
+by the system it is checking is a system marking its own homework.
+
 ## Security model
 
 The load-bearing properties. A bug that breaks one of these is a security bug,
@@ -650,7 +680,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**458 routes** — 185 `GET`, 269 `POST`, 4 `DELETE` — all JSON, all
+**498 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -708,7 +738,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 29 unit tests, on their own database file |
+| `npm test` | 95 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -766,9 +796,9 @@ credential — keep them together.
 
 ```
 crucible-core/
-  src/                95 modules, ~22,500 lines
+  src/                106 modules, ~26,500 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
-    db.js             149 tables, forward-only migrations
+    db.js             158 tables, forward-only migrations
     audit.js          the hash chain
     auth.js           sessions, 204 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
@@ -792,7 +822,7 @@ crucible-core/
     make-icons.mjs    writes PNG bytes with no image library
     prove-world.mjs   end-to-end proof of the outside-world layer
     prove-platform.mjs
-  test/               29 unit tests
+  test/               95 tests across nine files
   docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
   config/             agents, providers, rituals
 ```
@@ -804,10 +834,10 @@ crucible-core/
 Nothing here is claimed from inspection. Every number is measured.
 
 ```bash
-npm test                        # 29 tests
+npm test                        # 95 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
-node scripts/launch-audit.mjs   # 20 checks; non-zero exit on a blocker
+node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
 ```
 
 All three proofs run in **mock mode**: no key, no network, no cost.
@@ -821,8 +851,8 @@ the API demands exists), health (nothing dead, stalled or breached) and
 readiness (a provider configured, the public URL set, the licence files present,
 no test residue).
 
-**The browser sweep** opens all 114 departments in both themes and both
-languages, at 1440×900 and again at 390×844 — 456 renders each — and fails on a
+**The browser sweep** opens all 122 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 488 renders each — and fails on a
 blank page, a console error, a horizontal overflow, or a request to any host but
 its own.
 
