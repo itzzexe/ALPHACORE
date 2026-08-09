@@ -2199,6 +2199,13 @@ try { db.exec('ALTER TABLE sessions ADD COLUMN absolute_expires_at TEXT'); } cat
 try { db.exec('ALTER TABLE sessions ADD COLUMN ip TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN locked_until TEXT'); } catch { /* column exists */ }
 
+// Which model actually answered, not which tier was asked for. Providers move
+// what a name points at without announcing it, so a run that cannot name its
+// model is a run nobody can reproduce or account for.
+try { db.exec('ALTER TABLE runs ADD COLUMN provider TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE runs ADD COLUMN model TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE runs ADD COLUMN model_family TEXT'); } catch { /* column exists */ }
+
 // Crypto-shredding. One row per person the company holds data about, holding
 // their key wrapped under the vault's master key. Erasing them sets
 // wrapped_key to NULL — the row survives so the erasure can be proved, and a

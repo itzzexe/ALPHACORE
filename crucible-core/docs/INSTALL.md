@@ -534,6 +534,56 @@ On Windows, `Stop-ScheduledTask` calls TerminateProcess — SIGKILL by another
 name. `deploystop-service.ps1` sends a real Ctrl+C to the process's console
 instead, so the drain runs, and only kills it if that fails.
 
+### Watching it from outside
+
+```
+GET /metrics        Prometheus text
+```
+
+Answers only to localhost until `METRICS_TOKEN` is set, then to anyone holding
+it. Conventionally this endpoint is open; that convention is wrong here,
+because it carries model spend, queue depth, incident counts and how long the
+chain has gone unwitnessed.
+
+Three of the series are worth an alert rule:
+
+| | |
+|---|---|
+| `alphacore_awaiting_human` | work stopped for a person. The number the whole design turns on. |
+| `alphacore_anchor_age_seconds` | since the chain was last witnessed outside this machine. `-1` means never. |
+| `alphacore_event_loop_lag_ms` | see below. |
+
+**`node:sqlite` is synchronous.** One heavy query blocks HTTP, the WebSocket
+and the workers together. This is a property to respect rather than a bug to
+fix, so it is measured and stated instead of hidden: sustained lag above ~200ms
+is when the browser starts reporting the server as down, which sends people
+looking in entirely the wrong place. `GET /api/observability` lists the
+slowest operations seen since boot.
+
+Every finished run now records **which model actually answered** — provider,
+model and family, as columns rather than inferred later. Providers move what a
+name points at without announcing it, and a run that cannot name its model is a
+run nobody can reproduce or account for.
+
+### Keeping the database from growing forever
+
+A chain that is never deleted, plus a run history that only grows, is a
+disk-full outage with a long fuse — and a full disk stops SQLite dead.
+
+A sweep runs every six hours over a short list with a reason attached to each
+line: metrics 30 days, sign-in attempts 90, fetched pages 60, the egress log a
+year, finished jobs 30, read notifications 90, presence 2. Deletion happens in
+bounded batches, because a single DELETE of two million rows would hold the
+event loop for as long as it takes — housekeeping causing the outage it exists
+to prevent.
+
+**`audit_log`, `anchors` and `pii_subjects` are never on that list**, and
+the overview says so on the page rather than only in the source. Deleting a
+chain entry breaks every hash after it.
+
+`RETENTION_ENABLED=false` switches it off; `POST /api/observability/retention`
+runs it, defaulting to a dry run.
+
 ### Being told when something breaks
 
 A push reaches a browser that has the app installed. An incident at 3am on a

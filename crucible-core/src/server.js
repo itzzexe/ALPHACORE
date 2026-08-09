@@ -70,6 +70,7 @@ import { seedSlos, observeTick, trimMetrics } from './observe.js';
 import { takeBackup } from './backup.js';
 import { anchorNow } from './anchor.js';
 import { handleSignals, alert, shipOffsite, archiveWal, lifecycleOverview } from './lifecycle.js';
+import { metricsText, watchEventLoop, applyRetention, observabilityOverview } from './observability.js';
 import { mcpTools } from './mcptools.js';
 import { one, exec, q } from './db.js';
 import { getSetting, setSetting } from './settings.js';
@@ -157,6 +158,7 @@ handleJob('redteam.sweep', async () => { await runRedTeam(); });
 handleJob('chain.anchor', async () => { await anchorNow({ actor: 'system:anchor' }); });
 handleJob('backup.ship', async ({ file }) => { await shipOffsite(file); });
 handleJob('wal.archive', async () => { archiveWal(); });
+handleJob('retention.sweep', async () => { applyRetention(); });
 handleJob('revenue.chase', async ({ dealId }) => {
   const paid = one("SELECT id FROM invoices WHERE deal_id = ? AND state = 'paid'", dealId);
   if (paid) return {};
@@ -186,6 +188,11 @@ setInterval(() => { enqueue0('chain.anchor'); }, Math.max(1, Number(getSetting('
 // Between backups, the write-ahead log is the difference between losing a day
 // and losing four minutes.
 setInterval(() => { enqueue0('wal.archive'); }, 15 * 60_000).unref?.();
+// A chain that is never deleted plus a run history that only grows is a
+// disk-full outage with a long fuse, and a full disk stops SQLite dead.
+setInterval(() => { enqueue0('retention.sweep'); }, 6 * 3600 * 1000).unref?.();
+// The synchronous hazard, measured rather than hoped about.
+watchEventLoop();
 setInterval(() => { try { vaultSweep(); } catch { /* next sweep */ } }, 12 * 3600 * 1000).unref?.();
 // The revenue loop: source, then move every deal as far as its evidence allows.
 setInterval(() => { try { revenueTick(); } catch { /* next tick */ } }, 20_000).unref?.();
@@ -361,6 +368,31 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         return page(`Could not finish the handshake: ${String(err.message).slice(0, 200)}`, false);
       }
+    }
+
+    // Prometheus. Conventionally unauthenticated, and that convention is wrong
+    // here: this carries model spend, queue depth, incident counts and how long
+    // the chain has gone unwitnessed. A scrape token is the smallest thing that
+    // keeps it safe without making Prometheus a special case.
+    if (url.pathname === '/metrics') {
+      const want = getSetting('METRICS_TOKEN');
+      const given = req.headers['x-metrics-token']
+        || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (want && given !== want) {
+        res.writeHead(401, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'metrics token required' }));
+        return;
+      }
+      if (!want && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress)) {
+        // With no token set, answer only this machine — so a scrape endpoint is
+        // never accidentally open to a network somebody forgot about.
+        res.writeHead(403, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'set METRICS_TOKEN to scrape this from anywhere but localhost' }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' });
+      res.end(metricsText());
+      return;
     }
 
     // AlphaCore as an MCP server: an outside agent drives the company through

@@ -81,6 +81,7 @@ import { setFrozen } from './policy.js';
 // The outside world.
 import { listSecrets, putSecret, dropSecret, getSecret as vaultGet, keyHealth } from './vault.js';
 import { lifecycleOverview, alert } from './lifecycle.js';
+import { observabilityOverview, applyRetention } from './observability.js';
 import {
   DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
   getConnector, connectorsOverview, callConnector,
@@ -388,6 +389,10 @@ const routes = [
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
   ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
+
+  // Size, retention, and how late the event loop is running.
+  ['GET', /^\/api\/observability$/, () => observabilityOverview()],
+  ['POST', /^\/api\/observability\/retention$/, (_p, body) => applyRetention({ actor: need(body, 'actor'), dryRun: body.dryRun !== false })],
 
   // Draining, alerting, and whether a backup has ever left this machine.
   ['GET', /^\/api\/lifecycle$/, () => lifecycleOverview()],
@@ -1296,6 +1301,7 @@ function permFor(m, path) {
   // that are given on purpose rather than with ordinary record management.
   if (path === '/api/vault/key') return 'vault.manage';
   if (path.startsWith('/api/lifecycle')) return m === 'GET' ? 'observe.view' : 'settings.manage';
+  if (path.startsWith('/api/observability')) return m === 'GET' ? 'observe.view' : 'settings.manage';
   if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
   if (path === '/api/erasure/erase') return 'compliance.manage';
   if (path === '/api/anchors/verify') return 'audit.view';
