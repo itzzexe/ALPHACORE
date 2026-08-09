@@ -24,6 +24,8 @@ export const PERMS = [
   'evals.view', 'evals.run',
   'governance.view', 'rituals.complete', 'problems.resolve', 'notifications.read',
   'finance.view', 'finance.export',
+  'ledger.view', 'ledger.post', 'ledger.close',
+  'hunt.view', 'hunt.run',
   'marketing.view', 'marketing.manage',
   'customers.view', 'customers.manage',
   'people.view', 'people.manage',

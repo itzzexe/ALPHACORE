@@ -129,6 +129,13 @@ import { listSets, listEvalRuns, runEvalSet, accuracyFactor } from './evals.js';
 import { listProblems, resolveProblem } from './immune.js';
 import { listRituals, completeRitual } from './rituals.js';
 import { financeReport, exportFinanceReport } from './finance.js';
+import {
+  chart, addAccount, journalEntry, postEntry, reverseEntry, journalList, ledgerFor,
+  trialBalance, incomeStatement, balanceSheet, cashFlow, ledgerOverview,
+  closePeriod, reopenPeriod,
+} from './ledger.js';
+import { bookkeep, reconcile, closeMonth, bookkeeperOverview } from './bookkeeper.js';
+import { hunt, lookup, huntsList, huntDetail, huntOverview } from './hunt.js';
 import { listNotifications, unreadCount, markAllRead } from './notify.js';
 import {
   createCampaign, listCampaigns, approveCampaign, updateCampaign,
@@ -375,6 +382,52 @@ const routes = [
   // --- Finance ---
   ['GET', /^\/api\/finance$/, (_p, _b, url) => financeReport(url.searchParams.get('month'))],
   ['POST', /^\/api\/finance\/export$/, (_p, body) => exportFinanceReport(need(body, 'actor'))],
+
+  // --- The ledger: the books themselves ---
+  ['GET', /^\/api\/ledger$/, () => ledgerOverview()],
+  ['GET', /^\/api\/ledger\/chart$/, () => ({ accounts: chart() })],
+  ['POST', /^\/api\/ledger\/chart$/, (_p, body) => addAccount({ ...body, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/ledger\/journal$/, (_p, _b, url) => ({
+    entries: journalList({
+      period: url.searchParams.get('period'), state: url.searchParams.get('state'),
+      account: url.searchParams.get('account'), q: url.searchParams.get('q'),
+    }),
+  })],
+  ['POST', /^\/api\/ledger\/journal$/, (_p, body) => journalEntry({ ...body, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/ledger\/journal\/(\d+)\/post$/, ([id], body) => postEntry({ id: Number(id), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/ledger\/journal\/(\d+)\/reverse$/, ([id], body) => reverseEntry({
+    id: Number(id), actor: need(body, 'actor'), reason: need(body, 'reason'),
+  })],
+  ['GET', /^\/api\/ledger\/account\/([\w.-]+)$/, ([code], _b, url) => ledgerFor({ account: code, period: url.searchParams.get('period') })],
+  ['GET', /^\/api\/ledger\/trial-balance$/, (_p, _b, url) => trialBalance({ period: url.searchParams.get('period') })],
+  ['GET', /^\/api\/ledger\/income$/, (_p, _b, url) => incomeStatement({ period: url.searchParams.get('period') })],
+  ['GET', /^\/api\/ledger\/balance-sheet$/, (_p, _b, url) => balanceSheet({ asOf: url.searchParams.get('asOf') })],
+  ['GET', /^\/api\/ledger\/cash-flow$/, (_p, _b, url) => cashFlow({ period: url.searchParams.get('period') })],
+  ['POST', /^\/api\/ledger\/period\/close$/, (_p, body) => closePeriod({ period: need(body, 'period'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/ledger\/period\/reopen$/, (_p, body) => reopenPeriod({
+    period: need(body, 'period'), actor: need(body, 'actor'), reason: need(body, 'reason'),
+  })],
+
+  // --- The AI employees who keep them ---
+  ['GET', /^\/api\/bookkeeper$/, () => bookkeeperOverview()],
+  ['POST', /^\/api\/bookkeeper\/sweep$/, (_p, body) => bookkeep({ actor: body?.actor || 'agent:AGT-FIN-001' })],
+  ['GET', /^\/api\/bookkeeper\/reconcile$/, (_p, _b, url) => reconcile({ period: url.searchParams.get('period') })],
+  ['POST', /^\/api\/bookkeeper\/close$/, (_p, body) => closeMonth({
+    period: body?.period || null, actor: need(body, 'actor'), force: body?.force === true,
+  })],
+
+  // --- Finding things: one pass, or a hunt that keeps going ---
+  ['GET', /^\/api\/hunt$/, () => huntOverview()],
+  ['GET', /^\/api\/hunt\/lookup$/, (_p, _b, url) => lookup(url.searchParams.get('q'))],
+  ['GET', /^\/api\/hunt\/list$/, () => ({ hunts: huntsList({}) })],
+  ['GET', /^\/api\/hunt\/(\d+)$/, ([id]) => huntDetail(Number(id))],
+  ['POST', /^\/api\/hunt$/, (_p, body) => hunt({
+    question: need(body, 'question'), actor: need(body, 'actor'),
+    rounds: body?.rounds ? Number(body.rounds) : undefined,
+    maxUsd: body?.maxUsd ? Number(body.maxUsd) : undefined,
+    allowWeb: body?.allowWeb !== false,
+    sources: Array.isArray(body?.sources) ? body.sources : null,
+  })],
 
   // --- Notifications ---
   ['GET', /^\/api\/notifications$/, (_p, _b, url) => ({ unread: unreadCount(), items: listNotifications({ unreadOnly: url.searchParams.get('unread') === '1' }) })],
@@ -1390,6 +1443,15 @@ function permFor(m, path) {
   if (path === '/api/rituals') return 'governance.view';
   if (path === '/api/finance/export') return 'finance.export';
   if (path === '/api/finance') return 'finance.view';
+  // Reading the books and writing to them are different jobs, and closing a
+  // period is a third — the person who can look at a number should not
+  // automatically be able to seal the month it came from.
+  if (path === '/api/ledger/period/close' || path === '/api/ledger/period/reopen') return 'ledger.close';
+  if (path === '/api/bookkeeper/close') return 'ledger.close';
+  if (path.startsWith('/api/ledger') || path.startsWith('/api/bookkeeper')) return m === 'GET' ? 'ledger.view' : 'ledger.post';
+  // A hunt spends money and reaches outside; reading one that already ran does
+  // neither. Different permissions for genuinely different acts.
+  if (path.startsWith('/api/hunt')) return m === 'GET' ? 'hunt.view' : 'hunt.run';
   if (path.startsWith('/api/campaigns')) return m === 'GET' ? 'marketing.view' : 'marketing.manage';
   if (path.startsWith('/api/customers')) return m === 'GET' ? 'customers.view' : 'customers.manage';
   if (path.startsWith('/api/contracts')) return m === 'GET' ? 'legal.view' : 'legal.manage';

@@ -2213,6 +2213,117 @@ try { db.exec('ALTER TABLE runs ADD COLUMN prompt_version TEXT'); } catch { /* c
 // nonsense — which looks exactly like a ranked list.
 try { db.exec('ALTER TABLE graph_nodes ADD COLUMN embedding_space TEXT'); } catch { /* column exists */ }
 
+// Double-entry bookkeeping. The finance pages computed summaries from
+// operational tables, which answers "roughly how are we doing" and cannot
+// answer "what do we owe", "does this balance", or "show me the entry behind
+// this number" — the three questions an accountant, a bank and a tax authority
+// ask first.
+db.exec(`
+CREATE TABLE IF NOT EXISTS accounts (
+  code        TEXT PRIMARY KEY,          -- 1000, 4000, 5000 — the convention everybody knows
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL,             -- asset|liability|equity|revenue|expense
+  parent_code TEXT,
+  normal_side TEXT NOT NULL,             -- which side increases it
+  note        TEXT,
+  retired_at  TEXT,                      -- retired, never deleted: entries still point here
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A period that has closed cannot be posted into. Without this, last quarter's
+-- numbers change quietly whenever somebody backdates an entry.
+CREATE TABLE IF NOT EXISTS fiscal_periods (
+  period        TEXT PRIMARY KEY,        -- YYYY-MM
+  state         TEXT NOT NULL DEFAULT 'open',
+  closed_by     TEXT,
+  closed_at     TEXT,
+  reopened_by   TEXT,
+  reopened_at   TEXT,
+  reopen_reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS journal (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref             TEXT NOT NULL UNIQUE,  -- JE-202608-0001
+  entry_date      TEXT NOT NULL,
+  period          TEXT NOT NULL,
+  memo            TEXT NOT NULL,         -- a number nobody can explain is a number nobody can defend
+  source          TEXT,                  -- invoice | payout | model-spend | reversal | manual
+  source_id       TEXT,
+  currency        TEXT NOT NULL DEFAULT 'USD',
+  total           REAL NOT NULL,
+  state           TEXT NOT NULL DEFAULT 'draft',  -- draft|posted|reversed
+  created_by      TEXT NOT NULL,
+  posted_by       TEXT,
+  posted_at       TEXT,
+  reversed_by_id  INTEGER,               -- corrections are reversals, never edits
+  reversal_reason TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS journal_by_period ON journal(period, state);
+CREATE INDEX IF NOT EXISTS journal_by_source ON journal(source, source_id);
+
+CREATE TABLE IF NOT EXISTS journal_lines (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  journal_id  INTEGER NOT NULL,
+  account_code TEXT NOT NULL,
+  side        TEXT NOT NULL,             -- debit|credit, never both
+  amount      REAL NOT NULL,
+  memo        TEXT
+);
+CREATE INDEX IF NOT EXISTS lines_by_journal ON journal_lines(journal_id);
+CREATE INDEX IF NOT EXISTS lines_by_account ON journal_lines(account_code);
+
+-- A posted entry is evidence. Editing one is how books stop being evidence, so
+-- the database refuses it for the same reason it refuses to edit the chain.
+CREATE TRIGGER IF NOT EXISTS journal_lines_no_update BEFORE UPDATE ON journal_lines
+BEGIN SELECT RAISE(ABORT, 'a posted entry is corrected by a reversal, never by an edit'); END;
+CREATE TRIGGER IF NOT EXISTS journal_lines_no_delete BEFORE DELETE ON journal_lines
+WHEN (SELECT state FROM journal WHERE id = OLD.journal_id) = 'posted'
+BEGIN SELECT RAISE(ABORT, 'a posted entry cannot lose a line'); END;
+
+-- What the bookkeeper has already turned into entries, so a restart does not
+-- post everything a second time.
+-- A hunt: a question, and every round it took to answer it or fail to.
+-- Kept because "we looked and could not find it" is a finding, and the next
+-- person to ask deserves to see what was already tried rather than repeating it.
+CREATE TABLE IF NOT EXISTS hunts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  question    TEXT NOT NULL,
+  asked_by    TEXT NOT NULL,
+  agent_id    TEXT,
+  state       TEXT NOT NULL DEFAULT 'running',   -- running|found|not-found
+  answer      TEXT,
+  confidence  REAL,
+  rounds      INTEGER DEFAULT 0,
+  max_rounds  INTEGER,
+  max_usd     REAL,
+  cost_usd    REAL DEFAULT 0,
+  stopped     TEXT,                              -- why it stopped, in words
+  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS hunt_rounds (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  hunt_id  INTEGER NOT NULL,
+  round    INTEGER NOT NULL,
+  queries  TEXT NOT NULL,
+  hits     INTEGER DEFAULT 0,
+  verdict  TEXT,
+  note     TEXT,
+  at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS hunt_rounds_by_hunt ON hunt_rounds(hunt_id, round);
+
+CREATE TABLE IF NOT EXISTS ledger_marks (
+  source     TEXT NOT NULL,
+  source_id  TEXT NOT NULL,
+  journal_id INTEGER,
+  at         TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (source, source_id)
+);
+`);
+
 db.exec(`
 -- Somebody is always on holiday. Bounded in time on purpose: a delegation with
 -- no end is a permission grant with extra paperwork.

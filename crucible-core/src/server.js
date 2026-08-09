@@ -7,6 +7,8 @@ import os from 'node:os';
 import { PORT, ROOT, mockMode } from './env.js';
 import './db.js';
 import { audit } from './audit.js';
+import { seedChart, periodOf } from './ledger.js';
+import { bookkeep } from './bookkeeper.js';
 import { seedAgents, startWorkers } from './workflow.js';
 import { expirySweep } from './registry.js';
 import { advancePipelines } from './pipelines.js';
@@ -159,6 +161,17 @@ handleJob('chain.anchor', async () => { await anchorNow({ actor: 'system:anchor'
 handleJob('backup.ship', async ({ file }) => { await shipOffsite(file); });
 handleJob('wal.archive', async () => { archiveWal(); });
 handleJob('retention.sweep', async () => { applyRetention(); });
+handleJob('ledger.bookkeep', async () => {
+  const r = bookkeep({ actor: 'agent:AGT-FIN-001' });
+  if (!r.made.length && !r.problems.length) return {};
+  return {
+    audit: {
+      actorType: 'agent', actorId: 'agent:AGT-FIN-001', action: 'ledger.bookkept',
+      subjectType: 'ledger', subjectId: periodOf(),
+      payload: { entries: r.made.length, waiting: r.made.filter((m) => m.waiting).length, problems: r.problems.length },
+    },
+  };
+});
 handleJob('revenue.chase', async ({ dealId }) => {
   const paid = one("SELECT id FROM invoices WHERE deal_id = ? AND state = 'paid'", dealId);
   if (paid) return {};
@@ -172,6 +185,10 @@ const enqueue0 = (kind) => {
   try { enqueueJob(kind, {}, { idempotency: `${kind}:${Math.floor(Date.now() / 60_000)}` }); }
   catch { /* already queued this minute */ }
 };
+
+// A company cannot post an entry before it has somewhere to post it. Seeding is
+// idempotent: an account added by hand survives every restart after it.
+try { seedChart(); } catch { /* the chart is already there */ }
 
 // The queue drains continuously; everything below only decides what to put on it.
 setInterval(() => { jobsTick().catch(() => { /* the queue retries on its own */ }); }, 2000).unref?.();
@@ -191,6 +208,10 @@ setInterval(() => { enqueue0('wal.archive'); }, 15 * 60_000).unref?.();
 // A chain that is never deleted plus a run history that only grows is a
 // disk-full outage with a long fuse, and a full disk stops SQLite dead.
 setInterval(() => { enqueue0('retention.sweep'); }, 6 * 3600 * 1000).unref?.();
+// The books keep themselves. Every ten minutes rather than every event: an
+// entry per model call would be technically correct and unreadable, and a
+// ledger nobody reads is a ledger nobody checks.
+setInterval(() => { enqueue0('ledger.bookkeep'); }, 10 * 60_000).unref?.();
 // The synchronous hazard, measured rather than hoped about.
 watchEventLoop();
 setInterval(() => { try { vaultSweep(); } catch { /* next sweep */ } }, 12 * 3600 * 1000).unref?.();

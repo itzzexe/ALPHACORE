@@ -782,7 +782,7 @@ const EXPORT_COLS = [
 ];
 
 const xmlEsc = (v) => String(v ?? '')
-  .replace(/[ --]/g, '')
+  .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 function buildXls(records, sheetName) {

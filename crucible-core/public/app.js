@@ -179,6 +179,7 @@ const navPerm = {
   quality: 'quality.view', incidents: 'incidents.view', support: 'support.view', intel: 'intel.view',
   segments: 'segments.view', data: 'datasets.view', archive: 'archive.view', marketing: 'marketing.view',
   customers: 'customers.view', finance: 'finance.view', people: 'people.view', legal: 'legal.view',
+  ledger: 'ledger.view', bookkeeper: 'ledger.view', hunt: 'hunt.view',
   vendors: 'vendors.view', knowledge: 'knowledge.view', objectives: 'objectives.view', evals: 'evals.view',
   agents: 'agents.view', budgets: 'budgets.view', audit: 'audit.view', providers: 'providers.view',
   oversight: 'oversight.view', users: 'users.manage', settings: 'settings.manage',
@@ -904,6 +905,236 @@ async function renderObservability() {
   </div>`;
 }
 
+// The books. Four statements, the journal, and the account behind any number —
+// because the question after "what is this number" is always "show me".
+async function renderLedger() {
+  const L = await api('/api/ledger');
+  const tb = L.trialBalance; const is = L.incomeStatement; const bs = L.balanceSheet;
+  const acct = (a) => `<tr><td><a href="#/ledger" class="mono">${esc(a.code)}</a> ${esc(a.name)}</td><td class="num">${esc(money(a.balance))}</td></tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile ${tb.balances ? '' : 'tile-bad'}">
+      <div class="panel-title">Trial balance · ${esc(L.period)}</div>
+      <div class="big">${tb.balances ? 'balances' : 'OUT'}</div>
+      <div class="sub">${esc(money(tb.debits))} debits · ${esc(money(tb.credits))} credits${tb.balances ? '' : ` · out by ${esc(money(tb.difference))}`}</div>
+    </div>
+    <div class="panel tile"><div class="panel-title">Revenue · ${esc(L.period)}</div><div class="big">${esc(money(is.totalRevenue))}</div><div class="sub">net ${esc(money(is.net))} · margin ${is.margin ?? '—'}%</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Expenses · ${esc(L.period)}</div><div class="big">${esc(money(is.totalExpenses))}</div><div class="sub"><a href="#/bookkeeper">the bookkeeper →</a></div></div>
+    <div class="panel tile ${L.drafts ? 'tile-warn' : ''}">
+      <div class="panel-title">Period</div>
+      <div class="big">${esc(L.periodState)}</div>
+      <div class="sub">${L.drafts} draft${L.drafts === 1 ? '' : 's'}${L.awaitingHuman ? ` · ${L.awaitingHuman} waiting for a person` : ''}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title"><span>Balance sheet</span><span class="chip ${bs.balances ? 'chip-ok' : 'chip-bad'}">${bs.balances ? 'balances' : `OUT BY ${esc(money(bs.difference))}`}</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Account</th><th class="num">Balance</th></tr></thead><tbody>
+        <tr><td colspan="2" class="mono" style="color:var(--ink-dim)">ASSETS</td></tr>
+        ${bs.assets.map(acct).join('')}
+        <tr><td><strong>Total assets</strong></td><td class="num"><strong>${esc(money(bs.totalAssets))}</strong></td></tr>
+        <tr><td colspan="2" class="mono" style="color:var(--ink-dim)">LIABILITIES</td></tr>
+        ${bs.liabilities.map(acct).join('') || '<tr><td colspan="2" class="empty">none</td></tr>'}
+        <tr><td colspan="2" class="mono" style="color:var(--ink-dim)">EQUITY</td></tr>
+        ${bs.equity.map(acct).join('') || '<tr><td colspan="2" class="empty">none</td></tr>'}
+        <tr><td><strong>Liabilities + equity</strong></td><td class="num"><strong>${esc(money(bs.totalLiabilities + bs.totalEquity))}</strong></td></tr>
+      </tbody></table></div>
+      <div class="map-legend">Profit not yet closed to retained earnings is folded into equity, which is why this balances mid-month rather than only after a close.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span>Chart of accounts</span><button class="btn btn-sm" id="led-add">Add account</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Code</th><th>Account</th><th>Type</th><th class="num">Balance</th></tr></thead>
+      <tbody>${L.chart.map((a) => `<tr><td class="mono">${esc(a.code)}</td><td>${esc(a.name)}</td><td><span class="chip chip-dim">${esc(a.type)}</span></td><td class="num">${esc(money(a.balance))}</td></tr>`).join('')}</tbody></table></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>Journal · ${esc(L.period)}</span>
+      <span><input id="led-q" class="input input-sm" placeholder="find an entry" aria-label="Search the journal" style="width:180px"> <button class="btn btn-sm" id="led-new">New entry</button></span>
+    </div>
+    <div id="led-journal"></div>
+  </div>`;
+
+  const drawJournal = async (term) => {
+    const { entries } = await api(`/api/ledger/journal${term ? `?q=${encodeURIComponent(term)}` : ''}`);
+    const row = (e) => `<tr>
+        <td class="mono">${esc(e.ref)}</td>
+        <td class="mono">${esc(e.entry_date)}</td>
+        <td>${esc(e.memo)}${e.reversed_by_id ? ' <span class="chip chip-warn">reversed</span>' : ''}${e.state === 'draft' ? ' <span class="chip chip-warn">draft</span>' : ''}</td>
+        <td class="mono" style="font-size:11px">${e.lines.map((l) => `${esc(l.account_code)} ${l.side === 'debit' ? 'Dr' : 'Cr'} ${esc(money(l.amount))}`).join('<br>')}</td>
+        <td class="num">${esc(money(e.total))}</td>
+        <td class="mono" style="font-size:11px">${esc(e.created_by)}</td>
+        <td>${e.state === 'draft' ? `<button class="btn btn-sm" data-post="${e.id}">Post</button>` : (e.reversed_by_id ? '' : `<button class="btn btn-sm" data-rev="${e.id}">Reverse</button>`)}</td>
+      </tr>`;
+    $('#led-journal').innerHTML = entries.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Date</th><th>Memo</th><th>Lines</th><th class="num">Total</th><th>By</th><th></th></tr></thead><tbody>${entries.map(row).join('')}</tbody></table></div>`
+      : '<div class="empty">no entries yet — the bookkeeper writes them as things happen</div>';
+
+    $('[data-post]').forEach((b) => b.addEventListener('click', async () => {
+      try { await api(`/api/ledger/journal/${b.dataset.post}/post`, { method: 'POST', body: {} }); toast('posted'); render(); }
+      catch (e) { toast(e.message, true); }
+    }));
+    $('[data-rev]').forEach((b) => b.addEventListener('click', async () => {
+      // Asked for, not optional: a correction whose reason nobody wrote down is
+      // indistinguishable from an edit six months later.
+      const reason = prompt('Why is this being reversed?');
+      if (!reason) return;
+      try { await api(`/api/ledger/journal/${b.dataset.rev}/reverse`, { method: 'POST', body: { reason } }); toast('reversed'); render(); }
+      catch (e) { toast(e.message, true); }
+    }));
+  };
+  await drawJournal('');
+  let t;
+  $('#led-q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => drawJournal(e.target.value), 300); });
+
+  $('#led-new').addEventListener('click', async () => {
+    const memo = prompt('What is this entry for?'); if (!memo) return;
+    const dr = prompt('Debit — account code then amount, e.g. 5100 250'); if (!dr) return;
+    const cr = prompt('Credit — account code then amount, e.g. 1000 250'); if (!cr) return;
+    const [da, dv] = dr.trim().split(/\s+/);
+    const [ca, cv] = cr.trim().split(/\s+/);
+    try {
+      await api('/api/ledger/journal', { method: 'POST', body: {
+        memo, source: 'manual', post: true,
+        lines: [{ account: da, debit: Number(dv) }, { account: ca, credit: Number(cv) }],
+      } });
+      toast('posted'); render();
+    } catch (e) { toast(e.message, true); }
+  });
+  $('#led-add').addEventListener('click', async () => {
+    const code = prompt('Account code — four digits. 1xxx asset, 2xxx liability, 3xxx equity, 4xxx revenue, 5xxx expense'); if (!code) return;
+    const name = prompt('What is it called?'); if (!name) return;
+    const type = prompt('asset, liability, equity, revenue or expense'); if (!type) return;
+    try { await api('/api/ledger/chart', { method: 'POST', body: { code, name, type } }); toast('added'); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// The AI employees who keep the books, and the limit above which they stop.
+async function renderBookkeeper() {
+  const b = await api('/api/bookkeeper');
+  const rc = b.reconciliation;
+  const finding = (f) => `<div style="padding:8px 0;border-bottom:1px solid var(--seam)">
+        <div><strong>${esc(f.what)}</strong></div>
+        <div class="sub">${esc(f.why || '')}${f.operational !== undefined ? ` — operational ${esc(money(f.operational))} against ledger ${esc(money(f.ledger))}` : ''}</div>
+      </div>`;
+  const waitingRow = (w) => `<tr><td class="mono">${esc(w.ref)}</td><td>${esc(w.memo)}</td><td class="num">${esc(money(w.total))}</td><td class="mono" style="font-size:11px">${esc(w.created_by)}</td><td><a class="btn btn-sm" href="#/ledger">View</a></td></tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Recorded</div><div class="big">${b.recorded}</div><div class="sub">events turned into entries</div></div>
+    <div class="panel tile ${b.waiting.length ? 'tile-warn' : ''}"><div class="panel-title">Waiting for a person</div><div class="big">${b.waiting.length}</div><div class="sub">above the limit, so drafted not posted</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">The limit</div><div class="big">${esc(money(b.limitUsd))}</div><div class="sub">per entry, unattended</div></div>
+    <div class="panel tile ${rc.ok ? '' : 'tile-warn'}"><div class="panel-title">Reconciliation</div><div class="big">${rc.ok ? 'clean' : rc.findings.length}</div><div class="sub">${rc.ok ? 'the books match what happened' : 'thing(s) to look at'}</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">What this means</div>
+    <p class="lede">${esc(b.limitMeans)}. Nobody — person or agent — can post an entry that does not balance; the ledger refuses it. The limit is about attention, not arithmetic: an entry large enough to matter gets a person's eyes before it becomes part of the record.</p>
+    <div style="margin-top:10px"><button class="btn" id="bk-sweep">Sweep now</button> <button class="btn" id="bk-close">Close ${esc(b.period)}</button></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Waiting for a signature</div>
+      ${b.waiting.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Memo</th><th class="num">Total</th><th>Drafted by</th><th></th></tr></thead><tbody>${b.waiting.map(waitingRow).join('')}</tbody></table></div>`
+    : '<div class="empty">nothing waiting</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title">What the controller found</div>
+      ${rc.findings.length ? rc.findings.map(finding).join('') : '<div class="empty">the ledger matches the operational tables</div>'}
+      ${b.refused.length ? `<div class="panel-title" style="margin-top:12px">Events it could not book</div>${b.refused.map((r) => `<div class="meter-label"><span class="mono" style="font-size:11px">${esc(r.subject_id)}</span><span class="mono" style="font-size:11px">${esc(String(r.payload || '').slice(0, 80))}</span></div>`).join('')}` : ''}
+    </div>
+  </div>`;
+
+  $('#bk-sweep').addEventListener('click', async () => {
+    try { const r = await api('/api/bookkeeper/sweep', { method: 'POST', body: {} }); toast(`${r.made.length} entr(ies) written`); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#bk-close').addEventListener('click', async () => {
+    if (!confirm(`Close ${b.period}? Nothing can be posted into a closed period afterwards.`)) return;
+    try {
+      const r = await api('/api/bookkeeper/close', { method: 'POST', body: { period: b.period } });
+      toast(r.ok ? `${b.period} closed` : (r.blocking?.[0]?.what || 'not closed'), !r.ok);
+      render();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// The hunt: one pass across everything, or a search that keeps going until it
+// finds the answer or runs out of leads, rounds or money.
+async function renderHunt() {
+  const h = await api('/api/hunt');
+  const src = (s) => `<div class="meter-label"><span>${esc(s.label)}</span><span class="chip ${s.reachesOutside ? 'chip-warn' : 'chip-dim'}">${s.reachesOutside ? 'leaves the building' : 'internal'}</span></div>`;
+  const past = (r) => `<tr><td>${esc(r.question)}</td><td><span class="chip ${r.state === 'found' ? 'chip-ok' : 'chip-dim'}">${esc(r.state)}</span></td><td class="num">${r.rounds}</td><td class="num">${esc(money4(r.cost_usd || 0))}</td><td class="sub">${esc(r.stopped || '')}</td></tr>`;
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title"><span>Ask</span><span class="chip chip-dim">${h.tablesSearched} tables · ${h.sources.length} sources</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="hunt-q" class="input" placeholder="What do you want to know?" aria-label="What do you want to know?" style="flex:1;min-width:220px">
+      <button class="btn" id="hunt-look">Look</button>
+      <button class="btn btn-primary" id="hunt-go">Hunt</button>
+    </div>
+    <div class="map-legend" style="margin-top:8px">
+      <strong>Look</strong> is one pass across every table, the knowledge graph and what the agents remember — instant and free.
+      <strong>Hunt</strong> reads what came back, judges whether it actually answers the question, works out what to ask next from what it just learned, and goes again — up to ${h.maxRounds} rounds or ${esc(money(h.maxUsd))}, whichever comes first. It reaches the open web. If it does not find the answer it says so; it never offers a guess.
+    </div>
+    <div id="hunt-out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="panel tile"><div class="panel-title">Hunts</div><div class="big">${h.total}</div><div class="sub">${h.found} found${h.foundRate !== null ? ` · ${h.foundRate}%` : ''}</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Spent</div><div class="big">${esc(money(h.spentUsd))}</div><div class="sub">across every hunt ever run</div></div>
+    <div class="panel"><div class="panel-title">Where it looks</div>${h.sources.map(src).join('')}</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Every hunt, and what it tried</div>
+    ${h.recent.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Question</th><th>Result</th><th class="num">Rounds</th><th class="num">Cost</th><th>Why it stopped</th></tr></thead><tbody>${h.recent.map(past).join('')}</tbody></table></div>`
+    : '<div class="empty">nothing asked yet</div>'}
+  </div>`;
+
+  const out = $('#hunt-out');
+  const term = () => $('#hunt-q').value.trim();
+
+  $('#hunt-look').addEventListener('click', async () => {
+    if (!term()) return;
+    out.innerHTML = '<div class="empty">looking…</div>';
+    try {
+      const r = await api(`/api/hunt/lookup?q=${encodeURIComponent(term())}`);
+      const hit = (x) => `<tr><td><span class="chip chip-dim">${esc(x.source)}</span></td><td class="mono">${esc(x.where)}</td><td>${esc(x.title)}<div class="sub">${esc(String(x.snippet || '').slice(0, 160))}</div></td></tr>`;
+      out.innerHTML = r.total
+        ? `<div class="panel-title">${r.total} hit(s) across ${r.tablesSearched} tables</div>
+           <div class="table-wrap"><table><thead><tr><th>Source</th><th>Found in</th><th>What</th></tr></thead><tbody>${r.hits.map(hit).join('')}</tbody></table></div>
+           <div class="map-legend">${esc(r.note)}</div>`
+        : '<div class="empty">nothing matched. A hunt would keep going and follow what it learns.</div>';
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  });
+
+  $('#hunt-go').addEventListener('click', async () => {
+    if (!term()) return;
+    out.innerHTML = '<div class="empty">hunting — asking every source, judging what came back, then going again…</div>';
+    try {
+      const r = await api('/api/hunt', { method: 'POST', body: { question: term() } });
+      const cite = (c) => `<div class="meter-label"><span>${esc(c.title)}</span><span class="mono" style="font-size:11px">${esc(c.source)}/${esc(c.where)}</span></div>`;
+      const step = (t) => `<tr><td class="num">${t.round}</td><td>${esc(t.queries.join(' · '))}</td><td class="num">${t.newHits}</td><td class="sub">${esc(t.missing || (t.next.length ? `next: ${t.next.join(', ')}` : 'stopped'))}</td></tr>`;
+      out.innerHTML = `
+        <div class="panel-title"><span>${r.found ? 'Found' : 'Not found'}</span><span class="chip ${r.found ? 'chip-ok' : 'chip-dim'}">${r.rounds} round(s) · ${esc(money4(r.costUsd))}</span></div>
+        <p class="lede">${esc(r.answer || r.say)}</p>
+        ${r.citations.length ? `<div class="panel-title">From</div>${r.citations.map(cite).join('')}` : ''}
+        <div class="panel-title" style="margin-top:12px">What it tried</div>
+        <div class="table-wrap"><table><thead><tr><th class="num">Round</th><th>Asked</th><th class="num">New</th><th>Then</th></tr></thead><tbody>${r.trail.map(step).join('')}</tbody></table></div>
+        <div class="map-legend">${esc(r.stopped)} · asked ${esc(r.sourcesAsked.join(', '))}</div>`;
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  });
+
+  $('#hunt-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#hunt-go').click(); });
+}
+
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
@@ -931,6 +1162,9 @@ const routes = {
   risks: { title: 'Risk Register', render: renderRisks },
   quality: { title: 'Quality', render: renderQuality },
   finance: { title: 'Finance', render: renderFinance },
+  ledger: { title: 'Ledger', render: renderLedger },
+  bookkeeper: { title: 'Bookkeeper', render: renderBookkeeper },
+  hunt: { title: 'Hunt', render: renderHunt },
   oversight: { title: 'Oversight', render: renderOversight, poll: 10000 },
   users: { title: 'Users & Roles', render: renderUsers },
   settings: { title: 'Settings', render: renderSettings },

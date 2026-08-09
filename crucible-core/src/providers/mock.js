@@ -43,6 +43,27 @@ function pick(system, prompt) {
       confidence: 0.3,
     };
   }
+  // The hunt. Mock cannot judge whether evidence answers a question, so it never
+  // says it does — but it can pull the distinctive words out of what was found,
+  // which is exactly what a real model does with the "next" field. That way the
+  // multi-round machinery is demoable and testable without a key, and without
+  // mock ever claiming to have found something.
+  if (s.includes('"answered"') && s.includes('"next"')) {
+    const asked = new Set(((prompt || '').match(/Already searched[^\n]*/) || [''])[0]
+      .toLowerCase().split(/[|:]/).map((x) => x.trim()).filter(Boolean));
+    const words = [...new Set(((prompt || '').match(/[A-Z][a-zA-Z]{4,}/g) || []))]
+      .filter((w) => !asked.has(w.toLowerCase()) && !['Question', 'Evidence', 'Already'].includes(w))
+      .slice(0, 2);
+    return {
+      answered: false,
+      confidence: 0.3,
+      answer: null,
+      citations: [],
+      missing: '[mock] Deciding whether evidence answers a question needs a real model — connect a provider key.',
+      next: words,
+    };
+  }
+
   if (s.includes('"orgs"')) {
     return { orgs: [], summary: '[mock] No executives known in mock mode — connect a provider key so the agent can name real people.' };
   }
