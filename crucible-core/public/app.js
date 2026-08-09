@@ -973,11 +973,11 @@ async function renderLedger() {
       ? `<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Date</th><th>Memo</th><th>Lines</th><th class="num">Total</th><th>By</th><th></th></tr></thead><tbody>${entries.map(row).join('')}</tbody></table></div>`
       : '<div class="empty">no entries yet — the bookkeeper writes them as things happen</div>';
 
-    $('[data-post]').forEach((b) => b.addEventListener('click', async () => {
+    view.querySelectorAll('[data-post]').forEach((b) => b.addEventListener('click', async () => {
       try { await api(`/api/ledger/journal/${b.dataset.post}/post`, { method: 'POST', body: {} }); toast('posted'); render(); }
       catch (e) { toast(e.message, true); }
     }));
-    $('[data-rev]').forEach((b) => b.addEventListener('click', async () => {
+    view.querySelectorAll('[data-rev]').forEach((b) => b.addEventListener('click', async () => {
       // Asked for, not optional: a correction whose reason nobody wrote down is
       // indistinguishable from an edit six months later.
       const reason = prompt('Why is this being reversed?');
