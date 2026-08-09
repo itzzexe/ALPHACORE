@@ -79,7 +79,7 @@ import {
 } from './pm.js';
 import { setFrozen } from './policy.js';
 // The outside world.
-import { listSecrets, putSecret, dropSecret, getSecret as vaultGet } from './vault.js';
+import { listSecrets, putSecret, dropSecret, getSecret as vaultGet, keyHealth } from './vault.js';
 import {
   DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
   getConnector, connectorsOverview, callConnector,
@@ -387,6 +387,11 @@ const routes = [
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
   ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
+
+  // Where the master key comes from, and whether everything still reads.
+  // Rotation itself is not here: it belongs at a terminal, because the
+  // authority it needs is the key file, not a browser session.
+  ['GET', /^\/api\/vault\/key$/, () => keyHealth()],
 
   // --- Erasure: the right to be forgotten, against a record that cannot forget ---
   ['GET', /^\/api\/erasure$/, () => erasureOverview()],
@@ -1281,6 +1286,7 @@ function permFor(m, path) {
   if (path.startsWith('/api/account/')) return null;
   // Erasing somebody is irreversible by design, so it sits with the powers
   // that are given on purpose rather than with ordinary record management.
+  if (path === '/api/vault/key') return 'vault.manage';
   if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
   if (path === '/api/erasure/erase') return 'compliance.manage';
   if (path === '/api/anchors/verify') return 'audit.view';

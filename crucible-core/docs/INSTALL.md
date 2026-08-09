@@ -368,7 +368,75 @@ reporting a clean bill of health.
 
 ---
 
-## 8. Backups
+## 8. The master key
+
+Everything the company keeps secret is sealed under one key: provider keys,
+OAuth tokens, webhook signing secrets, and every person's crypto-shredding key.
+Two questions follow from that, and both now have answers.
+
+### Where it lives
+
+By default, `data/master.key` — beside the database, which is honest for one
+machine and wrong for anything else: theft of the disk is theft of both. Two
+ways out, neither of which needs the source patched:
+
+```bash
+# From a secret manager, fetched on every use, never written to disk
+ALPHACORE_MASTER_KEY_COMMAND="vault read -field=key secret/alphacore"
+ALPHACORE_MASTER_KEY_COMMAND="op read op://vault/alphacore/master-key"
+ALPHACORE_MASTER_KEY_COMMAND="aws kms decrypt --ciphertext-blob fileb://key.enc --output text --query Plaintext"
+
+# Or straight from the environment, for a container secret
+ALPHACORE_MASTER_KEY="<base64 of 48 random bytes>"
+```
+
+Any command that prints the material on standard output works. The platform
+never sees the credential that fetched it, only the answer. `GET /api/vault/key`
+says which source is in use and states plainly what that source is worth.
+
+### Changing it
+
+```bash
+npm run rotate-key -- --dry-run   # what would move
+npm run rotate-key                # move it
+```
+
+A key that cannot be rotated is a key you keep after the laptop it was copied
+to went missing, because the alternative is losing every credential you have.
+
+The order is the whole safety argument:
+
+1. read and decrypt everything under the **current** key, in memory
+2. re-seal it all under the **new** key, in one transaction
+3. read every re-sealed value back and compare it with what was there
+4. only then install the new key file
+
+Any failure before step 4 rolls back and leaves the old key exactly where it
+was. If anything is unreadable *before* it starts, it refuses outright —
+re-sealing what you cannot read turns a recoverable problem into a permanent
+one. And a rotation that installs the key first and fails halfway is
+indistinguishable from destroying the vault, which is the usual way this goes
+wrong.
+
+It is a terminal command, not a button. The authority it needs is the key file
+itself, which is what somebody at a console already has and a browser session
+does not.
+
+### The retired key is kept
+
+Renamed with the time it was retired, not deleted. **A backup taken an hour ago
+is still sealed under it**, and deleting it makes that backup unreadable — a
+restore that quietly produces a company with no credentials. Move retired keys
+to wherever you keep the backups they belong to, together.
+
+Sealed values carry the fingerprint of the key that sealed them, so "sealed
+under a key you no longer have" is its own error naming the fingerprint,
+instead of a generic decryption failure. Those are two problems whose answers
+have nothing in common.
+
+---
+
+## 9. Backups
 
 The whole company is `crucible-core/data/`. Two things live there:
 
@@ -412,7 +480,7 @@ Rituals.
 
 ---
 
-## 9. Upgrading
+## 10. Upgrading
 
 ```bash
 git pull
@@ -433,7 +501,7 @@ ignored.
 
 ---
 
-## 10. Running it as a service
+## 11. Running it as a service
 
 The server is a plain Node process. Any supervisor works.
 
@@ -471,7 +539,7 @@ sit as permanently "running".
 
 ---
 
-## 11. When something is wrong
+## 12. When something is wrong
 
 Start here, in this order:
 
@@ -508,7 +576,7 @@ All three run in mock mode: no key, no network, no cost.
 
 ---
 
-## 12. Multiple companies on one machine
+## 13. Multiple companies on one machine
 
 Tenancy is by file and process, not by a `WHERE` clause — two companies never
 share a table:
@@ -526,7 +594,7 @@ machine. The isolation is real, the blast radius of a compromised host is not.
 
 ---
 
-## 13. Environment variables
+## 14. Environment variables
 
 Everything below can also be set in Settings, which takes precedence. Use the
 environment when a machine should be configured before it first starts.
@@ -536,6 +604,8 @@ environment when a machine should be configured before it first starts.
 | `PORT` | Listening port. Default `8484`. |
 | `ALPHACORE_DB` | Path to the database file, relative to `crucible-core/`. Default `data/alphacore.db`. |
 | `ALPHACORE_MOCK` | `true` forces mock mode even when a key is present. |
+| `ALPHACORE_MASTER_KEY_COMMAND` | A command printing the master key material. The KMS door. |
+| `ALPHACORE_MASTER_KEY` | The material directly, base64. For container secrets. |
 | `TRUST_PROXY` | `true` only when a reverse proxy sits in front, so `X-Forwarded-For` can be believed for rate limiting. |
 | `ANCHOR_WITNESS` | `rfc3161` (default), `webhook` or `file`. |
 | `ANCHOR_TSA_URL` | The timestamping authority. Defaults to DigiCert's free service. |

@@ -15,37 +15,49 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './env.js';
-import { q, one, exec } from './db.js';
+import { q, one, exec, db } from './db.js';
+import { masterKey, keyId, proposeKey, installKey, keySource, KEY_FILE } from './masterkey.js';
+
+/** Thrown when a ciphertext names a key that is not the one loaded. */
+export class VaultKeyMismatch extends Error {}
 import { audit } from './audit.js';
-
-const KEY_FILE = path.join(ROOT, 'data', 'master.key');
-
-/** The master key, made once and kept out of the database. */
-function masterKey() {
-  if (!fs.existsSync(KEY_FILE)) {
-    const salt = randomBytes(16);
-    const material = randomBytes(32);
-    fs.writeFileSync(KEY_FILE, Buffer.concat([salt, material]).toString('base64'), { mode: 0o600 });
-  }
-  const raw = Buffer.from(fs.readFileSync(KEY_FILE, 'utf8').trim(), 'base64');
-  return scryptSync(raw.subarray(16), raw.subarray(0, 16), 32);
-}
 
 /**
  * Sealing and opening are exported so other things can be wrapped under the
  * same master key. A second key file would be a second thing to back up, a
  * second thing to rotate, and a second thing to lose.
+ *
+ * Sealed values carry the fingerprint of the key that sealed them:
+ *
+ *   k1:<key id>:<base64 iv‖tag‖ciphertext>
+ *
+ * Values written before this existed have no prefix and are read with whatever
+ * key is current, which is correct: there was only ever one. The fingerprint
+ * turns "sealed under a key you no longer have" into its own error instead of
+ * a generic decryption failure — two problems whose answers have nothing in
+ * common, and which used to look identical.
  */
-export function seal(plain) {
+export function seal(plain, key = masterKey()) {
   const iv = randomBytes(12);
-  const c = createCipheriv('aes-256-gcm', masterKey(), iv);
+  const c = createCipheriv('aes-256-gcm', key, iv);
   const data = Buffer.concat([c.update(String(plain), 'utf8'), c.final()]);
-  return Buffer.concat([iv, c.getAuthTag(), data]).toString('base64');
+  return `k1:${keyId(key)}:${Buffer.concat([iv, c.getAuthTag(), data]).toString('base64')}`;
 }
 
-export function open(ciphertext) {
-  const buf = Buffer.from(ciphertext, 'base64');
-  const d = createDecipheriv('aes-256-gcm', masterKey(), buf.subarray(0, 12));
+export function open(ciphertext, key = masterKey()) {
+  let blob = String(ciphertext);
+  if (blob.startsWith('k1:')) {
+    const [, id, rest] = blob.split(':');
+    if (id !== keyId(key)) {
+      throw new VaultKeyMismatch(
+        `this was sealed under key ${id}, and the key in use is ${keyId(key)} — `
+        + 'restore the retired key file, or re-seal from a backup taken under it',
+      );
+    }
+    blob = rest;
+  }
+  const buf = Buffer.from(blob, 'base64');
+  const d = createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
   d.setAuthTag(buf.subarray(12, 28));
   return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
 }
@@ -126,4 +138,161 @@ export function vaultSweep() {
     audit({ actorType: 'system', actorId: 'system:vault', action: 'vault.stale', subjectType: 'secret', subjectId: s.name });
   }
   return stale.length;
+}
+
+// ---------------------------------------------------------------- rotation --
+
+/**
+ * Everything in this database that is sealed under the master key.
+ *
+ * Two places, and both must move together or the rotation is worse than
+ * useless: the vault's own secrets, and every person's crypto-shredding key.
+ * Missing the second would leave every subject key unreadable — which is to
+ * say it would erase everybody, silently, as a side effect of a security
+ * improvement.
+ */
+function sealedEverywhere() {
+  const items = [];
+  for (const r of q('SELECT name, ciphertext FROM vault_secrets')) {
+    items.push({ table: 'vault_secrets', key: r.name, column: 'ciphertext', value: r.ciphertext });
+  }
+  try {
+    for (const r of q('SELECT ref, wrapped_key FROM pii_subjects WHERE wrapped_key IS NOT NULL')) {
+      items.push({ table: 'pii_subjects', key: r.ref, column: 'wrapped_key', value: r.wrapped_key });
+    }
+  } catch { /* older database, before crypto-shredding */ }
+  return items;
+}
+
+/**
+ * Re-seal everything under a new master key.
+ *
+ * The order is the entire safety argument, so it is written out rather than
+ * left to be inferred:
+ *
+ *   1. read and decrypt everything under the CURRENT key, in memory
+ *   2. re-seal it all under the NEW key, in one transaction
+ *   3. read every re-sealed value back with the new key and compare it to what
+ *      was there before
+ *   4. only if all of that held, install the new key file
+ *
+ * Any failure before step 4 rolls the transaction back and leaves the old key
+ * exactly where it was. A rotation that installs the key first and fails
+ * halfway is indistinguishable from destroying the vault, and that is the
+ * usual way this goes wrong.
+ */
+export function rotateMasterKey({ actor, dryRun = false } = {}) {
+  if (!actor) throw new Error('rotating the master key is a human act and has to be signed');
+
+  const oldKey = masterKey();
+  const items = sealedEverywhere();
+
+  // Step 1. If anything cannot be read now, stop: re-sealing what you cannot
+  // read is how a rotation turns a recoverable problem into a permanent one.
+  const plain = new Map();
+  const unreadable = [];
+  for (const it of items) {
+    try { plain.set(`${it.table}:${it.key}`, open(it.value, oldKey)); }
+    catch (e) { unreadable.push({ ...it, error: e.message }); }
+  }
+  if (unreadable.length) {
+    return {
+      ok: false,
+      reason: `${unreadable.length} sealed value(s) cannot be read with the current key — rotating would make that permanent`,
+      unreadable: unreadable.map((u) => `${u.table}.${u.key}`),
+    };
+  }
+
+  if (dryRun) {
+    return { ok: true, dryRun: true, wouldReseal: items.length, from: keyId(oldKey) };
+  }
+
+  const proposed = proposeKey();
+
+  // Steps 2 and 3, inside one transaction.
+  db.exec('BEGIN');
+  try {
+    for (const it of items) {
+      const text = plain.get(`${it.table}:${it.key}`);
+      const resealed = seal(text, proposed.key);
+      const idCol = it.table === 'vault_secrets' ? 'name' : 'ref';
+      exec(`UPDATE ${it.table} SET ${it.column} = ? WHERE ${idCol} = ?`, resealed, it.key);
+    }
+
+    for (const it of items) {
+      const idCol = it.table === 'vault_secrets' ? 'name' : 'ref';
+      const stored = one(`SELECT ${it.column} AS v FROM ${it.table} WHERE ${idCol} = ?`, it.key).v;
+      const back = open(stored, proposed.key);
+      if (back !== plain.get(`${it.table}:${it.key}`)) {
+        throw new Error(`${it.table}.${it.key} did not survive re-sealing`);
+      }
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    audit({
+      actorType: 'human', actorId: actor, action: 'vault.rotation_aborted',
+      subjectType: 'system', subjectId: 'master-key',
+      payload: { error: String(e.message).slice(0, 200), items: items.length },
+    });
+    return { ok: false, reason: `rolled back: ${e.message}`, nothingChanged: true };
+  }
+
+  // Step 4. Everything is re-sealed and read back; now the key can move.
+  let installed;
+  try {
+    installed = installKey(proposed.raw);
+  } catch (e) {
+    // The database is now under a key that is not installed. Say exactly that,
+    // and exactly how to fix it, rather than leaving somebody to discover it
+    // at the next restart.
+    return {
+      ok: false,
+      reason: `everything was re-sealed but the new key could not be installed: ${e.message}`,
+      urgent: `the database now expects key ${proposed.id}. Put this material where the key comes from, or restore a backup taken before this ran.`,
+      material: proposed.raw.toString('base64'),
+    };
+  }
+
+  audit({
+    actorType: 'human', actorId: actor, action: 'vault.key_rotated',
+    subjectType: 'system', subjectId: 'master-key',
+    payload: { from: keyId(oldKey), to: proposed.id, resealed: items.length, retiredFile: installed.retiredFile },
+  });
+
+  return {
+    ok: true,
+    from: keyId(oldKey),
+    to: proposed.id,
+    resealed: items.length,
+    retiredFile: installed.retiredFile,
+    note: 'The retired key file is kept. A backup taken before now is still sealed under it, and deleting it makes that backup unreadable.',
+  };
+}
+
+/** Where the key comes from, and whether everything can still be read. */
+export function keyHealth() {
+  const src = keySource();
+  const items = sealedEverywhere();
+  let readable = 0;
+  const failing = [];
+  for (const it of items) {
+    try { open(it.value); readable++; }
+    catch (e) { failing.push({ where: `${it.table}.${it.key}`, error: e.message.slice(0, 120) }); }
+  }
+  return {
+    ...src,
+    sealedValues: items.length,
+    readable,
+    failing,
+    // A rotation is only meaningful if it can be undone by restoring a backup,
+    // and that needs the retired keys.
+    retiredKeys: (() => {
+      try {
+        return fs.readdirSync(path.dirname(KEY_FILE))
+          .filter((f) => f.startsWith('master.key.retired-'))
+          .sort().reverse();
+      } catch { return []; }
+    })(),
+  };
 }

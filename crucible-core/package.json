@@ -10,7 +10,7 @@
     "start": "node --experimental-sqlite src/server.js",
     "dev": "node --experimental-sqlite --watch src/server.js",
     "seed": "node --experimental-sqlite scripts/seed.js",
-    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js test/push.test.js test/anchor.test.js test/identity.test.js test/erasure.test.js",
+    "test": "node --experimental-sqlite --test test/smoke.test.js test/world.test.js test/platform.test.js test/push.test.js test/anchor.test.js test/identity.test.js test/erasure.test.js test/rotation.test.js",
     "prove": "node --experimental-sqlite scripts/prove-world.mjs",
     "prove:platform": "node --experimental-sqlite scripts/prove-platform.mjs",
     "reset-password": "node --experimental-sqlite scripts/reset-password.mjs",
@@ -18,7 +18,8 @@
     "anchor": "node --experimental-sqlite -e \"import(\"./src/anchor.js\").then(async A=>{const r=await A.anchorNow({actor:\"human:console\"});console.log(JSON.stringify(r,null,2))})\"",
     "openapi": "node scripts/openapi.mjs",
     "openapi:check": "node scripts/openapi.mjs --check",
-    "verify": "node --experimental-sqlite scripts/verify-chain.mjs"
+    "verify": "node --experimental-sqlite scripts/verify-chain.mjs",
+    "rotate-key": "node --experimental-sqlite scripts/rotate-key.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"
