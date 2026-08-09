@@ -50,9 +50,26 @@ function wake({ level, source, message, subjectType, subjectId }) {
   if (!spec && level !== 'error' && level !== 'warn') return;
 
   const shape = spec || { perm: null, route: '#/', title: source || 'AlphaCore' };
-  // Imported here rather than at the top: push reaches outside the machine and
-  // pulls in crypto and the settings table, and notify() is called from deep
-  // inside the seeds at boot, before any of that is needed.
+
+  // Both of these are imported here rather than at the top: they reach outside
+  // the machine and pull in crypto and the settings table, and notify() is
+  // called from deep inside the seeds at boot, before any of that is wanted.
+
+  // A push reaches an installed browser. This reaches everything else — the
+  // Telegram group, the on-call webhook, a pager script — and only for what
+  // genuinely stops the company, because a channel people cannot mute
+  // per-message is a channel they mute entirely.
+  if (level === 'error' || spec?.urgency === 'high') {
+    import('./lifecycle.js')
+      .then(({ alert }) => alert({
+        level, subject: shape.title,
+        text: `${message}
+
+${shape.route}`,
+      }))
+      .catch(() => { /* the record is the fact; this is the courtesy */ });
+  }
+
   import('./push.js')
     .then(({ pushToPermitted }) => pushToPermitted(shape.perm, {
       title: shape.title,

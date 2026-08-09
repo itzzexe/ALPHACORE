@@ -102,6 +102,23 @@ const trig = q("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name L
 if (trig.length < 2) note('BLOCKER', 'record', 'the append-only triggers are missing', 'the audit log can be edited');
 else pass('record', 'the audit log refuses UPDATE and DELETE at the database level');
 
+const { lifecycleOverview } = await import('../src/lifecycle.js');
+const life = lifecycleOverview();
+if (!life.offsite.configured) {
+  note('HIGH', 'record', 'no backup has ever left this machine',
+    'BACKUP_SHIP_COMMAND is unset, so every copy is on the disk that holds the original — that survives a mistake, not the disk');
+} else if (life.offsite.lastFailureAt && (!life.offsite.lastShippedAt || life.offsite.lastFailureAt > life.offsite.lastShippedAt)) {
+  note('HIGH', 'record', 'the last attempt to ship a backup off this machine failed', life.offsite.lastFailureAt);
+} else {
+  pass('record', `backups leave this machine — last at ${life.offsite.lastShippedAt}`);
+}
+if (!life.alerts.configured) {
+  note('MEDIUM', 'health', 'nothing can reach a person who is not looking at the app',
+    'a push needs the app installed on the device that is not being looked at. Set ALERT_CHANNEL for incidents at 3am');
+} else {
+  pass('health', `alerts reach people through ${life.alerts.channel}`);
+}
+
 const backups = q('SELECT file, created_at, verified FROM backups ORDER BY id DESC LIMIT 1');
 if (!backups.length) note('HIGH', 'record', 'no backup has ever been taken', 'the first one is a single click on the Backups page');
 else {

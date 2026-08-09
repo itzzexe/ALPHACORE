@@ -503,6 +503,80 @@ ignored.
 
 ## 11. Running it as a service
 
+Ready-made units are in `deploy/`.
+
+```bash
+sudo cp deploy/alphacore.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now alphacore
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deployinstall-service.ps1
+powershell -File deploystop-service.ps1     # stops it the way it expects
+```
+
+### Stopping is not the same as being killed
+
+A process that exits the instant it is asked leaves runs marked as running that
+nothing owns. They are reclaimed at the next boot — but only if there is one,
+and only after however long the restart takes.
+
+SIGTERM now drains: it stops taking work, waits up to `DRAIN_SECONDS` (20 by
+default) for what is in flight, requeues anything still going at the deadline,
+records what it abandoned, checkpoints the log, and exits. A second signal
+skips the wait, because impatience beats tidiness and nobody should have to
+reach for SIGKILL to be heard.
+
+The systemd unit sets `TimeoutStopSec=60` for this reason: it must be
+comfortably larger than `DRAIN_SECONDS`, or systemd kills the thing mid-drain.
+
+On Windows, `Stop-ScheduledTask` calls TerminateProcess — SIGKILL by another
+name. `deploystop-service.ps1` sends a real Ctrl+C to the process's console
+instead, so the drain runs, and only kills it if that fails.
+
+### Being told when something breaks
+
+A push reaches a browser that has the app installed. An incident at 3am on a
+machine nobody installed it on reaches nobody, and the first anybody knows is
+the morning.
+
+```bash
+ALERT_CHANNEL=telegram        # + ALERT_TELEGRAM_TOKEN and ALERT_TELEGRAM_CHAT
+ALERT_CHANNEL=webhook         # + ALERT_WEBHOOK_URL — Slack, Discord, Mattermost
+ALERT_CHANNEL=command         # + ALERT_COMMAND — mail(1), ntfy, an SMS gateway, a pager
+```
+
+Test it with `POST /api/lifecycle/alert-test`. Only errors and the things that
+genuinely stop the company go out this way: a channel people cannot mute
+per-message is a channel they mute entirely.
+
+### Getting a backup off the machine
+
+A copy on the same disk survives a mistake, not the disk.
+
+```bash
+BACKUP_SHIP_COMMAND="rclone copy --config /etc/rclone.conf"
+BACKUP_SHIP_COMMAND="aws s3 cp --storage-class STANDARD_IA"
+BACKUP_SHIP_COMMAND="restic backup"
+BACKUP_SHIP_COMMAND="scp -q -i /etc/alphacore/id_ed25519 backup@offsite:/srv/alphacore/"
+```
+
+The file path is appended as the last argument. Whatever you already trust is
+better than a second-rate uploader built here, and it keeps its own credentials
+where they belong. **A failure alerts** — a backup that silently stops leaving
+the machine is indistinguishable from one that never did.
+
+Between backups, the write-ahead log is archived every fifteen minutes to
+`data/wal-archive/` (48 segments kept, then rotated). A nightly copy alone
+means losing up to a day; these turn that into minutes. The bound is deliberate:
+an unbounded archive fills the disk, and a full disk stops the database — a
+backup feature that causes an outage.
+
+The launch audit asks about both. "No backup has ever left this machine" is a
+HIGH finding, not a note.
+
+
+
 The server is a plain Node process. Any supervisor works.
 
 **systemd** (`/etc/systemd/system/alphacore.service`):
@@ -606,6 +680,9 @@ environment when a machine should be configured before it first starts.
 | `ALPHACORE_MOCK` | `true` forces mock mode even when a key is present. |
 | `ALPHACORE_MASTER_KEY_COMMAND` | A command printing the master key material. The KMS door. |
 | `ALPHACORE_MASTER_KEY` | The material directly, base64. For container secrets. |
+| `DRAIN_SECONDS` | How long to let in-flight work finish on SIGTERM. Default 20. |
+| `ALERT_CHANNEL` | `telegram`, `webhook` or `command`. |
+| `BACKUP_SHIP_COMMAND` | Gets a backup off this machine. The path is appended. |
 | `TRUST_PROXY` | `true` only when a reverse proxy sits in front, so `X-Forwarded-For` can be believed for rate limiting. |
 | `ANCHOR_WITNESS` | `rfc3161` (default), `webhook` or `file`. |
 | `ANCHOR_TSA_URL` | The timestamping authority. Defaults to DigiCert's free service. |

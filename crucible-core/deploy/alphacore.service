@@ -1,0 +1,56 @@
+# systemd unit for AlphaCore.
+#
+#   sudo cp deploy/alphacore.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now alphacore
+#
+# The two settings that are actually load-bearing are TimeoutStopSec and
+# KillSignal: the process drains on SIGTERM, and systemd's default 90 seconds
+# is plenty, but a shorter one configured elsewhere would SIGKILL it mid-run.
+
+[Unit]
+Description=AlphaCore — the company that runs itself
+Documentation=https://github.com/itzzexe/crucible-core
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alphacore
+Group=alphacore
+WorkingDirectory=/opt/alphacore/crucible-core
+ExecStart=/usr/bin/node --experimental-sqlite src/server.js
+
+# Draining: let runs in flight finish before going. DRAIN_SECONDS (a setting)
+# bounds the wait; this must be comfortably larger than it.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+Restart=always
+RestartSec=5
+
+Environment=NODE_ENV=production
+Environment=PORT=8484
+# Behind a reverse proxy, so X-Forwarded-For can be believed for rate limiting.
+# Leave this off if the port is reachable directly — see docs/INSTALL.md.
+Environment=TRUST_PROXY=true
+
+# The master key from a secret manager rather than the disk beside the database.
+# Environment=ALPHACORE_MASTER_KEY_COMMAND=/usr/local/bin/fetch-alphacore-key
+
+# Everything the company is lives under data/ and workspace/. Nothing else on
+# this machine needs to be writable by it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/alphacore/crucible-core/data /opt/alphacore/crucible-core/workspace
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=alphacore
+
+[Install]
+WantedBy=multi-user.target

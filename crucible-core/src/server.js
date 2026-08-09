@@ -69,6 +69,7 @@ import { chiefTick } from './chief.js';
 import { seedSlos, observeTick, trimMetrics } from './observe.js';
 import { takeBackup } from './backup.js';
 import { anchorNow } from './anchor.js';
+import { handleSignals, alert, shipOffsite, archiveWal, lifecycleOverview } from './lifecycle.js';
 import { mcpTools } from './mcptools.js';
 import { one, exec, q } from './db.js';
 import { getSetting, setSetting } from './settings.js';
@@ -154,6 +155,8 @@ handleJob('provenance.seal', async () => { sealFinishedWork(); });
 handleJob('graph.rebuild', async () => { rebuildGraph(); });
 handleJob('redteam.sweep', async () => { await runRedTeam(); });
 handleJob('chain.anchor', async () => { await anchorNow({ actor: 'system:anchor' }); });
+handleJob('backup.ship', async ({ file }) => { await shipOffsite(file); });
+handleJob('wal.archive', async () => { archiveWal(); });
 handleJob('revenue.chase', async ({ dealId }) => {
   const paid = one("SELECT id FROM invoices WHERE deal_id = ? AND state = 'paid'", dealId);
   if (paid) return {};
@@ -180,6 +183,9 @@ setInterval(() => { enqueue0('redteam.sweep'); }, 6 * 3600 * 1000).unref?.();
 // where it had got to. A company that has done nothing since the last one
 // skips it rather than asking an authority to sign its own footprints.
 setInterval(() => { enqueue0('chain.anchor'); }, Math.max(1, Number(getSetting('ANCHOR_EVERY_HOURS') || 6)) * 3600 * 1000).unref?.();
+// Between backups, the write-ahead log is the difference between losing a day
+// and losing four minutes.
+setInterval(() => { enqueue0('wal.archive'); }, 15 * 60_000).unref?.();
 setInterval(() => { try { vaultSweep(); } catch { /* next sweep */ } }, 12 * 3600 * 1000).unref?.();
 // The revenue loop: source, then move every deal as far as its evidence allows.
 setInterval(() => { try { revenueTick(); } catch { /* next tick */ } }, 20_000).unref?.();
@@ -207,10 +213,12 @@ setInterval(() => { try { takeBackup({ kind: 'scheduled', actor: 'system:backup'
 if (!IS_TENANT) {
   setInterval(() => { try { superviseTenants(); } catch { /* next sweep */ } }, 30_000).unref?.();
   setInterval(() => { try { collectUsage(); } catch { /* next sweep */ } }, 5 * 60_000).unref?.();
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.on(signal, () => { try { stopTenants(); } catch { /* going down anyway */ } process.exit(0); });
-  }
 }
+
+// Stopping is not the same as being killed. A process that exits the instant it
+// is asked leaves runs marked as running that nothing owns, and they stay that
+// way until a boot that may not come for hours. Draining costs a few seconds.
+handleSignals({ onStop: () => { if (!IS_TENANT) { try { stopTenants(); } catch { /* going down anyway */ } } } });
 setInterval(() => { try { syncMarketing(); } catch { /* next tick retries */ } }, 4000).unref?.();
 // Employees answer in the room they were mentioned in, as soon as their run lands.
 setInterval(() => { syncChat().catch(() => { /* next tick retries */ }); }, 2500).unref?.();
