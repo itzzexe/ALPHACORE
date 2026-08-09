@@ -57,6 +57,12 @@ const INJECTION = [
   // English
   /ignore\s+(all\s+)?(previous|prior|above)\s+instructions/i,
   /disregard\s+(your\s+)?(system\s+)?(prompt|instructions|rules)/i,
+  // "forget everything above" was found by fuzzing, not by review: the list
+  // had "ignore" and "disregard" and simply no third synonym, and a quarter of
+  // mutated payloads walked through the gap. The object is required — "forget
+  // about the meeting on Tuesday" is a sentence people write.
+  /\b(forget|ignore|disregard|overlook)\s+(everything|all|anything|what)\b[^.!?]{0,40}\b(above|before|prior|previous|earlier|said|told|instructed)/i,
+  /\bfollow\s+(these|the|my)\s+new\s+instructions?/i,
   /you\s+are\s+now\s+(a|an|the)\s/i,
   /\bnew\s+instructions?\s*:/i,
   /(send|email|forward|reveal|print)\s+(me\s+)?(the\s+)?(api\s+)?(key|token|password|secret|credential)/i,
@@ -65,6 +71,10 @@ const INJECTION = [
   // Arabic — the same four moves: ignore, override, impersonate, exfiltrate
   /تجاهل\s+(كل\s+)?(ال)?(تعليمات|الأوامر|التوجيهات)/,
   /(تجاهل|ألغِ|الغ)\s+(ما\s+)?(سبق|قبل|السابق)/,
+  // Same gap on this side: "انس كل ما قيل لك سابقاً" uses a verb the list did
+  // not have. Arabic drops short vowels and the alif takes three written
+  // forms, so the alternation is spelled out rather than assumed.
+  /(انس|أنس|إنس|تناس|اهمل|أهمل)\s+(كل\s+)?(ما\s+)?(قيل|سبق|ذُكر|ذكر|قبل|السابق)/,
   /(أنت|انت)\s+الآن\s/,
   /(تعليمات|أوامر)\s+(جديدة|أخرى)\s*[:：]/,
   /(أرسل|ارسل|أعطني|اعطني|اكشف)\s+(لي\s+)?(ال)?(مفاتيح|مفتاح|كلمة\s*المرور|الرمز|السر)/,
