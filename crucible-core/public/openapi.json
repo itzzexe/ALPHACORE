@@ -3509,6 +3509,144 @@
         ]
       }
     },
+    "/api/deliverability": {
+      "get": {
+        "summary": "GET /api/deliverability",
+        "tags": [
+          "deliverability"
+        ],
+        "description": "Requires the `comms.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `comms.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/deliverability/preflight": {
+      "get": {
+        "summary": "GET /api/deliverability/preflight",
+        "tags": [
+          "deliverability"
+        ],
+        "description": "Requires the `comms.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `comms.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/deliverability/consent": {
+      "post": {
+        "summary": "POST /api/deliverability/consent",
+        "tags": [
+          "deliverability"
+        ],
+        "description": "Requires the `comms.view` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `comms.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
     "/api/embeddings": {
       "get": {
         "summary": "GET /api/embeddings",

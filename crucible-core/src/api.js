@@ -85,6 +85,7 @@ import { observabilityOverview, applyRetention } from './observability.js';
 import { canaryOverview, promptHistory, proposeChain, runCanary, promoteChain, revertChain } from './canary.js';
 import { approvalsOverview, roleTemplates, applyTemplate, delegate, endDelegation } from './approvals.js';
 import { embeddingsOverview, reindex } from './embeddings.js';
+import { deliverabilityOverview, preflight, recordingRule } from './deliverability.js';
 import {
   DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
   getConnector, connectorsOverview, callConnector,
@@ -392,6 +393,13 @@ const routes = [
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
   ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
+
+  // Whether mail arrives, and whether a recording is lawful.
+  ['GET', /^\/api\/deliverability$/, () => deliverabilityOverview()],
+  ['GET', /^\/api\/deliverability\/preflight$/, () => preflight({})],
+  ['POST', /^\/api\/deliverability\/consent$/, (_p, body) => recordingRule({
+    country: need(body, 'country'), region: body.region || null,
+  })],
 
   // Recall, and which of the two kinds of it is in use.
   ['GET', /^\/api\/embeddings$/, () => embeddingsOverview()],
@@ -1341,6 +1349,7 @@ function permFor(m, path) {
   // Reading your own queue needs nothing beyond a session — it only ever shows
   // what you personally could act on. Handing out a role is users.manage.
   if (path.startsWith('/api/embeddings')) return m === 'GET' ? 'graph.view' : 'graph.manage';
+  if (path.startsWith('/api/deliverability')) return 'comms.view';
   if (path === '/api/approvals') return null;
   if (path.startsWith('/api/roles')) return m === 'GET' ? 'users.manage' : 'users.manage';
   if (path.startsWith('/api/delegations')) return null;

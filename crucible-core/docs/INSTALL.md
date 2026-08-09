@@ -123,6 +123,68 @@ To do real work:
    fenced by an allowlist; a live connector with an empty allowlist is a
    finding, not a convenience.
 
+### Mail that arrives, and recordings that are lawful
+
+Two things a company discovers late and expensively.
+
+**Mail.** A message that is not signed, from a domain with no policy, goes to
+spam — and spam is indistinguishable from "they ignored us" in every report the
+company will produce. It is silent: nothing fails, the send is recorded as
+successful, and the pipeline reports a healthy rate into a void.
+
+```bash
+MAIL_DOMAIN=yourcompany.com
+GET /api/deliverability             # the key to publish
+GET /api/deliverability/preflight   # what the world can actually see
+```
+
+Messages are signed with RSA-2048 DKIM, relaxed/relaxed canonicalisation — the
+combination every receiver verifies. The private half lives in the vault; the
+public half is a DNS record, which cannot be a secret because publishing it is
+the point.
+
+**The records themselves are yours to publish**, in your registrar, against your
+domain. Nothing here can do that, and this is one of the two things in the whole
+review that no amount of code can finish. What it *can* do is read the live DNS
+and say what a receiver would conclude — deliberately reading DNS rather than a
+setting, because a record somebody *meant* to publish is worth nothing and the
+entire failure mode is believing a thing is in place when it is not. It reports
+a missing SPF, an `+all` that authorises the whole internet, a DKIM key that is
+published but is not the one being signed with (worse than not signing), a
+missing DMARC, and no MX.
+
+**Recording a call.** Whether it is lawful depends on where the other party is,
+and getting it wrong is criminal in several places rather than a compliance
+finding.
+
+```bash
+POST /api/deliverability/consent  {"country":"US","region":"WA"}
+```
+
+Two-party jurisdictions require an announcement first, and one gets written for
+you. A single "US" answer is wrong often enough to be dangerous, so the thirteen
+all-party states are listed separately — and **anywhere not in the table gets
+the strict rule**, as does the US with no state given. The decision is recorded
+whether or not anybody objects, because "we had consent" is a claim somebody
+will need to prove. It is a starting position from where the other party is, and
+it says on the page that it is not legal advice.
+
+### Money after the sale
+
+Taking money was the easy half. What decides whether a business is solvent is
+what happens afterwards, and none of it existed: **refunds** (which move money
+outward and therefore carry a value and hit the same gate a payout does —
+nothing about "we are giving it back" makes it less of a payment),
+**disputes** (which have a deadline, and missing it loses the money by default,
+so the due date is surfaced), **contesting one** (a statement made to a bank on
+the company's behalf, so it is a write and it is gated), and **tax**
+(calculated rather than invented — an invoice with the wrong tax is a
+correction to every downstream report as well).
+
+These are wired and gated. They are **not verified against a live Stripe
+account** here, which is the honest limit: the paper-trading mode above is the
+way to exercise them for a fortnight before they touch a real card.
+
 ### Paper trading — real reads, nothing sent
 
 There are two settings and the gap between them is a cliff. Mock mode proves the
