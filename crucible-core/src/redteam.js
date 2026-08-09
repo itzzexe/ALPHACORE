@@ -113,14 +113,36 @@ export const ATTACKS = {
     describe: 'Somebody edits the record after the fact',
     severity: 'critical',
     run() {
+      // Two questions, because either alone can lie.
+      //
+      // The attempt alone lies on an empty log: a BEFORE UPDATE trigger fires
+      // per row, so an UPDATE that matches nothing raises nothing, and this
+      // reported the most serious attack in the suite as *breached* on any
+      // database that had not written an entry yet.
+      //
+      // The triggers' presence alone lies too — a trigger can exist and be
+      // wrong. So: the guard must be installed, and it must actually refuse.
+      const guards = q("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name IN ('audit_no_update', 'audit_no_delete')");
+      const installed = guards.length === 2;
+      const rows = one('SELECT COUNT(*) AS n FROM audit_log').n;
+
       let refused = false;
       let detail = '';
-      try {
-        exec("UPDATE audit_log SET action = 'tampered' WHERE seq = (SELECT MIN(seq) FROM audit_log)");
-        detail = 'an UPDATE on the audit log succeeded — the trigger is missing';
-      } catch (err) {
+      if (!installed) {
+        detail = `the append-only guards are missing (${guards.length} of 2) — the record can be edited`;
+      } else if (!rows) {
+        // Nothing to tamper with yet. The guard is in place; say exactly that
+        // rather than inventing a verdict from a no-op.
         refused = true;
-        detail = `the database refused the edit: ${String(err.message).slice(0, 120)}`;
+        detail = 'the log is empty, so there was nothing to edit; both append-only guards are installed';
+      } else {
+        try {
+          exec("UPDATE audit_log SET action = 'tampered' WHERE seq = (SELECT MIN(seq) FROM audit_log)");
+          detail = 'an UPDATE on the audit log succeeded — the guard did not fire';
+        } catch (err) {
+          refused = true;
+          detail = `the database refused the edit: ${String(err.message).slice(0, 120)}`;
+        }
       }
       return record({ attack: 'audit-tamper', target: 'audit_log triggers', payload: 'UPDATE audit_log', outcome: refused ? 'defended' : 'breached', detail, severity: 'critical' });
     },

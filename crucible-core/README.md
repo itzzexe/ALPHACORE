@@ -6,56 +6,204 @@
 
 **An entire AI-native company inside a single Node process.**
 One hundred and fourteen departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
-researches, sells, supports, **hires its own new employees** — and now reaches the real world
-through one guarded door — while humans hold every gate that matters: approving, publishing,
-signing, and ruling.
+researches, sells, supports, **hires its own new employees** — and reaches the real world through one guarded
+door — while humans hold every gate that matters: approving, publishing, signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-114-ff6b2c?style=flat-square" alt="114 departments">
-<img src="https://img.shields.io/badge/divisions-13-e8c547?style=flat-square" alt="13 divisions">
-<img src="https://img.shields.io/badge/integrations-10_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="10 integrations plus any HTTP API">
-<img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
-<img src="https://img.shields.io/badge/AI_providers-9_%2B_local-4f9cf0?style=flat-square" alt="9 providers plus local">
+<img src="https://img.shields.io/badge/departments-114-c0563a?style=flat-square" alt="114 departments">
+<img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
+<img src="https://img.shields.io/badge/relationships-314-8d8477?style=flat-square" alt="314 declared relationships">
+<img src="https://img.shields.io/badge/API-458_routes-4f9cf0?style=flat-square" alt="458 API routes">
 <img src="https://img.shields.io/badge/permissions-204_atomic-e07bd2?style=flat-square" alt="204 atomic permissions">
+<img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
+<img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
+<img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
-<img src="https://img.shields.io/badge/frameworks-zero-78bf6d?style=flat-square" alt="zero frameworks">
-<img src="https://img.shields.io/badge/node-%E2%89%A522.5-5ec3c9?style=flat-square" alt="Node ≥ 22.5">
+<img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
+<img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
+<img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
 
-*No frameworks. No build step. One process, one SQLite file, and a living circuit-board map
-where you literally watch the company work.*
+*No frameworks. No build step. One process, one SQLite file, and a living map
+where you watch the company work.*
+
+**[Install & run](docs/INSTALL.md)** · [Security](../SECURITY.md) · [Contributing](../CONTRIBUTING.md) · [Licence](../LICENSE)
 
 </div>
 
 ---
 
-**What makes it different:** most "AI agent" projects are a chat loop with tools. AlphaCore is an **operating company** — money is reserved before any model is called, reviewers are forced onto a different model family than authors, low-confidence work stops at a human gate, incidents demand postmortems, every produced file lands on disk through an explicit human apply, and the whole story is sealed into an append-only SHA-256 hash chain you can verify from the dashboard header. The AI does the work; the humans keep the authority; the chain keeps them both honest.
+## Contents
 
-And when it reaches outside — Gmail, GitHub, Slack, Stripe, the open web, any API you describe — **every single attempt passes one gate** that checks the employee's scope, the allowlist, the quota, and a constitution written in a form a machine can enforce. The intent is recorded *before* the call is made. A new integration runs in dry-run until a person deliberately arms it. And eight attacks run against all of it on a timer, because the day an employee can read a page and then send an email, a hostile page becomes a command channel.
+| | |
+|---|---|
+| [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
+| [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 114 departments](#the-company--13-divisions-114-departments) | the shape |
+| [The engine room](#the-engine-room) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
+| [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
+| [The API](#the-api) · [MCP](#mcp--both-directions) · [Webhooks](#webhooks) · [Command line](#the-command-line) | the surfaces |
+| [Configuration](#configuration) · [Data on disk](#data-on-disk) · [Layout](#layout) | the operations |
+| [Verification](#verification) · [Design decisions](#design-decisions) | the proof |
 
-Born as the working implementation of **Part 3 — Technical Design** of the AlphaCore blueprint (see the repository root), then expanded far past it. Built with Node's standard library, `node:sqlite`, and a vanilla-JS dashboard.
+---
 
-<p align="center">
-  <img src="docs/mainboard.svg" alt="The living map — 13 districts and 102 departments around the Harmony core" width="100%">
-</p>
+## What this is
+
+Most "AI agent" projects are a chat loop with tools bolted on. AlphaCore is an
+**operating company**: a structure with departments, budgets, gates, reviewers,
+incidents, postmortems, and a permanent record.
+
+- **Money is reserved before a model is called.** A runaway loop hits the cap,
+  not your card.
+- **Reviewers are forced onto a different model family than authors.** A model
+  cannot mark its own homework.
+- **Low-confidence work stops at a human gate** rather than shipping quietly.
+- **Every consequential act is sealed into an append-only SHA-256 hash chain**
+  you can verify from the dashboard header.
+- **Anything that leaves the machine passes one gate**, and the intent is
+  written to the chain *before* the call goes out — so a blocked attempt leaves
+  a record too.
+
+The AI does the work. The humans keep the authority. The chain keeps them both
+honest.
+
+### What makes it different
+
+| | |
+|---|---|
+| **One process** | `node src/server.js`. HTTP API, static console, worker loop, scheduler, WebSocket — no reverse proxy, no queue server, no container required. |
+| **One dependency** | `@anthropic-ai/sdk`. Everything else is the standard library: `node:sqlite`, `node:crypto`, `node:http`. The WebSocket framing is hand-rolled against RFC 6455. |
+| **No build step** | The browser loads the same JavaScript that is in the repository. No bundler, no transpiler, no `dist/`. |
+| **Zero external requests from the console** | No fonts, no CDNs, no analytics, no telemetry. This is checked in the test sweep, not merely intended. |
+| **Runs at zero cost** | Without a provider key it runs in deterministic mock mode. The entire platform is explorable for nothing. |
+| **Arabic is first-class** | Not a translation layer bolted on: a dictionary the shell speaks and a DOM pass over every rendered page, with RTL layout throughout. |
+
+---
+
+## Quick start
+
+```bash
+cd crucible-core
+npm install
+npm start          # http://localhost:8484
+```
+
+On Windows, double-click **`Start-AlphaCore.bat`** — it checks the Node
+version, installs on first run, and opens the browser.
+
+Requires **Node ≥ 22.5**. Not negotiable: the database layer is `node:sqlite`,
+which does not exist below 22.5.
+
+### First run
+
+The first time the server starts against an empty database it creates one
+account and prints it, **once**:
+
+```
+──────────────────────────────────────────────────────────
+  First run. The owner account has been created.
+
+    username   owner
+    password   78jv-n9n7-azvr-68dx
+
+  This is shown once and is not stored anywhere in readable form.
+  You will be asked to change it the moment you sign in.
+──────────────────────────────────────────────────────────
+```
+
+Lowercase letters and digits in groups of four, with `i`, `l`, `o`, `0` and `1`
+left out — because the screen it is read from and the screen it is typed into
+are often not the same one.
+
+Until that password is replaced, the account can do exactly two things: look at
+itself, and choose a new one. **Enforced in the server**, not asked for on
+screen — a prompt the client can skip is not a requirement.
+
+Missed the line? You are not locked out:
+
+```bash
+npm run reset-password            # the owner account
+npm run reset-password -- alice   # somebody else
+```
+
+It issues a new password, prints it once, ends every open session for that
+account, and writes the reset to the audit chain. It requires filesystem access
+to the database — the same access needed to delete it — so it grants nobody
+anything they did not already have.
+
+### Going live
+
+Out of the box: **mock mode**. Every model call returns a deterministic stub,
+nothing leaves the machine, nothing costs anything. The header says `MOCK MODE`
+so you are never in doubt.
+
+1. **Settings → AI providers** — paste a key. Encrypted at rest with
+   AES-256-GCM, never echoed back; the page shows the last four characters.
+2. **Test connectivity** — one small real call, and you see what came back.
+3. **Budgets → company cap** — money is reserved before a model is called.
+4. **World → Connectors** — each starts fenced by an allowlist.
+5. **Settings → This company** — your company's name replaces `this company` in
+   every system prompt, investor update and generated document.
+
+Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/INSTALL.md)**.
+
+---
+
+## On a phone
+
+The console is built for a phone as much as a desktop.
+
+- Below 860px the rail and the department list slide in together as a **drawer**,
+  opening on the division you are already standing in.
+- A **bar of four thumb-sized targets** takes the bottom of the screen —
+  overview, departments, search, account — carrying the waiting-on-you count.
+- **Tables scroll inside their own box** instead of pushing the page sideways.
+- The layout keeps clear of the notch and the home indicator.
+
+A phone cannot reach `localhost`, so the server prints this machine's address on
+the network when it starts:
+
+```
+AlphaCore running on http://localhost:8484
+  on this network:  http://192.168.0.193:8484
+```
+
+**Installing to a home screen** — it is a progressive web app: an icon, no
+address bar, its own entry in the app switcher, and it opens without waiting for
+the network. Android/Chrome offers *Install app*; iOS/Safari, Share → *Add to
+Home Screen*. This needs **HTTPS**: browsers only treat `localhost` as a secure
+origin over plain `http`, so over a LAN address the layout works but it stays a
+browser tab. Put Caddy or a tunnel in front and both come back.
+
+**Offline**, the shell opens and says in your own language that it cannot reach
+the company — rather than a browser error page implying the app is broken.
+Nothing under `/api` is ever cached: a stale approval queue looks exactly like
+the truth, which is worse than an error.
+
+The icons are drawn by `scripts/make-icons.mjs`, which writes the PNG bytes
+itself — deflate, CRC, coverage antialiasing — rather than adding an image
+library to a project whose whole point is that it has none.
+
+---
 
 ## The company at a glance
 
 ```mermaid
 flowchart TD
-  CORE(("▲ HARMONY<br/>orchestrator +<br/>audit chain"))
-  ENGINE["ENGINE · 9<br/>requests · agents · runs"] --> CORE
-  WORLD["THE WORLD · 9<br/>integrations · the gate · vault<br/>web · MCP · queue · companies<br/>keys · webhooks"] --> CORE
-  BUILD["BUILD · 10<br/>specs · products · packages"] --> CORE
-  DECIDE["DECIDE · 9<br/>gates · budgets · shadow company"] --> CORE
-  DATA["DATA · 7<br/>intel · archive · knowledge graph"] --> CORE
-  CREATE["CREATE · 7<br/>content · design · brand"] --> CORE
-  COMMERCE["COMMERCE · 8<br/>sales · CRM · revenue loop"] --> CORE
-  CAPITAL["CAPITAL · 5<br/>finance · treasury · money desk"] --> CORE
-  OPERATE["OPERATE · 7<br/>incidents · support · contact centre"] --> CORE
-  TALENT["TALENT · 10<br/>HR · memory · the floor · skills"] --> CORE
-  TRUST["TRUST · 5<br/>SOC · provenance · red team"] --> CORE
-  EXEC["EXECUTIVE · 4<br/>board · IR · operating rhythm"] --> CORE
-  GOVERN["GOVERN · 12<br/>constitution · watchtower · backups"] --> CORE
-  classDef c1 fill:#ff6b2c,color:#14100c,stroke:none
+  CORE(("◆ HARMONY<br/>orchestrator +<br/>audit chain"))
+  ENGINE["ENGINE · 9<br/>requests · agents · runs<br/>pipelines · providers"] --> CORE
+  WORLD["THE WORLD · 9<br/>integrations · the gate · vault<br/>web · MCP · queue"] --> CORE
+  BUILD["BUILD · 10<br/>system design · products<br/>projects · releases · packages"] --> CORE
+  DECIDE["DECIDE · 9<br/>human gate · decisions · budgets<br/>risks · evals · shadow company"] --> CORE
+  DATA["DATA · 7<br/>intelligence · segments · datasets<br/>archive · knowledge graph"] --> CORE
+  MARKETING["MARKETING · 20<br/>brand · content · design · SEO<br/>paid · lifecycle · events · press"] --> CORE
+  COMMERCE["COMMERCE · 7<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
+  CAPITAL["CAPITAL · 5<br/>finance · reports · FinOps<br/>treasury · money desk"] --> CORE
+  OPERATE["OPERATE · 7<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
+  TALENT["TALENT · 10<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
+  TRUST["TRUST · 5<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
+  EXEC["EXECUTIVE · 4<br/>board · investor relations<br/>comms · operating rhythm"] --> CORE
+  GOVERN["GOVERN · 12<br/>constitution · oversight · audit<br/>watchtower · time machine · backups"] --> CORE
+  classDef c1 fill:#c0563a,color:#f2f0ea,stroke:none
   classDef c2 fill:#b78bff,color:#14100c,stroke:none
   classDef c3 fill:#5ec3c9,color:#14100c,stroke:none
   classDef c4 fill:#78bf6d,color:#14100c,stroke:none
@@ -68,13 +216,12 @@ flowchart TD
   classDef c11 fill:#d8d8d8,color:#14100c,stroke:none
   classDef c12 fill:#948b7d,color:#14100c,stroke:none
   classDef c13 fill:#2fd6a8,color:#14100c,stroke:none
-  classDef core fill:#1d1812,color:#ff6b2c,stroke:#ff6b2c,stroke-width:2px
-  class WORLD c13
+  classDef core fill:#1d1812,color:#e0714f,stroke:#e0714f,stroke-width:2px
   class ENGINE c1
   class BUILD c2
   class DECIDE c3
   class DATA c4
-  class CREATE c5
+  class MARKETING c5
   class COMMERCE c6
   class CAPITAL c7
   class OPERATE c8
@@ -82,435 +229,655 @@ flowchart TD
   class TRUST c10
   class EXEC c11
   class GOVERN c12
+  class WORLD c13
   class CORE core
 ```
 
-## How an order moves through the company
+Every department declares what it hands to, reviews for, audits, and remembers.
+Those declarations are data, not decoration: **314 relationships** that the map
+draws, the trace walks hop by hop, and the launch audit checks. A department
+joined to nothing is a finding, not a diagram problem.
+
+## How work moves through the company
 
 ```mermaid
 flowchart LR
   REQ([Request desk]) --> ENG[ENGINE<br/>agents pick up runs]
   ENG --> BLD[BUILD<br/>specs · pipelines · products]
   BLD --> GATE{DECIDE<br/>human gate}
-  GATE -->|approved| MKT[CREATE + DATA<br/>content · intel · designs]
-  GATE -->|rejected| ENG
+  GATE -->|approved| MKT[MARKETING + DATA<br/>content · intel · designs]
+  GATE -->|sent back| ENG
   MKT --> COM[COMMERCE + CAPITAL<br/>deals · customers · ledger]
   COM --> OPS[OPERATE + TALENT<br/>support · incidents · training]
-  OPS --> GOV[GOVERN<br/>audit chain seals everything]
-  TRUST[TRUST · SOC watches every hop] -.-> ENG
+  OPS --> GOV[GOVERN<br/>the chain seals everything]
+  TRUST[TRUST · the SOC watches every hop] -.-> ENG
   TRUST -.-> GATE
   TRUST -.-> COM
+  WORLD[[THE WORLD · one gate out]] -.-> MKT
+  WORLD -.-> COM
   style GATE fill:#5ec3c9,color:#14100c
   style GOV fill:#948b7d,color:#14100c
   style TRUST fill:#e07bd2,color:#14100c
+  style WORLD fill:#2fd6a8,color:#14100c
 ```
 
 ---
 
-## Quick start
-
-**Windows, one double-click:** run `Start-AlphaCore.bat` in the repository root. It checks Node, installs dependencies on first run, seeds demo data, opens the browser, and starts the server. If the server is already running it just opens the dashboard.
-
-**Manually:**
-
-```powershell
-cd alphacore
-npm install
-npm run seed     # optional: sample agents, runs, one tribunal case (mock, $0)
-npm start        # http://localhost:8484
-```
-
-Requires **Node ≥ 22.5** (built-in `node:sqlite`; the npm scripts pass the flag).
-
-**First run creates one account and prints its password to the console, once.** Username `owner`, superadmin: every permission, the owner powers, the kill switches. Copy the password when you see it — lowercase and digits in groups of four, so it can be typed from one screen into another; it is stored only as a hash, and until you replace it that account can do exactly two things: read itself, and choose a new password. That is enforced in the server, not merely asked for on screen.
-
-Missed that line? `npm run reset-password` issues a new one, ends every session for that account, and records the reset on the chain.
-
-**On a phone:** the console rearranges below 860px — the rail becomes a drawer, a bar of four thumb-sized targets takes the bottom of the screen, tables scroll in their own box. It is a progressive web app, so it installs to a home screen with its own icon and no address bar, and opens offline to say so in your own language rather than showing a browser error. The server prints this machine's address on the network at startup; installing needs HTTPS, because only `localhost` counts as secure over plain http. See **[docs/INSTALL.md §4](docs/INSTALL.md)**.
-
-Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/INSTALL.md)**.
-
-**Going live:** paste provider API keys in **Settings** (stored locally in SQLite, never echoed back, effective immediately) or copy `.env.example` → `.env`. With zero keys the router runs a deterministic **mock mode** — the entire platform is demoable at $0.
-
-## Authentication & fine-grained permissions
-
-```mermaid
-sequenceDiagram
-  participant B as Browser
-  participant S as Server
-  participant DB as SQLite
-  B->>S: POST /api/auth/login
-  S->>DB: scrypt verify · create session
-  S-->>B: opaque token (7 days)
-  B->>S: any /api/* request + x-auth-token
-  S->>S: permFor(path) → required permission
-  alt lacks the permission
-    S-->>B: 403 permission required
-  else allowed
-    S->>S: actor = session account (never client-supplied)
-    S->>DB: do the work + append to the audit chain
-    S-->>B: result
-  end
-```
-
-- Session login (scrypt-hashed passwords, opaque 7-day tokens). Every `/api/*` route is authenticated; anonymous requests get 401.
-- **204 atomic permissions** in `section.action` form (`support.view`, `decisions.decide`, `security.manage`, …). A user can be granted **exactly one permission** and nothing else; navigation and pages gate themselves accordingly.
-- **Identity is never client-supplied.** The server stamps every action with the session's account; the audit chain records who really acted.
-- The superadmin manages users (create, disable, reset password, edit grants) and provider connections from the UI.
-
-## The surface
-
-One skin: warm paper. The whole interface is ink on bone, and colour is held
-back until you point at something — which is what lets a hundred and two
-departments sit on one page without shouting. Type carries the identity
-instead: a light serif at wide tracking for names and places, a quiet sans for
-the interface, a mono for anything that is a figure or an identifier. One
-border weight exists, a hairline, and there are no boxes.
-
-Two skins of one design, switched from the top bar and remembered. Dark is not
-a black interface — it is the same warm paper seen at night: the greys keep
-their brown cast, the terracotta accent lifts because at eighteen per cent
-luminance on a dark ground it reads as mud, and the status colours come up
-enough to stay legible without becoming the neon the light skin was designed to
-avoid. Only tokens are redefined; no component knows which skin it is wearing,
-which is what stops the two drifting apart.
-
-The density is split on purpose: the shell, the map and the summaries are as
-airy as the reference that inspired them; the tables where work actually
-happens keep the same type and colour but a density that lets you scan forty
-rows without scrolling for a minute.
-
 ## The map
 
-One map, two depths, and zooming between them *is* the explanation — the branch
-you followed is the relationship.
+The overview is a **living circuit board**: a dense core of the orchestrator and
+the chain, with a tree for every district growing out of it. Every leaf is a
+department, drawn from the same catalogue the router uses — never a picture that
+can drift from the code.
 
-| Depth | What you see |
-|---|---|
-| **The whole company** | A dense core — the orchestrator and the chain — with a tree for every district growing out of it. Each leaf is a department: filled if it holds records, hollow if it is declared and still empty. District names sit around the rim in the serif. Point at one and its colour comes up while everything else recedes. |
-| **One district** | Its departments as chips carrying a mark for the kind of work they do, clustered by branch, with the district name ghosted enormous behind them. Arrows walk you round the rim without going back out. |
+- **Point** at a district to bring up its colour · **click** to go inside
+- **Right-click** any department for everything it touches
+- **Trace flow** walks the graph hop by hop, showing how work actually moves
+- **Drag / wheel** pans and zooms; the zoom level is remembered
+- Edges are typed and drawn differently: hand-off, sent back to improve,
+  independent peer review, audit verdict, stops for a human, memory kept
 
-The interaction engine is unchanged and shared: click opens the department,
-right-click opens its full connection ledger with hop-by-hop **Trace flow**,
-clicking a relationship line explains what kind of movement it is, drag and
-wheel pan and zoom. A **MAP / DASHBOARDS** switch separates the drawing from
-the numbers, because they are two different questions.
+`GET /api/map` returns the whole thing — divisions, departments, edges,
+connectivity audit and live flow counts — as JSON.
+
+---
 
 ## The company — 13 divisions, 114 departments
 
-| Division | Departments |
-|---|---|
-| **ENGINE** | Request desk (writes route themselves department-to-department), Agents, Workforce load board, Run queue, Pipelines (FORGE chains), Providers, Artifacts, Capacity planning |
-| **BUILD** | System design (full spec packages), Infrastructure plans, Products (ten-gate factory), Journeys, Projects, Tasks (delegable to agents), The Lab (A/B experiments), Releases (auto-drafted changelogs) |
-| **DECIDE** | Human gate, Decisions registry + tribunal, Budgets, Risks, Quality, Evals & canaries, PMO stage gates |
-| **DATA** | Intelligence (multi-pass collection + web enrichment, Arabic/English exports), Segments, Datasets, Archive, Knowledge, Insights (company analytics) |
-| **MARKETING** | A whole department, twenty desks: the marketing desk itself, Personas, Positioning, Campaigns, Editorial calendar, Search, Paid media, Lifecycle email, Events, Press & media, Community, Attribution, Landing pages, Marketing operations, Market watch, Brand studio, Content studio, Design studio, Social media, Localization |
-| **COMMERCE** | Pricing, Customer success, Sales, Customers (CRM), Relations (partners/investors/government), Procurement (human-approved spend), Revenue loop |
-| **CAPITAL** | Finance, Financial reports, FinOps (cost per agent, waste detection, tier advice) |
-| **OPERATE** | Incidents (SEV lifecycle + enforced postmortems), Support, Assets, Legal (human-signed contracts), Vendors, Objectives (OKRs) |
-| **TALENT** | People (HR), Org & personas, The society (how agent colleagues get on), Disputes, **Recruiting — the company hires its own AI employees** (spec → trial → human decision → live on the roster), Academy (training that closes measured eval gaps), Enablement |
-| **TRUST** | Security SOC (real sweeps: injection phrasing in run inputs, secret-shaped strings in outputs, no-DPA vendors, over-broad grants), Compliance (DPA posture, data register, attestations), Sustainability (energy/carbon from live token meters) |
-| **EXECUTIVE** | Board room (packet from live numbers, human-signed resolutions), Investor relations, Internal comms (the weekly bulletin writes itself from real events) |
-| **GOVERN** | Harmony (the orchestrator), Autopilot (cross-department reflexes), Governance (rituals + immune system), Oversight (approvals ledger), Scorecard, Users & roles, Settings, Audit chain, **The constitution**, **Time machine** |
-| **THE WORLD** | **Integrations** (ten services + any HTTP API you describe), **The gate** (every outbound attempt, allowed or refused, with the rule that decided), **The vault** (credentials encrypted at rest), **The open web** (fetch, search, real browser), **MCP** (tools in, this company out), **The queue** (durable outbound work) |
+<details open>
+<summary><b>ENGINE · 9</b> — the workforce and the work</summary>
 
-Plus, folded into the divisions that own them: **Revenue loop** (Commerce), **Provenance** and **Red team** (Trust), **Shadow company** (Decide), **Skill market** (Talent), **Knowledge graph** (Data), **Treasury**, **Money desk**, **Contact centre**, **Agent memory**, **The floor**.
+**Request desk** · **Agents** · **Workforce** · **Run queue** · **Pipelines** ·
+**Providers** · **Artifacts** · **Capacity** · **Workstreams**
 
-Everything is cross-linked: 336 declared relationships, each a live SQL count, zero orphans, plus the universal rules — *everything ends on the audit chain; produced items freeze into the archive.*
+Where work is asked for and carried out. 51 AI employees seeded from
+`config/agents.json`, each with a mission, a tier, a sensitivity class and a
+human owner. Runs are leased, attempted, retried with backoff, and shelved
+honestly when they never succeed. Runs left `running` by a process that died are
+reclaimed to the queue at boot and recorded.
+</details>
 
-**The company hires its own workforce** (Talent → Recruiting):
+<details>
+<summary><b>BUILD · 10</b> — specifications, products, and shipping</summary>
 
-```mermaid
-flowchart LR
-  O([Human opens a role]) --> D[An agent drafts the<br/>role specification]
-  D --> T[A reviewer agent<br/>trials the spec]
-  T --> H{Human verdict}
-  H -->|hire| R[["New AI employee joins the roster<br/>and starts taking real work"]]
-  H -->|reject| X[Archived with reasons]
-  style H fill:#5ec3c9,color:#14100c
-  style R fill:#ff6b2c,color:#14100c
-```
+**System design** · **Infrastructure** · **Products** · **Journeys** ·
+**Projects** · **Tasks** · **The Lab** · **Releases** · **Sprints (Scrum)** ·
+**Department packages**
+
+Blueprints advance stage by stage into complete document packages on disk.
+Journeys move customers through defined arcs. Sprints carry points and velocity.
+Department packages install and uninstall whole departments from a manifest.
+</details>
+
+<details>
+<summary><b>DECIDE · 9</b> — where a person is required</summary>
+
+**Human gate** · **Decisions** · **Budgets** · **Risks** · **Quality** ·
+**Evals** · **PMO gates** · **AI Auditor** · **Shadow company**
+
+The decision registry with evidence and verification. Reservation-first budgets:
+money is held before the call, settled after, released on failure. A mini-tribunal
+of advocate, critic, judge, validator and red team. The **shadow company** forks
+the whole database and runs a scenario against the copy, so a strategy can be
+tried without touching the real one.
+</details>
+
+<details>
+<summary><b>DATA · 7</b> — what the company knows</summary>
+
+**Intelligence** · **Segments** · **Datasets** · **Archive** · **Knowledge** ·
+**Insights** · **Knowledge graph**
+
+Multi-round intelligence collection that proposes organisations, then harvests
+their real details from their own websites — and never invents an email, a phone
+number or an address. The knowledge graph builds nodes and typed edges from real
+rows and answers "what do we know about X" within N hops.
+</details>
+
+<details>
+<summary><b>MARKETING · 20</b> — a complete district</summary>
+
+**Localization** · **Social media** · **Content studio** · **Design studio** ·
+**Marketing** · **Market watch** · **Marketing department** · **Brand studio** ·
+**Personas** · **Positioning** · **Search** · **Paid media** · **Lifecycle email** ·
+**Editorial calendar** · **Events** · **Press & media** · **Community** ·
+**Attribution** · **Landing pages** · **Marketing operations**
+
+The largest district: strategy (personas, positioning, brand), production
+(content, design, localization, landing pages), distribution (social, search,
+paid, lifecycle, events, press, community), and measurement (attribution, market
+watch, marketing operations) — each wired to the others and outward to commerce,
+data and the gate.
+</details>
+
+<details>
+<summary><b>COMMERCE · 7</b> — money coming in</summary>
+
+**Pricing** · **Customer success** · **Sales** · **Customers** · **Relations** ·
+**Procurement** · **Revenue loop**
+
+The revenue loop runs a name on a list to money in the account: source, approach,
+meeting, proposal, invoice, deliver. Every hop that touches somebody outside goes
+through the gate. The two that cannot be undone — agreeing, and taking money —
+stop for a person.
+</details>
+
+<details>
+<summary><b>CAPITAL · 5</b> — money going out, and money held</summary>
+
+**Finance** · **Financial reports** · **FinOps** · **Treasury (crypto)** ·
+**Money desk**
+
+Ledger, P&L, runway, spend efficiency. The treasury is **watch-only**: the
+platform never holds a private key, seed phrase or mnemonic. Payouts are signed
+outside it, and resolving one requires a signed-in human that no autonomy path
+can reach.
+</details>
+
+<details>
+<summary><b>OPERATE · 7</b> — keeping the lights on</summary>
+
+**Incidents** · **Support** · **Assets** · **Legal** · **Vendors** ·
+**Objectives** · **Contact centre**
+
+Incidents demand postmortems. Support drafts replies and graduates an agent to
+sending unedited only after a hundred sent at ninety-five per cent unedited —
+and recalls it below ninety. The contact centre handles real telephony:
+messages, calls, voicemail and carrier webhooks verified by signature.
+</details>
+
+<details>
+<summary><b>TALENT · 10</b> — the workforce grows itself</summary>
+
+**People** · **Org & personas** · **The society** · **Disputes** ·
+**Enablement** · **Recruiting** · **Academy** · **Agent memory** ·
+**The floor (chat)** · **Skill market**
+
+Recruiting opens a role, drafts a spec, and hires a new AI employee into the
+org. The academy trains it. Agent memory keeps episodes, grades them, and writes
+playbooks that are recalled into later prompts. The floor is a live chat room
+where employees and humans talk. The skill market proposes, tests and adopts new
+capabilities.
+</details>
+
+<details>
+<summary><b>TRUST · 5</b> — the company checking itself</summary>
+
+**Security (SOC)** · **Compliance** · **Sustainability** · **Provenance** ·
+**Red team**
+
+Provenance issues **Ed25519 receipts** over canonically serialised content that
+anyone can verify without this platform. The red team attacks the company on a
+schedule — prompt injection, secret exfiltration, unscoped egress, bulk contact,
+money without a person, audit tampering, vault read-back, SSRF — and an open
+finding is a blocker.
+</details>
+
+<details>
+<summary><b>EXECUTIVE · 4</b> — the long view</summary>
+
+**Board room** · **Investor relations** · **Internal comms** ·
+**Operating rhythm**
+
+Board packs, monthly investor updates built from live numbers with no invented
+facts, internal announcements, and the rhythm that runs the day.
+</details>
+
+<details>
+<summary><b>GOVERN · 12</b> — the rules and the record</summary>
+
+**Harmony** · **Autopilot** · **Governance** · **Oversight** · **Scorecard** ·
+**Users & roles** · **Settings** · **Audit chain** · **The constitution** ·
+**Time machine** · **Watchtower** · **Backups**
+
+The constitution is enforced by machine at the gate, not written on a poster.
+The time machine snapshots the company and replays it: stand at any past moment
+and see what was true. The audit chain is append-only at the database level and
+verifiable from the header.
+</details>
+
+<details>
+<summary><b>THE WORLD · 9</b> — everything outside this machine</summary>
+
+**Integrations** · **The gate** · **The vault** · **The open web** · **MCP** ·
+**The queue** · **Companies** · **API keys** · **Webhooks**
+
+One door out, and everything that guards it.
+</details>
+
+---
 
 ## The engine room
 
-**Where a model call goes** — the budget is reserved before anything else happens:
+### The router
 
-```mermaid
-flowchart TD
-  T["Task arrives · tier T1–T3"] --> BUD{{"Budget reservation FIRST<br/>agent-daily · decision cap · company monthly<br/>hard stop fires before the call"}}
-  BUD --> S{"Claude subscription<br/>signed in?"}
-  S -->|yes| CLI["claude CLI · $0 marginal cost"]
-  S -->|no| API{"Anthropic API key?"}
-  API -->|yes| ANT["claude-opus-5 / sonnet-5 / haiku-4-5"]
-  API -->|no| OTH["OpenAI → DeepSeek → Gemini"]
-  OTH -->|no keys at all| MOCK["deterministic mock · $0"]
-  CLI --> FAM{"Review role?"}
-  ANT --> FAM
-  OTH --> FAM
-  FAM -->|yes| SEP["reviewer family ≠ author family<br/>fallback: same-family flag + forced human gate"]
-  FAM -->|no| GO[call proceeds · settle actual cost]
-  SEP --> GO
-  BUD -.->|"no-DPA provider (DeepSeek)"| SENS["never sees customer-sensitive work"]
-  style BUD fill:#e8c547,color:#14100c
-  style SEP fill:#e07bd2,color:#14100c
+Nine real providers plus a deterministic mock: **anthropic**,
+**claude-subscription** (your Claude Code CLI, no API key), **openai**,
+**deepseek**, **google**, **openrouter**, **groq**, **together**, **ollama**
+(local), and **mock**.
+
+Agents declare a *tier*, not a model. The router resolves a tier to a chain of
+provider/model candidates and walks it until one answers. A tier with no
+available provider fails loudly — "router exhausted" — rather than silently
+degrading.
+
+**Reviewers are pushed onto a different provider family than the author.** Two
+instances of one model reviewing each other is not review.
+
+### Budgets, reservation-first
+
+```
+reserve(estimate) → call the model → settle(actual)
+                 ↘ failure → release
 ```
 
-**A run's life** — `awaiting_human` is a first-class state, and logic failures never retry:
+Money is held before the call and reconciled after. A loop that runs away hits
+the cap and stops. Budget scopes are `company`, `governance`, `agent` and
+`decision`, and the constraint is in the schema — not in a comment.
 
-```mermaid
-stateDiagram-v2
-  [*] --> queued
-  queued --> leased : worker takes the lease
-  leased --> running
-  running --> done : output passes the schema gate
-  running --> awaiting_human : gate rule / low confidence / review block
-  awaiting_human --> done : human approves
-  awaiting_human --> failed : human rejects
-  running --> failed : logic failure — never retried
-  running --> queued : transport failure · retry ≤ 3
-  queued --> dead_letter : retries exhausted
-  done --> [*]
+### The audit chain
+
+Every consequential act is one row:
+
+```
+entry = { occurred_at, actor_type, actor_id, action, subject_type, subject_id, payload }
+hash  = SHA-256(canonical(entry) + previous_hash)
 ```
 
-- **Model router** — five backends behind one router; tier chains are config (`config/providers.json`), **subscription-first**: Claude Pro/Max via the CLI (zero marginal cost) → Anthropic API (`claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5`) → OpenAI → DeepSeek → Gemini → mock. **Family separation** (a reviewer never shares the author's model family — enforced in the router; degradation to same-family review carries a flag and forces a human gate). **Sensitivity ceilings**: no-DPA providers never see customer data. Review roles fail closed.
-- **Reservation-first budgets** — the hard stop fires **before** the model call. Scopes: per-agent daily, per-decision (T1 $2 / T2 $15 / T3 $75), company monthly, governance pool ≤ 5%. Freezes are one click and audited.
-- **Run queue** — small state machine; `awaiting_human` is a first-class state; logic failures never retry; transport failures requeue then dead-letter.
-- **Mini-tribunal** — advocate → **blind parallel critics** (isolation asserted in the audit) → judge synthesis; T3 adds a validator round and a red team. Judges recommend; **humans decide**.
-- **Pipelines (FORGE)** — templated multi-agent chains producing **real files on disk** under `workspace/`; an Engineer run's files are written only by an explicit human apply. Paths are sandboxed.
-- **Audit chain** — SHA-256 hash-linked, append-only (SQL triggers block UPDATE/DELETE), verifiable end-to-end from the dashboard header.
-- **Immune system** — reversible containment on real signals: spend spikes → freeze, eval regressions → suspend, failure clusters → problems, stale gates, overdue risk reviews, renewal windows.
-- **Autopilot** — idempotent cross-department reflexes (incident→risk, won deal→customer, failing eval→training task, big segment→campaign, …), each firing once per subject and logged.
+- Canonical serialisation: sorted keys, no whitespace variance
+- `UPDATE` and `DELETE` on `audit_log` are refused by **SQL triggers**, not by
+  convention
+- `verifyChain()` recomputes the whole chain and names the exact entry that
+  broke
+- The header carries a live badge; the launch audit and both proofs check it
+
+The actor is injected server-side. A client can ask for an action; it cannot
+claim to be someone. Autonomy records itself as `system:autonomy` and never
+as a human who did not act.
+
+### The workforce
+
+51 employees seeded from `config/agents.json`, each with a system prompt that
+resolves `{{company}}` to your company's name. Personas add voice; memory adds
+recall. Runs carry attempts, leases, token counts and cost. Pipelines chain runs
+into multi-stage work with gates between stages.
+
+---
 
 ## The outside world
 
-For most of its life this company was complete on the inside and sealed on the
-outside: a post was "published" into a table, an email was drafted and never
-sent. Everything below is the machinery that lets it reach anything real —
-and the machinery that keeps that honest.
+Nothing reaches outside this machine except through one gate, in this order:
 
-```mermaid
-flowchart LR
-  A["An employee<br/>wants to act"] --> SCOPE{{"Does it hold<br/>the scope?"}}
-  SCOPE -- no --> NO1["refused · recorded"]
-  SCOPE -- yes --> ALLOW{{"Target on the<br/>allowlist?"}}
-  ALLOW -- no --> NO2["refused · recorded"]
-  ALLOW -- yes --> QUOTA{{"Within quota<br/>and rate?"}}
-  QUOTA -- no --> NO3["refused · recorded"]
-  QUOTA -- yes --> LAW{{"Constitution"}}
-  LAW -- blocks --> NO4["refused · rule named"]
-  LAW -- gate --> HUMAN["waits for a person"]
-  LAW -- passes --> STATE{{"Connector armed?"}}
-  STATE -- dry-run --> DRY["executes · records ·<br/>nothing leaves"]
-  STATE -- live --> OUT["reaches the world"]
-  OUT --> CHAIN["intent + result<br/>on the hash chain"]
-  DRY --> CHAIN
-  HUMAN --> CHAIN
-  style LAW fill:#e8c547,color:#14100c
-  style OUT fill:#2fd6a8,color:#14100c
-  style CHAIN fill:#ff6b2c,color:#14100c
+```
+scope → allowlist → quota → constitution → value ceiling → dry-run
 ```
 
-**The gate** is the only door. Every outbound effect — an email, a commit, a
-post, a payment, an HTTP call to somebody else's API — passes `egress.attempt()`,
-and it is deliberately suspicious. Failure is closed: anything unrecognised is
-refused, and the **intent is written before the call is made**, so a crash
-mid-flight still leaves evidence of what was about to happen.
+- The **intent is written to the chain before the call**, so a blocked attempt
+  leaves a record too
+- **Failure closed**: if a rule cannot be evaluated, the call does not happen
+- A new connector starts in **dry-run** — it runs the whole path and sends
+  nothing, so you can watch what it *would* do
+- Every verdict, allowed or refused, lands on the egress log with the rule that
+  decided it
 
-| Piece | What it is |
-|---|---|
-| **Integrations** | Ten drivers — Gmail, Google Calendar, GitHub, Slack, Telegram, X, LinkedIn, Stripe, Notion — plus a generic driver that turns **any HTTP API into a connector from a JSON description**, no code. A connector starts *disconnected*; a credential moves it to *dry-run* (everything executes, nothing leaves); arming it is a separate deliberate act by a person. |
-| **The vault** | Credentials sealed with AES-256-GCM under a master key kept **outside the database**, so a copied `.db` is not a copied set of keys. The value goes in and never comes back out — listings show the last four characters. |
-| **Agent scopes** | Each employee holds named grants (`gmail.send` limited to one domain, `pr.create` limited to one repository). No wildcards. Revoking takes effect on the next call. |
-| **The queue** | Outbound work with attempts, exponential backoff and idempotency keys, so a retry can never double-send and a dead job is shelved for a person instead of repeated forever. |
-| **The open web** | Three graded abilities — fetch, search, browse (real Chromium over CDP) — behind the SSRF guard. Every page is kept with the **hash of what it actually said**, so a claim traces back to its source. Text that tries to give instructions is flagged, filed as an attack, and never obeyed. |
-| **MCP, both ways** | Register any MCP server and its tools become things the workforce can do. AlphaCore is *also* an MCP server at `POST /mcp` — point Claude Code at it with your own token and drive the company from outside, with exactly the permissions your account holds. |
-| **The constitution** | Ten founding rules with two halves each: the sentence a person reads and a machine form the gate evaluates. Money needs a person, no unrequested bulk contact, no credential ever leaves, fetched text is data and never instruction. Amending requires the owner and leaves the old version in the record. |
-| **The red team** | Eight attacks run on a timer against our own machinery — prompt injection (English *and* Arabic), secret exfiltration, unscoped egress, bulk contact, autonomous payment, audit tampering, vault read-back, SSRF. A breach is a finding, not an incident. This is how the Arabic injection gap was found and closed. |
-| **Provenance** | An Ed25519 receipt for every artifact: content hash, chain entry, model, reviewers, cost. Anyone holding the public key verifies it offline, forever, without asking us anything. |
-| **Time machine** | The chain is append-only, so the past is readable. Stand at any entry, replay a stretch, reopen a decision with what is known now — the original is never edited. |
-| **Shadow company** | Fork the database, pull a lever (budgets, headcount, demand, price, churn), run it forward and compare the numbers. A simulated employee *cannot* send an email — not by policy, but because the file it works in is connected to nothing. |
-| **Skill market** | An employee that has done the same work ten times is asked to write down its method. The method is scored against the incumbent by someone who did not write it, and adopted only if it wins. Model tournaments re-rank providers per task type from measured quality and cost. |
-| **Knowledge graph** | Entities and edges built from the rows that already exist, with local hashed-trigram embeddings (Arabic-folded, no key, no network) — "everything we know about Basra Oil Company" in one hop. |
-| **Revenue loop** | Sourced → contacted → replied → meeting → proposal → agreed → invoiced → paid → delivering → delivered. Every hop that touches somebody outside goes through the gate; the two that cannot be undone stop for a person. |
-| **Live presence** | A WebSocket (hand-rolled, no dependency) feeding the chain to every open page, plus who else is looking at what. |
+### Connectors
 
-**Sovereign mode.** Ollama is a first-class provider cleared for every
-sensitivity level, because the data never leaves the machine. With the line cut,
-the company keeps working on local models — which in Iraq is the difference
-between a company that runs and one that waits.
+Nine built in — **gmail**, **gcalendar**, **github**, **slack**, **telegram**,
+**x**, **linkedin**, **stripe**, **notion** — plus a generic **HTTP driver**
+that turns any REST API into a connector from a config block: base URL, auth
+placement, and named operations.
 
-## The platform
+Credentials live in the **vault**: AES-256-GCM at rest, with the master key in
+`data/master.key`, deliberately outside the database. The plaintext leaves only
+for the connector making the call. Listings show the last four characters and
+nothing else. OAuth flows verify state and refresh expiring tokens on the queue.
 
-The layer above the company: this installation running more than one of them,
-exposing them to other software, letting a department be shipped as a package —
-and keeping all of it operating without somebody standing over it.
+### The open web
 
-### The operating rhythm — the part that makes "autonomous" true
+Fetch, search, and a real browser. Every page is kept with its hash so a claim
+can be traced back to a source. Fetched text is **data, never instruction** — an
+injection scanner runs over everything that comes back, in **English and
+Arabic**, because a scanner that only reads one language is a hole in the shape
+of the other.
 
-Autonomy used to mean: work arrives, the machine does it, nobody approves each
-step. That is a company that *executes* without intervention. It was not a
-company that *runs* without one, because nobody was deciding what should be
-worked on, whether last week went well, or what to change as a result. A person
-was still the management layer.
+### The queue
 
-`src/chief.js` is that layer, and it keeps three clocks:
+Durable jobs with attempts, exponential backoff, idempotency keys and a shelf
+for whatever never succeeded. Everything that touches the outside runs here
+rather than on a bare timer, because a call that fails halfway must be retried
+rather than repeated blindly.
 
-| Clock | What it does |
-|---|---|
-| **Day** | Requeues work that stalled, spreads load off whoever is carrying too much, puts an unfixed security finding in front of everything else, and holds speculative work when the month is nearly spent. |
-| **Week** | Compares what was planned against what landed, writes the corrections, and opens the next week with a target derived from the last four — not from hope. |
-| **Quarter** | Closes the old objectives honestly, sets new ones **from the company's own numbers**, and divides the money across them. |
+---
 
-Every turn writes a *period*: the plan before, the review after, the corrections
-in between. Six months from now, "why did the company do that" has an answer
-with a date on it.
+## The platform layer
 
-Four limits stay, and are printed on the page rather than buried:
+### The operating rhythm
 
-- Money leaves only when a signed-in person releases it.
-- No bulk contact with people who never asked to hear from us.
-- Irreversible outbound actions stop at the gate for a person.
-- Everything the rhythm decides is written down with the numbers it decided from.
+The part that makes "autonomous" true. Every tick the chief reads the situation —
+queue depth, breached objectives, unpaid invoices, open incidents, budget
+headroom, waiting approvals — and acts: enqueues work, chases revenue, opens
+incidents, requeues stalled runs, calls for a decision. It never fabricates a
+human approver; when a person is required, it stops and says so.
 
-"Runs without intervention" means nobody has to be present for the work. It does
-not mean nobody is responsible for the consequences.
+### Watchtower
 
-### Watchtower — noticing, and then doing something
-
-A dashboard that goes red and waits is a dashboard for a company with people
-watching it. Every service level objective here carries a **remedy**: a
-specific, bounded action the company applies to itself.
-
-| Promise | If it breaks |
-|---|---|
-| Work waiting stays under forty items | spread the load onto employees who are free |
-| Nothing sits in "running" for half an hour | requeue it |
-| Monthly spend stays inside the cap | hold speculative work until the month turns |
-| Fewer than ten audits fail in a day | ask the quality desk for the *pattern*, not the list |
-| The red team has nothing open | page a person — this one has no safe automatic fix |
-
-The remedies are deliberately small and reversible, and none of them can spend
-money or reach outside. A system that heals itself by taking bigger actions than
-a human would is not self-healing; it is unsupervised.
+Service objectives with targets, live values and breach state. A breach applies a
+remedy — and, unlike the first version, **re-applies it on a cooldown** if the
+problem persists, instead of firing once on the transition and then watching a
+standing failure forever.
 
 ### Many companies
 
-```mermaid
-flowchart TD
-  CP["Control plane<br/>:8484"] --> T1["acme<br/>data/tenants/acme.db<br/>:8500"]
-  CP --> T2["basra-oil<br/>data/tenants/basra-oil.db<br/>:8501"]
-  CP --> T3["…<br/>own file · own process"]
-  CP -.->|reads usage, pauses at cap| T1
-  style CP fill:#2fd6a8,color:#14100c
+Tenancy is **by file and process**, not by a `WHERE` clause:
+
+```bash
+ALPHACORE_DB=data/northwind.db PORT=8485 npm start
 ```
 
-The obvious design is a `tenant_id` column and a `WHERE` clause on every query.
-Across 130 tables and 400 endpoints that is 130 chances to forget, and the
-failure mode is one company reading another's customers. So **isolation is by
-file**: each company gets its own SQLite database and its own worker process. A
-query cannot leak across tenants because no connection can see two of them — not
-as a matter of discipline, but as a matter of what is open. A company past its
-monthly cap is paused rather than allowed to keep spending.
-
-### The programmatic surface
-
-- **API keys** — a session token belongs to a person at a keyboard and carries
-  their whole permission set; a key belongs to a script, lasts months, and
-  should do exactly one thing. Separate mechanism, own scopes, own rate limit,
-  own ledger. Stored as a scrypt hash; shown once and never again.
-  `curl -H "x-api-key: ck_…"`.
-- **Webhooks out** — the audit chain is the event source, so a webhook can never
-  announce something that did not happen. Signed HMAC-SHA256 over
-  `timestamp.body` with a five-minute replay window, delivered on the job queue,
-  paused after twenty consecutive failures.
-
-### Departments as packages
-
-A department is tables, employees, permissions, relationships and a place on the
-map. Written down, that is a manifest — and a manifest is installable.
-
-```json
-{ "id": "legalhold", "version": "1.0.0",
-  "section": { "id": "legalhold", "label": "Legal hold", "division": "operate" },
-  "permissions": ["legalhold.view", "legalhold.manage"],
-  "tables": [{ "name": "legalhold_matters", "columns": [ … ] }],
-  "agents": [{ "id": "AGT-HOLD-001", "name": "Legal hold clerk", "roleGroup": "assure" }],
-  "edges": [{ "to": "legal", "label": "holds arise from open matters" }] }
-```
-
-Installing is deliberately narrow: tables must be prefixed with the package id,
-permissions must be new and namespaced, no code is executed, and the whole
-install runs in one transaction so a failure leaves nothing behind. Uninstalling
-retires the employees and **keeps the data** unless a person explicitly asks
-otherwise.
+The Companies page spawns and supervises a process per tenant, each on its own
+database file and port, with usage collected centrally. Because the boundary is
+the operating system's rather than a query's, a bug in one company's page cannot
+read another's rows. Do not, however, put two parties who actively distrust each
+other behind one machine.
 
 ### Backups
 
-Taken from a checkpointed database, so a copy is a whole file rather than a file
-plus whatever was still in the write-ahead log. Each records the chain entry it
-was taken at. Verifying re-opens the file and reads its chain back — a copy
-nobody has checked is a hope, not a backup. Restoring takes a backup of the
-present first.
+Checkpoint the write-ahead log, copy the file, record size, SHA-256, chain tip
+and chain hash. Verification re-hashes the copy and re-counts its chain against
+what was recorded. A quarterly restore drill is a registered ritual, because a
+backup you have never restored is a hope.
 
-## Factory reset (superadmin only)
+---
 
-Settings → **Danger zone**. Three locks: superadmin role + typed phrase `WIPE ALL DATA` + password re-entry. Two levels — data wipe (operational records cleared; users, sessions, provider settings survive; defaults re-seeded; the audit chain restarts with a genesis entry naming who wiped) and **full factory reset** (users/sessions/settings go too; a fresh `owner` account is created and its password printed once to the server console). An extra checkbox also deletes produced workspace files.
+## Security model
+
+The load-bearing properties. A bug that breaks one of these is a security bug,
+not a feature request — see [SECURITY.md](../SECURITY.md) for how to report one.
+
+| Guarantee | How |
+|---|---|
+| The record cannot be edited | SQL triggers abort `UPDATE`/`DELETE` on `audit_log`; every row hashes the one before it |
+| Money leaves only by a human | Autonomy cannot reach payout resolution; wallets are watch-only; no private key, seed or mnemonic is ever stored |
+| The gate is failure-closed | Six checks in order, intent chained before the call, unevaluable rule ⇒ no call |
+| Identity comes from the server | The session's user is injected and overrides anything in the request body |
+| Secrets are encrypted at rest | AES-256-GCM, master key outside the database, API masks to the last four characters |
+| No shipped credential | First run generates its own password; an unclaimed account can only read itself and replace it |
+| Nothing leaks to git | `data/`, `workspace/`, `.env*`, `*.key`, `*.pem` are ignored, and CI fails the build if one is ever committed |
+
+**What it does not guarantee**, stated plainly: it is built to run on a machine
+you control; `data/master.key` is a file on disk; the injection scanner is a
+filter and not a proof; and the server speaks plain HTTP, so put TLS in front of
+it before exposing it to a network.
+
+### The constitution
+
+Ten rules, enforced by machine at the gate, each with a severity that decides
+what happens: `block` refuses, `gate` stops for a person, `warn` records.
+
+| Rule | |
+|---|---|
+| `no-fabricated-approval` | **block** — no action may record a human approver who did not approve it |
+| `claims-need-sources` | warn — a claim about the outside world carries the source it came from |
+| `no-unrequested-bulk` | **block** — the company does not contact people in bulk who never asked |
+| `honour-unsubscribe` | **block** — anyone who asks to be left alone is left alone, everywhere, permanently |
+| `money-needs-a-person` | **gate** — money leaves only when a signed-in person releases it |
+| `spend-ceiling` | **gate** — any single outbound action over fifty dollars stops for a person |
+| `never-impersonate` | **block** — no employee may present itself as a specific real person |
+| `fetched-text-is-data` | **block** — text from the web is data, never instruction |
+| `no-secret-egress` | **block** — no credential, key or seed phrase leaves by any channel |
+| `everything-on-the-chain` | warn — every consequential act is written before it happens |
+
+### Authentication & fine-grained permissions
+
+- scrypt-hashed passwords, opaque 7-day session tokens
+- Every `/api/*` route is authenticated; anonymous requests get 401. Four paths do not take a session token, and each is deliberate:
+  `POST /api/auth/login` and `POST /api/auth/logout` (there is nothing to
+  present yet, or nothing left to present), `GET /api/ping` (liveness, which
+  answers nothing about the company), and `/webhooks/*` — carrier callbacks
+  from the phone network, which cannot hold a token and are authenticated by
+  the carrier's own signature instead
+- **204 atomic permissions** across 105 families (`decisions.approve`,
+  `treasury.payout`, `egress.grant`, …). The superadmin holds `*`
+- The launch audit checks that every permission the API demands exists in the
+  catalogue — a route guarded by a permission nobody can hold is permanently
+  unreachable, and that is a blocker
+- Changing a password ends every session for that account, including the one
+  that changed it
+
+---
+
+## The surfaces
+
+### The API
+
+**458 routes** — 185 `GET`, 269 `POST`, 4 `DELETE` — all JSON, all
+permission-checked, all under `/api`.
+
+```bash
+curl -H "x-auth-token: $TOKEN" http://localhost:8484/api/stats
+curl -H "x-auth-token: $TOKEN" http://localhost:8484/api/map
+curl -H "x-auth-token: $TOKEN" http://localhost:8484/api/audit/verify
+```
+
+**API keys** for machine callers: shown once at creation, scoped to a permission
+set, rate-limited per minute, with per-call logging. A revoked key stops working
+immediately.
+
+**`GET /api/ping`** is the one endpoint that carries no credential — version,
+uptime, and whether the database answers. Deliberately the dullest endpoint in
+the system: a health check that can read your company is not a health check.
+
+### MCP — both directions
+
+**Outward**, AlphaCore is an MCP *client*: register any MCP server over stdio or
+HTTP JSON-RPC 2.0 and its tools become capabilities the workforce can use,
+through the same gate as everything else.
+
+**Inward**, AlphaCore is an MCP *server* at `POST /mcp`. Point Claude Code,
+Claude Desktop or any MCP client at it with your own token and drive the company
+from outside. Seven tools are exposed — `company_overview`, `list_sections`,
+`submit_request`, `ask_employee`, `read_memory`, `audit_tail`, `post_to_floor` —
+and you get **exactly the permissions your account holds**. There is no wider
+back door.
+
+```json
+{
+  "mcpServers": {
+    "alphacore": {
+      "url": "http://localhost:8484/mcp",
+      "headers": { "x-auth-token": "YOUR-ALPHACORE-TOKEN" }
+    }
+  }
+}
+```
+
+### Webhooks
+
+Outbound events with HMAC-SHA256 over `timestamp.body` in
+`x-alphacore-signature`, a five-minute replay window, retries with backoff, and
+pause-on-failing. Subscribe with glob patterns (`run.*`, `egress.blocked`).
+
+### Live updates
+
+A hand-rolled WebSocket at `/live` — RFC 6455 framing, no dependency — carries
+presence, the live ticker, and floor chat.
+
+### The command line
+
+| | |
+|---|---|
+| `npm start` | run the server |
+| `npm run dev` | run with `--watch` |
+| `npm test` | 29 unit tests, on their own database file |
+| `npm run prove` | prove the outside-world layer end to end |
+| `npm run prove:platform` | prove the platform layer end to end |
+| `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
+| `npm run reset-password` | issue a new password for an account |
+| `npm run icons` | redraw the app icons |
+| `node scripts/launch-audit.mjs` | the pre-flight audit — exits non-zero on a blocker |
+
+---
+
+## Configuration
+
+Settings take precedence over the environment. Use the environment when a
+machine must be configured before it first starts.
+
+| Variable | Meaning |
+|---|---|
+| `PORT` | listening port (default `8484`) |
+| `ALPHACORE_DB` | database file, relative to `crucible-core/` (default `data/alphacore.db`) |
+| `ALPHACORE_MOCK` | `true` forces mock mode even with a key present |
+| `ALPHACORE_TENANT` | set by the platform when it spawns a tenant; you do not set this |
+| `ANTHROPIC_API_KEY` | and the equivalents per provider — but prefer Settings, where keys are encrypted |
+
+Settings the console owns: `COMPANY_NAME`, `PUBLIC_BASE_URL`, every provider
+key, and the mock-mode flag.
+
+Config files:
+
+| | |
+|---|---|
+| `config/agents.json` | the workforce — missions, tiers, sensitivity, owners |
+| `config/providers.json` | providers, tiers and the candidate chains |
+| `config/rituals.json` | recurring obligations, including the restore drill |
+
+## Data on disk
+
+```
+data/
+  alphacore.db          every record, including the audit chain
+  alphacore.db-wal      write-ahead log
+  master.key            the AES key for the vault — NOT in the database, on purpose
+  backups/              taken from the console, each with its hash and chain tip
+  simulations/          shadow-company forks
+  tenants/              one database per company
+
+workspace/              what the workforce produced: blueprints, designs,
+                        reports, intel exports, working code
+```
+
+**Both `data/` and `workspace/` are ignored by git.** They are regenerated by
+the platform and they belong to whoever runs it, not to this project. A backup
+of the database *without* `master.key` cannot decrypt a single stored
+credential — keep them together.
 
 ## Layout
 
 ```
-alphacore/
-├─ config/            providers, budgets, agents, pipelines, golden sets, rituals (all config, not code)
-├─ src/
-│  ├─ server.js       one process: HTTP + static + workers + scheduled ticks
-│  ├─ api.js          route table + path→permission resolver (~440 endpoints)
-│  ├─ auth.js         sessions, scrypt, the permission catalog (203 keys)
-│  ├─ db.js           node:sqlite schema (~145 tables) + append-only audit triggers
-│  ├─ router.js       tier chains, family separation, sensitivity, fallbacks
-│  ├─ policy.js       reservation-first budget engine
-│  ├─ workflow.js     run queue + workers
-│  ├─ links.js        the relationship resolver: section catalog, edges, live activity feed
-│  ├─ expansion.js    TRUST / CAPITAL / TALENT / EXEC departments
-│  ├─ egress.js       THE GATE — the only door out of this machine
-│  ├─ vault.js        credentials, encrypted at rest
-│  ├─ connectors/     one driver contract, ten services, plus any-HTTP-API
-│  ├─ jobs.js         durable queue: attempts, backoff, idempotency
-│  ├─ web.js          fetch / search / browse, SSRF-guarded, injection-scanned
-│  ├─ mcp.js          MCP client and MCP server, both directions
-│  ├─ constitution.js the rules, in a form the gate can evaluate
-│  ├─ redteam.js      eight attacks we run on ourselves
-│  ├─ provenance.js   Ed25519 receipts for everything produced
-│  ├─ timemachine.js  snapshots, replay, reopening a decision
-│  ├─ simulation.js   the shadow company
-│  ├─ skills.js       the skill market and model tournaments
-│  ├─ graph.js        knowledge graph with local embeddings
-│  ├─ revenue.js      the closed loop, intel to invoice
-│  ├─ live.js         WebSocket presence, hand-rolled
-│  ├─ wipe.js         the factory reset
-│  └─ …               tribunal, pipelines, intel, maestro, nexus, immune, and the rest
-├─ public/            vanilla-JS dashboard (app.js: 2 map builders + 1 interaction engine)
-├─ workspace/         real produced files: blueprints, designs, exports, project workspaces
-└─ data/              SQLite (gitignored — never commit live database files)
+crucible-core/
+  src/                95 modules, ~22,500 lines
+    server.js         one process: HTTP + console + workers + scheduler + WS
+    db.js             149 tables, forward-only migrations
+    audit.js          the hash chain
+    auth.js           sessions, 204 permissions, password generation
+    router.js         tier → provider chain, with reviewer separation
+    policy.js         reservation-first budgets
+    workflow.js       agents, runs, leases, retries, reclamation
+    egress.js         the gate
+    vault.js          AES-256-GCM secrets
+    constitution.js   the ten rules, enforced
+    connectors/       nine integrations + a generic HTTP driver
+    …
+  public/
+    index.html        the shell
+    app.js            the console — 9,600 lines, vanilla, hash routing
+    styles.css        2,300 lines: design tokens, light and dark, RTL-aware
+    i18n.js           Arabic as a first-class language
+    sw.js             network-first service worker
+    manifest.webmanifest
+  scripts/
+    launch-audit.mjs  the pre-flight audit
+    reset-password.mjs
+    make-icons.mjs    writes PNG bytes with no image library
+    prove-world.mjs   end-to-end proof of the outside-world layer
+    prove-platform.mjs
+  test/               29 unit tests
+  docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
+  config/             agents, providers, rituals
 ```
 
-## Tests & maintenance
+---
 
-```powershell
-npm test                       # audit integrity, budget hard-stop, lifecycle, family separation, tribunal,
-                               # the gate, the vault, the constitution, the queue, provenance, the red team
-npm run prove                  # the same walls, proved against the LIVE database, with the numbers printed
-node --experimental-sqlite scripts/seed.js           # demo data (forced mock)
-node --experimental-sqlite scripts/rechain-audit.js  # audit-chain repair (content-preserving, self-recording)
+## Verification
+
+Nothing here is claimed from inspection. Every number is measured.
+
+```bash
+npm test                        # 29 tests
+npm run prove                   # the outside world, end to end
+npm run prove:platform          # the platform layer, end to end
+node scripts/launch-audit.mjs   # 20 checks; non-zero exit on a blocker
 ```
 
-The test suites name their own database file (`ALPHACORE_DB`) and delete it on
-start. They used to delete `data/alphacore.db` — which is the running company —
-so the file is now nameable and the default is never the one that gets wiped.
+All three proofs run in **mock mode**: no key, no network, no cost.
 
-**Git hygiene for the database:** `data/` DB files are gitignored — including `-wal`/`-shm`. Never force-add them; a WAL copied between machines corrupts the database. Stop the server before committing anything near `data/`.
+**The launch audit** asks the questions somebody should have to answer before
+handing this to anyone — of the running system, not of the code. Security (no
+guessable password, no unfenced live connector, nothing the red team has open),
+record (the chain verifies, the triggers exist, a backup is recent), wiring
+(every department joined, every department opens a real page, every permission
+the API demands exists), health (nothing dead, stalled or breached) and
+readiness (a provider configured, the public URL set, the licence files present,
+no test residue).
 
-## Design decisions on top of the blueprint
+**The browser sweep** opens all 114 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 456 renders each — and fails on a
+blank page, a console error, a horizontal overflow, or a request to any host but
+its own.
 
-- **ADR-007 (this repo): SQLite in dev.** Same schema as Part 3's Postgres DDL, one file, zero setup. Postgres remains the production target per ADR-002.
-- The Claude-subscription provider shares the `anthropic` family, so it can never pose as an "independent" reviewer against the Claude API — separation is enforced in the router, not by convention.
-- Model prices in `config/providers.json` were entered 2026-08 — verify before production (the blueprint's own rule).
+**CI** runs the tests and both proofs on Node 22 and 24, on Ubuntu and Windows,
+boots the server and runs the audit against it, and fails the build if anything
+under `data/`, any `.env`, or any key ever appears in the tree.
+
+---
+
+## Factory reset
+
+Settings → **Danger zone**. Three locks: the superadmin role, the typed phrase
+`WIPE ALL DATA`, and your password again. Two levels — a data wipe (records
+cleared; users, sessions and provider settings survive; defaults re-seeded) and
+a **full factory reset** (users, sessions and settings go too; a fresh `owner`
+account is created and its password printed once to the server console). An
+extra checkbox also deletes produced workspace files.
+
+Either way the audit chain restarts with a genesis entry naming who pulled the
+switch. The append-only triggers are dropped for the wipe and re-armed the
+moment it is done.
+
+---
+
+## Design decisions
+
+Choices that shaped this, and what they cost:
+
+- **`node:sqlite` over better-sqlite3.** No native build, no `node-gyp`, no
+  prebuilt binaries per platform — at the price of requiring Node 22.5.
+- **A modular monolith over services.** One process is one deployment, one
+  transaction boundary, one place to look when something is wrong. It scales up
+  to a machine, not past it, and that is the intended size.
+- **Reservation-first budgets over usage reports.** A report tells you what you
+  spent. A reservation stops you spending it.
+- **A hash chain over an audit table.** An audit table you can edit is a diary.
+- **Tenancy by file and process over a tenant column.** A missing `WHERE` clause
+  is a data breach; a missing process is an error.
+- **Network-first service worker over cache-first.** Slower, and it never serves
+  last week's code to somebody who just upgraded.
+- **Vanilla everything.** No framework means no upgrade treadmill, no build
+  step, and a browser that runs exactly the file in the repository. It also
+  means writing your own WebSocket framing and your own PNG encoder — which,
+  in a project whose argument is that the machinery should be legible, is the
+  point rather than the cost.
+- **`crucible-genesis` survives the rename.** It is the first link of every
+  chain ever written, including the backups already on disk. Renaming it would
+  make an old export fail verification for no visible gain.
+
+---
+
+<div align="center">
+
+**[Install & run](docs/INSTALL.md)** · **[Security](../SECURITY.md)** · **[Contributing](../CONTRIBUTING.md)** · **[MIT](../LICENSE)**
+
+*The AI does the work. The humans keep the authority. The chain keeps them both honest.*
+
+</div>
