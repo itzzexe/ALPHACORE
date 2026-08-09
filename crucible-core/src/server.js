@@ -9,6 +9,7 @@ import './db.js';
 import { audit } from './audit.js';
 import { seedChart, periodOf } from './ledger.js';
 import { bookkeep } from './bookkeeper.js';
+import { tick as standingTick } from './standing.js';
 import { seedAgents, startWorkers } from './workflow.js';
 import { expirySweep } from './registry.js';
 import { advancePipelines } from './pipelines.js';
@@ -161,6 +162,17 @@ handleJob('chain.anchor', async () => { await anchorNow({ actor: 'system:anchor'
 handleJob('backup.ship', async ({ file }) => { await shipOffsite(file); });
 handleJob('wal.archive', async () => { archiveWal(); });
 handleJob('retention.sweep', async () => { applyRetention(); });
+handleJob('standing.tick', async () => {
+  const r = await standingTick({});
+  if (!r.fired.length && !r.expired) return {};
+  return {
+    audit: {
+      actorType: 'system', actorId: 'system:standing', action: 'standing.fired',
+      subjectType: 'standing', subjectId: 'tick',
+      payload: { fired: r.fired.length, failed: r.fired.filter((f) => !f.ok).length, expired: r.expired },
+    },
+  };
+});
 handleJob('ledger.bookkeep', async () => {
   const r = bookkeep({ actor: 'agent:AGT-FIN-001' });
   if (!r.made.length && !r.problems.length) return {};
@@ -212,6 +224,9 @@ setInterval(() => { enqueue0('retention.sweep'); }, 6 * 3600 * 1000).unref?.();
 // entry per model call would be technically correct and unreadable, and a
 // ledger nobody reads is a ledger nobody checks.
 setInterval(() => { enqueue0('ledger.bookkeep'); }, 10 * 60_000).unref?.();
+// Standing orders. Every two minutes rather than every second: the schedules are
+// hourly at their finest, and a tighter loop only buys the chance to fire twice.
+setInterval(() => { enqueue0('standing.tick'); }, 2 * 60_000).unref?.();
 // The synchronous hazard, measured rather than hoped about.
 watchEventLoop();
 setInterval(() => { try { vaultSweep(); } catch { /* next sweep */ } }, 12 * 3600 * 1000).unref?.();

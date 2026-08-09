@@ -27,6 +27,8 @@ export const PERMS = [
   'ledger.view', 'ledger.post', 'ledger.close',
   'hunt.view', 'hunt.run',
   'browser.view', 'browser.drive', 'browser.approve',
+  'economics.view', 'standing.view', 'standing.manage', 'deadletter.view', 'deadletter.revive',
+  'lifecycle.view', 'lifecycle.manage',
   'marketing.view', 'marketing.manage',
   'customers.view', 'customers.manage',
   'people.view', 'people.manage',

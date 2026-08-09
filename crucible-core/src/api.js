@@ -139,6 +139,11 @@ import { hunt, lookup, huntsList, huntDetail, huntOverview } from './hunt.js';
 import {
   drive, approveStep, refuseStep, stopSession, sessionDetail, sessionsList, browserOverview,
 } from './browser.js';
+import { economicsOverview, unitEconomics, agentEconomics, customerEconomics } from './economics.js';
+import {
+  createOrder, pauseOrder, resumeOrder, deleteOrder, fireOrder, ordersList, orderDetail, standingOverview,
+} from './standing.js';
+import { deadLetters, deadLetterOverview, reviveRun } from './workflow.js';
 import { listNotifications, unreadCount, markAllRead } from './notify.js';
 import {
   createCampaign, listCampaigns, approveCampaign, updateCampaign,
@@ -451,6 +456,35 @@ const routes = [
     id: Number(id), actor: need(body, 'actor'), why: body?.why || '',
   })],
   ['POST', /^\/api\/browser\/(\d+)\/stop$/, ([id], body) => stopSession({ id: Number(id), actor: need(body, 'actor') })],
+
+  // --- Does the workforce earn its keep ---
+  ['GET', /^\/api\/economics$/, (_p, _b, url) => economicsOverview({ month: url.searchParams.get('month') })],
+  ['GET', /^\/api\/economics\/unit$/, (_p, _b, url) => unitEconomics({ month: url.searchParams.get('month') })],
+  ['GET', /^\/api\/economics\/agents$/, (_p, _b, url) => ({ agents: agentEconomics({ month: url.searchParams.get('month') }) })],
+  ['GET', /^\/api\/economics\/customers$/, () => ({ customers: customerEconomics() })],
+
+  // --- Things the company keeps doing without being asked again ---
+  ['GET', /^\/api\/standing$/, () => standingOverview()],
+  ['GET', /^\/api\/standing\/(\d+)$/, ([id]) => orderDetail(Number(id))],
+  ['POST', /^\/api\/standing$/, (_p, body) => createOrder({
+    goal: need(body, 'goal'), kind: need(body, 'kind'), schedule: need(body, 'schedule'),
+    reason: need(body, 'reason'), actor: need(body, 'actor'),
+    target: body?.target || null,
+    maxUsdPerRun: body?.maxUsdPerRun ? Number(body.maxUsdPerRun) : undefined,
+    lifetimeUsd: body?.lifetimeUsd ? Number(body.lifetimeUsd) : undefined,
+    expiresAt: body?.expiresAt || null,
+  })],
+  ['POST', /^\/api\/standing\/(\d+)\/pause$/, ([id], body) => pauseOrder({ id: Number(id), actor: need(body, 'actor'), why: body?.why || '' })],
+  ['POST', /^\/api\/standing\/(\d+)\/resume$/, ([id], body) => resumeOrder({ id: Number(id), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/standing\/(\d+)\/delete$/, ([id], body) => deleteOrder({ id: Number(id), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/standing\/(\d+)\/fire$/, ([id], body) => fireOrder(Number(id), { manual: true, actor: need(body, 'actor') })],
+
+  // --- Work that failed for good, and was written down and never read ---
+  ['GET', /^\/api\/deadletter$/, () => deadLetterOverview()],
+  ['GET', /^\/api\/deadletter\/list$/, () => ({ dead: deadLetters({}) })],
+  ['POST', /^\/api\/deadletter\/([\w-]+)\/revive$/, ([runId], body) => reviveRun(runId, {
+    actor: need(body, 'actor'), why: body?.why || '',
+  })],
 
   // --- Notifications ---
   ['GET', /^\/api\/notifications$/, (_p, _b, url) => ({ unread: unreadCount(), items: listNotifications({ unreadOnly: url.searchParams.get('unread') === '1' }) })],
@@ -1479,6 +1513,13 @@ function permFor(m, path) {
   // leaves the building are three different amounts of authority.
   if (/^\/api\/browser\/\d+\/(approve|refuse)$/.test(path)) return 'browser.approve';
   if (path.startsWith('/api/browser')) return m === 'GET' ? 'browser.view' : 'browser.drive';
+  if (path.startsWith('/api/economics')) return 'economics.view';
+  if (path.startsWith('/api/standing')) return m === 'GET' ? 'standing.view' : 'standing.manage';
+  // Reading what died and putting it back on the queue are different acts: the
+  // second spends money again on work that has already failed four times.
+  if (/^\/api\/deadletter\/[\w-]+\/revive$/.test(path)) return 'deadletter.revive';
+  if (path.startsWith('/api/deadletter')) return 'deadletter.view';
+  if (path.startsWith('/api/lifecycle')) return m === 'GET' ? 'lifecycle.view' : 'lifecycle.manage';
   if (path.startsWith('/api/campaigns')) return m === 'GET' ? 'marketing.view' : 'marketing.manage';
   if (path.startsWith('/api/customers')) return m === 'GET' ? 'customers.view' : 'customers.manage';
   if (path.startsWith('/api/contracts')) return m === 'GET' ? 'legal.view' : 'legal.manage';

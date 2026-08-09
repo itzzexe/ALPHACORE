@@ -2284,6 +2284,46 @@ BEGIN SELECT RAISE(ABORT, 'a posted entry cannot lose a line'); END;
 
 -- What the bookkeeper has already turned into entries, so a restart does not
 -- post everything a second time.
+-- A standing order: something the company keeps doing without being asked
+-- again. The reason is required and kept, because an order nobody can explain
+-- in six months is an order nobody dares to delete.
+CREATE TABLE IF NOT EXISTS standing_orders (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal                 TEXT NOT NULL,
+  kind                 TEXT NOT NULL,      -- hunt|browse|bookkeep|request
+  schedule             TEXT NOT NULL,      -- hourly|daily|weekly|monthly
+  target               TEXT,
+  reason               TEXT NOT NULL,
+  owner                TEXT NOT NULL,
+  state                TEXT NOT NULL DEFAULT 'active',  -- active|paused|expired|deleted
+  paused_reason        TEXT,
+  max_usd_per_run      REAL DEFAULT 1,
+  lifetime_usd         REAL DEFAULT 25,
+  spent_usd            REAL DEFAULT 0,
+  firings              INTEGER DEFAULT 0,
+  consecutive_failures INTEGER DEFAULT 0,
+  last_fired           TEXT,
+  last_note            TEXT,
+  next_due             TEXT,
+  expires_at           TEXT,
+  created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS standing_due ON standing_orders(state, next_due);
+
+-- Every firing, kept. An order that has run four hundred times and never
+-- succeeded should be obvious from one glance rather than from a log dive.
+CREATE TABLE IF NOT EXISTS standing_firings (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id  INTEGER NOT NULL,
+  ok        INTEGER NOT NULL DEFAULT 1,
+  note      TEXT,
+  cost_usd  REAL DEFAULT 0,
+  ms        INTEGER,
+  fired_by  TEXT,
+  at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS standing_firings_by_order ON standing_firings(order_id, id DESC);
+
 -- A browser session an employee drove: the goal, and every step it took.
 -- Kept in full, with the picture, because "an agent did something on the web"
 -- is not an acceptable answer to a question about your own company.

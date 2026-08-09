@@ -232,6 +232,74 @@ export async function executeRun(run) {
   }
 }
 
+/**
+ * Work that failed for good.
+ *
+ * `dead_letter` has been written on every exhausted run since the queue was
+ * built, and nothing has ever read it. That is the worst shape a table can
+ * have: the company records its own permanent failures and shows them to
+ * nobody, so the dashboard stays green while the work quietly does not happen.
+ */
+export function deadLetters({ limit = 100, includeRevived = false } = {}) {
+  return q(
+    `SELECT d.id, d.run_id, d.reason, d.created_at,
+            r.agent_id, r.task_type, r.state, r.attempts, r.cost_usd, r.decision_id, r.pipeline_id
+       FROM dead_letter d
+       LEFT JOIN runs r ON r.id = d.run_id
+      ${includeRevived ? '' : "WHERE r.state = 'failed' OR r.state IS NULL"}
+      ORDER BY d.id DESC LIMIT ?`, limit,
+  );
+}
+
+/** What is dying, grouped by why — the shape that tells you where to look. */
+export function deadLetterOverview() {
+  const rows = deadLetters({ limit: 500 });
+  const byReason = new Map();
+  for (const d of rows) {
+    // The first clause of the message: everything after it is usually an id or
+    // a timestamp, and grouping on the whole string gives four hundred groups
+    // of one, which is the same as no grouping.
+    const key = String(d.reason || 'unknown').split(/[:(]/)[0].trim().slice(0, 70);
+    const cur = byReason.get(key) || { reason: key, n: 0, agents: new Set(), costUsd: 0 };
+    cur.n += 1;
+    if (d.agent_id) cur.agents.add(d.agent_id);
+    cur.costUsd += Number(d.cost_usd || 0);
+    byReason.set(key, cur);
+  }
+  return {
+    total: one('SELECT COUNT(*) AS n FROM dead_letter').n,
+    waiting: rows.length,
+    // Money already spent on work that produced nothing. Somebody should see it.
+    wastedUsd: Number(rows.reduce((n, d) => n + Number(d.cost_usd || 0), 0).toFixed(4)),
+    byReason: [...byReason.values()]
+      .map((r) => ({ ...r, agents: [...r.agents], costUsd: Number(r.costUsd.toFixed(4)) }))
+      .sort((a, b) => b.n - a.n),
+    recent: rows.slice(0, 40),
+    lastDeath: one('SELECT created_at FROM dead_letter ORDER BY id DESC LIMIT 1')?.created_at || null,
+  };
+}
+
+/**
+ * Put a dead run back on the queue.
+ *
+ * Signed, because a run that failed four times and is being asked to try again
+ * is a decision, and because the reason it failed may still be there — a revival
+ * that fails four more times has cost the company twice for nothing.
+ */
+export function reviveRun(runId, { actor, why = '' }) {
+  if (!actor) { const e = new Error('reviving dead work has to be signed'); e.status = 400; throw e; }
+  const run = one('SELECT * FROM runs WHERE id = ?', runId);
+  if (!run) { const e = new Error('no such run'); e.status = 404; throw e; }
+  if (run.state !== 'failed') { const e = new Error(`that run is ${run.state}, not dead`); e.status = 400; throw e; }
+  exec("UPDATE runs SET state = 'queued', attempts = 0, failure_reason = NULL, lease_until = NULL WHERE id = ?", runId);
+  audit({
+    actorType: 'human', actorId: actor, action: 'run.revived',
+    subjectType: 'run', subjectId: runId,
+    payload: { why, hadFailed: run.failure_reason, attempts: run.attempts },
+  });
+  return { ok: true, id: runId, state: 'queued' };
+}
+
 /** Human gate actions on awaiting_human runs. */
 export function resolveRun(runId, verdict, approver, note = null) {
   const run = one('SELECT * FROM runs WHERE id = ?', runId);

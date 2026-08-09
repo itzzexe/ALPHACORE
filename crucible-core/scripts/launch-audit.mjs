@@ -134,6 +134,32 @@ if (audit.orphans.length) note('HIGH', 'wiring', `${audit.orphans.length} depart
 else pass('wiring', `all ${sections.length} departments have at least one declared relationship`);
 if (audit.weak.length) note('MEDIUM', 'wiring', `${audit.weak.length} department(s) hang by a single relationship`, audit.weak.map((w) => w.id).join(', '));
 else pass('wiring', 'no department hangs by a single thread');
+// A relationship naming a department that does not exist is dropped silently by
+// everything that reads the map, so the map looks complete and is not. Five had
+// accumulated before anybody counted them.
+if (audit.dangling?.length) {
+  note('HIGH', 'wiring', `${audit.dangling.length} relationship(s) name a department that does not exist`,
+    audit.dangling.map((d) => `${d.from} → ${d.to} (no such: ${d.missing})`).join(', '));
+} else pass('wiring', 'every declared relationship names two departments that exist');
+
+// Every division must touch every other. A division that connects to nothing
+// outside itself is a silo with a colour, and the map exists to make that
+// visible rather than to hide it behind a pretty layout.
+const divIds = DIVISIONS.map((d) => d.id);
+const divOf = new Map(sections.map((s) => [s.id, s.division]));
+const joined = new Set();
+for (const e of relationshipMatrix()) {
+  const a = divOf.get(e.from); const b = divOf.get(e.to);
+  if (a && b && a !== b) joined.add([a, b].sort().join('|'));
+}
+const unjoined = [];
+for (let i = 0; i < divIds.length; i += 1) {
+  for (let j = i + 1; j < divIds.length; j += 1) {
+    if (!joined.has([divIds[i], divIds[j]].sort().join('|'))) unjoined.push(`${divIds[i]} ↔ ${divIds[j]}`);
+  }
+}
+if (unjoined.length) note('MEDIUM', 'wiring', `${unjoined.length} pair(s) of divisions never touch`, unjoined.join(', '));
+else pass('wiring', `all ${divIds.length} divisions are joined to each other`);
 
 // Every section must have a page, and every page a section. A route with no
 // section is unreachable from the map; a section with no route is a dead link.

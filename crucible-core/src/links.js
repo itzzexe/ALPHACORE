@@ -378,6 +378,10 @@ export function sectionCatalog() {
     S('bookkeeper', 'Bookkeeping', 'capital', '#/bookkeeper', n('SELECT COUNT(*) AS n FROM ledger_marks'), 'The AI employees who write the entries, and the limit above which they stop'),
     S('hunt', 'Deep search', 'data', '#/hunt', n('SELECT COUNT(*) AS n FROM hunts'), 'Asks every source, follows what it learns, and keeps going until it finds it or says it did not'),
     S('browser', 'The browser', 'world', '#/browser', n('SELECT COUNT(*) AS n FROM browser_sessions'), 'A real browser the employees drive: look, decide, act — with every step and its screenshot kept'),
+    S('economics', 'Unit economics', 'capital', '#/economics', n('SELECT COUNT(*) AS n FROM model_calls'), 'What each employee, department and customer costs, and what their work touched'),
+    S('standing', 'Standing orders', 'govern', '#/standing', n("SELECT COUNT(*) AS n FROM standing_orders WHERE state != 'deleted'"), 'What the company keeps doing without being asked again — and what turns itself off'),
+    S('deadletter', 'Dead work', 'operate', '#/deadletter', n('SELECT COUNT(*) AS n FROM dead_letter'), 'Work that failed for good: what died, why, what it cost, and whether to try again'),
+    S('continuity', 'Continuity', 'operate', '#/continuity', n('SELECT COUNT(*) AS n FROM backups'), 'Draining, who can be reached at 3am, and whether a copy has ever left this machine'),
     // Operate
     S('incidents', 'Incidents', 'operate', '#/incidents', n('SELECT COUNT(*) AS n FROM incidents'), 'SEV lifecycle with postmortems'),
     S('support', 'Support', 'operate', '#/support', n('SELECT COUNT(*) AS n FROM tickets'), 'Tickets, AI drafts, human sends'),
@@ -537,6 +541,17 @@ export function connectivityAudit() {
   // that from the moment the auditor was wired to everything, the orphan check
   // returned an empty list without checking anything. A department with no
   // declared relationship is an orphan, whatever the universal rules say.
+  // An edge naming a department that does not exist contributes nothing to
+  // anybody's degree and was, until it was measured, completely invisible: the
+  // loop above skips unknown ids without a word. Five had accumulated. A map
+  // that quietly drops the relationships it cannot resolve is worse than one
+  // with none, because it looks complete.
+  const known = new Set(sections.map((s) => s.id));
+  const dangling = edges
+    .filter((e) => e.from !== 'all' && e.to !== 'all')
+    .filter((e) => !known.has(e.from) || !known.has(e.to))
+    .map((e) => ({ from: e.from, to: e.to, missing: !known.has(e.from) ? e.from : e.to, label: e.label }));
+
   const orphans = sections.filter((s) => degree[s.id] === 0)
     .map((s) => ({ id: s.id, label: s.label }));
   const weak = sections.filter((s) => degree[s.id] <= 1)
@@ -551,6 +566,7 @@ export function connectivityAudit() {
     minDegree: Math.min(...Object.values(degree)),
     avgDegree: Number((Object.values(degree).reduce((a, b) => a + b, 0) / sections.length).toFixed(1)),
     universalEdges: edges.filter((e) => e.from === 'all' || e.to === 'all').map((e) => `${e.from} → ${e.to}`),
+    dangling,
   };
 }
 
@@ -658,7 +674,7 @@ export function relationshipMatrix() {
     edge('finance', 'bookkeeper', 'model spend accrued to the books', n("SELECT COUNT(*) AS n FROM ledger_marks WHERE source = 'model-spend'"), '#/bookkeeper'),
     edge('ledger', 'finreports', 'statements drawn from real entries', n("SELECT COUNT(*) AS n FROM journal WHERE state = 'posted'"), '#/finreports'),
     edge('ledger', 'audit', 'every posting on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'journal.%' OR action LIKE 'ledger.%'"), '#/audit'),
-    edge('hunt', 'graph', 'the knowledge graph, asked every round', n('SELECT COUNT(*) AS n FROM hunt_rounds'), '#/graph'),
+    edge('hunt', 'kgraph', 'the knowledge graph, asked every round', n('SELECT COUNT(*) AS n FROM hunt_rounds'), '#/graph'),
     edge('hunt', 'web', 'hunts that reached outside', n("SELECT COUNT(*) AS n FROM hunts WHERE max_usd > 0"), '#/web'),
     edge('hunt', 'memory', 'what the agents already knew', n('SELECT COUNT(*) AS n FROM hunts'), '#/memory'),
     edge('hunt', 'audit', 'every hunt recorded, found or not', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'hunt.finished'"), '#/audit'),
@@ -667,6 +683,44 @@ export function relationshipMatrix() {
     edge('browser', 'vault', 'credentials typed without passing through a model', n("SELECT COUNT(*) AS n FROM browser_steps WHERE action LIKE '%«%'"), '#/vault'),
     edge('browser', 'audit', 'every session and every signature on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'browser.%'"), '#/audit'),
     edge('hunt', 'browser', 'questions the open web could not answer by reading', n("SELECT COUNT(*) AS n FROM browser_sessions"), '#/browser'),
+
+    // The new departments, joined to what they actually draw on.
+    edge('economics', 'runs', 'every run priced, per employee', n('SELECT COUNT(*) AS n FROM runs WHERE cost_usd > 0'), '#/runs'),
+    edge('economics', 'ledger', 'checked against the books, and it says when they disagree', n("SELECT COUNT(*) AS n FROM journal WHERE state = 'posted'"), '#/ledger'),
+    edge('economics', 'customers', 'what each account costs to serve', n('SELECT COUNT(*) AS n FROM customers'), '#/customers'),
+    edge('standing', 'hunt', 'questions asked on a schedule', n("SELECT COUNT(*) AS n FROM standing_orders WHERE kind = 'hunt'"), '#/hunt'),
+    edge('standing', 'browser', 'web work done on a schedule, still stopping at the commit', n("SELECT COUNT(*) AS n FROM standing_orders WHERE kind = 'browse'"), '#/browser'),
+    edge('standing', 'bookkeeper', 'the books kept up to date without being asked', n("SELECT COUNT(*) AS n FROM standing_orders WHERE kind = 'bookkeep'"), '#/bookkeeper'),
+    edge('standing', 'requests', 'work opened at the desk on a schedule', n("SELECT COUNT(*) AS n FROM standing_orders WHERE kind = 'request'"), '#/requests'),
+    edge('deadletter', 'runs', 'runs that failed for good', n('SELECT COUNT(*) AS n FROM dead_letter'), '#/runs'),
+    edge('deadletter', 'jobs', 'what the queue could not finish', n('SELECT COUNT(*) AS n FROM dead_letter'), '#/jobs'),
+    edge('continuity', 'backups', 'whether a copy has left this machine', n('SELECT COUNT(*) AS n FROM backups'), '#/backups'),
+    edge('continuity', 'incidents', 'how a person is reached at 3am', n('SELECT COUNT(*) AS n FROM incidents'), '#/incidents'),
+
+    // Thirteen pairs of divisions had no declared relationship at all. Each of
+    // these is a link that already exists in the data and was simply never
+    // written down — not a decoration added to make the map look connected.
+    edge('economics', 'agents', 'what each employee costs to run', n("SELECT COUNT(*) AS n FROM agents WHERE status = 'active'"), '#/agents'),                                    // capital ↔ engine
+    edge('finops', 'runs', 'spend traced back to the work that caused it', n('SELECT COUNT(*) AS n FROM model_calls WHERE run_id IS NOT NULL'), '#/runs'),                         // capital ↔ engine
+    edge('economics', 'products', 'what a product costs to build and run', n('SELECT COUNT(*) AS n FROM products'), '#/products'),                                                 // build ↔ capital
+    edge('quality', 'releases', 'nothing ships without its quality gate', n('SELECT COUNT(*) AS n FROM releases'), '#/releases'),                                                  // build ↔ trust
+    edge('releases', 'board', 'what shipped, reported upward', n('SELECT COUNT(*) AS n FROM releases'), '#/board'),                                                                // build ↔ exec
+    edge('releases', 'egress', 'a release is the company reaching the outside', n("SELECT COUNT(*) AS n FROM egress_log WHERE capability LIKE 'repo%' OR capability LIKE 'deploy%'"), '#/egress'), // build ↔ world
+    edge('data', 'decisions', 'decisions standing on evidence somebody can re-check rather than on a summary', n('SELECT COUNT(*) AS n FROM decisions'), '#/decisions'),        // data ↔ decide
+    edge('archive', 'evals', "yesterday's work, kept so today's can be scored against it", n('SELECT COUNT(*) AS n FROM archive_items'), '#/evals'),                              // data ↔ decide
+    edge('releases', 'security', 'nothing ships without somebody looking at what it opens', n('SELECT COUNT(*) AS n FROM releases'), '#/security'),                              // build ↔ trust
+    edge('products', 'compliance', 'what each product promises about the data it holds', n('SELECT COUNT(*) AS n FROM products'), '#/compliance'),                               // build ↔ trust
+    edge('customers', 'people', 'who is answerable for which account, by name', n('SELECT COUNT(*) AS n FROM customers'), '#/people'),                                           // commerce ↔ talent
+    edge('success', 'academy', 'what customers keep asking becomes what the company teaches', n('SELECT COUNT(*) AS n FROM customer_health'), '#/academy'),                      // commerce ↔ talent
+    edge('incidents', 'people', 'who is on the hook when it breaks at 3am', n('SELECT COUNT(*) AS n FROM incidents'), '#/people'),                                               // operate ↔ talent
+    edge('support', 'academy', 'the questions that keep coming back become training', n('SELECT COUNT(*) AS n FROM tickets'), '#/academy'),                                      // operate ↔ talent
+    edge('customers', 'workforce', 'who is answerable for which account', n('SELECT COUNT(*) AS n FROM customers'), '#/workforce'),                                                // commerce ↔ talent
+    edge('customers', 'compliance', 'what we promised each customer about their data', n('SELECT COUNT(*) AS n FROM contracts'), '#/compliance'),                                  // commerce ↔ trust
+    edge('sales', 'board', 'the pipeline the board actually asks about', n("SELECT COUNT(*) AS n FROM deals WHERE stage NOT IN ('lost')"), '#/board'),                              // commerce ↔ exec
+    edge('treasury', 'egress', 'money only leaves through the one door, signed by a person', n('SELECT COUNT(*) AS n FROM payouts'), '#/egress'),                                  // capital ↔ world
+    edge('incidents', 'workforce', 'who is on the hook when it breaks', n('SELECT COUNT(*) AS n FROM incidents'), '#/workforce'),                                                  // operate ↔ talent
+    edge('people', 'security', 'who holds which key, reviewed rather than assumed', n('SELECT COUNT(*) AS n FROM users'), '#/security'),                                           // talent ↔ trust
+    edge('board', 'egress', 'what the company sent outside, where the board can see it', n('SELECT COUNT(*) AS n FROM egress_log'), '#/egress'),                                   // exec ↔ world
     edge('finreports', 'archive', 'approved reports archived', n("SELECT COUNT(*) AS n FROM archive_items WHERE subject_type = 'finReport'"), '#/archive'),
     edge('products', 'journeys', 'journeys building products', n('SELECT COUNT(*) AS n FROM journeys WHERE product_id IS NOT NULL'), '#/journeys'),
     edge('products', 'content', 'launch content', n('SELECT COUNT(*) AS n FROM content_items WHERE product_id IS NOT NULL'), '#/content'),
@@ -760,7 +814,7 @@ export function relationshipMatrix() {
     edge('agents', 'workstreams', 'independent peer reviewers on each round', n("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'cycle-review:%'"), '#/workstreams', 'review'),
     edge('auditor', 'all', 'any department can be audited to one standard', n('SELECT COUNT(*) AS n FROM audits'), '#/auditor', 'audit'),
     edge('auditor', 'oversight', 'audit verdicts recorded for humans', n("SELECT COUNT(*) AS n FROM audits WHERE state = 'done'"), '#/oversight', 'audit'),
-    edge('auditor', 'problems', 'failed audits become problems to fix', n("SELECT COUNT(*) AS n FROM audits WHERE verdict = 'fail'"), '#/governance', 'audit'),
+    edge('auditor', 'governance', 'failed audits become problems to fix', n("SELECT COUNT(*) AS n FROM audits WHERE verdict = 'fail'"), '#/governance', 'audit'),
     edge('gate', 'runs', 'rejected work goes back to the agent', n("SELECT COUNT(*) AS n FROM approvals WHERE verdict = 'rejected'"), '#/runs', 'loop'),
     // The contact centre reaches people, and what it hears comes back inside.
     edge('contact', 'customers', 'calls and messages to known customers', n('SELECT COUNT(*) AS n FROM calls WHERE customer_id IS NOT NULL'), '#/customers'),
@@ -802,7 +856,7 @@ export function relationshipMatrix() {
 
     // Governance of the new machinery.
     edge('constitution', 'auditor', 'the auditor judges against the same rules', n("SELECT COUNT(*) AS n FROM constitution WHERE state = 'active'"), '#/auditor', 'audit'),
-    edge('constitution', 'owner', 'only the owner amends the rules', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'constitution.%'"), '#/owner', 'gate'),
+    edge('constitution', 'users', 'only the owner amends the rules', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'constitution.%'"), '#/owner', 'gate'),
     edge('provenance', 'artifacts', 'every artifact leaves with a signed receipt', n('SELECT COUNT(*) AS n FROM provenance'), '#/artifacts'),
     edge('provenance', 'audit', 'the receipt names the chain entry it was made at', n('SELECT COUNT(*) AS n FROM provenance WHERE chain_hash IS NOT NULL'), '#/audit', 'audit'),
     edge('provenance', 'runs', 'a run receipt names its model and its reviewers', n("SELECT COUNT(*) AS n FROM provenance WHERE subject_type = 'run'"), '#/runs'),
@@ -917,7 +971,7 @@ export function relationshipMatrix() {
 
     edge('packages', 'agents', 'a package hires its own employees', n("SELECT COUNT(*) AS n FROM agents WHERE spec LIKE '%fromPackage%'"), '#/agents'),
     edge('packages', 'users', 'and declares its own permissions, which must be new', n("SELECT COUNT(*) AS n FROM packages WHERE state = 'installed'"), '#/users'),
-    edge('packages', 'graph', 'an installed department appears on the map like any other', n("SELECT COUNT(*) AS n FROM packages WHERE state = 'installed'"), '#/graph'),
+    edge('packages', 'kgraph', 'an installed department appears on the map like any other', n("SELECT COUNT(*) AS n FROM packages WHERE state = 'installed'"), '#/graph'),
 
     edge('anchors', 'audit', 'the height and hash a third party wrote down', n('SELECT COUNT(*) AS n FROM anchors WHERE ok = 1'), '#/audit', 'audit'),
     edge('anchors', 'egress', 'reaching a timestamping authority goes through the gate', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'chain.anchored'"), '#/egress'),

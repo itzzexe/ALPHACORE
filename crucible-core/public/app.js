@@ -180,6 +180,7 @@ const navPerm = {
   segments: 'segments.view', data: 'datasets.view', archive: 'archive.view', marketing: 'marketing.view',
   customers: 'customers.view', finance: 'finance.view', people: 'people.view', legal: 'legal.view',
   ledger: 'ledger.view', bookkeeper: 'ledger.view', hunt: 'hunt.view', browser: 'browser.view',
+  economics: 'economics.view', standing: 'standing.view', deadletter: 'deadletter.view', continuity: 'lifecycle.view',
   vendors: 'vendors.view', knowledge: 'knowledge.view', objectives: 'objectives.view', evals: 'evals.view',
   agents: 'agents.view', budgets: 'budgets.view', audit: 'audit.view', providers: 'providers.view',
   oversight: 'oversight.view', users: 'users.manage', settings: 'settings.manage',
@@ -1254,6 +1255,221 @@ async function renderBrowser() {
   if (b.waiting.length) showSession(b.waiting[0].id);
 }
 
+// Does the workforce earn its keep. Cost is exact; revenue attributed to an
+// agent is revenue its work touched — the page says so rather than implying it.
+async function renderEconomics() {
+  const e = await api('/api/economics');
+  const agent = (a) => `<tr>
+      <td class="mono"><a href="#/agents">${esc(a.id)}</a></td>
+      <td>${esc(a.name || '')}</td>
+      <td class="num">${a.runs}</td>
+      <td class="num">${a.delivered}</td>
+      <td class="num">${esc(money4(a.cost))}</td>
+      <td class="num">${a.wasteUsd > 0 ? `<span style="color:var(--warn)">${esc(money4(a.wasteUsd))}</span>` : '—'}</td>
+      <td class="num">${a.revenueTouched ? esc(money(a.revenueTouched)) : '—'}</td>
+      <td class="num">${a.touchedPerDollar ? `${a.touchedPerDollar}×` : '—'}</td>
+    </tr>`;
+  const cust = (c) => `<tr>
+      <td>${esc(c.name)}</td>
+      <td class="num">${esc(money(c.paid))}</td>
+      <td class="num">${esc(money4(c.salesCost))}</td>
+      <td class="num">${esc(money4(c.supportCost))}</td>
+      <td class="num">${esc(money(c.netOfModelSpend))}</td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Cost per run</div><div class="big">${e.costPerRun !== null ? esc(money4(e.costPerRun)) : '—'}</div><div class="sub">${e.runs} run${e.runs === 1 ? '' : 's'} · ${e.delivered} delivered</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Cost per delivered</div><div class="big">${e.costPerDelivered !== null ? esc(money4(e.costPerDelivered)) : '—'}</div><div class="sub">what the failures make each success cost</div></div>
+    <div class="panel tile ${e.failureWasteUsd > 0 ? 'tile-warn' : ''}"><div class="panel-title">Wasted on failures</div><div class="big">${esc(money4(e.failureWasteUsd))}</div><div class="sub">${e.failureRate}% of runs failed</div></div>
+    <div class="panel tile"><div class="panel-title">Collected · ${esc(e.period)}</div><div class="big">${esc(money(e.revenueUsd))}</div><div class="sub">${e.invoicesPaid} invoice${e.invoicesPaid === 1 ? '' : 's'} paid</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Does it pay for itself?</span>${e.fromLedger ? `<span class="chip ${e.ledgerAgrees ? 'chip-ok' : 'chip-warn'}">${e.ledgerAgrees ? 'the books agree' : 'the books disagree'}</span>` : ''}</div>
+    <p class="lede">${esc(e.says)}</p>
+    ${e.fromLedger ? `<div class="map-legend">From the ledger for ${esc(e.period)}: revenue ${esc(money(e.fromLedger.revenue))}, expenses ${esc(money(e.fromLedger.expenses))}, net ${esc(money(e.fromLedger.net))}${e.fromLedger.margin !== null ? ` · margin ${e.fromLedger.margin}%` : ''}. <a href="#/ledger">the books →</a></div>` : ''}
+    <div class="map-legend">${esc(e.honestly)}</div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title"><span>Cost per unit of work</span></div>
+      <table><tbody>
+        <tr><td>per model call</td><td class="num">${e.modelCalls ? esc(money4(e.spendUsd / e.modelCalls)) : '—'}</td></tr>
+        <tr><td>per ticket</td><td class="num">${e.costPerTicket !== null ? esc(money4(e.costPerTicket)) : '—'}</td></tr>
+        <tr><td>per deal won</td><td class="num">${e.costPerDealWon !== null ? esc(money4(e.costPerDealWon)) : '—'}</td></tr>
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">By department</div>
+      ${e.departments.length
+    ? `<table><thead><tr><th>Department</th><th class="num">Runs</th><th class="num">Cost</th><th class="num">Touched</th></tr></thead><tbody>${e.departments.map((d) => `<tr><td>${esc(d.dept)}</td><td class="num">${d.runs}</td><td class="num">${esc(money4(d.cost))}</td><td class="num">${d.revenueTouched ? esc(money(d.revenueTouched)) : '—'}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="empty">no work yet this month</div>'}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Every employee that did something</span><span class="chip chip-dim">${e.idleAgents} idle</span></div>
+    ${e.agents.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Employee</th><th>Name</th><th class="num">Runs</th><th class="num">Delivered</th><th class="num">Cost</th><th class="num">Wasted</th><th class="num">Touched</th><th class="num">Per dollar</th></tr></thead><tbody>${e.agents.map(agent).join('')}</tbody></table></div>`
+    : '<div class="empty">nobody has done anything this month</div>'}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">What each customer costs to serve</div>
+    ${e.customers.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Customer</th><th class="num">Paid</th><th class="num">Sales</th><th class="num">Support</th><th class="num">Net of model spend</th></tr></thead><tbody>${e.customers.map(cust).join('')}</tbody></table></div>
+       <div class="map-legend">Only the model spend traceable to them. Infrastructure, people and everything else sit in <a href="#/ledger">the books</a>, not here.</div>`
+    : '<div class="empty">no customers yet</div>'}
+  </div>`;
+}
+
+// Things the company keeps doing without being asked again.
+async function renderStanding() {
+  const s = await api('/api/standing');
+  const order = (o) => `<tr>
+      <td>${esc(o.goal)}<div class="sub">${esc(o.reason || '')}</div></td>
+      <td><span class="chip chip-dim">${esc(o.kindLabel)}</span></td>
+      <td class="sub">${esc(o.scheduleLabel)}</td>
+      <td><span class="chip ${{ active: 'chip-ok', paused: 'chip-warn' }[o.state] || 'chip-dim'}">${esc(o.state)}</span>${o.paused_reason ? `<div class="sub">${esc(String(o.paused_reason).slice(0, 70))}</div>` : ''}</td>
+      <td class="num">${o.firings}</td>
+      <td class="num">${esc(money4(o.spent_usd || 0))}<div class="sub">of ${esc(money(o.lifetime_usd || 0))}</div></td>
+      <td class="mono" style="font-size:11px">${esc(o.owner)}</td>
+      <td>
+        <button class="btn btn-sm" data-fire="${o.id}">Run now</button>
+        ${o.state === 'paused'
+    ? `<button class="btn btn-sm" data-resume="${o.id}">Resume</button>`
+    : `<button class="btn btn-sm" data-pause="${o.id}">Pause</button>`}
+        <button class="btn btn-sm btn-bad" data-del="${o.id}">Delete</button>
+      </td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    <div class="panel tile"><div class="panel-title">Standing orders</div><div class="big">${s.active}</div><div class="sub">running without being asked</div></div>
+    <div class="panel tile ${s.paused ? 'tile-warn' : ''}"><div class="panel-title">Turned off</div><div class="big">${s.paused}</div><div class="sub">paused, with the reason on them</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Firings</div><div class="big">${s.firings}</div><div class="sub">${s.failures} failed</div></div>
+    <div class="panel tile"><div class="panel-title">Spent</div><div class="big">${esc(money(s.spentUsd))}</div><div class="sub">across every order</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Add one</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="so-goal" class="input" placeholder="What should keep happening?" aria-label="What should keep happening?" style="flex:1;min-width:220px">
+      <select id="so-kind" class="input input-sm" aria-label="What kind of work" style="width:190px">${s.kinds.map((k) => `<option value="${esc(k.key)}">${esc(k.label)}</option>`).join('')}</select>
+      <select id="so-sched" class="input input-sm" aria-label="How often" style="width:140px">${s.schedules.map((k) => `<option value="${esc(k.key)}"${k.key === 'weekly' ? ' selected' : ''}>${esc(k.label)}</option>`).join('')}</select>
+      <button class="btn btn-primary" id="so-add">Add</button>
+    </div>
+    <input id="so-why" class="input" placeholder="Why should this keep happening? (required — an order nobody can explain never gets deleted)" aria-label="Why should this keep happening?" style="width:100%;margin-top:8px">
+    <div class="map-legend" style="margin-top:8px">${esc(s.inherits)}</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Orders</div>
+    ${s.orders.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Kind</th><th>How often</th><th>State</th><th class="num">Ran</th><th class="num">Spent</th><th>Owner</th><th></th></tr></thead><tbody>${s.orders.map(order).join('')}</tbody></table></div>`
+    : '<div class="empty">nothing standing yet</div>'}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Every firing</div>
+    ${s.recent.length
+    ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Order</th><th>Result</th><th class="num">Cost</th></tr></thead><tbody>${s.recent.map((f) => `<tr><td class="mono" style="font-size:11px">${esc(String(f.at || '').slice(0, 16))}</td><td>${esc(String(f.goal || '').slice(0, 60))}</td><td><span class="chip ${f.ok ? 'chip-ok' : 'chip-bad'}">${f.ok ? 'ok' : 'failed'}</span> <span class="sub">${esc(String(f.note || '').slice(0, 80))}</span></td><td class="num">${esc(money4(f.cost_usd || 0))}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty">nothing has fired yet</div>'}
+  </div>`;
+
+  const act = async (id, path, body = {}) => {
+    try { await api(`/api/standing/${id}/${path}`, { method: 'POST', body }); render(); }
+    catch (e) { toast(e.message, true); }
+  };
+  view.querySelectorAll('[data-fire]').forEach((b) => b.addEventListener('click', async () => {
+    toast('running…');
+    await act(b.dataset.fire, 'fire');
+  }));
+  view.querySelectorAll('[data-pause]').forEach((b) => b.addEventListener('click', () => act(b.dataset.pause, 'pause', { why: 'paused by hand' })));
+  view.querySelectorAll('[data-resume]').forEach((b) => b.addEventListener('click', () => act(b.dataset.resume, 'resume')));
+  view.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
+    if (confirm('Delete this standing order?')) act(b.dataset.del, 'delete');
+  }));
+
+  $('#so-add').addEventListener('click', async () => {
+    const goal = $('#so-goal').value.trim();
+    const reason = $('#so-why').value.trim();
+    if (!goal) { toast('what should keep happening?', true); return; }
+    if (!reason) { toast('say why — an order nobody can explain never gets deleted', true); return; }
+    try {
+      await api('/api/standing', { method: 'POST', body: { goal, reason, kind: $('#so-kind').value, schedule: $('#so-sched').value } });
+      toast('standing'); render();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// Work that failed for good. Written down since the queue was built and, until
+// now, read by nobody.
+async function renderDeadletter() {
+  const d = await api('/api/deadletter');
+  view.innerHTML = `
+  <div class="grid grid-3">
+    <div class="panel tile ${d.waiting ? 'tile-warn' : ''}"><div class="panel-title">Dead work</div><div class="big">${d.waiting}</div><div class="sub">${d.total} ever</div></div>
+    <div class="panel tile tile-steel"><div class="panel-title">Spent on nothing</div><div class="big">${esc(money4(d.wastedUsd))}</div><div class="sub">already paid for, delivered nothing</div></div>
+    <div class="panel tile"><div class="panel-title">Last death</div><div class="big" style="font-size:16px">${esc(String(d.lastDeath || '—').slice(0, 16))}</div><div class="sub">${d.byReason.length} distinct reason(s)</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Why it is dying</div>
+    ${d.byReason.length
+    ? `<table><thead><tr><th>Reason</th><th class="num">Runs</th><th>Employees</th><th class="num">Cost</th></tr></thead><tbody>${d.byReason.map((r) => `<tr><td>${esc(r.reason)}</td><td class="num">${r.n}</td><td class="mono" style="font-size:11px">${esc(r.agents.join(', ').slice(0, 60))}</td><td class="num">${esc(money4(r.costUsd))}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="empty">nothing has failed for good — the queue is doing its job</div>'}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Each one</div>
+    ${d.recent.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Run</th><th>Employee</th><th>Task</th><th>Why it died</th><th class="num">Cost</th><th></th></tr></thead><tbody>${d.recent.map((x) => `<tr><td class="mono">${esc(x.run_id)}</td><td class="mono" style="font-size:11px">${esc(x.agent_id || '—')}</td><td>${esc(x.task_type || '')}</td><td class="sub">${esc(String(x.reason || '').slice(0, 90))}</td><td class="num">${esc(money4(x.cost_usd || 0))}</td><td><button class="btn btn-sm" data-revive="${esc(x.run_id)}">Try again</button></td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty">nothing waiting</div>'}
+  </div>`;
+
+  view.querySelectorAll('[data-revive]').forEach((b) => b.addEventListener('click', async () => {
+    // Asked for, because the reason it failed four times may still be there, and
+    // a revival that fails four more times has cost the company twice.
+    const why = prompt('Why should this run again? What has changed?');
+    if (!why) return;
+    try { await api(`/api/deadletter/${b.dataset.revive}/revive`, { method: 'POST', body: { why } }); toast('back on the queue'); render(); }
+    catch (e) { toast(e.message, true); }
+  }));
+}
+
+// Draining, alerting, and whether a copy has ever left this machine.
+async function renderContinuity() {
+  const l = await api('/api/lifecycle');
+  const row = (k, v) => `<div class="meter-label"><span>${esc(k)}</span><span class="mono">${esc(String(v ?? '—'))}</span></div>`;
+  view.innerHTML = `
+  <div class="grid grid-3">
+    <div class="panel tile ${l.draining ? 'tile-warn' : ''}"><div class="panel-title">State</div><div class="big">${l.draining ? 'draining' : 'serving'}</div><div class="sub">${l.draining ? 'finishing what it started' : 'accepting work'}</div></div>
+    <div class="panel tile ${l.alerts?.configured ? '' : 'tile-warn'}"><div class="panel-title">Reachable at 3am</div><div class="big" style="font-size:18px">${esc(l.alerts?.channel || 'nobody')}</div><div class="sub">${l.alerts?.configured ? 'an alert reaches a person' : `set ALERT_CHANNEL — ${esc((l.alerts?.channels || []).join(', '))}`}</div></div>
+    <div class="panel tile ${l.offsite?.lastShippedAt ? '' : 'tile-warn'}"><div class="panel-title">Off this machine</div><div class="big" style="font-size:18px">${l.offsite?.lastShippedAt ? 'yes' : 'never'}</div><div class="sub">${l.offsite?.lastShippedAt ? esc(String(l.offsite.lastShippedAt).slice(0, 16)) : (l.offsite?.configured ? 'configured, never run' : 'set BACKUP_SHIP_COMMAND')}</div></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-title">Everything this reports</div>
+      ${Object.entries(l).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.entries(v).map(([k2, v2]) => row(`${k}.${k2}`, Array.isArray(v2) ? v2.join(', ') : v2))
+    : [row(k, Array.isArray(v) ? v.join(', ') : v)])).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Write-ahead log</div>
+      ${l.walArchive ? Object.entries(l.walArchive).map(([k, v]) => row(k, v)).join('') : '<div class="empty">nothing archived yet</div>'}
+      <div class="map-legend">Between backups, the write-ahead log is the difference between losing a day and losing four minutes.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Why this page exists</div>
+    <p class="lede">These are the two findings the launch audit reports and nothing in the console could answer: whether a copy of the company has ever left this disk, and whether anyone can be reached when it is three in the morning and something is on fire. Both are settings, and both are decisions — so they are shown here rather than assumed.</p>
+    <div><a class="btn" href="#/settings">Settings</a> <a class="btn" href="#/backups">Backups</a> <a class="btn" href="#/incidents">Incidents</a></div>
+  </div>`;
+}
+
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
@@ -1285,6 +1501,10 @@ const routes = {
   bookkeeper: { title: 'Bookkeeper', render: renderBookkeeper },
   hunt: { title: 'Hunt', render: renderHunt },
   browser: { title: 'Browser', render: renderBrowser },
+  economics: { title: 'Unit economics', render: renderEconomics },
+  standing: { title: 'Standing orders', render: renderStanding },
+  deadletter: { title: 'Dead work', render: renderDeadletter },
+  continuity: { title: 'Continuity', render: renderContinuity },
   oversight: { title: 'Oversight', render: renderOversight, poll: 10000 },
   users: { title: 'Users & Roles', render: renderUsers },
   settings: { title: 'Settings', render: renderSettings },

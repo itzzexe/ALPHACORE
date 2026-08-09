@@ -9,7 +9,7 @@ One hundred and twenty-two departments across thirteen divisions, staffed by an 
 researches, sells, supports, **hires its own new employees** — and reaches the real world through one guarded
 door — while humans hold every gate that matters: approving, publishing, signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-126-c0563a?style=flat-square" alt="126 departments">
+<img src="https://img.shields.io/badge/departments-130-c0563a?style=flat-square" alt="130 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/relationships-344-8d8477?style=flat-square" alt="344 declared relationships">
 <img src="https://img.shields.io/badge/API-498_routes-4f9cf0?style=flat-square" alt="498 API routes">
@@ -19,7 +19,7 @@ door — while humans hold every gate that matters: approving, publishing, signi
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-131-78bf6d?style=flat-square" alt="131 tests">
+<img src="https://img.shields.io/badge/tests-151-78bf6d?style=flat-square" alt="151 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
@@ -39,8 +39,8 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 126 departments](#the-company--13-divisions-126-departments) | the shape |
-| [The engine room](#the-engine-room) · [The books](#the-books) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 130 departments](#the-company--13-divisions-130-departments) | the shape |
+| [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
 | [The API](#the-api) · [MCP](#mcp--both-directions) · [Webhooks](#webhooks) · [Command line](#the-command-line) | the surfaces |
@@ -204,12 +204,12 @@ flowchart TD
   DATA["DATA · 9<br/>intelligence · segments · datasets<br/>archive · knowledge graph · deep search"] --> CORE
   MARKETING["MARKETING · 20<br/>brand · content · design · SEO<br/>paid · lifecycle · events · press"] --> CORE
   COMMERCE["COMMERCE · 7<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
-  CAPITAL["CAPITAL · 7<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping"] --> CORE
+  CAPITAL["CAPITAL · 8<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
   OPERATE["OPERATE · 7<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
   TALENT["TALENT · 10<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
   TRUST["TRUST · 5<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
   EXEC["EXECUTIVE · 4<br/>board · investor relations<br/>comms · operating rhythm"] --> CORE
-  GOVERN["GOVERN · 12<br/>constitution · oversight · audit<br/>watchtower · time machine · backups"] --> CORE
+  GOVERN["GOVERN · 16<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
   classDef c1 fill:#c0563a,color:#f2f0ea,stroke:none
   classDef c2 fill:#b78bff,color:#14100c,stroke:none
   classDef c3 fill:#5ec3c9,color:#14100c,stroke:none
@@ -241,7 +241,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **358 relationships** that the map
+Those declarations are data, not decoration: **390 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -289,7 +289,7 @@ connectivity audit and live flow counts — as JSON.
 
 ---
 
-## The company — 13 divisions, 126 departments
+## The company — 13 divisions, 130 departments
 
 <details open>
 <summary><b>ENGINE · 10</b> — the workforce and the work</summary>
@@ -370,10 +370,10 @@ stop for a person.
 </details>
 
 <details>
-<summary><b>CAPITAL · 7</b> — the books, money going out, and money held</summary>
+<summary><b>CAPITAL · 8</b> — the books, money going out, and money held</summary>
 
-**Finance** · **Financial reports** · **Ledger** · **Bookkeeping** · **FinOps** ·
-**Treasury (crypto)** · **Money desk**
+**Finance** · **Financial reports** · **Ledger** · **Bookkeeping** ·
+**Unit economics** · **FinOps** · **Treasury (crypto)** · **Money desk**
 
 Real double-entry books, not computed summaries. P&L, runway and spend
 efficiency sit on top of them. The treasury is **watch-only**: the platform never
@@ -382,10 +382,10 @@ resolving one requires a signed-in human that no autonomy path can reach.
 </details>
 
 <details>
-<summary><b>OPERATE · 8</b> — keeping the lights on</summary>
+<summary><b>OPERATE · 10</b> — keeping the lights on</summary>
 
-**Incidents** · **Support** · **Assets** · **Legal** · **Vendors** ·
-**Objectives** · **Contact centre** · **Deliverability**
+**Incidents** · **Support** · **Dead work** · **Continuity** · **Assets** ·
+**Legal** · **Vendors** · **Objectives** · **Contact centre** · **Deliverability**
 
 Incidents demand postmortems. Support drafts replies and graduates an agent to
 sending unedited only after a hundred sent at ninety-five per cent unedited —
@@ -431,11 +431,12 @@ facts, internal announcements, and the rhythm that runs the day.
 </details>
 
 <details>
-<summary><b>GOVERN · 15</b> — the rules and the record</summary>
+<summary><b>GOVERN · 16</b> — the rules and the record</summary>
 
 **Harmony** · **Autopilot** · **Governance** · **Oversight** · **Scorecard** ·
-**Users & roles** · **Roles** · **Settings** · **Audit chain** · **Anchors** ·
-**The constitution** · **Time machine** · **Watchtower** · **Instruments** · **Backups**
+**Standing orders** · **Users & roles** · **Roles** · **Settings** ·
+**Audit chain** · **Anchors** · **The constitution** · **Time machine** ·
+**Watchtower** · **Instruments** · **Backups**
 
 The constitution is enforced by machine at the gate, not written on a poster.
 The time machine snapshots the company and replays it: stand at any past moment
@@ -574,6 +575,69 @@ keys, vault items and users are never read, and no column holding a hash, token
 or ciphertext can be the reason a row was returned. And anything the open web
 returns is checked for injection **before a model reads it** — a search loop
 feeds untrusted text straight to the thing deciding what to do next.
+
+### Does the workforce earn its keep
+
+A company employing fifty AI agents can read "what did we spend" off the finance
+page and "what did we earn" off the ledger, and still cannot answer the only
+question that decides anything: **which of them is worth having**.
+
+It is answerable because the work is already traceable. A run drafted the
+proposal that became the deal that became the invoice that was paid; a run
+drafted the reply that closed the ticket. The chain was in the operational
+tables and nobody had walked it.
+
+One thing said plainly rather than buried, because the alternative is a number
+that looks like proof and is not: **touched, not caused**. An agent that drafted
+a proposal did not single-handedly earn the money — a person edited it, a founder
+took the call, the customer had half decided already. So this reports *revenue an
+agent's work touched*, says so in the field name, and refuses to call it ROI.
+
+What it does say without qualification is the cost, which comes from the meter,
+per run, exactly:
+
+| | |
+|---|---|
+| **Cost per delivered** | always worse than cost per run, because a failure costs the same as a success and delivers nothing |
+| **Wasted on failures** | the purest waste in the building, and invisible until somebody totals it |
+| **Cost to serve a customer** | real work traced to them through their tickets and their deal, not an allocation by headcount — which is how you find out the biggest account is the least profitable |
+| **Coverage** | whether the month's collected revenue covers the month's model spend, stated as a ratio *and* as a sentence, because a ratio alone gets misread in both directions |
+
+An agent in two departments has its cost split rather than counted twice, or the
+company appears to spend more than it does. And the whole thing is checked
+against the ledger — **where the two disagree it says so** instead of quietly
+preferring one.
+
+### Standing orders
+
+Until now everything the company did was either something a person had just
+asked for, or something hardcoded into an interval. There was no way to say
+*"from now on, every Monday, do this"* — which is most of what running a company
+consists of.
+
+A standing order is a goal in words, a schedule, an owner, a required reason, and
+a record of every firing. It targets work that already exists — a hunt, a browser
+session, the bookkeeper, the request desk — from a **closed list**, because an
+open one would quietly turn a scheduler into a new capability.
+
+The schedule is the boring part. What matters is that a recurring job outlives
+the attention of whoever wrote it:
+
+- **Three failures in a row and it turns itself off**, with the last error on the
+  record. A job that fails silently every hour for a month is worse than no job:
+  the dashboard stays green while the work does not happen. Resuming clears the
+  count, or a single later failure would be its third.
+- **It cannot outlive its allowance.** A per-firing cap and a lifetime cap, and
+  when the lifetime is gone it pauses and says so.
+- **It inherits every gate.** A browsing order still stops at the click that
+  commits; a bookkeeping order still drafts rather than posts above the limit. A
+  standing order is a **schedule, not an authority** — nothing it can do could
+  not have been done by hand by its owner.
+- **The reason is required and kept.** Not paperwork: an order nobody can explain
+  in six months is an order nobody dares to delete, and those accumulate until
+  the list is useless.
+- Three fire per tick, not everything at once. Ten orders each able to start a
+  model chain is a way to spend a month's budget in a minute.
 
 ### The audit chain
 
@@ -750,7 +814,7 @@ department rather than buried in Settings.
 | **Anchors** | The chain's head witnessed by an RFC 3161 timestamping authority, outside this disk. Verifying the chain proves it agrees with *itself*, which is exactly what a rewritten record also does — anybody who owns the file can edit it and recompute every hash. This is the only check that cannot be forged locally. |
 | **Erasure** | Crypto-shredding: a person's data sealed under their own key *before* the payload is hashed, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. |
 | **The desk** | Everything waiting on a person, ordered by what it blocks. Batches are recorded as one act naming every item, never as a dozen entries that read like a dozen judgements. |
-| **Roles** | Seven templates over the 212 permissions, with each irreversible power in exactly one of them. |
+| **Roles** | Seven templates over the 219 permissions, with each irreversible power in exactly one of them. |
 | **Model chains** | Which model does the work, and a canary that must pass — on the same day, against the chain in service — before it changes. An untested chain cannot be promoted, and an inconclusive canary does not count as evidence. |
 | **Recall** | Local embeddings via ollama, so search finds "the tool that reads receipts" from "invoice OCR platform" — trigrams score that pair at 0.000. Nothing leaves the machine. |
 | **Deliverability** | DKIM signing, and a preflight that reads live DNS to say what a receiver would conclude. Plus whether a call may lawfully be recorded, by jurisdiction. |
@@ -845,7 +909,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**528 routes** — all JSON, all
+**542 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -921,7 +985,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 131 tests, on their own database files |
+| `npm test` | 151 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -970,6 +1034,7 @@ Settings the console owns, all editable without a restart:
 | `BOOKKEEPER_LIMIT_USD` | what an AI employee may post to the books unattended (default 500). Above it, they draft and a person posts |
 | `HUNT_MAX_ROUNDS` · `HUNT_MAX_USD` | how long a deep search may keep going, and what it may spend doing it |
 | `BROWSER_PORT` · `BROWSER_MAX_STEPS` · `BROWSER_MAX_USD` | where the browser is listening, and how far an employee may drive it before stopping |
+| Standing orders | no setting: each order carries its own per-firing and lifetime cap, because one global number would be wrong for all of them |
 | `TIER_OVERRIDES` | a promoted model chain — written by the canary, not by hand |
 
 Config files:
@@ -1009,17 +1074,19 @@ credential — keep them together.
 
 ```
 crucible-core/
-  src/                110 modules, ~27,300 lines
+  src/                113 modules, ~28,400 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
     db.js             165 tables, forward-only migrations
     audit.js          the hash chain
-    auth.js           sessions, 212 permissions, password generation
+    auth.js           sessions, 219 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
     policy.js         reservation-first budgets
     ledger.js         double-entry books: the chart, the journal, four statements
     bookkeeper.js     the AI employees who write the entries, and the limit
     hunt.js           deep search that keeps going, and says so when it fails
     browser.js        a real browser the employees drive, and what stops them
+    economics.js      what each employee costs, and what its work touched
+    standing.js       what the company keeps doing, and what turns itself off
     workflow.js       agents, runs, leases, retries, reclamation
     egress.js         the gate, and paper trading
     vault.js          AES-256-GCM secrets, and rotating the key under them
@@ -1055,7 +1122,7 @@ crucible-core/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               131 tests across twelve files
+  test/               151 tests across fourteen files
   docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
   config/             agents, providers, rituals
 ```
@@ -1067,13 +1134,22 @@ crucible-core/
 Nothing here is claimed from inspection. Every number is measured.
 
 ```bash
-npm test                        # 131 tests
+npm test                        # 151 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
 ```
 
 All three proofs run in **mock mode**: no key, no network, no cost.
+
+**The map is checked, not drawn.** Every department must have a real
+relationship, no department may hang by a single thread, **every declared
+relationship must name two departments that exist**, and **every one of the 13
+divisions must touch every other**. The last two were added after measuring
+found five relationships pointing at departments that had never existed — silently
+dropped by everything that reads the map, so it looked complete — and thirteen
+pairs of divisions with no connection at all. A map that hides its own gaps is
+worse than no map.
 
 **The launch audit** asks the questions somebody should have to answer before
 handing this to anyone — of the running system, not of the code. Security (no
@@ -1118,7 +1194,7 @@ configured, the public URL set, the licence files present, no test residue).
   form and puts all thirteen perceived elements through the real gate: twelve
   proceed, and "Submit order" stops.
 
-**The browser sweep** opens all 126 departments in both themes and both
+**The browser sweep** opens all 130 departments in both themes and both
 languages, at 1440×900 and again at 390×844 — 488 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
@@ -1212,6 +1288,19 @@ Choices that shaped this, and what they cost:
 - **The element list is kept, not just the click.** Without the menu it was
   choosing from, "why did it click that" is unanswerable — you would be looking
   at the choice without the alternatives.
+- **Dates are stored in SQLite's shape, not ISO 8601.** Every due check compares
+  against `datetime('now')`, which uses a space where ISO uses a "T" — and "T"
+  sorts after " ", so an ISO timestamp is always greater than the SQLite one for
+  the same instant. Stored as ISO, no standing order would ever have fired, for
+  ever, silently. The tests caught it only because they wrote their own dates.
+- **Revenue an agent touched is not revenue it earned**, and the field is named
+  for what it is. A number that looks like proof and is not is how somebody ends
+  up firing an employee over an arithmetic artefact.
+- **An agent in two departments has its cost split**, or the company appears to
+  spend twice what it does.
+- **A relationship naming a department that does not exist is a finding, not a
+  no-op.** Five had accumulated, contributing nothing to any degree count and
+  visible to nobody.
 - **A hunt that cannot stop is not a feature.** Round ceiling, cost cap, and a
   dry round all end it — otherwise "keep going until it finds it" is a promise to
   search forever, and a loop that must produce something eventually produces
