@@ -565,6 +565,40 @@ model and family, as columns rather than inferred later. Providers move what a
 name points at without announcing it, and a run that cannot name its model is a
 run nobody can reproduce or account for.
 
+### Usable without a mouse or a screen
+
+Checked rather than intended, and checked on every page: the browser sweep
+**fails** if any control on any of the 114 departments has no accessible name,
+if a form field is unlabelled, or if a decorative icon would be announced as a
+graphic. A page that renders beautifully and announces nothing is not finished.
+
+What that turned up, and what was done about it:
+
+- **Labels sat beside inputs without being linked to them.** A sighted person
+  read "Name"; a screen reader said "edit text, blank" and the form was
+  unusable. Linked at render time in one place, because asking ninety renderers
+  to remember a `for` attribute does not work — and the sweep now fails when
+  one is missed.
+- **Eighty-three selects had no name at all.** Named from the id suffix, which
+  in this codebase is consistently the field's own word — the same word the
+  handler uses two lines later, so reading it is not guessing.
+- **`--ink-faint` measured 2.57:1 against paper**, below even the large-text
+  bar, and it carried most of the secondary text in the interface. Along with
+  the accent, ok and warn colours it is now darkened by exactly as much as
+  4.5:1 requires and no more, so the palette keeps its character. Every token
+  in both themes clears AA for normal text.
+- **A skip link**, first in the DOM and visible only when focused. Without it,
+  reaching page content by keyboard meant tabbing through thirteen division
+  buttons on every load.
+- **Toasts announce.** They are a status region now; before, a save confirmed
+  itself only to people who could see it.
+- **Navigating moves the reading position** to the content that replaced
+  everything, instead of leaving focus on a nav item — which reads as "the link
+  did not work".
+- Thirty-two decorative icons hidden from the reader, `aria-current` on the
+  open department, `aria-expanded` on the phone drawer, and both dialogs given
+  names.
+
 ### The approval desk
 
 The design says humans hold the gates. That is a promise on one side and a

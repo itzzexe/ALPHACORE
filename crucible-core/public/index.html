@@ -24,15 +24,19 @@
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+<!-- The first thing focus lands on. Visible only when focused, because it is
+     for people who are already tabbing — but it must be first in the DOM or it
+     is not a skip link, it is a link that comes after the thing it skips. -->
+<a class="skip-link" href="#view">Skip to the page</a>
 <div class="app" id="app">
   <!-- Icon rail: one button per division. The 76 departments live one click
        deeper, so the shell stays quiet until you ask it for something. -->
-  <aside class="rail" id="rail">
+  <aside class="rail" id="rail" aria-label="Divisions">
     <a class="rail-brand" href="#/" title="AlphaCore">◆</a>
     <div id="rail-items"></div>
     <div class="rail-spacer"></div>
     <button class="rail-btn" id="rail-search" type="button" aria-label="Search">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <span class="rail-tip" data-i18n="Search  Ctrl+K">Search · Ctrl+K</span>
     </button>
   </aside>
@@ -43,7 +47,7 @@
     <header class="topbar">
       <h1 id="page-title">Overview</h1>
       <button class="top-search" id="open-palette" type="button">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <svg width="14" height="14" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <span data-i18n="Search departments, actions…">Search departments, actions…</span>
         <kbd>Ctrl K</kbd>
       </button>
@@ -52,7 +56,7 @@
         <span id="chain-chip" class="chip chip-dim" title="Audit hash-chain integrity">chain —</span>
         <button class="icon-btn wide" id="lang-toggle" type="button" title="العربية / English">ع</button>
         <button class="icon-btn" id="theme-toggle" type="button" title="Day / night" aria-pressed="false">◐</button>
-        <button class="who-chip" id="who-chip" type="button" title="Sign out">
+        <button class="who-chip" id="who-chip" type="button" title="Sign out" aria-label="Signed in — sign out">
           <span class="avatar" id="who-avatar">—</span>
           <span>
             <span class="who-name" id="who-name">—</span><br>
@@ -61,7 +65,10 @@
         </button>
       </div>
     </header>
-    <section id="view" class="view"></section>
+    <section id="view" class="view" tabindex="-1"></section>
+    <!-- Announced politely: these interrupt nothing, they queue behind
+         whatever is being read. -->
+    <div id="toast" role="status" aria-live="polite" aria-atomic="false"></div>
   </main>
 
   <!-- Phone navigation. The rail and the flyout are the wrong shape for a
@@ -72,20 +79,20 @@
   <div class="nav-scrim" id="nav-scrim" hidden></div>
   <nav class="tabbar" id="tabbar" aria-label="Main">
     <a class="tab" href="#/" data-tab="home">
-      <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
       <span data-i18n="Overview">Overview</span>
     </a>
     <button class="tab" type="button" id="tab-nav">
-      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       <span data-i18n="Departments">Departments</span>
       <span class="tab-dot" id="tab-dot"></span>
     </button>
     <button class="tab" type="button" id="tab-search">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <span data-i18n="Search">Search</span>
     </button>
     <button class="tab" type="button" id="tab-who">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>
       <span id="tab-who-label" data-i18n="Account">Account</span>
     </button>
   </nav>

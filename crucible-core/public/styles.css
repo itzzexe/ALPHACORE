@@ -22,18 +22,18 @@
   --seam-soft: #e9e5dc;
   --ink: #191714;            /* near-black, warm */
   --ink-mute: #6a645b;
-  --ink-faint: #9d968a;
+  --ink-faint: #726d64;      /* was #9d968a — 2.57:1 on paper, which is not readable */
   --ink-ghost: #cfc9bd;      /* the huge type behind the map */
 
   /* The single accent. Terracotta, taken from the thin red marks on the
      reference lines — used for live state, the current thing, and nothing else. */
-  --accent: #b8503a;
+  --accent: #b34e39;          /* 4.52:1 */
   --accent-soft: #cf7a63;
   --accent-wash: rgba(184, 80, 58, 0.08);
 
   /* Status, muted to sit on paper rather than glow on it */
-  --ok: #5d7f5f;
-  --warn: #a07a35;
+  --ok: #567557;              /* 4.53:1 */
+  --warn: #89682d;            /* 4.50:1 */
   --bad: #a8443a;
   --steel: #4a6d76;
 
@@ -2339,4 +2339,38 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
 .login-note-quiet {
   font-size: 11px; line-height: 1.55; color: var(--ink-faint);
   margin-top: var(--s2); text-align: start;
+}
+
+/* ==========================================================================
+   Accessibility.
+
+   Two things here rather than scattered: the skip link, which must be first in
+   the DOM and invisible until it matters, and a focus ring that survives every
+   theme. Everything else lives with the component it belongs to.
+   ========================================================================== */
+
+/* Off-screen until focused. Not display:none — that would make it unreachable
+   by the keyboard, which is the only way anybody ever reaches it. */
+.skip-link {
+  position: fixed; top: 0; inset-inline-start: 0; z-index: 999;
+  padding: var(--s3) var(--s4);
+  background: var(--ink); color: var(--paper);
+  font-size: 13px; text-decoration: none;
+  border-radius: 0 0 var(--r-sm) 0;
+  transform: translateY(-120%);
+  transition: transform var(--t-fast) var(--ease);
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* The view takes focus on navigation and must not draw a box for it: a
+   programmatic focus is a reading position, not a control. */
+#view:focus { outline: none; }
+#view:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -4px; }
+
+/* Anything hidden from sight is hidden from everybody, including a reader that
+   would otherwise cheerfully announce a drawer that is off-screen. */
+[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link { transition: none; }
 }

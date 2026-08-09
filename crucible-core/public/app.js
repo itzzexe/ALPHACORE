@@ -238,7 +238,7 @@ let openDiv = null;
 
 function railBtn(id, label, count = '') {
   return `<button class="rail-btn" type="button" data-div="${id}" aria-label="${esc(label)}">
-    <svg viewBox="0 0 24 24">${DIV_ICON[id] || DIV_ICON.govern}</svg>
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">${DIV_ICON[id] || DIV_ICON.govern}</svg>
     <span class="rail-dot">${count || ''}</span>
     <span class="rail-tip">${esc(label)}</span>
   </button>`;
@@ -293,6 +293,7 @@ function renderFlyout() {
 const onPhone = () => window.matchMedia('(max-width: 860px)').matches;
 
 function openMobileNav() {
+  $('#tab-nav')?.setAttribute('aria-expanded', 'true');
   // A drawer that opens onto a bare strip of icons is a drawer that has to be
   // used twice. If no division is chosen it opens on the one you are already
   // standing in, so the list is there the moment it slides in.
@@ -309,6 +310,7 @@ function openMobileNav() {
 }
 
 function closeMobileNav() {
+  $('#tab-nav')?.setAttribute('aria-expanded', 'false');
   $('#app').classList.remove('mnav');
   $('#nav-scrim').classList.remove('on');
   $('#tab-nav')?.classList.remove('on');
@@ -350,7 +352,14 @@ function paintTabbar() {
 
 function markActiveNav() {
   const here = currentRoute().key;
-  document.querySelectorAll('#flyout a').forEach((a) => a.classList.toggle('active', a.dataset.route === here));
+  document.querySelectorAll('#flyout a').forEach((a) => {
+    const active = a.dataset.route === here;
+    a.classList.toggle('active', active);
+    // Colour alone says nothing to a screen reader, and nothing at all to
+    // somebody who cannot distinguish these two greys.
+    if (active) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
   const sec = CATALOG.sections.find((s) => routeOf(s.href) === here);
   document.querySelectorAll('#rail-items .rail-btn').forEach((b) => {
     b.classList.toggle('on', b.dataset.div === (openDiv || sec?.division));
@@ -526,7 +535,15 @@ async function disablePush() {
 
 function toast(msg, isErr = false) {
   let host = $('#toast');
-  if (!host) { host = document.createElement('div'); host.id = 'toast'; document.body.appendChild(host); }
+  if (!host) {
+    // The markup provides one with role=status; this is only a fallback, and it
+    // carries the same attributes so a toast is never silently unannounced.
+    host = document.createElement('div');
+    host.id = 'toast';
+    host.setAttribute('role', 'status');
+    host.setAttribute('aria-live', 'polite');
+    document.body.appendChild(host);
+  }
   const el = document.createElement('div');
   el.className = 'toast' + (isErr ? ' err' : '');
   el.textContent = msg;
@@ -755,6 +772,12 @@ async function navigate() {
   }
   markActiveNav();
   closeMobileNav();
+  // Move the reading position to the content that just replaced everything.
+  // Without this a screen reader stays where it was and announces nothing,
+  // which reads as "the link did not work".
+  if (document.activeElement?.closest('#flyout, #rail, #tabbar, #palette')) {
+    requestAnimationFrame(() => view.focus({ preventScroll: true }));
+  }
   view.innerHTML = `<div class="empty">${esc(t('Loading…'))}</div>`;
   try { await r.render(arg); afterRender(); }
   catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
@@ -777,8 +800,31 @@ async function navigate() {
  * narrower without lying about the data, so it gets to keep its width and
  * scroll inside its own box instead of pushing the whole document sideways.
  */
+let labelSeq = 0;
+
 function afterRender() {
   translateDom(view);
+
+  // Ninety renderers write `<label class="fl">Name</label><input id="x">`:
+  // adjacent, and unconnected. A sighted person reads the label; a screen
+  // reader announces "edit text, blank" and the form is unusable. Linking them
+  // here covers every page at once, which is the only way this gets done —
+  // asking ninety call sites to remember a `for` attribute does not work, and
+  // the browser sweep now fails when one is missed.
+  for (const label of view.querySelectorAll('label.fl:not([for])')) {
+    let control = label.nextElementSibling;
+    // Skip past a wrapper or a hint line to reach the actual control.
+    while (control && !/^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName)) {
+      control = control.querySelector?.('input, select, textarea') || control.nextElementSibling;
+      if (control && /^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName)) break;
+      if (control && control.tagName === 'LABEL') { control = null; break; }
+    }
+    if (!control || !/^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName)) continue;
+    if (control.type === 'hidden') continue;
+    if (!control.id) control.id = `fld-${++labelSeq}`;
+    label.setAttribute('for', control.id);
+  }
+
   for (const table of view.querySelectorAll('table')) {
     if (table.parentElement?.classList.contains('tscroll')) continue;
     const box = document.createElement('div');
@@ -973,7 +1019,7 @@ function buildSystemMap(s, prov, agentsList, chain, extra = {}) {
     </g>`;
   }).join('');
 
-  return `<svg class="metro" viewBox="0 0 1000 700" role="img" aria-label="Interactive system metro map — lines are departments, connectors are the Nexus automations between them">
+  return `<svg aria-hidden="true" focusable="false" class="metro" viewBox="0 0 1000 700" role="img" aria-label="Interactive system metro map — lines are departments, connectors are the Nexus automations between them">
   ${lines}${cross}${dots}${labels}${stations}
   <a href="#/audit" data-station data-line="core" data-color="${chain.ok ? '#59b36a' : '#e5533d'}" data-name="AUDIT CHAIN" data-val="${chain.checked} entries · ${chain.ok ? 'intact' : 'BROKEN'}" data-tip="Hash-chained, append-only. Every line ends here because every action in the company ends up on the record."><g class="m-term">
     <circle class="m-term-pulse" cx="${TX}" cy="${TY}" r="34" stroke="${chain.ok ? 'var(--ok)' : 'var(--bad)'}"/>
@@ -1060,7 +1106,7 @@ function buildConstellation(map) {
   const hs = harmony?.score ?? 0;
   const hsColor = hs >= 80 ? 'var(--ok)' : hs >= 55 ? 'var(--warn)' : 'var(--bad)';
 
-  return `<svg class="constellation" viewBox="0 0 1000 880" role="img" aria-label="Company constellation — every section and the real relationships between them">
+  return `<svg aria-hidden="true" focusable="false" class="constellation" viewBox="0 0 1000 880" role="img" aria-label="Company constellation — every section and the real relationships between them">
     <defs>${MAP_DEFS}
       <radialGradient id="coreGlow"><stop offset="0%" stop-color="rgba(255,107,44,0.30)"/><stop offset="100%" stop-color="rgba(255,107,44,0)"/></radialGradient>
     </defs>
@@ -1424,7 +1470,7 @@ function buildAtlasFar(map) {
   }).join('');
 
   const hs = harmony?.score ?? 0;
-  return `<svg class="atlas-svg" viewBox="150 92 1590 1108" preserveAspectRatio="xMidYMid meet" role="img"
+  return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="150 92 1590 1108" preserveAspectRatio="xMidYMid meet" role="img"
     aria-label="The company as a constellation — every district a tree growing from the core">
     ${districts}
     <g class="at-core">
@@ -1500,7 +1546,7 @@ function buildAtlasNear(map, divId) {
   const total = items.reduce((a, x) => a + x.count, 0);
   const related = edges.filter((e) => items.some((x) => x.id === e.from) || items.some((x) => x.id === e.to)).length;
 
-  return `<svg class="atlas-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+  return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
     aria-label="${esc(divisionName(div.id, div.label))} — its departments and how they connect"
     style="color:${div.color}">
     <text class="at-ghost" x="${rootX}" y="${(rootY - 430).toFixed(0)}" style="font-size:196px">${esc(divisionName(div.id, div.label))}</text>
@@ -1569,7 +1615,7 @@ function initAtlas(map) {
     dlg = document.createElement('div');
     dlg.id = 'map-dialog';
     dlg.hidden = true;
-    dlg.innerHTML = '<div class="md-box" role="dialog" aria-modal="true" tabindex="-1"></div>';
+    dlg.innerHTML = '<div class="md-box" role="dialog" aria-modal="true" aria-label="Department details" role="dialog" aria-modal="true" tabindex="-1"></div>';
     document.body.appendChild(dlg);
   }
   const side = dlg.querySelector('.md-box');
@@ -1611,7 +1657,7 @@ function initAtlas(map) {
   }));
   // Pan, without stealing clicks. The pointer is only captured once a real
   // drag starts — capturing on pointerdown retargets the follow-up click to
-  // the <svg>, so a plain click on a section never reached the section.
+  // the <svg aria-hidden="true" focusable="false">, so a plain click on a section never reached the section.
   let drag = null;
   svg.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || dialogOpen()) return;
@@ -2080,7 +2126,7 @@ function buildSystemMapOrbital(s, prov, agentsList, chain, extra = {}) {
     orbitPill({ x: 88, y: 557, w: 156, h: 40, href: '#/intel', title: 'DATA · INTEL', value: `${extra.archiveCount ?? 0} archived · targets → CRM`, cls: 'steel' }),
   ];
 
-  return `<svg class="sysmap" viewBox="0 0 1000 655" role="img" aria-label="System map — the company in orbit around its audit chain">
+  return `<svg aria-hidden="true" focusable="false" class="sysmap" viewBox="0 0 1000 655" role="img" aria-label="System map — the company in orbit around its audit chain">
   <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L8 4 L0 8 z" fill="var(--ink-faint)"/></marker></defs>
 
   <ellipse class="orbit-guide" cx="500" cy="330" rx="215" ry="155"/>
@@ -2125,7 +2171,7 @@ function buildSystemMapLegacy(s, prov, agentsList, chain, extra = {}) {
   const provNames = { anthropic: 'CLAUDE API', 'claude-subscription': 'CLAUDE SUB', openai: 'OPENAI', deepseek: 'DEEPSEEK', google: 'GEMINI' };
   const provRows = prov.providers.filter((p) => p.name !== 'mock');
 
-  return `<svg class="sysmap" viewBox="0 0 1000 570" role="img" aria-label="System map — relations between the platform sections">
+  return `<svg aria-hidden="true" focusable="false" class="sysmap" viewBox="0 0 1000 570" role="img" aria-label="System map — relations between the platform sections">
   <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L8 4 L0 8 z" fill="var(--ink-faint)"/></marker></defs>
 
   <rect class="map-group" x="15" y="40" width="150" height="250" rx="5"/>
@@ -2308,7 +2354,7 @@ async function renderOverview() {
   <div class="grid grid-2">
     <div class="panel">
       <div class="panel-title">Spend · last 14 days</div>
-      <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Daily spend sparkline">
+      <svg aria-hidden="true" focusable="false" class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Daily spend sparkline">
         <polyline points="${points}" fill="none" stroke="var(--ember)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
         <polygon points="0,100 ${points} 100,100" fill="rgba(255,107,44,0.08)"/>
       </svg>
@@ -2453,7 +2499,7 @@ async function renderRuns() {
     <div class="panel-title">Enqueue a run</div>
     <div class="form-inline">
       <div><label class="fl">Agent</label>
-        <select id="run-agent">${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</select></div>
+        <select id="run-agent" aria-label="Agent">${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</select></div>
       <div><label class="fl">Task type</label><input type="text" id="run-type" value="task"></div>
     </div>
     <div><label class="fl">Prompt</label><textarea id="run-prompt" placeholder="What should the agent do?"></textarea></div>
@@ -2461,7 +2507,7 @@ async function renderRuns() {
   </div>
   <div class="panel">
     <div class="panel-title"><span>Recent runs</span>
-      <select id="run-filter" style="width:auto">
+      <select id="run-filter" aria-label="Filter" style="width:auto">
         ${['', 'queued', 'running', 'awaiting_human', 'done', 'failed'].map((s) => `<option value="${s}" ${s === stateSel ? 'selected' : ''}>${s || 'all states'}</option>`).join('')}
       </select>
     </div>
@@ -2520,7 +2566,7 @@ async function renderDecisions() {
     <div class="panel-title">Register a decision</div>
     <div class="form-inline">
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="dec-title" placeholder="What is being decided?"></div>
-      <div><label class="fl">Tier</label><select id="dec-tier"><option>T1</option><option selected>T2</option><option>T3</option></select></div>
+      <div><label class="fl">Tier</label><select id="dec-tier" aria-label="Tier"><option>T1</option><option selected>T2</option><option>T3</option></select></div>
       <div><label class="fl">Owner (human)</label><input type="text" id="dec-owner" value="CTO"></div>
       <button class="btn btn-primary" id="dec-go">Register</button>
     </div>
@@ -2651,9 +2697,9 @@ async function renderPipelines() {
     <div class="panel-title">Start a pipeline — FORGE chain, each step feeds the next</div>
     <div class="form-inline">
       <div style="flex:1.2"><label class="fl">Template</label>
-        <select id="pl-template">${templates.map((t) => `<option value="${esc(t.key)}">${esc(t.title)}</option>`).join('')}</select></div>
+        <select id="pl-template" aria-label="Template">${templates.map((t) => `<option value="${esc(t.key)}">${esc(t.title)}</option>`).join('')}</select></div>
       <div><label class="fl">Product (optional)</label>
-        <select id="pl-product"><option value="">— none —</option>${products.map((p) => `<option value="${esc(p.id)}" ${p.id === preselect ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
+        <select id="pl-product" aria-label="Product"><option value="">— none —</option>${products.map((p) => `<option value="${esc(p.id)}" ${p.id === preselect ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="pl-go">Start</button>
     </div>
     <div><label class="fl">Goal</label><textarea id="pl-goal" placeholder="What should this pipeline produce?"></textarea></div>
@@ -2799,7 +2845,7 @@ async function renderIncidents() {
   <div class="panel">
     <div class="panel-title">Declare an incident — a human commands, always</div>
     <div class="form-inline">
-      <div style="flex:0.6"><label class="fl">Severity</label><select id="in-sev"><option>SEV1</option><option>SEV2</option><option selected>SEV3</option><option>SEV4</option></select></div>
+      <div style="flex:0.6"><label class="fl">Severity</label><select id="in-sev" aria-label="Severity"><option>SEV1</option><option>SEV2</option><option selected>SEV3</option><option>SEV4</option></select></div>
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="in-title"></div>
       <div><label class="fl">Commander (human)</label><input type="text" id="in-cmd" value="${esc(actor())}"></div>
       <button class="btn btn-primary" id="in-go">Declare</button>
@@ -2872,7 +2918,7 @@ async function renderSupport() {
       <div class="form-inline">
         <div><label class="fl">Customer</label><input type="text" id="tk-cust"></div>
         <div><label class="fl">Category</label><input type="text" id="tk-cat" value="general"></div>
-        <div><label class="fl">Product</label><select id="tk-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+        <div><label class="fl">Product</label><select id="tk-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       </div>
       <div class="form-inline">
         <div style="flex:1"><label class="fl">Subject</label><input type="text" id="tk-subj"></div>
@@ -3113,11 +3159,11 @@ async function renderIntel() {
   ${canM ? `<div class="panel">
     <div class="panel-title">New intelligence campaign — precise criteria beat a vague sentence</div>
     <div class="form-inline">
-      <div><label class="fl">Type</label><select id="iq-kind"><option value="company">companies</option><option value="government body">government bodies</option><option value="ngo">NGOs</option><option value="investor">investors</option><option value="supplier">suppliers</option><option value="distributor">distributors</option></select></div>
+      <div><label class="fl">Type</label><select id="iq-kind" aria-label="Kind"><option value="company">companies</option><option value="government body">government bodies</option><option value="ngo">NGOs</option><option value="investor">investors</option><option value="supplier">suppliers</option><option value="distributor">distributors</option></select></div>
       <div><label class="fl">Sector / القطاع</label><input type="text" id="iq-sector" placeholder="energy · oil & gas"></div>
       <div><label class="fl">Country / الدولة</label><input type="text" id="iq-country" placeholder="Iraq"></div>
       <div><label class="fl">City / المدينة</label><input type="text" id="iq-city" placeholder="Basra"></div>
-      <div style="flex:0.5"><label class="fl">Size</label><select id="iq-size"><option value="">any</option><option>SME</option><option>mid-market</option><option>enterprise</option><option>state-owned</option></select></div>
+      <div style="flex:0.5"><label class="fl">Size</label><select id="iq-size" aria-label="Size"><option value="">any</option><option>SME</option><option>mid-market</option><option>enterprise</option><option>state-owned</option></select></div>
       <div style="flex:0.4"><label class="fl">Target #</label><input type="text" id="iq-count" value="15"></div>
       <button class="btn btn-primary" id="iq-go">Run campaign</button>
     </div>
@@ -3315,7 +3361,7 @@ async function renderSegments() {
         <div style="flex:1.4"><label class="fl">Segment name</label><input type="text" id="sg-bname" placeholder="Iraqi energy — contactable"></div>
         <div><label class="fl">Country</label><input type="text" id="sg-country" placeholder="Iraq"></div>
         <div><label class="fl">Sector</label><input type="text" id="sg-sector" placeholder="energy"></div>
-        <div style="flex:0.7"><label class="fl">Campaign</label><select id="sg-query"><option value="">any</option>${queries.map((iq) => `<option value="${iq.id}">#${iq.id} ${esc(short(iq.question, 24))}</option>`).join('')}</select></div>
+        <div style="flex:0.7"><label class="fl">Campaign</label><select id="sg-query" aria-label="Query"><option value="">any</option>${queries.map((iq) => `<option value="${iq.id}">#${iq.id} ${esc(short(iq.question, 24))}</option>`).join('')}</select></div>
       </div>
       <div class="form-inline">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="sg-contactable" checked> contactable only (has email or phone)</label>
@@ -3490,7 +3536,7 @@ async function renderArchive() {
   <div class="panel">
     <div class="form-inline">
       <div style="flex:2"><label class="fl">Search titles</label><input type="text" id="arc-q" value="${esc(search)}" placeholder="intel, contract, journey…"></div>
-      <div><label class="fl">Kind</label><select id="arc-kind"><option value="">all</option>${stats.byKind.map((k) => `<option value="${esc(k.kind)}" ${k.kind === kind ? 'selected' : ''}>${esc(k.kind)} (${k.n})</option>`).join('')}</select></div>
+      <div><label class="fl">Kind</label><select id="arc-kind" aria-label="Kind"><option value="">all</option>${stats.byKind.map((k) => `<option value="${esc(k.kind)}" ${k.kind === kind ? 'selected' : ''}>${esc(k.kind)} (${k.n})</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="arc-go">Filter</button>
     </div>
     <div class="agent-meta">${stats.bySubject.map((s) => `<span class="chip chip-dim">${esc(s.subject_type)} · ${s.n}</span>`).join('')}</div>
@@ -3631,8 +3677,8 @@ async function renderMarketing() {
     <div class="panel-title">New campaign — AI drafts the copy, a human approves before it goes live</div>
     <div class="form-inline">
       <div><label class="fl">Name</label><input type="text" id="cm-name"></div>
-      <div><label class="fl">Channel</label><select id="cm-chan"><option>landing</option><option>email</option><option>paid</option><option>content</option><option>social</option></select></div>
-      <div><label class="fl">Product</label><select id="cm-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Channel</label><select id="cm-chan" aria-label="Channel"><option>landing</option><option>email</option><option>paid</option><option>content</option><option>social</option></select></div>
+      <div><label class="fl">Product</label><select id="cm-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       <div><label class="fl">Budget $</label><input type="text" id="cm-budget" value="0"></div>
       <button class="btn btn-primary" id="cm-go">Create</button>
     </div>
@@ -3698,10 +3744,10 @@ async function renderCustomers() {
     <div class="form-inline">
       <div><label class="fl">Name</label><input type="text" id="cu-name"></div>
       <div><label class="fl">Company</label><input type="text" id="cu-comp"></div>
-      <div><label class="fl">State</label><select id="cu-state"><option>lead</option><option>trial</option><option>active</option></select></div>
+      <div><label class="fl">State</label><select id="cu-state" aria-label="State"><option>lead</option><option>trial</option><option>active</option></select></div>
       <div><label class="fl">MRR $</label><input type="text" id="cu-mrr" value="0"></div>
-      <div><label class="fl">Product</label><select id="cu-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
-      <div><label class="fl">Campaign</label><select id="cu-camp"><option value="">—</option>${campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product</label><select id="cu-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Campaign</label><select id="cu-camp" aria-label="Campaign"><option value="">—</option>${campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="cu-go">Add</button>
     </div>
   </div>
@@ -3768,7 +3814,7 @@ async function renderPeople() {
     <div class="form-inline">
       <div><label class="fl">Name</label><input type="text" id="pe-name"></div>
       <div style="flex:1.5"><label class="fl">Role</label><input type="text" id="pe-role"></div>
-      <div><label class="fl">Type</label><select id="pe-type"><option>hire</option><option>fractional</option><option>founder</option></select></div>
+      <div><label class="fl">Type</label><select id="pe-type" aria-label="Type"><option>hire</option><option>fractional</option><option>founder</option></select></div>
       <button class="btn btn-primary" id="pe-go">Add</button>
     </div>
     <div class="map-legend">First hire waits for M7 — positive contribution margin (Part 6 §8). Adding one here is the record, not the trigger.</div>
@@ -3786,12 +3832,12 @@ async function renderLegal() {
   <div class="panel">
     <div class="panel-title">New legal item — signing is human-only and named, always (Part 1 §6.1)</div>
     <div class="form-inline">
-      <div><label class="fl">Kind</label><select id="lg-kind"><option>contract</option><option>tos</option><option>privacy</option><option>dpa</option><option>nda</option><option>provider-terms</option></select></div>
+      <div><label class="fl">Kind</label><select id="lg-kind" aria-label="Kind"><option>contract</option><option>tos</option><option>privacy</option><option>dpa</option><option>nda</option><option>provider-terms</option></select></div>
       <div style="flex:1.5"><label class="fl">Title</label><input type="text" id="lg-title"></div>
       <div><label class="fl">Counterparty</label><input type="text" id="lg-cp"></div>
       <div><label class="fl">Review due</label><input type="text" id="lg-due" placeholder="2026-12-01"></div>
-      <div><label class="fl">Vendor</label><select id="lg-vendor"><option value="">—</option>${vendors.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</select></div>
-      <div><label class="fl">Product</label><select id="lg-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Vendor</label><select id="lg-vendor" aria-label="Vendor"><option value="">—</option>${vendors.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product</label><select id="lg-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="lg-go">Register</button>
     </div>
   </div>
@@ -3871,7 +3917,7 @@ async function renderKnowledge() {
   <div class="panel">
     <div class="panel-title">Organizational memory — unverified claims never become truth (Part 3 §8); verification is human-only</div>
     <div class="form-inline">
-      <div><label class="fl">Layer</label><select id="kn-layer"><option>org</option><option>lesson</option><option>product</option><option>policy</option><option>project</option></select></div>
+      <div><label class="fl">Layer</label><select id="kn-layer" aria-label="Layer"><option>org</option><option>lesson</option><option>product</option><option>policy</option><option>project</option></select></div>
       <div style="flex:2"><label class="fl">Content</label><input type="text" id="kn-content"></div>
       <div><label class="fl">Source ref</label><input type="text" id="kn-src"></div>
       <button class="btn btn-primary" id="kn-go">Add</button>
@@ -3912,7 +3958,7 @@ async function renderObjectives() {
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="ob-title"></div>
       <div><label class="fl">Quarter</label><input type="text" id="ob-q" value="2026-Q3"></div>
       <div><label class="fl">Owner</label><input type="text" id="ob-owner" value="CEO"></div>
-      <div><label class="fl">Product</label><select id="ob-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product</label><select id="ob-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="ob-go">Create</button>
     </div>
     <div><label class="fl">Key results — one per line: description | target | unit</label><textarea id="ob-krs" placeholder="First paying customer | 1 | customers&#10;Escaped defects per release | 1 | defects"></textarea></div>
@@ -3962,7 +4008,7 @@ async function renderProjects() {
     <div class="form-inline">
       <div style="flex:1.5"><label class="fl">Name</label><input type="text" id="pj-name"></div>
       <div><label class="fl">Owner</label><input type="text" id="pj-owner" value="${esc(currentUser?.username || '')}"></div>
-      <div><label class="fl">Product</label><select id="pj-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product</label><select id="pj-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="pj-go">Create</button>
     </div>
   </div>
@@ -4003,12 +4049,12 @@ async function renderTasksPage() {
     <div class="form-inline">
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="tk2-title"></div>
       <div><label class="fl">Assignee</label>
-        <select id="tk2-assignee">
+        <select id="tk2-assignee" aria-label="Assignee">
           <optgroup label="AI agents">${agents.map((a) => `<option value="agent:${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</optgroup>
           <optgroup label="Humans">${people.map((p) => `<option value="human:${esc(p.id)}">${esc(p.name)}</option>`).join('')}</optgroup>
         </select></div>
-      <div><label class="fl">Project</label><select id="tk2-proj"><option value="">—</option>${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
-      <div><label class="fl">Priority</label><select id="tk2-prio"><option>normal</option><option>high</option><option>critical</option><option>low</option></select></div>
+      <div><label class="fl">Project</label><select id="tk2-proj" aria-label="Project"><option value="">—</option>${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Priority</label><select id="tk2-prio" aria-label="Priority"><option>normal</option><option>high</option><option>critical</option><option>low</option></select></div>
       <button class="btn btn-primary" id="tk2-go">Create</button>
     </div>
     <div><label class="fl">Details</label><textarea id="tk2-details"></textarea></div>
@@ -4099,7 +4145,7 @@ async function renderQuality() {
     <div class="panel-title">Manual quality review — drills are the proof (Part 5 §1.5)</div>
     <div class="form-inline">
       <div style="flex:1.5"><label class="fl">Area audited</label><input type="text" id="qr-area" placeholder="e.g. backup restore drill, support drafts sample"></div>
-      <div><label class="fl">Verdict</label><select id="qr-verdict"><option>pass</option><option>fail</option></select></div>
+      <div><label class="fl">Verdict</label><select id="qr-verdict" aria-label="Verdict"><option>pass</option><option>fail</option></select></div>
       <button class="btn btn-primary" id="qr-go">Record</button>
     </div>
     <div><label class="fl">Notes</label><input type="text" id="qr-notes"></div>
@@ -4296,7 +4342,7 @@ async function renderSettings() {
           <td class="mono" style="font-size:11px">${esc(p.keyName)}${p.configured && p.tail ? ` <span style="color:var(--ink-faint)">····${esc(p.tail)}</span>` : ''}${p.source ? ` <span class="chip chip-dim">${esc(p.source)}</span>` : ''}</td>
           <td>${p.available ? '<span class="chip chip-ok">available</span>' : '<span class="chip chip-warn">off</span>'}</td>
           <td>${p.kind === 'claude-cli'
-            ? `<select data-skey="${esc(p.keyName)}" style="width:auto"><option value="true" ${p.configured ? 'selected' : ''}>enabled</option><option value="" ${p.configured ? '' : 'selected'}>disabled</option></select>`
+            ? `<select data-skey="${esc(p.keyName)}" aria-label="${esc(p.provider)} — enabled or disabled" style="width:auto"><option value="true" ${p.configured ? 'selected' : ''}>enabled</option><option value="" ${p.configured ? '' : 'selected'}>disabled</option></select>`
             : `<input type="password" data-skey="${esc(p.keyName)}" placeholder="${p.configured ? 'replace key…' : 'paste API key…'}" style="width:220px">`}</td>
           <td><button class="btn btn-sm btn-ok" data-ssave="${esc(p.keyName)}">Save</button>
               ${p.configured && p.source === 'settings' ? `<button class="btn btn-sm btn-bad" data-sclear="${esc(p.keyName)}">Clear</button>` : ''}</td>
@@ -4665,8 +4711,8 @@ async function renderRelations() {
     <div class="panel-title">New relationship — partners, investors, government, media, community</div>
     <div class="form-inline">
       <div style="flex:1.6"><label class="fl">Name</label><input type="text" id="pr-name"></div>
-      <div><label class="fl">Kind</label><select id="pr-kind"><option>partner</option><option>investor</option><option>government</option><option>media</option><option>community</option><option>strategic</option></select></div>
-      <div><label class="fl">Tier</label><select id="pr-tier"><option>standard</option><option>key</option><option>strategic</option></select></div>
+      <div><label class="fl">Kind</label><select id="pr-kind" aria-label="Kind"><option>partner</option><option>investor</option><option>government</option><option>media</option><option>community</option><option>strategic</option></select></div>
+      <div><label class="fl">Tier</label><select id="pr-tier" aria-label="Tier"><option>standard</option><option>key</option><option>strategic</option></select></div>
       <div><label class="fl">Owner</label><input type="text" id="pr-owner" value="${esc(currentUser?.username || '')}"></div>
       <button class="btn btn-primary" id="pr-go">Add</button>
     </div>
@@ -4768,7 +4814,7 @@ async function renderJourneys() {
     <div class="panel-title">Start a company journey — the order crosses ALL 14 departments: strategy → research → product → finance → legal → architecture → engineering → review → QA → security → release → marketing → support → governance</div>
     <div class="form-inline">
       <div style="flex:2"><label class="fl">What is being built / ordered?</label><input type="text" id="jn-title" placeholder="e.g. Invoice OCR micro-SaaS for Iraqi SMEs"></div>
-      <div><label class="fl">Product (optional)</label><select id="jn-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product (optional)</label><select id="jn-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       <div><label class="fl">Autopilot</label><label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:8px 0"><input type="checkbox" id="jn-auto"> minimal human touch</label></div>
       <button class="btn btn-primary" id="jn-go">Launch journey</button>
     </div>
@@ -4877,7 +4923,7 @@ async function renderSocial() {
     <div class="panel">
       <div class="panel-title">Connect a channel</div>
       <div class="form-inline">
-        <div><label class="fl">Platform</label><select id="ch-platform"><option>x</option><option>linkedin</option><option>instagram</option><option>facebook</option><option>tiktok</option><option>youtube</option><option>telegram</option></select></div>
+        <div><label class="fl">Platform</label><select id="ch-platform" aria-label="Platform"><option>x</option><option>linkedin</option><option>instagram</option><option>facebook</option><option>tiktok</option><option>youtube</option><option>telegram</option></select></div>
         <div><label class="fl">Handle</label><input type="text" id="ch-handle" placeholder="@alphacore"></div>
         <div style="flex:0.5"><label class="fl">Followers</label><input type="text" id="ch-followers" value="0"></div>
         <button class="btn btn-primary" id="ch-go">Connect</button>
@@ -4886,9 +4932,9 @@ async function renderSocial() {
     <div class="panel">
       <div class="panel-title">New post — the SMM agent drafts, you publish</div>
       <div class="form-inline">
-        <div><label class="fl">Channel</label><select id="po-channel"><option value="">any</option>${ov.channels.map((c) => `<option value="${c.id}">${esc(c.platform)} @${esc(c.handle)}</option>`).join('')}</select></div>
-        <div><label class="fl">Kind</label><select id="po-kind"><option>post</option><option>thread</option><option>reel-script</option><option>story</option></select></div>
-        <div><label class="fl">Campaign</label><select id="po-camp"><option value="">—</option>${campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label class="fl">Channel</label><select id="po-channel" aria-label="Channel"><option value="">any</option>${ov.channels.map((c) => `<option value="${c.id}">${esc(c.platform)} @${esc(c.handle)}</option>`).join('')}</select></div>
+        <div><label class="fl">Kind</label><select id="po-kind" aria-label="Kind"><option>post</option><option>thread</option><option>reel-script</option><option>story</option></select></div>
+        <div><label class="fl">Campaign</label><select id="po-camp" aria-label="Campaign"><option value="">—</option>${campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
         <button class="btn btn-primary" id="po-go">Draft it</button>
       </div>
       <div><label class="fl">Brief</label><textarea id="po-brief" placeholder="What should this post say / achieve?"></textarea></div>
@@ -4980,7 +5026,7 @@ async function renderContent() {
   ${canM ? `<div class="panel">
     <div class="panel-title">Brief the Content Creator — articles, scripts, emails, landing copy</div>
     <div class="form-inline">
-      <div><label class="fl">Kind</label><select id="ct-kind"><option>article</option><option>blog</option><option>video-script</option><option>email</option><option>landing</option><option>doc</option></select></div>
+      <div><label class="fl">Kind</label><select id="ct-kind" aria-label="Kind"><option>article</option><option>blog</option><option>video-script</option><option>email</option><option>landing</option><option>doc</option></select></div>
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="ct-title"></div>
     </div>
     <div><label class="fl">Brief</label><textarea id="ct-brief" placeholder="Audience, angle, key points, call to action…"></textarea></div>
@@ -5025,7 +5071,7 @@ async function renderDesign() {
   ${canM ? `<div class="panel">
     <div class="panel-title">Brief the Designer — logos, banners, UI mockups, brand assets: designs for everything, delivered as real SVG files</div>
     <div class="form-inline">
-      <div><label class="fl">Kind</label><select id="ds-kind"><option>social-visual</option><option>logo</option><option>banner</option><option>ui</option><option>brand</option><option>diagram</option></select></div>
+      <div><label class="fl">Kind</label><select id="ds-kind" aria-label="Kind"><option>social-visual</option><option>logo</option><option>banner</option><option>ui</option><option>brand</option><option>diagram</option></select></div>
       <div style="flex:2"><label class="fl">Title</label><input type="text" id="ds-title"></div>
     </div>
     <div><label class="fl">Brief</label><textarea id="ds-brief" placeholder="Purpose, mood, colors, text to include, dimensions…"></textarea></div>
@@ -5076,8 +5122,8 @@ async function renderSales() {
     <div class="form-inline">
       <div style="flex:1.8"><label class="fl">Deal name</label><input type="text" id="dl-name" placeholder="e.g. Basra Oil Co — pilot"></div>
       <div style="flex:0.6"><label class="fl">Value $/yr</label><input type="text" id="dl-value" value="0"></div>
-      <div><label class="fl">Product</label><select id="dl-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
-      <div><label class="fl">Partner</label><select id="dl-partner"><option value="">—</option>${partners.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product</label><select id="dl-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Partner</label><select id="dl-partner" aria-label="Partner"><option value="">—</option>${partners.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="dl-go">Open deal</button>
     </div>
     <div><label class="fl">Notes</label><input type="text" id="dl-notes" placeholder="who, why now, what they need"></div>
@@ -5230,7 +5276,7 @@ async function renderSystems() {
     <div class="panel-title">New design package — one sentence in, a complete specification out</div>
     <div class="form-inline">
       <div style="flex:1.4"><label class="fl">System name</label><input type="text" id="bp-name" placeholder="Invoice OCR platform"></div>
-      <div><label class="fl">Product</label><select id="bp-prod"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label class="fl">Product</label><select id="bp-prod" aria-label="Product"><option value="">—</option>${products.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="bp-go">Generate package</button>
     </div>
     <div><label class="fl">Goal — what must this system do, for whom?</label><textarea id="bp-goal" placeholder="A web app that lets Iraqi SMEs photograph supplier invoices and get structured accounting entries, with Arabic OCR and export to their accountant."></textarea></div>
@@ -5240,7 +5286,7 @@ async function renderSystems() {
       <div><label class="fl">Budget</label><input type="text" id="bp-budget" placeholder="$500/mo infra"></div>
       <div><label class="fl">Stack preference</label><input type="text" id="bp-stack" placeholder="any / Node + Postgres"></div>
       <div><label class="fl">Compliance</label><input type="text" id="bp-comp" placeholder="Iraqi data residency"></div>
-      <div><label class="fl">Language</label><select id="bp-lang"><option value="English">English</option><option value="Arabic">العربية</option><option value="Arabic and English">both</option></select></div>
+      <div><label class="fl">Language</label><select id="bp-lang" aria-label="Language"><option value="English">English</option><option value="Arabic">العربية</option><option value="Arabic and English">both</option></select></div>
     </div>
     <div class="panel-title" style="margin-top:12px">Documents to produce — ${catalog.length} available, all selected by default</div>
     <div class="rule-grid">
@@ -5353,8 +5399,8 @@ async function renderInfra() {
     <div class="panel-title">Plan the infrastructure — sized from the load you state, with the arithmetic shown</div>
     <div class="form-inline">
       <div style="flex:1.4"><label class="fl">Name</label><input type="text" id="if-name" placeholder="Invoice OCR — production"></div>
-      <div><label class="fl">Section</label><select id="if-section">${sections.map((s) => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('')}</select></div>
-      <div><label class="fl">From design</label><select id="if-bp"><option value="">—</option>${blueprints.map((b) => `<option value="${b.id}">${esc(short(b.name, 26))}</option>`).join('')}</select></div>
+      <div><label class="fl">Section</label><select id="if-section" aria-label="Section">${sections.map((s) => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('')}</select></div>
+      <div><label class="fl">From design</label><select id="if-bp" aria-label="Blueprint"><option value="">—</option>${blueprints.map((b) => `<option value="${b.id}">${esc(short(b.name, 26))}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="if-go">Design it</button>
     </div>
     <div class="form-inline">
@@ -5419,7 +5465,7 @@ async function renderFinReports() {
   ${canM ? `<div class="panel">
     <div class="panel-title">Prepare a financial document — internal ones are built on the live ledger, not on guesses</div>
     <div class="form-inline">
-      <div style="flex:1.6"><label class="fl">Document</label><select id="fr-kind">${overview.kinds.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}${k.internal ? '' : ' — external company'}</option>`).join('')}</select></div>
+      <div style="flex:1.6"><label class="fl">Document</label><select id="fr-kind" aria-label="Kind">${overview.kinds.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}${k.internal ? '' : ' — external company'}</option>`).join('')}</select></div>
       <div><label class="fl">Period</label><input type="text" id="fr-period" placeholder="${new Date().toISOString().slice(0, 7)}"></div>
       <div style="flex:1.2"><label class="fl">Company (research only)</label><input type="text" id="fr-subject" placeholder="e.g. Basra Oil Company"></div>
       <button class="btn btn-primary" id="fr-go">Prepare</button>
@@ -5689,7 +5735,7 @@ async function renderRequests() {
     <div><textarea id="rq-body" style="min-height:96px" placeholder="مثال: اريد دراسة كاملة لإطلاق تطبيق فواتير للشركات الصغيرة في العراق — السوق، المتطلبات، التصميم التقني، التكلفة، وخطة التسويق&#10;or: Find me 10 energy companies in Basra with real contact details, then draft an intro email for each"></textarea></div>
     <div class="form-inline">
       <div style="flex:2"><label class="fl">Title (optional — the router will name it)</label><input type="text" id="rq-title"></div>
-      <div><label class="fl">Priority</label><select id="rq-prio"><option>normal</option><option>high</option><option>critical</option><option>low</option></select></div>
+      <div><label class="fl">Priority</label><select id="rq-prio" aria-label="Priority"><option>normal</option><option>high</option><option>critical</option><option>low</option></select></div>
       <button class="btn btn-primary" id="rq-go">Submit to the company</button>
     </div>
     <div class="map-legend">The intake router reads your request and draws its own route through the departments that must each do something real — it is not a fixed template. Steps run by themselves, open actual work in other sections when needed (an intelligence campaign, a design package, a financial report), and stop only where a person is required. You can watch every step below.</div>
@@ -6123,7 +6169,7 @@ const DEPT_PAGES = {
     form: () => `
       <div class="form-inline">
         <div style="flex:1.4"><label class="fl">Name</label><input type="text" id="as-name" placeholder="alphacore.iq domain"></div>
-        <div><label class="fl">Kind</label><select id="as-kind"><option>domain</option><option>license</option><option>credential</option><option>device</option><option>repo</option><option>account</option><option>certificate</option></select></div>
+        <div><label class="fl">Kind</label><select id="as-kind" aria-label="Kind"><option>domain</option><option>license</option><option>credential</option><option>device</option><option>repo</option><option>account</option><option>certificate</option></select></div>
         <div><label class="fl">Owner</label><input type="text" id="as-owner" value="${esc(currentUser?.username || '')}"></div>
         <div style="flex:0.6"><label class="fl">$/mo</label><input type="text" id="as-cost" value="0"></div>
         <div><label class="fl">Renews</label><input type="text" id="as-renew" placeholder="2027-01-15"></div>
@@ -6157,9 +6203,9 @@ const DEPT_PAGES = {
     form: () => `
       <div class="form-inline">
         <div style="flex:1.4"><label class="fl">Title</label><input type="text" id="lo-title"></div>
-        <div><label class="fl">From</label><select id="lo-kind"><option value="manual">pasted text</option><option value="content">content item</option><option value="post">social post</option><option value="doc">design document</option></select></div>
+        <div><label class="fl">From</label><select id="lo-kind" aria-label="Kind"><option value="manual">pasted text</option><option value="content">content item</option><option value="post">social post</option><option value="doc">design document</option></select></div>
         <div style="flex:0.5"><label class="fl">Source #</label><input type="text" id="lo-sid" placeholder="id"></div>
-        <div style="flex:0.5"><label class="fl">Into</label><select id="lo-lang"><option value="ar">العربية</option><option value="en">English</option><option value="ku">Kurdish</option><option value="tr">Türkçe</option></select></div>
+        <div style="flex:0.5"><label class="fl">Into</label><select id="lo-lang" aria-label="Language"><option value="ar">العربية</option><option value="en">English</option><option value="ku">Kurdish</option><option value="tr">Türkçe</option></select></div>
         <button class="btn btn-primary" id="lo-go">Translate</button>
       </div>
       <div><label class="fl">Text (leave blank when pulling from a source above)</label><textarea id="lo-text" style="min-height:80px"></textarea></div>`,
@@ -6215,7 +6261,7 @@ const DEPT_PAGES = {
     ],
     form: (extra) => `
       <div class="form-inline">
-        <div style="flex:1.4"><label class="fl">Employee</label><select id="en-agent">${(extra.agents || []).map((a) => `<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</select></div>
+        <div style="flex:1.4"><label class="fl">Employee</label><select id="en-agent" aria-label="Agent">${(extra.agents || []).map((a) => `<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('')}</select></div>
         <button class="btn btn-primary" id="en-go">Analyse and plan</button>
       </div>`,
     submit: async () => api('/api/enablement', { method: 'POST', body: { agentId: $('#en-agent').value } }),
@@ -6353,7 +6399,7 @@ async function renderConnectors() {
   <div class="panel">
     <div class="panel-title">Try a call by hand</div>
     <div class="form-inline">
-      <select id="cc-conn">${d.connectors.filter((c) => c.state !== 'disconnected').map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('') || '<option>connect something first</option>'}</select>
+      <select id="cc-conn" aria-label="Connector">${d.connectors.filter((c) => c.state !== 'disconnected').map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('') || '<option>connect something first</option>'}</select>
       <input id="cc-cap" placeholder="capability, e.g. mail.read" style="width:180px">
       <input id="cc-args" placeholder='{"query":"is:unread","max":3}' style="width:38%">
       <button class="btn btn-sm btn-primary" id="cc-go">Call</button>
@@ -6508,7 +6554,7 @@ async function renderVault() {
       <input id="v-name" placeholder="NAME_LIKE_THIS" style="width:200px">
       <input id="v-val" type="password" placeholder="the value — stored encrypted, never shown again" style="width:34%">
       <input id="v-conn" placeholder="connector (optional)" style="width:130px">
-      <input id="v-exp" type="date" title="expires">
+      <input id="v-exp" aria-label="Expires" type="date" title="expires">
       <button class="btn btn-sm btn-primary" id="v-put">Store</button>
     </div>` : '<div class="empty">vault.manage required</div>'}
     <table><thead><tr><th>Name</th><th>Kind</th><th>For</th><th>Ends</th><th>Expires</th><th>Last used</th><th></th></tr></thead><tbody>
@@ -6802,7 +6848,7 @@ async function renderConstitution() {
         <input id="ct-article" placeholder="article, e.g. Consent">
         <textarea id="ct-text" rows="3" placeholder="The sentence a person reads."></textarea>
         <input id="ct-machine" placeholder='machine form (optional): {"gate": {"capabilityIn": ["call.place"]}}'>
-        <select id="ct-sev"><option value="warn">warn</option><option value="gate">stop for a person</option><option value="block">refuse outright</option></select>
+        <select id="ct-sev" aria-label="Severity"><option value="warn">warn</option><option value="gate">stop for a person</option><option value="block">refuse outright</option></select>
         <button class="btn btn-primary" id="ct-add">Enact</button>
       </div>
       <div class="map-legend">A rule nobody can check is a slogan; a check nobody can read is a trap. Write both halves. Amending replaces the rule with a new version and leaves the old one in the record — the constitution has a history, not a current state.</div>
@@ -6946,7 +6992,7 @@ async function renderSimulation() {
       <input id="sm-name" placeholder="a short name, e.g. marketing cut">
       <textarea id="sm-q" rows="2" placeholder="What happens if we cut marketing by forty per cent?"></textarea>
       <div class="form-inline">
-        <select id="sm-lever">${d.levers.map((l) => `<option value="${esc(l.id)}">${esc(l.id)} — ${esc(l.describe)}</option>`).join('')}</select>
+        <select id="sm-lever" aria-label="Lever">${d.levers.map((l) => `<option value="${esc(l.id)}">${esc(l.id)} — ${esc(l.describe)}</option>`).join('')}</select>
         <input id="sm-arg" placeholder='{"factor": 0.6}' style="width:180px">
         <button class="btn btn-primary" id="sm-run">Fork and run</button>
       </div>
@@ -7032,7 +7078,7 @@ async function renderSkills() {
   <div class="panel">
     <div class="panel-title">Model tournaments — which model actually wins which work</div>
     ${canM ? `<div class="form-inline">
-      <select id="tn-task">${d.taskTypes.map((t) => `<option value="${esc(t.task_type)}">${esc(t.task_type)} (${t.runs} runs)</option>`).join('')}</select>
+      <select id="tn-task" aria-label="Task">${d.taskTypes.map((t) => `<option value="${esc(t.task_type)}">${esc(t.task_type)} (${t.runs} runs)</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" id="tn-run">Run a tournament</button>
     </div>` : ''}
     ${d.tournaments.map((t) => `
@@ -7346,7 +7392,7 @@ async function renderObserve() {
   const spark = (series, colour) => {
     if (!series.length) return '<div class="sub">no measurements yet</div>';
     const max = Math.max(...series.map((p) => p.v), 0.0001);
-    return `<svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:36px">
+    return `<svg aria-hidden="true" focusable="false" viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:36px">
       <polyline fill="none" stroke="${colour}" stroke-width="1.5" vector-effect="non-scaling-stroke"
         points="${series.map((p, i) => `${(i / Math.max(1, series.length - 1)) * 100},${28 - (p.v / max) * 26}`).join(' ')}"/>
     </svg>`;
@@ -7484,8 +7530,8 @@ async function renderKeys() {
     <div class="panel-title">Mint a key</div>
     <div class="form-inline">
       <input id="ak-name" placeholder="what it is for, e.g. reporting script" style="width:220px">
-      <input id="ak-rate" type="number" value="120" title="calls per minute" style="width:110px">
-      <input id="ak-exp" type="date" title="expires">
+      <input id="ak-rate" aria-label="Rate" type="number" value="120" title="calls per minute" style="width:110px">
+      <input id="ak-exp" aria-label="Expires" type="date" title="expires">
       <button class="btn btn-sm btn-primary" id="ak-make">Create</button>
     </div>
     <div class="sub" style="margin-top:8px">Scopes — pick only what it needs:</div>
@@ -7792,9 +7838,9 @@ async function renderEvents() {
     <div class="form-grid">
       <input id="ev-name" placeholder="what it is called">
       <div class="form-inline">
-        <select id="ev-kind"><option value="webinar">webinar</option><option value="roundtable">roundtable</option><option value="conference">conference</option><option value="meetup">meetup</option></select>
-        <select id="ev-format"><option value="online">online</option><option value="in-person">in person</option><option value="hybrid">hybrid</option></select>
-        <input id="ev-when" type="datetime-local" style="width:210px">
+        <select id="ev-kind" aria-label="Kind"><option value="webinar">webinar</option><option value="roundtable">roundtable</option><option value="conference">conference</option><option value="meetup">meetup</option></select>
+        <select id="ev-format" aria-label="Format"><option value="online">online</option><option value="in-person">in person</option><option value="hybrid">hybrid</option></select>
+        <input id="ev-when" aria-label="When" type="datetime-local" style="width:210px">
         <input id="ev-city" placeholder="city" style="width:130px">
         <input id="ev-budget" type="number" placeholder="budget $" style="width:120px">
       </div>
@@ -7862,7 +7908,7 @@ async function renderPress() {
     <div class="panel-title">Write something</div>
     <div class="form-grid">
       <div class="form-inline">
-        <select id="pr-kind"><option value="release">press release</option><option value="pitch">pitch</option><option value="briefing">briefing</option></select>
+        <select id="pr-kind" aria-label="Kind"><option value="release">press release</option><option value="pitch">pitch</option><option value="briefing">briefing</option></select>
         <input id="pr-outlet" placeholder="outlet" style="width:180px">
         <input id="pr-journalist" placeholder="journalist" style="width:180px">
       </div>
@@ -7922,7 +7968,7 @@ async function renderCommunity() {
     <div class="form-inline">
       <input id="cm-handle" placeholder="@handle or name" style="width:200px">
       <input id="cm-channel" placeholder="where — x, linkedin, telegram…" style="width:170px">
-      <select id="cm-role"><option value="member">member</option><option value="advocate">advocate</option><option value="ambassador">ambassador</option><option value="critic">critic</option></select>
+      <select id="cm-role" aria-label="Role"><option value="member">member</option><option value="advocate">advocate</option><option value="ambassador">ambassador</option><option value="critic">critic</option></select>
       <input id="cm-reach" type="number" placeholder="reach" style="width:110px">
       <button class="btn btn-sm btn-primary" id="cm-add">Add</button>
     </div>
@@ -8015,7 +8061,7 @@ async function renderPages() {
     <div class="form-inline">
       <input id="pg-slug" placeholder="slug, e.g. oil-and-gas-arabic" style="width:230px">
       <input id="pg-title" placeholder="title" style="width:200px">
-      <select id="pg-persona"><option value="">any persona</option>${d.personas.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+      <select id="pg-persona" aria-label="Persona"><option value="">any persona</option>${d.personas.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" id="pg-add">Draft</button>
     </div>
     <input id="pg-purpose" placeholder="what one action this page is for" style="width:60%;margin-top:8px">
@@ -8090,7 +8136,7 @@ async function renderMktOps() {
   <div class="panel">
     <div class="panel-title">Add a rule or a tool</div>
     <div class="form-inline">
-      <select id="op-kind"><option value="tool">tool</option><option value="rule">rule</option><option value="tracking">tracking</option><option value="convention">convention</option></select>
+      <select id="op-kind" aria-label="Kind"><option value="tool">tool</option><option value="rule">rule</option><option value="tracking">tracking</option><option value="convention">convention</option></select>
       <input id="op-name" placeholder="name" style="width:180px">
       <input id="op-value" placeholder="value" style="width:120px">
       <button class="btn btn-sm btn-primary" id="op-add">Add</button>
@@ -8334,7 +8380,7 @@ async function renderCompliance() {
     <div class="panel-title">Attestations — human-signed, auditor-ready</div>
     ${canM ? `<div class="form-inline">
       <input id="cc-area" placeholder="area, e.g. access-control" style="width:200px">
-      <select id="cc-status" style="width:auto"><option value="ok">ok</option><option value="gap">gap</option><option value="na">n/a</option></select>
+      <select id="cc-status" aria-label="Status" style="width:auto"><option value="ok">ok</option><option value="gap">gap</option><option value="na">n/a</option></select>
       <input id="cc-note" placeholder="note" style="width:280px">
       <button class="btn btn-sm btn-primary" id="cc-go">Record check</button></div>` : ''}
     <table><thead><tr><th>Area</th><th>Status</th><th>Note</th><th>By</th><th>When</th></tr></thead><tbody>
@@ -8453,7 +8499,7 @@ async function renderPmo() {
     ${tile('Failed', d.stats.failed, 'work sent back')}
     <div class="panel tile"><div class="panel-title">New gate</div>
       ${canM ? `<div class="form-inline" style="flex-direction:column;align-items:stretch;gap:6px">
-        <select id="pg-proj">${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+        <select id="pg-proj" aria-label="Project">${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
         <input id="pg-gate" placeholder="gate, e.g. Design freeze">
         <button class="btn btn-sm btn-primary" id="pg-go">Create</button></div>` : '<div class="sub">pmo.manage required</div>'}</div>
   </div>
@@ -8500,7 +8546,7 @@ async function renderBrand() {
   view.innerHTML = `
   <div class="panel"><div class="panel-title">Brand studio — the identity every agent must obey</div>
     ${canM ? `<div class="form-inline">
-      <select id="br-kind" style="width:auto"><option>voice</option><option>palette</option><option>logo-spec</option><option>boilerplate</option><option>guideline</option></select>
+      <select id="br-kind" aria-label="Kind" style="width:auto"><option>voice</option><option>palette</option><option>logo-spec</option><option>boilerplate</option><option>guideline</option></select>
       <input id="br-name" placeholder="asset name" style="width:220px">
       <button class="btn btn-sm btn-primary" id="br-go">Draft with an agent</button></div>` : ''}
   </div>
@@ -8525,7 +8571,7 @@ async function renderProcurement() {
     ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
       <input id="pu-item" placeholder="item" style="width:220px">
       <input id="pu-amt" type="number" placeholder="USD" style="width:90px">
-      <select id="pu-vendor" style="width:auto"><option value="">— vendor —</option>${vendors.map((v) => `<option value="${v.id}">${esc(v.name)}</option>`).join('')}</select>
+      <select id="pu-vendor" aria-label="Vendor" style="width:auto"><option value="">— vendor —</option>${vendors.map((v) => `<option value="${v.id}">${esc(v.name)}</option>`).join('')}</select>
       <input id="pu-why" placeholder="justification" style="width:260px">
       <button class="btn btn-sm btn-primary" id="pu-go">Request</button></div>` : ''}
     <table><thead><tr><th>#</th><th>Item</th><th class="num">USD</th><th>Vendor</th><th>State</th><th>By / Approver</th><th></th></tr></thead><tbody>
@@ -8617,7 +8663,7 @@ async function renderAcademy() {
     </div>`).join('')}</div>` : ''}
   <div class="panel"><div class="panel-title">New curriculum</div>
     ${canM ? `<div class="form-inline">
-      <select id="ac-agent">${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
+      <select id="ac-agent" aria-label="Agent">${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
       <input id="ac-title" placeholder="curriculum title" style="width:280px">
       <button class="btn btn-sm btn-primary" id="ac-go">Create</button></div>` : '<div class="map-legend">academy.manage required.</div>'}
   </div>
@@ -8729,10 +8775,10 @@ async function renderWorkstreams() {
     <div class="panel-title">Start a workstream — pick the methodology the work actually needs</div>
     ${canM ? `<div class="form-inline" style="flex-wrap:wrap;gap:8px">
       <input id="ws-title" placeholder="title" style="width:220px">
-      <select id="ws-method" style="width:auto">${Object.entries(d.methods).map(([k, m]) => `<option value="${k}" ${k === 'kaizen' ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
-      <input id="ws-target" type="number" step="0.05" min="0.5" max="1" value="0.85" title="quality target" style="width:80px">
-      <input id="ws-cycles" type="number" min="1" max="8" value="4" title="cycle budget" style="width:70px">
-      <select id="ws-reviewers" style="width:auto" title="peer reviewers per round"><option value="1">1 reviewer</option><option value="2" selected>2 reviewers</option><option value="3">3 reviewers</option></select>
+      <select id="ws-method" aria-label="Method" style="width:auto">${Object.entries(d.methods).map(([k, m]) => `<option value="${k}" ${k === 'kaizen' ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
+      <input id="ws-target" aria-label="Target" type="number" step="0.05" min="0.5" max="1" value="0.85" title="quality target" style="width:80px">
+      <input id="ws-cycles" aria-label="Cycles" type="number" min="1" max="8" value="4" title="cycle budget" style="width:70px">
+      <select id="ws-reviewers" aria-label="Reviewers" style="width:auto" title="peer reviewers per round"><option value="1">1 reviewer</option><option value="2" selected>2 reviewers</option><option value="3">3 reviewers</option></select>
       <textarea id="ws-goal" placeholder="the goal — what must exist when this is done" style="width:100%;height:52px"></textarea>
       <div style="width:100%">
         <div class="map-legend" style="margin:0 0 4px">Route — the departments this work travels through, in order (click to toggle):</div>
@@ -8795,7 +8841,7 @@ async function renderWorkstreamDetail(id) {
     ${w.note ? `<div class="map-legend" style="color:var(--warn)">${esc(w.note)}</div>` : ''}
     ${canM && w.state !== 'done' ? `<div class="form-inline" style="margin-top:10px;flex-wrap:wrap">
       <input id="wd-note" placeholder="your instruction for the next round — the agents must obey it" style="width:48%">
-      <select id="wd-dept" style="width:auto"><option value="">same department</option>${w.route.map((r) => `<option value="${esc(r)}">re-run in ${esc(r)}</option>`).join('')}</select>
+      <select id="wd-dept" aria-label="Department" style="width:auto"><option value="">same department</option>${w.route.map((r) => `<option value="${esc(r)}">re-run in ${esc(r)}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" id="wd-rerun">Run another round</button>
       <button class="btn btn-sm" id="wd-note-only">Save note only</button>
       ${w.state === 'awaiting_human' ? '<button class="btn btn-sm btn-ok" id="wd-accept">Accept the work</button>' : ''}
@@ -8849,7 +8895,7 @@ async function renderAuditor() {
   <div class="panel">
     <div class="panel-title">Send anything to the auditor — one standard, every department</div>
     ${canR ? `<div class="form-inline" style="flex-wrap:wrap">
-      <select id="au-type" style="width:auto">
+      <select id="au-type" aria-label="Type" style="width:auto">
         <option value="content">content item</option><option value="post">social post</option>
         <option value="ticket">support draft</option><option value="release">release notes</option>
         <option value="brand">brand asset</option><option value="bulletin">bulletin</option>
@@ -8896,7 +8942,7 @@ async function renderSprints() {
     ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
       <input id="sp-name" placeholder="sprint name, e.g. Sprint 4" style="width:170px">
       <input id="sp-goal" placeholder="sprint goal — one sentence" style="width:340px">
-      <input id="sp-start" type="date" style="width:140px"><input id="sp-end" type="date" style="width:140px">
+      <input id="sp-start" aria-label="Start" type="date" style="width:140px"><input id="sp-end" aria-label="End" type="date" style="width:140px">
       <button class="btn btn-sm btn-primary" id="sp-go">Create</button></div>` : ''}
   </div>
   ${sprints.map((s) => {
@@ -8986,8 +9032,8 @@ async function renderMarketingDept() {
     channels: () => `
       <div class="panel"><div class="panel-title">Channel performance — what each one cost and returned</div>
         ${canM ? `<div class="form-inline">
-          <select id="cc-camp" style="width:auto">${d.campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option value="">no campaigns</option>'}</select>
-          <select id="cc-chan" style="width:auto">${['search', 'social', 'email', 'content', 'events', 'partners', 'outbound'].map((c) => `<option>${c}</option>`).join('')}</select>
+          <select id="cc-camp" aria-label="Campaign" style="width:auto">${d.campaigns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option value="">no campaigns</option>'}</select>
+          <select id="cc-chan" aria-label="Channel" style="width:auto">${['search', 'social', 'email', 'content', 'events', 'partners', 'outbound'].map((c) => `<option>${c}</option>`).join('')}</select>
           <input id="cc-bud" type="number" placeholder="budget $" style="width:110px">
           <button class="btn btn-sm btn-primary" id="cc-go">Plan channel</button></div>` : ''}
         <table><thead><tr><th>Channel</th><th class="num">Budget</th><th class="num">Spent</th><th class="num">Impr.</th><th class="num">Clicks</th><th class="num">CTR</th><th class="num">Leads</th><th class="num">CPL</th><th class="num">Customers</th><th class="num">CAC</th><th>Verdict</th></tr></thead><tbody>
@@ -9013,10 +9059,10 @@ async function renderMarketingDept() {
       <div class="panel"><div class="panel-title">Editorial calendar — planned against the funnel, not the mood</div>
         ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
           <input id="cal-t" placeholder="title" style="width:240px">
-          <select id="cal-ch" style="width:auto">${['blog', 'social', 'email', 'video', 'landing'].map((x) => `<option>${x}</option>`).join('')}</select>
-          <select id="cal-st" style="width:auto">${['awareness', 'consideration', 'decision', 'retention'].map((x) => `<option>${x}</option>`).join('')}</select>
-          <select id="cal-pa" style="width:auto"><option value="">— persona —</option>${d.personas.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
-          <input id="cal-due" type="date" style="width:150px">
+          <select id="cal-ch" aria-label="Channel" style="width:auto">${['blog', 'social', 'email', 'video', 'landing'].map((x) => `<option>${x}</option>`).join('')}</select>
+          <select id="cal-st" aria-label="State" style="width:auto">${['awareness', 'consideration', 'decision', 'retention'].map((x) => `<option>${x}</option>`).join('')}</select>
+          <select id="cal-pa" aria-label="Party A" style="width:auto"><option value="">— persona —</option>${d.personas.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+          <input id="cal-due" aria-label="Due" type="date" style="width:150px">
           <button class="btn btn-sm btn-primary" id="cal-go">Add to calendar</button></div>` : ''}
         <table><thead><tr><th>Due</th><th>Title</th><th>Channel</th><th>Stage</th><th>Persona</th><th>State</th><th></th></tr></thead><tbody>
         ${d.calendar.map((c) => `<tr>
@@ -9032,7 +9078,7 @@ async function renderMarketingDept() {
       <div class="panel"><div class="panel-title">Search — the queries worth winning</div>
         ${canM ? `<div class="form-inline">
           <input id="seo-t" placeholder="topic, e.g. invoice data extraction" style="width:280px">
-          <select id="seo-l" style="width:auto"><option value="en">English</option><option value="ar">العربية</option></select>
+          <select id="seo-l" aria-label="Level" style="width:auto"><option value="en">English</option><option value="ar">العربية</option></select>
           <button class="btn btn-sm btn-primary" id="seo-go">Research</button></div>
           <div class="map-legend">The SEO lead returns keywords with intent and difficulty. Volumes stay empty unless real data is supplied — an invented number is worse than none.</div>` : ''}
         <table><thead><tr><th>Keyword</th><th>Lang</th><th>Intent</th><th class="num">Difficulty</th><th class="num">Priority</th></tr></thead><tbody>
@@ -9141,10 +9187,10 @@ async function renderMoney() {
       </tr>`).join('')}
       </tbody></table>
       ${canM ? `<div class="form-inline" style="margin-top:10px">
-        <input id="m-res" type="number" value="${p.reserve_pct}" style="width:80px" title="reserve %">
-        <input id="m-opex" type="number" value="${p.opex_pct}" style="width:80px" title="opex %">
-        <input id="m-grow" type="number" value="${p.growth_pct}" style="width:80px" title="growth %">
-        <input id="m-run" type="number" value="${p.min_runway_mo}" style="width:80px" title="min runway months">
+        <input id="m-res" aria-label="Reserve" type="number" value="${p.reserve_pct}" style="width:80px" title="reserve %">
+        <input id="m-opex" aria-label="Operating spend" type="number" value="${p.opex_pct}" style="width:80px" title="opex %">
+        <input id="m-grow" aria-label="Growth" type="number" value="${p.growth_pct}" style="width:80px" title="growth %">
+        <input id="m-run" aria-label="Runway" type="number" value="${p.min_runway_mo}" style="width:80px" title="min runway months">
         <button class="btn btn-sm btn-primary" id="m-set">Set policy</button>
       </div><div class="map-legend">reserve · opex · growth must add up to 100</div>` : ''}
     </div>
@@ -9161,8 +9207,8 @@ async function renderMoney() {
   <div class="panel">
     <div class="panel-title">Money moves — every allocation with a reason attached</div>
     ${canM ? `<div class="form-inline">
-      <select id="mv-kind" style="width:auto"><option value="allocation">allocation</option><option value="transfer">transfer</option><option value="writeoff">writeoff</option><option value="note">note</option></select>
-      <select id="mv-bucket" style="width:auto"><option value="">— bucket —</option><option>reserve</option><option>opex</option><option>growth</option></select>
+      <select id="mv-kind" aria-label="Kind" style="width:auto"><option value="allocation">allocation</option><option value="transfer">transfer</option><option value="writeoff">writeoff</option><option value="note">note</option></select>
+      <select id="mv-bucket" aria-label="Bucket" style="width:auto"><option value="">— bucket —</option><option>reserve</option><option>opex</option><option>growth</option></select>
       <input id="mv-amt" type="number" step="0.01" placeholder="amount" style="width:110px">
       <input id="mv-why" placeholder="reason" style="width:280px">
       <button class="btn btn-sm" id="mv-add">Record</button></div>` : ''}
@@ -9217,9 +9263,9 @@ async function renderContact() {
     ${canM ? `<div class="form-inline" style="flex-wrap:wrap">
       <input id="c-to" placeholder="+964..." style="width:150px">
       <input id="c-why" placeholder="purpose of the call" style="width:260px">
-      <select id="c-voice" style="width:auto">${c.voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}</select>
-      <select id="c-lang" style="width:auto"><option value="en">English</option><option value="ar">العربية</option></select>
-      <select id="c-agent" style="width:auto"><option value="">— any employee —</option>${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
+      <select id="c-voice" aria-label="Voice" style="width:auto">${c.voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}</select>
+      <select id="c-lang" aria-label="Language" style="width:auto"><option value="en">English</option><option value="ar">العربية</option></select>
+      <select id="c-agent" aria-label="Agent" style="width:auto"><option value="">— any employee —</option>${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" id="c-add">Queue call</button></div>` : ''}
     <table><thead><tr><th>#</th><th>To</th><th>Purpose</th><th>Voice</th><th>State</th><th></th></tr></thead><tbody>
     ${c.calls.map((x) => `<tr>
@@ -9239,8 +9285,8 @@ async function renderContact() {
     ${canM ? `<div class="form-inline">
       <input id="s-to" placeholder="+964..." style="width:150px">
       <input id="s-body" placeholder="message (leave empty to have an employee write it)" style="width:320px">
-      <select id="s-chan" style="width:auto"><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select>
-      <select id="s-agent" style="width:auto"><option value="">— draft with —</option>${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
+      <select id="s-chan" aria-label="Channel" style="width:auto"><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select>
+      <select id="s-agent" aria-label="Agent" style="width:auto"><option value="">— draft with —</option>${agents.map((a) => `<option value="${esc(a.id)}">${esc(a.id)}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" id="s-add">Queue message</button></div>` : ''}
     ${c.threads.map((t) => `<div class="panel" style="margin-top:10px;background:var(--bg-sunk)">
       <div class="panel-title mono" style="font-size:11px">${esc(t.key)} · ${t.count}</div>
@@ -9285,7 +9331,7 @@ async function renderTreasury() {
     <div class="map-legend">This platform stores <b>addresses only</b>. No private key, seed phrase or mnemonic is kept here or asked for anywhere — the company can watch money arrive and cannot move it.</div>
     ${canM ? `<div class="form-inline">
       <input id="w-label" placeholder="label, e.g. Main receiving" style="width:180px">
-      <select id="w-chain" style="width:auto">${chains.map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('')}</select>
+      <select id="w-chain" aria-label="Chain" style="width:auto">${chains.map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('')}</select>
       <input id="w-addr" placeholder="public address" style="width:320px">
       <button class="btn btn-sm btn-primary" id="w-add">Add wallet</button>
     </div>` : ''}
@@ -9306,7 +9352,7 @@ async function renderTreasury() {
     ${canM ? `<div class="form-inline">
       <input id="i-desc" placeholder="what is being billed" style="width:260px">
       <input id="i-amt" type="number" step="0.0001" placeholder="amount" style="width:120px">
-      <select id="i-chain" style="width:auto"><option value="">— any wallet —</option>${chains.map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('')}</select>
+      <select id="i-chain" aria-label="Chain" style="width:auto"><option value="">— any wallet —</option>${chains.map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('')}</select>
       <button class="btn btn-sm btn-primary" id="i-add">Issue invoice</button>
     </div>` : ''}
     <table><thead><tr><th>Ref</th><th>For</th><th class="num">Amount</th><th>Pay to</th><th>State</th><th></th></tr></thead><tbody>
@@ -9334,7 +9380,7 @@ async function renderTreasury() {
       <div class="map-legend">The platform holds no key, so it cannot send. A payout is a request; you sign it in your own wallet and paste the transaction hash back so the ledger matches the chain. <b>Autonomy mode cannot release these.</b></div>
       ${canM ? `<div class="form-inline">
         <input id="p-addr" placeholder="destination address" style="width:220px">
-        <select id="p-chain" style="width:auto">${chains.map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('')}</select>
+        <select id="p-chain" aria-label="Chain" style="width:auto">${chains.map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('')}</select>
         <input id="p-amt" type="number" step="0.0001" placeholder="amount" style="width:100px">
         <input id="p-why" placeholder="reason" style="width:180px">
         <button class="btn btn-sm" id="p-add">Prepare payout</button>
@@ -9573,7 +9619,7 @@ async function renderMemory() {
     <div class="panel-title"><span>${esc(agent.agentId)} — playbook <span class="chip chip-dim">workspace/_memory/${esc(agent.agentId)}.md</span></span>
       <span class="chip">${agent.recalls} recalls</span></div>
     <div class="map-legend">This Markdown file is read before every single task this agent performs. Edit it and the change takes effect on the very next run.</div>
-    <textarea id="mem-pb" style="width:100%;height:230px;font-family:var(--font-mono);font-size:11.5px" ${canM ? '' : 'readonly'}>${esc(agent.playbook || '')}</textarea>
+    <textarea id="mem-pb" aria-label="Playbook" style="width:100%;height:230px;font-family:var(--font-mono);font-size:11.5px" ${canM ? '' : 'readonly'}>${esc(agent.playbook || '')}</textarea>
     ${canM ? '<button class="btn btn-sm btn-primary" id="mem-save" style="margin-top:8px">Save playbook</button>' : ''}
   </div>
   <div class="grid grid-2">
