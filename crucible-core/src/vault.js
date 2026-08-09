@@ -31,14 +31,19 @@ function masterKey() {
   return scryptSync(raw.subarray(16), raw.subarray(0, 16), 32);
 }
 
-function seal(plain) {
+/**
+ * Sealing and opening are exported so other things can be wrapped under the
+ * same master key. A second key file would be a second thing to back up, a
+ * second thing to rotate, and a second thing to lose.
+ */
+export function seal(plain) {
   const iv = randomBytes(12);
   const c = createCipheriv('aes-256-gcm', masterKey(), iv);
   const data = Buffer.concat([c.update(String(plain), 'utf8'), c.final()]);
   return Buffer.concat([iv, c.getAuthTag(), data]).toString('base64');
 }
 
-function open(ciphertext) {
+export function open(ciphertext) {
   const buf = Buffer.from(ciphertext, 'base64');
   const d = createDecipheriv('aes-256-gcm', masterKey(), buf.subarray(0, 12));
   d.setAuthTag(buf.subarray(12, 28));

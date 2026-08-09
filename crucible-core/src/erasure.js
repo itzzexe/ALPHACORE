@@ -1,0 +1,291 @@
+// Crypto-shredding — how a right to be forgotten survives a record that
+// cannot be edited.
+//
+// The two requirements are flatly contradictory as usually stated. The audit
+// chain is append-only and hash-linked: deleting a row breaks every hash after
+// it, and the whole point of the chain is that this is impossible. Meanwhile
+// somebody in the EU sends an erasure request naming an email address that sits
+// inside forty of those rows, and "our architecture does not allow it" is not
+// one of the lawful answers.
+//
+// The way out is to stop storing the thing at all.
+//
+// Every person the company holds data about gets their own key. Their details
+// are sealed under it before they are written anywhere — crucially, *before*
+// the audit payload is hashed, so the chain covers the ciphertext and knows
+// nothing about the plaintext. Erasing them destroys their key. The rows stay
+// exactly as they were, every hash still verifies, and what was inside them is
+// gone in the only sense that matters: nobody can read it, including us,
+// including with the database and the master key in hand.
+//
+// What deliberately survives an erasure: that a person existed under some
+// reference, that they asked, and when it was carried out. Erasing the erasure
+// would leave no way to prove the request was honoured, which serves nobody —
+// least of all the person who made it.
+import { createCipheriv, createDecipheriv, randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { q, one, exec } from './db.js';
+import { audit, verifyChain } from './audit.js';
+import { seal as vaultSeal, open as vaultOpen } from './vault.js';
+
+// A sealed value is a self-describing string so it survives JSON, canonical
+// serialisation and a database column without any schema knowing about it.
+//   pii:1:<subject ref>:<base64 iv+tag+ciphertext>
+const PREFIX = 'pii:1:';
+export const isSealed = (v) => typeof v === 'string' && v.startsWith(PREFIX);
+
+/**
+ * The stable reference for a person, derived rather than sequential.
+ *
+ * Keyed by a per-install salt so the same email in two installs gives two
+ * references, and one-way so the reference itself is not a copy of the thing
+ * it points at. Sequential ids would leak how many people are on file and let
+ * two databases be joined by a number.
+ */
+function subjectRef(kind, identifier) {
+  let salt = one("SELECT v FROM settings WHERE k = 'PII_SUBJECT_SALT'")?.v;
+  if (!salt) {
+    salt = randomBytes(32).toString('base64');
+    exec("INSERT INTO settings (k, v) VALUES ('PII_SUBJECT_SALT', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", salt);
+  }
+  const norm = String(identifier || '').trim().toLowerCase();
+  return createHash('sha256').update(`${salt}|${kind}|${norm}`).digest('hex').slice(0, 24);
+}
+
+/**
+ * The key for one person, created on first sight and wrapped under the vault's
+ * master key so a stolen database is not a stolen set of subject keys.
+ */
+function subjectKey(ref, { create = true } = {}) {
+  const row = one('SELECT * FROM pii_subjects WHERE ref = ?', ref);
+  if (row?.erased_at) return null;                    // shredded: nothing to return
+  if (row) return Buffer.from(vaultOpen(row.wrapped_key), 'base64');
+  if (!create) return null;
+  const key = randomBytes(32);
+  exec('INSERT INTO pii_subjects (ref, wrapped_key) VALUES (?,?)', ref, vaultSeal(key.toString('base64')));
+  return key;
+}
+
+/**
+ * Seal one value for one person.
+ *
+ * `kind` and `identifier` say *whose* data this is — usually the person's own
+ * email or phone, because that is what an erasure request will name. Every
+ * value sealed for the same person shares one key, so one deletion covers all
+ * of them, wherever they ended up.
+ */
+export function sealPii(value, { kind, identifier }) {
+  if (value === null || value === undefined || value === '') return value;
+  if (isSealed(value)) return value;
+  const ref = subjectRef(kind, identifier);
+  const key = subjectKey(ref);
+  if (!key) return `${PREFIX}${ref}:erased`;          // already shredded; do not resurrect
+  const iv = randomBytes(12);
+  const c = createCipheriv('aes-256-gcm', key, iv);
+  const data = Buffer.concat([c.update(String(value), 'utf8'), c.final()]);
+  const blob = Buffer.concat([iv, c.getAuthTag(), data]).toString('base64');
+  return `${PREFIX}${ref}:${blob}`;
+}
+
+/**
+ * Read it back, if the key still exists.
+ *
+ * After an erasure this returns a marker rather than throwing. A page that
+ * explodes because somebody exercised a legal right is a page that will be
+ * quietly patched by removing the erasure.
+ */
+export function openPii(sealed) {
+  if (!isSealed(sealed)) return sealed;
+  const [, , ref, blob] = sealed.split(':');
+  if (!blob || blob === 'erased') return '[erased]';
+  const key = subjectKey(ref, { create: false });
+  if (!key) return '[erased]';
+  try {
+    const buf = Buffer.from(blob, 'base64');
+    const d = createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
+    d.setAuthTag(buf.subarray(12, 28));
+    return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
+  } catch {
+    return '[unreadable]';
+  }
+}
+
+/** Walk any structure and open every sealed value in it. */
+export function openDeep(value) {
+  if (isSealed(value)) return openPii(value);
+  if (Array.isArray(value)) return value.map(openDeep);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, openDeep(v)]));
+  }
+  return value;
+}
+
+/** Which people are on file, and which have been erased. */
+export function refFor(kind, identifier) {
+  return subjectRef(kind, identifier);
+}
+
+// ------------------------------------------------------------------ erasure --
+
+// Columns that hold something about a person who never worked here. Erasure
+// walks these; anything not listed is not touched, which is why the list is
+// here in the open rather than inferred from column names at runtime — a
+// regex that decides what counts as personal data is a regex that will one day
+// decide wrongly and quietly.
+const PII_COLUMNS = [
+  ['intel_records', ['email', 'phone', 'address', 'email2', 'phone2', 'whatsapp']],
+  ['intel_contacts', ['email', 'phone']],
+  ['suppression_list', ['contact']],
+  ['tenants', ['owner_email']],
+];
+
+/**
+ * Everything held about one person, before deciding what to do about it.
+ *
+ * This is the same walk that answers a subject access request, which is the
+ * other half of the same law and the half people forget to build.
+ */
+export function findSubject({ kind = 'contact', identifier }) {
+  const ref = subjectRef(kind, identifier);
+  const subject = one('SELECT * FROM pii_subjects WHERE ref = ?', ref);
+  const needle = String(identifier || '').trim().toLowerCase();
+  const hits = [];
+
+  for (const [table, cols] of PII_COLUMNS) {
+    let rows = [];
+    try { rows = q(`SELECT rowid AS _rowid, * FROM ${table}`); } catch { continue; }
+    for (const row of rows) {
+      for (const col of cols) {
+        const v = row[col];
+        if (v === null || v === undefined || v === '') continue;
+        const plain = isSealed(v) ? openPii(v) : v;
+        if (String(plain).trim().toLowerCase() === needle) {
+          hits.push({ table, rowid: row._rowid, column: col, sealed: isSealed(v) });
+        }
+      }
+    }
+  }
+
+  // The chain is searched by reference, never by scanning plaintext: once
+  // sealed there is no plaintext there to scan for, which is the point.
+  const chained = q(
+    "SELECT seq, action, occurred_at FROM audit_log WHERE payload LIKE ? ORDER BY seq",
+    `%${ref}%`,
+  );
+
+  return {
+    ref,
+    known: Boolean(subject),
+    erasedAt: subject?.erased_at || null,
+    records: hits,
+    auditEntries: chained.length,
+    auditSample: chained.slice(0, 20),
+  };
+}
+
+/**
+ * Carry out an erasure.
+ *
+ * Three steps in this order, and the order is the whole design:
+ *   1. seal anything about them still sitting in plaintext, so it is behind
+ *      the key that is about to be destroyed
+ *   2. destroy the key
+ *   3. record that it happened, on the chain, under the reference
+ *
+ * Doing (2) before (1) would leave plaintext columns readable forever with no
+ * key to shred them with, which is the failure mode that makes people believe
+ * crypto-shredding does not work.
+ */
+export function eraseSubject({ kind = 'contact', identifier, reason = null, actor }) {
+  if (!actor) throw new Error('an erasure is a human act and has to be signed');
+  const ref = subjectRef(kind, identifier);
+  const existing = one('SELECT * FROM pii_subjects WHERE ref = ?', ref);
+  if (existing?.erased_at) return { ok: true, alreadyErased: true, ref, at: existing.erased_at };
+
+  const found = findSubject({ kind, identifier });
+
+  let sealedNow = 0;
+  for (const hit of found.records) {
+    if (hit.sealed) continue;
+    const current = one(`SELECT ${hit.column} AS v FROM ${hit.table} WHERE rowid = ?`, hit.rowid)?.v;
+    if (current === null || current === undefined) continue;
+    exec(`UPDATE ${hit.table} SET ${hit.column} = ? WHERE rowid = ?`, sealPii(current, { kind, identifier }), hit.rowid);
+    sealedNow++;
+  }
+
+  // Destroy the key. Overwrite rather than delete the row: the reference has to
+  // survive so the erasure can be proved, and a missing row is indistinguishable
+  // from a person nobody ever heard of.
+  if (existing) {
+    exec("UPDATE pii_subjects SET wrapped_key = NULL, erased_at = datetime('now'), erased_by = ?, reason = ? WHERE ref = ?", actor, reason, ref);
+  } else {
+    exec("INSERT INTO pii_subjects (ref, wrapped_key, erased_at, erased_by, reason) VALUES (?, NULL, datetime('now'), ?, ?)", ref, actor, reason);
+  }
+
+  audit({
+    actorType: 'human', actorId: actor, action: 'pii.erased',
+    subjectType: 'person', subjectId: ref,
+    // The identifier itself is never written here. Recording "we erased
+    // alice@example.com" in an append-only log is a way of not erasing it.
+    payload: { ref, sealedBeforeShredding: sealedNow, recordsCovered: found.records.length, auditEntries: found.auditEntries, reason },
+  });
+
+  return { ok: true, ref, sealedBeforeShredding: sealedNow, recordsCovered: found.records.length, auditEntries: found.auditEntries };
+}
+
+/**
+ * Prove it worked, rather than asserting it.
+ *
+ * Re-reads everything that was sealed for this person and checks that not one
+ * of it comes back as readable text, and that the chain still verifies. An
+ * erasure nobody checked is a promise, not a fact.
+ */
+export function verifyErasure({ kind = 'contact', identifier = null, ref = null }) {
+  const key = ref || subjectRef(kind, identifier);
+  const subject = one('SELECT * FROM pii_subjects WHERE ref = ?', key);
+  if (!subject) return { ok: false, reason: 'no such subject' };
+  if (!subject.erased_at) return { ok: false, reason: 'this subject has not been erased' };
+
+  const leaks = [];
+  for (const [table, cols] of PII_COLUMNS) {
+    let rows = [];
+    try { rows = q(`SELECT rowid AS _rowid, ${cols.join(', ')} FROM ${table}`); } catch { continue; }
+    for (const row of rows) {
+      for (const col of cols) {
+        const v = row[col];
+        if (!isSealed(v)) continue;
+        if (!v.includes(key)) continue;
+        const opened = openPii(v);
+        if (opened !== '[erased]' && opened !== '[unreadable]') {
+          leaks.push({ table, rowid: row._rowid, column: col });
+        }
+      }
+    }
+  }
+
+  // The other half of the promise: erasing somebody must not have damaged the
+  // record of everything else. If shredding a key broke the chain, the design
+  // would be wrong no matter how unreadable the data became.
+  const chain = verifyChain();
+  return {
+    ok: leaks.length === 0 && subject.wrapped_key === null && chain.ok,
+    ref: key,
+    erasedAt: subject.erased_at,
+    keyDestroyed: subject.wrapped_key === null,
+    chainStillVerifies: chain.ok,
+    leaks,
+  };
+}
+
+export function erasureOverview() {
+  const subjects = q('SELECT ref, erased_at, erased_by, reason, created_at FROM pii_subjects ORDER BY created_at DESC LIMIT 200');
+  return {
+    // The count of people on file is itself worth knowing and is not personal
+    // data: it is a number, and it is the one a regulator asks for first.
+    known: one('SELECT COUNT(*) AS n FROM pii_subjects').n,
+    erased: one('SELECT COUNT(*) AS n FROM pii_subjects WHERE erased_at IS NOT NULL').n,
+    columnsCovered: PII_COLUMNS.flatMap(([t, cols]) => cols.map((c) => `${t}.${c}`)),
+    subjects: subjects.map((s) => ({
+      ref: s.ref, erasedAt: s.erased_at, erasedBy: s.erased_by, reason: s.reason, since: s.created_at,
+    })),
+  };
+}

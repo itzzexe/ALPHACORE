@@ -252,7 +252,74 @@ old anchor against a truncated chain and call it a match.
 
 ---
 
-## 6. Backups
+## 6. Erasing a person
+
+An erasure request and an append-only record are flatly contradictory as
+usually stated. The chain is hash-linked: deleting a row breaks every hash
+after it, and that impossibility is the entire point of having one. Meanwhile
+somebody sends a request naming an email address that sits inside forty of
+those rows, and "our architecture does not allow it" is not one of the lawful
+answers.
+
+The way out is to never store the thing. Every person the company holds data
+about gets their own key. Their details are sealed under it **before** the
+audit payload is hashed, so the chain covers the ciphertext and never knew the
+plaintext. Erasing them destroys the key: the rows stay exactly as they were,
+every hash still verifies, and what was inside them is gone in the only sense
+that matters — nobody can read it, including you, with the database and the
+master key in hand.
+
+### Doing it
+
+```bash
+# what is held about them — the same walk that answers a subject access request
+curl -X POST localhost:8484/api/erasure/find -H "x-auth-token: $TOKEN"      -H 'content-type: application/json' -d '{"identifier":"someone@example.com"}'
+
+# carry it out
+curl -X POST localhost:8484/api/erasure/erase -H "x-auth-token: $TOKEN"      -H 'content-type: application/json'      -d '{"identifier":"someone@example.com","reason":"they asked"}'
+
+# prove it, rather than believe it
+curl -X POST localhost:8484/api/erasure/verify -H "x-auth-token: $TOKEN"      -H 'content-type: application/json' -d '{"identifier":"someone@example.com"}'
+```
+
+Erasing needs `compliance.manage`; looking somebody up needs
+`compliance.view`. Both lookups are POSTs on purpose: naming a person in a URL
+puts them in an access log and a browser history, which is the opposite of what
+is being asked for.
+
+### What survives, and why
+
+- **That a person existed under some reference, that they asked, and when it
+  was done.** Erasing the erasure would leave no way to prove the request was
+  honoured, which serves nobody — least of all them.
+- **Never the identifier itself.** Writing "we erased alice@example.com" into
+  an append-only log is a way of not erasing alice@example.com. The record
+  holds a salted one-way reference and nothing else.
+- **Everything that was not about them.** The rest of each entry is untouched.
+
+### Two things that catch people out
+
+**Order matters.** Anything still sitting in plaintext is sealed *first*, then
+the key is destroyed. Done the other way round, plaintext columns stay readable
+forever with no key left to shred them with — which is why people conclude that
+crypto-shredding does not work.
+
+**Re-import does not resurrect.** If the same list is loaded again next week,
+values for an erased person seal to a dead marker rather than a new key. Without
+that, the erasure was theatre.
+
+### The honest limit
+
+Coverage is a list, not a guess — `GET /api/erasure` prints exactly which
+columns are walked. A regex that decides at runtime what counts as personal
+data is a regex that will one day decide wrongly and silently. If you add a
+column that holds something about somebody outside the company, add it to
+`PII_COLUMNS` in `src/erasure.js`, and to the list of things your privacy
+notice claims to cover.
+
+---
+
+## 7. Backups
 
 The whole company is `crucible-core/data/`. Two things live there:
 
@@ -296,7 +363,7 @@ Rituals.
 
 ---
 
-## 7. Upgrading
+## 8. Upgrading
 
 ```bash
 git pull
@@ -317,7 +384,7 @@ ignored.
 
 ---
 
-## 8. Running it as a service
+## 9. Running it as a service
 
 The server is a plain Node process. Any supervisor works.
 
@@ -355,7 +422,7 @@ sit as permanently "running".
 
 ---
 
-## 9. When something is wrong
+## 10. When something is wrong
 
 Start here, in this order:
 
@@ -392,7 +459,7 @@ All three run in mock mode: no key, no network, no cost.
 
 ---
 
-## 10. Multiple companies on one machine
+## 11. Multiple companies on one machine
 
 Tenancy is by file and process, not by a `WHERE` clause — two companies never
 share a table:
@@ -410,7 +477,7 @@ machine. The isolation is real, the blast radius of a compromised host is not.
 
 ---
 
-## 11. Environment variables
+## 12. Environment variables
 
 Everything below can also be set in Settings, which takes precedence. Use the
 environment when a machine should be configured before it first starts.

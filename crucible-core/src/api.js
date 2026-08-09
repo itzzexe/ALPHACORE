@@ -10,6 +10,7 @@ import {
   unsubscribe as pushUnsubscribe, deliver as pushDeliver,
 } from './push.js';
 import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anchor.js';
+import { erasureOverview, findSubject, eraseSubject, verifyErasure } from './erasure.js';
 // Aliased: securityOverview already means the SOC department in this file,
 // and an account's own second factor is a different thing entirely.
 import {
@@ -386,6 +387,20 @@ const routes = [
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
   ['POST', /^\/api\/account\/sessions\/end-others$/, (_p, body, _u, user) => endOtherSessions(user.id, body.keep || null)],
+
+  // --- Erasure: the right to be forgotten, against a record that cannot forget ---
+  ['GET', /^\/api\/erasure$/, () => erasureOverview()],
+  // A lookup is itself a use of the identifier, so it is a POST and it is
+  // audited by the permission layer like anything else — not a GET whose
+  // subject sits in a URL, a log line and a browser history.
+  ['POST', /^\/api\/erasure\/find$/, (_p, body) => findSubject({ kind: body.kind || 'contact', identifier: need(body, 'identifier') })],
+  ['POST', /^\/api\/erasure\/erase$/, (_p, body) => eraseSubject({
+    kind: body.kind || 'contact', identifier: need(body, 'identifier'),
+    reason: body.reason || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/erasure\/verify$/, (_p, body) => verifyErasure({
+    kind: body.kind || 'contact', identifier: body.identifier || null, ref: body.ref || null,
+  })],
 
   // --- Anchoring: the record answering to something other than itself ---
   ['GET', /^\/api\/anchors$/, () => anchorsOverview()],
@@ -1264,6 +1279,10 @@ function permFor(m, path) {
   // namespace matters: /api/security is the SOC department, and putting these
   // there unauthenticated its entire prefix.
   if (path.startsWith('/api/account/')) return null;
+  // Erasing somebody is irreversible by design, so it sits with the powers
+  // that are given on purpose rather than with ordinary record management.
+  if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
+  if (path === '/api/erasure/erase') return 'compliance.manage';
   if (path === '/api/anchors/verify') return 'audit.view';
   if (path.startsWith('/api/anchors')) return m === 'GET' ? 'audit.view' : 'settings.manage';
   if (path === '/api/push') return 'users.manage';

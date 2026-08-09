@@ -2198,6 +2198,21 @@ try { db.exec('ALTER TABLE sessions ADD COLUMN last_seen TEXT'); } catch { /* co
 try { db.exec('ALTER TABLE sessions ADD COLUMN absolute_expires_at TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE sessions ADD COLUMN ip TEXT'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN locked_until TEXT'); } catch { /* column exists */ }
+
+// Crypto-shredding. One row per person the company holds data about, holding
+// their key wrapped under the vault's master key. Erasing them sets
+// wrapped_key to NULL — the row survives so the erasure can be proved, and a
+// missing row would be indistinguishable from a person nobody heard of.
+db.exec(`
+CREATE TABLE IF NOT EXISTS pii_subjects (
+  ref         TEXT PRIMARY KEY,     -- salted one-way reference, never the identifier
+  wrapped_key TEXT,                 -- NULL once shredded
+  erased_at   TEXT,
+  erased_by   TEXT,
+  reason      TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
 // Intelligence v2 — structured criteria, multi-round collection, web enrichment.
 for (const sql of [
   'ALTER TABLE intel_queries ADD COLUMN criteria TEXT',
