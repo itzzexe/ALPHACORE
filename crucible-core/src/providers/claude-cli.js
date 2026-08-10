@@ -59,10 +59,20 @@ export async function call({ model, system, prompt, maxTokens }) {
   }
 
   const cli = resolveCli();
+  // The CLI prefers an API key over the claude.ai login whenever one is in the
+  // environment ("connectors are disabled because ANTHROPIC_API_KEY ... takes
+  // precedence"). Since anthropic/ is a separate provider with its own tier
+  // entries, a key meant for that path must never reach this one — otherwise
+  // the subscription is silently bypassed and a dead key fails the whole call.
+  const childEnv = { ...process.env };
+  delete childEnv.ANTHROPIC_API_KEY;
+  delete childEnv.ANTHROPIC_AUTH_TOKEN;
+
   const out = await new Promise((resolve, reject) => {
     const child = spawn(cli.cmd, args, {
       shell: cli.shell,
       windowsHide: true,
+      env: childEnv,
     });
     let stdout = '';
     let stderr = '';
