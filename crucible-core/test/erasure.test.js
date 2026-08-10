@@ -81,7 +81,18 @@ test('a subject access request finds everything held about one person', () => {
     ALICE, '+964 770 000 0000');
   exec("INSERT INTO intel_records (query_id, name, email) VALUES (1, 'Bob Ltd', ?)", BOB);
 
+  // She also wrote to support. The address is what a request names; what she
+  // wrote is about her just as much, and is reached because it sits on the row
+  // the address matched.
+  exec("INSERT INTO tickets (customer, category, subject, body) VALUES (?,?,?,?)",
+    ALICE, 'billing', 'Please close my account', 'My name is Alice and I live at 5 Rose Lane.');
+
   const found = E.findSubject({ identifier: ALICE });
+  const cols = found.records.map((r) => `${r.table}.${r.column}`);
+  assert.ok(cols.includes('tickets.customer'), 'the address she wrote from');
+  assert.ok(cols.includes('tickets.body'), 'and the message it arrived on');
+  assert.ok(found.records.find((r) => r.column === 'tickets.body'.split('.')[1])?.carried,
+    'the body is carried, not matched — a paragraph never equals an email address');
   assert.ok(found.records.length >= 1, 'her row should be found while it is still plaintext');
   assert.ok(found.auditEntries >= 1, 'and the chain entries, found by reference not by scanning');
   assert.equal(found.erasedAt, null);
@@ -138,13 +149,16 @@ test('the database itself no longer holds her details anywhere', () => {
     const cols = q(`PRAGMA table_info(${t.name})`).map((c) => c.name);
     for (const row of q(`SELECT * FROM ${t.name}`)) {
       for (const c of cols) {
-        if (typeof row[c] === 'string' && row[c].toLowerCase().includes('alice@example.com')) {
+        const v = typeof row[c] === 'string' ? row[c].toLowerCase() : '';
+        // Her address, and the things she said that were only reachable by
+        // following the row it appeared on.
+        if (v.includes('alice@example.com') || v.includes('5 rose lane') || v.includes('my name is alice')) {
           leaks.push(`${t.name}.${c}`);
         }
       }
     }
   }
-  assert.deepEqual(leaks, [], `her address is still readable in: ${leaks.join(', ')}`);
+  assert.deepEqual(leaks, [], `still readable in: ${leaks.join(', ')}`);
 });
 
 test('bob is untouched — erasure is surgical, not a purge', () => {
@@ -185,6 +199,65 @@ test('the overview counts people without naming any of them', () => {
   assert.ok(o.known >= 2);
   assert.equal(o.erased, 1);
   assert.ok(o.columnsCovered.includes('intel_records.email'));
+  assert.ok(o.columnsCarried.includes('calls.recording'),
+    'and says plainly which columns are only reached by following a row');
   assert.ok(!JSON.stringify(o).includes('alice@example.com'));
   assert.ok(!JSON.stringify(o).includes('bob@example.com'));
+});
+
+// The contact centre was the worst of it. A phone number is what an erasure
+// request names; a recording of somebody's voice is the most sensitive thing
+// this company can hold about them, and it was surviving untouched because it
+// is not equal to a phone number and nothing followed the row.
+const CALLER = '+964 771 234 5678';
+
+test('a caller is a person on file, recording and all', () => {
+  exec(`INSERT INTO calls (direction, from_number, to_number, state, transcript, recording, created_by)
+        VALUES ('in', ?, '+964 780 000 0000', 'completed', ?, ?, 'inbound')`,
+  CALLER, 'He said his name is Karim and he lives at 12 Palm Street.', 'BASE64AUDIOOFHISVOICE');
+  exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, body, state, thread_key)
+        VALUES ('in', 'sms', ?, '+964 780 000 0000', ?, 'received', 'thread-1')`,
+  CALLER, 'Please delete everything you hold about me.');
+
+  const found = E.findSubject({ identifier: CALLER });
+  const cols = found.records.map((r) => `${r.table}.${r.column}`);
+  assert.ok(cols.includes('calls.from_number'), 'the number he rang from');
+  assert.ok(cols.includes('calls.transcript'), 'what he said');
+  assert.ok(cols.includes('calls.recording'), 'and his voice');
+  assert.ok(cols.includes('sms_messages.body'));
+});
+
+test('erasing him takes the recording with it, and the chain still verifies', () => {
+  const before = verifyChain();
+  const r = E.eraseSubject({ identifier: CALLER, reason: 'he asked, on the recording', actor: 'human:owner' });
+  assert.ok(r.ok);
+  assert.ok(r.sealedBeforeShredding >= 4, 'number, transcript, recording, message');
+
+  const call = one('SELECT * FROM calls ORDER BY rowid DESC LIMIT 1');
+  assert.equal(E.openPii(call.transcript), '[erased]');
+  assert.equal(E.openPii(call.recording), '[erased]');
+  assert.equal(E.openPii(call.from_number), '[erased]');
+  assert.equal(call.to_number, '+964 780 000 0000', 'our own number is not his personal data');
+  assert.equal(call.direction, 'in', 'and the fact that a call happened survives');
+
+  const sms = one('SELECT * FROM sms_messages ORDER BY rowid DESC LIMIT 1');
+  assert.equal(E.openPii(sms.body), '[erased]');
+
+  assert.equal(verifyChain().ok, true, 'shredding his key must not break a hash');
+  assert.ok(verifyChain().checked > before.checked);
+});
+
+test('nothing he said is readable anywhere in the database', () => {
+  const needles = ['771 234 5678', 'karim', '12 palm street', 'base64audioofhisvoice'];
+  const leaks = [];
+  for (const t of q("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")) {
+    const cols = q(`PRAGMA table_info(${t.name})`).map((c) => c.name);
+    for (const row of q(`SELECT * FROM ${t.name}`)) {
+      for (const c of cols) {
+        const v = typeof row[c] === 'string' ? row[c].toLowerCase() : '';
+        if (needles.some((n) => v.includes(n))) leaks.push(`${t.name}.${c}`);
+      }
+    }
+  }
+  assert.deepEqual(leaks, [], `still readable in: ${leaks.join(', ')}`);
 });

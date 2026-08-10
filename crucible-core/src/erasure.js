@@ -131,12 +131,34 @@ export function refFor(kind, identifier) {
 // here in the open rather than inferred from column names at runtime — a
 // regex that decides what counts as personal data is a regex that will one day
 // decide wrongly and quietly.
+// Two kinds of column, and the distinction is the whole reason this works.
+//
+// `match` holds the person's identifier itself — the walk compares each value
+// to the email or phone the request names, because that is what an erasure
+// request can name. `also` holds everything else in that same row that is about
+// the same person and could never be matched: a call transcript is not equal to
+// a phone number, and a support ticket's body is not equal to an address.
+//
+// Listing a transcript under `match` would have looked exactly like coverage
+// and erased nothing — the value would never equal the identifier, so the walk
+// would never see it. That is the failure this shape exists to prevent.
 const PII_COLUMNS = [
-  ['intel_records', ['email', 'phone', 'address', 'email2', 'phone2', 'whatsapp']],
-  ['intel_contacts', ['email', 'phone']],
-  ['suppression_list', ['contact']],
-  ['tenants', ['owner_email']],
+  ['intel_records', ['email', 'phone', 'address', 'email2', 'phone2', 'whatsapp'], []],
+  ['intel_contacts', ['email', 'phone'], ['name', 'role', 'note']],
+  ['suppression_list', ['contact'], []],
+  ['tenants', ['owner_email'], []],
+  // Support: somebody who wrote in is a person on file, and what they wrote is
+  // about them as much as the address they wrote from.
+  ['tickets', ['customer'], ['subject', 'body', 'draft', 'sent_body']],
+  // The contact centre. A recording and a transcript of somebody's voice are
+  // the most sensitive things this company holds about anyone, and they were
+  // surviving erasure entirely.
+  ['calls', ['from_number', 'to_number'], ['transcript', 'recording', 'script', 'outcome', 'follow_up']],
+  ['sms_messages', ['from_number', 'to_number'], ['body']],
 ];
+
+/** Every column of a table that an erasure may touch, matched or carried. */
+const allColumns = (match, also) => [...match, ...also];
 
 /**
  * Everything held about one person, before deciding what to do about it.
@@ -150,17 +172,28 @@ export function findSubject({ kind = 'contact', identifier }) {
   const needle = String(identifier || '').trim().toLowerCase();
   const hits = [];
 
-  for (const [table, cols] of PII_COLUMNS) {
+  for (const [table, match, also] of PII_COLUMNS) {
     let rows = [];
     try { rows = q(`SELECT rowid AS _rowid, * FROM ${table}`); } catch { continue; }
     for (const row of rows) {
-      for (const col of cols) {
+      const matched = match.filter((col) => {
+        const v = row[col];
+        if (v === null || v === undefined || v === '') return false;
+        const plain = isSealed(v) ? openPii(v) : v;
+        return String(plain).trim().toLowerCase() === needle;
+      });
+      if (!matched.length) continue;
+
+      // The row is theirs. Everything on it that was listed as being about the
+      // same person comes with it — otherwise the address is erased and the
+      // conversation it appears in is not, which erases nothing worth erasing.
+      for (const col of allColumns(matched, also)) {
         const v = row[col];
         if (v === null || v === undefined || v === '') continue;
-        const plain = isSealed(v) ? openPii(v) : v;
-        if (String(plain).trim().toLowerCase() === needle) {
-          hits.push({ table, rowid: row._rowid, column: col, sealed: isSealed(v) });
-        }
+        hits.push({
+          table, rowid: row._rowid, column: col, sealed: isSealed(v),
+          carried: !matched.includes(col),
+        });
       }
     }
   }
@@ -215,11 +248,20 @@ export function eraseSubject({ kind = 'contact', identifier, reason = null, acto
   // Destroy the key. Overwrite rather than delete the row: the reference has to
   // survive so the erasure can be proved, and a missing row is indistinguishable
   // from a person nobody ever heard of.
-  if (existing) {
-    exec("UPDATE pii_subjects SET wrapped_key = NULL, erased_at = datetime('now'), erased_by = ?, reason = ? WHERE ref = ?", actor, reason, ref);
-  } else {
-    exec("INSERT INTO pii_subjects (ref, wrapped_key, erased_at, erased_by, reason) VALUES (?, NULL, datetime('now'), ?, ?)", ref, actor, reason);
-  }
+  //
+  // Upsert rather than branching on the `existing` read taken at the top of this
+  // function, because the sealing loop above may have created the row in between:
+  // sealing the first plaintext value mints the person's key, and minting a key
+  // inserts the subject. Branching on the stale read meant that erasing somebody
+  // who was not already on file — which is exactly the person who arrives by
+  // phone or by writing to support — threw a UNIQUE violation and erased nobody.
+  exec(`INSERT INTO pii_subjects (ref, wrapped_key, erased_at, erased_by, reason)
+        VALUES (?, NULL, datetime('now'), ?, ?)
+        ON CONFLICT(ref) DO UPDATE SET
+          wrapped_key = NULL,
+          erased_at   = datetime('now'),
+          erased_by   = excluded.erased_by,
+          reason      = excluded.reason`, ref, actor, reason);
 
   audit({
     actorType: 'human', actorId: actor, action: 'pii.erased',
@@ -246,7 +288,8 @@ export function verifyErasure({ kind = 'contact', identifier = null, ref = null 
   if (!subject.erased_at) return { ok: false, reason: 'this subject has not been erased' };
 
   const leaks = [];
-  for (const [table, cols] of PII_COLUMNS) {
+  for (const [table, match, also] of PII_COLUMNS) {
+    const cols = allColumns(match, also);
     let rows = [];
     try { rows = q(`SELECT rowid AS _rowid, ${cols.join(', ')} FROM ${table}`); } catch { continue; }
     for (const row of rows) {
@@ -283,7 +326,11 @@ export function erasureOverview() {
     // data: it is a number, and it is the one a regulator asks for first.
     known: one('SELECT COUNT(*) AS n FROM pii_subjects').n,
     erased: one('SELECT COUNT(*) AS n FROM pii_subjects WHERE erased_at IS NOT NULL').n,
-    columnsCovered: PII_COLUMNS.flatMap(([t, cols]) => cols.map((c) => `${t}.${c}`)),
+    // Split, because the difference matters to whoever is answering for this:
+    // a matched column can be named in a request, a carried one is only reached
+    // because it sits on a row that was matched.
+    columnsCovered: PII_COLUMNS.flatMap(([t, match]) => match.map((c) => `${t}.${c}`)),
+    columnsCarried: PII_COLUMNS.flatMap(([t, , also]) => also.map((c) => `${t}.${c}`)),
     subjects: subjects.map((s) => ({
       ref: s.ref, erasedAt: s.erased_at, erasedBy: s.erased_by, reason: s.reason, since: s.created_at,
     })),
