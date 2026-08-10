@@ -47,6 +47,13 @@ jobs:
       - name: The API description is current
         run: npm run openapi:check
 
+      # Same argument, applied to the document that makes the argument. A README
+      # claiming every number is measured cannot carry counts that disagree with
+      # the catalogue — or with each other. Measured against an empty database,
+      # so the answer does not depend on whose machine ran it.
+      - name: The README's numbers are current
+        run: npm run readme:check
+
   audit:
     name: Launch audit
     runs-on: ubuntu-latest

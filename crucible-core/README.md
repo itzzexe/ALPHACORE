@@ -5,21 +5,21 @@
 ### The company that runs itself — and proves every move on a hash chain.
 
 **An entire AI-native company inside a single Node process.**
-One hundred and twenty-two departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and thirty-nine departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports, **hires its own new employees** — and reaches the real world through one guarded
 door — while humans hold every gate that matters: approving, publishing, signing, and ruling.
 
-<img src="https://img.shields.io/badge/departments-130-c0563a?style=flat-square" alt="130 departments">
+<img src="https://img.shields.io/badge/departments-139-c0563a?style=flat-square" alt="139 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
-<img src="https://img.shields.io/badge/relationships-344-8d8477?style=flat-square" alt="344 declared relationships">
-<img src="https://img.shields.io/badge/API-498_routes-4f9cf0?style=flat-square" alt="498 API routes">
-<img src="https://img.shields.io/badge/permissions-204_atomic-e07bd2?style=flat-square" alt="204 atomic permissions">
+<img src="https://img.shields.io/badge/relationships-423-8d8477?style=flat-square" alt="423 declared relationships">
+<img src="https://img.shields.io/badge/API-584_routes-4f9cf0?style=flat-square" alt="584 API routes">
+<img src="https://img.shields.io/badge/permissions-240_atomic-e07bd2?style=flat-square" alt="240 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-151-78bf6d?style=flat-square" alt="151 tests">
+<img src="https://img.shields.io/badge/tests-177-78bf6d?style=flat-square" alt="177 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
@@ -39,7 +39,7 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 130 departments](#the-company--13-divisions-130-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 139 departments](#the-company--13-divisions-139-departments) | the shape |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
@@ -93,6 +93,10 @@ cd crucible-core
 npm install
 npm start          # http://localhost:8484
 ```
+
+The repository root holds the blueprint the platform was built from — eleven
+documents that argue for it. The platform itself lives one directory down, in
+`crucible-core/`, which is what that first line is for.
 
 On Windows, double-click **`Start-AlphaCore.bat`** — it checks the Node
 version, installs on first run, and opens the browser.
@@ -197,19 +201,19 @@ library to a project whose whole point is that it has none.
 ```mermaid
 flowchart TD
   CORE(("◆ HARMONY<br/>orchestrator +<br/>audit chain"))
-  ENGINE["ENGINE · 9<br/>requests · agents · runs<br/>pipelines · providers"] --> CORE
+  ENGINE["ENGINE · 10<br/>requests · agents · runs<br/>pipelines · providers"] --> CORE
   WORLD["THE WORLD · 10<br/>integrations · the gate · vault<br/>web · browser · MCP · queue"] --> CORE
   BUILD["BUILD · 10<br/>system design · products<br/>projects · releases · packages"] --> CORE
-  DECIDE["DECIDE · 9<br/>human gate · decisions · budgets<br/>risks · evals · shadow company"] --> CORE
+  DECIDE["DECIDE · 10<br/>human gate · decisions · budgets<br/>risks · evals · shadow company"] --> CORE
   DATA["DATA · 9<br/>intelligence · segments · datasets<br/>archive · knowledge graph · deep search"] --> CORE
-  MARKETING["MARKETING · 20<br/>brand · content · design · SEO<br/>paid · lifecycle · events · press"] --> CORE
-  COMMERCE["COMMERCE · 7<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
-  CAPITAL["CAPITAL · 8<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
-  OPERATE["OPERATE · 7<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
+  MARKETING["MARKETING · 21<br/>brand · content · design · SEO<br/>paid · lifecycle · events · press"] --> CORE
+  COMMERCE["COMMERCE · 8<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
+  CAPITAL["CAPITAL · 9<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
+  OPERATE["OPERATE · 13<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
   TALENT["TALENT · 10<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
-  TRUST["TRUST · 5<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
+  TRUST["TRUST · 8<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
   EXEC["EXECUTIVE · 4<br/>board · investor relations<br/>comms · operating rhythm"] --> CORE
-  GOVERN["GOVERN · 16<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
+  GOVERN["GOVERN · 17<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
   classDef c1 fill:#c0563a,color:#f2f0ea,stroke:none
   classDef c2 fill:#b78bff,color:#14100c,stroke:none
   classDef c3 fill:#5ec3c9,color:#14100c,stroke:none
@@ -241,7 +245,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **390 relationships** that the map
+Those declarations are data, not decoration: **423 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -289,7 +293,7 @@ connectivity audit and live flow counts — as JSON.
 
 ---
 
-## The company — 13 divisions, 130 departments
+## The company — 13 divisions, 139 departments
 
 <details open>
 <summary><b>ENGINE · 10</b> — the workforce and the work</summary>
@@ -297,10 +301,11 @@ connectivity audit and live flow counts — as JSON.
 **Request desk** · **Agents** · **Workforce** · **Run queue** · **Pipelines** ·
 **Providers** · **Artifacts** · **Capacity** · **Workstreams** · **Model chains**
 
-Where work is asked for and carried out. 51 AI employees seeded from
+Where work is asked for and carried out. 43 AI employees seeded from
 `config/agents.json`, each with a mission, a tier, a sensitivity class and a
-human owner. Runs are leased, attempted, retried with backoff, and shelved
-honestly when they never succeed. Runs left `running` by a process that died are
+human owner — and more than that in any company that has been running a while,
+because recruiting hires its own. Runs are leased, attempted, retried with
+backoff, and shelved honestly when they never succeed. Runs left `running` by a process that died are
 reclaimed to the queue at boot and recorded.
 </details>
 
@@ -342,13 +347,13 @@ rows and answers "what do we know about X" within N hops.
 </details>
 
 <details>
-<summary><b>MARKETING · 20</b> — a complete district</summary>
+<summary><b>MARKETING · 21</b> — a complete district</summary>
 
 **Localization** · **Social media** · **Content studio** · **Design studio** ·
 **Marketing** · **Market watch** · **Marketing department** · **Brand studio** ·
 **Personas** · **Positioning** · **Search** · **Paid media** · **Lifecycle email** ·
 **Editorial calendar** · **Events** · **Press & media** · **Community** ·
-**Attribution** · **Landing pages** · **Marketing operations**
+**Attribution** · **Landing pages** · **Marketing operations** · **Growth**
 
 The largest district: strategy (personas, positioning, brand), production
 (content, design, localization, landing pages), distribution (social, search,
@@ -358,10 +363,10 @@ data and the gate.
 </details>
 
 <details>
-<summary><b>COMMERCE · 7</b> — money coming in</summary>
+<summary><b>COMMERCE · 8</b> — money coming in</summary>
 
 **Pricing** · **Customer success** · **Sales** · **Customers** · **Relations** ·
-**Procurement** · **Revenue loop**
+**Procurement** · **Revenue loop** · **Partnerships**
 
 The revenue loop runs a name on a list to money in the account: source, approach,
 meeting, proposal, invoice, deliver. Every hop that touches somebody outside goes
@@ -370,10 +375,10 @@ stop for a person.
 </details>
 
 <details>
-<summary><b>CAPITAL · 8</b> — the books, money going out, and money held</summary>
+<summary><b>CAPITAL · 9</b> — the books, money going out, and money held</summary>
 
 **Finance** · **Financial reports** · **Ledger** · **Bookkeeping** ·
-**Unit economics** · **FinOps** · **Treasury (crypto)** · **Money desk**
+**Unit economics** · **FinOps** · **Treasury (crypto)** · **Money desk** · **Tax**
 
 Real double-entry books, not computed summaries. P&L, runway and spend
 efficiency sit on top of them. The treasury is **watch-only**: the platform never
@@ -382,10 +387,11 @@ resolving one requires a signed-in human that no autonomy path can reach.
 </details>
 
 <details>
-<summary><b>OPERATE · 10</b> — keeping the lights on</summary>
+<summary><b>OPERATE · 13</b> — keeping the lights on</summary>
 
 **Incidents** · **Support** · **Dead work** · **Continuity** · **Assets** ·
-**Legal** · **Vendors** · **Objectives** · **Contact centre** · **Deliverability**
+**Legal** · **Vendors** · **Objectives** · **Contact centre** · **Deliverability** ·
+**Intellectual property** · **Help centre** · **Status & SLA**
 
 Incidents demand postmortems. Support drafts replies and graduates an agent to
 sending unedited only after a hundred sent at ninety-five per cent unedited —
@@ -408,10 +414,10 @@ capabilities.
 </details>
 
 <details>
-<summary><b>TRUST · 6</b> — the company checking itself</summary>
+<summary><b>TRUST · 8</b> — the company checking itself</summary>
 
 **Security (SOC)** · **Compliance** · **Sustainability** · **Provenance** ·
-**Red team** · **Erasure**
+**Red team** · **Erasure** · **Privacy & DPO** · **Trust centre**
 
 Provenance issues **Ed25519 receipts** over canonically serialised content that
 anyone can verify without this platform. The red team attacks the company on a
@@ -431,12 +437,12 @@ facts, internal announcements, and the rhythm that runs the day.
 </details>
 
 <details>
-<summary><b>GOVERN · 16</b> — the rules and the record</summary>
+<summary><b>GOVERN · 17</b> — the rules and the record</summary>
 
 **Harmony** · **Autopilot** · **Governance** · **Oversight** · **Scorecard** ·
 **Standing orders** · **Users & roles** · **Roles** · **Settings** ·
 **Audit chain** · **Anchors** · **The constitution** · **Time machine** ·
-**Watchtower** · **Instruments** · **Backups**
+**Watchtower** · **Instruments** · **Backups** · **Data governance**
 
 The constitution is enforced by machine at the gate, not written on a poster.
 The time machine snapshots the company and replays it: stand at any past moment
@@ -661,10 +667,15 @@ as a human who did not act.
 
 ### The workforce
 
-51 employees seeded from `config/agents.json`, each with a system prompt that
-resolves `{{company}}` to your company's name. Personas add voice; memory adds
-recall. Runs carry attempts, leases, token counts and cost. Pipelines chain runs
-into multi-stage work with gates between stages.
+43 employees seeded from `config/agents.json`, each with a system prompt that
+resolves `{{company}}` to your company's name. That is the starting roster, not
+a ceiling: recruiting opens roles and hires into the org, so a company that has
+been running for a while has more employees than this file describes, and the
+number on your own Workforce page is the honest one.
+
+Personas add voice; memory adds recall. Runs carry attempts, leases, token
+counts and cost. Pipelines chain runs into multi-stage work with gates between
+stages.
 
 ---
 
@@ -803,6 +814,33 @@ backup you have never restored is a hope.
 
 ---
 
+## The departments somebody asks about after the fact
+
+Nine of these arrived because a reviewer went through the map looking for what a
+real company has and this one did not. Two of them turned out to be *already
+built and unreachable* — `partners` had a table, an API and an outreach drafter
+with no page to stand on, and `experiments` had a table nothing exposed. The
+other seven were genuinely missing, and every one of them is a place where being
+missing costs money or breaks a promise.
+
+| | |
+|---|---|
+| **Tax** | Not a report over the ledger — a report can say what you charged, never what you *owed*. Rates belong to a jurisdiction with a registration, a threshold and a filing date. Nothing here invents a rate: an unknown jurisdiction produces an unclassified line and a question, because a guessed VAT rate is a wrong number that looks exactly like a right one. Tax collected is credited to a liability and never to revenue — booking it as income is how a company looks profitable until the return falls due. An employee classifies and posts up to the bookkeeper's limit; **filing is a human act at any amount**. |
+| **Privacy & DPO** | A different question from security, and deliberately not the same desk. The SOC asks whether somebody can take the data; this asks whether the company may hold it at all, on what basis, for how long, and who is answerable. A data flow is assessed *before* it runs, its risk derived from its own facts rather than typed by whoever wants approval, and a high-risk one cannot be waved through by an employee. Subject requests carry a statutory clock. **No identifier is stored** — only the one-way reference erasure uses, which is why answering an access request needs the person to give their address again. |
+| **Intellectual property** | What the company owns that is not a thing. Kept apart from Assets because the failure mode is not wear but a renewal date nobody watched, and a trademark lost that way cannot be bought back at any price. It also lists what was shipped and never claimed. |
+| **Help centre** | Documentation for the people who bought it — not the academy, which trains the workforce, and not support, which answers one person at a time. The link that makes it pay for itself is the gap: a question asked three times is one gap with a count of three, raised from real tickets without being asked. An employee drafts; a person publishes. |
+| **Data governance** | What a column *is*, as a governance fact. The inventory is discovered from the schema — a hand-maintained list is stale the week after the next feature — but the classification is a judgement recorded with a name against it. Its whole purpose is one cross-check no other module can make: **a column classified as personal that the erasure walk cannot reach**, which means "a person can be forgotten" is untrue for whatever is in it. |
+| **Trust centre** | What a prospect is told, with a live reading behind every claim rather than a sentence: open red-team findings, hours since the chain was last witnessed, how many people are still waiting for a privacy answer. If the number is embarrassing the honest options are to fix it or not to publish the claim — not to write a nicer sentence. |
+| **Status & SLA** | What the company admits in public while it is happening, and the promise it made about how often. Posting a notice is a separate act from opening the incident, and **closing the incident does not close the notice** — somebody says "resolved" out loud, because a page that quietly goes green teaches people not to read it. An open incident with no notice is a finding. |
+| **Partnerships** | Not sales. Sales asks whether they will buy; this asks whether anything actually flows through the relationship, and names the ones producing nothing — a list of logos that only grows describes a company doing better than it is. |
+| **Growth** | Moving one named number on purpose. The hypothesis is required before the result exists, because deciding what counts as success afterwards is how every experiment succeeds. An experiment cannot be concluded without saying what happens next, and "inconclusive" is a first-class answer. |
+
+One thing was deliberately **not** built: a declared relationship between Legal
+and the revenue loop. A contract review that ought to happen before a deal is
+agreed is a reasonable thing to want, and nothing in the code enforces it — so
+there is no line on the map claiming it does. A relationship the map draws and
+nothing carries out is the decoration this whole design exists to refuse.
+
 ## What a real deployment needs
 
 The bones above are the company. These are what a deployment discovers it needs,
@@ -812,9 +850,9 @@ department rather than buried in Settings.
 | | |
 |---|---|
 | **Anchors** | The chain's head witnessed by an RFC 3161 timestamping authority, outside this disk. Verifying the chain proves it agrees with *itself*, which is exactly what a rewritten record also does — anybody who owns the file can edit it and recompute every hash. This is the only check that cannot be forged locally. |
-| **Erasure** | Crypto-shredding: a person's data sealed under their own key *before* the payload is hashed, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. |
+| **Erasure** | Crypto-shredding: a person's data sealed under their own key, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. It reaches the intelligence tables, support, and the contact centre — including a call transcript and the recording of somebody's voice, which are the most sensitive things here and the easiest to miss, because a recording is not equal to the phone number an erasure request names. |
 | **The desk** | Everything waiting on a person, ordered by what it blocks. Batches are recorded as one act naming every item, never as a dozen entries that read like a dozen judgements. |
-| **Roles** | Seven templates over the 219 permissions, with each irreversible power in exactly one of them. |
+| **Roles** | Seven templates over the 240 permissions, with each irreversible power in exactly one of them. |
 | **Model chains** | Which model does the work, and a canary that must pass — on the same day, against the chain in service — before it changes. An untested chain cannot be promoted, and an inconclusive canary does not count as evidence. |
 | **Recall** | Local embeddings via ollama, so search finds "the tool that reads receipts" from "invoice OCR platform" — trigrams score that pair at 0.000. Nothing leaves the machine. |
 | **Deliverability** | DKIM signing, and a preflight that reads live DNS to say what a receiver would conclude. Plus whether a call may lawfully be recorded, by jurisdiction. |
@@ -848,7 +886,7 @@ not a feature request — see [SECURITY.md](../SECURITY.md) for how to report on
 | A password is not enough | Optional TOTP, single-use; ten recovery codes; sign-in rate-limited per account **and** per address; lockout after eight failures |
 | A session cannot live forever | An idle clock that slides and an absolute one that does not, so a leaked token expires even if something keeps touching it |
 | Secrets are encrypted at rest | AES-256-GCM, master key outside the database and optionally outside the machine, rotatable without losing a credential; the API masks to the last four characters |
-| A person can be forgotten | Crypto-shredding: their data is sealed under their own key before the payload is hashed, so destroying it leaves every hash verifying |
+| A person can be forgotten | Crypto-shredding: their data is sealed under their own key and the key is destroyed, so every hash still verifies. The walk matches the identifier a request names and then carries the rest of the row — the message, the transcript, the recording — because none of those equal an email address |
 | No shipped credential | First run generates its own password; an unclaimed account can only read itself and replace it |
 | Nothing leaks to git | `data/`, `workspace/`, `.env*`, `*.key`, `*.pem` are ignored, and CI fails the build if one is ever committed |
 
@@ -867,6 +905,19 @@ not a feature request — see [SECURITY.md](../SECURITY.md) for how to report on
   installing to a phone's home screen needs it anyway.
 - Stripe's refund, dispute and tax paths are wired and gated but **not verified
   against a live account**. Paper trading exists to exercise them first.
+- **Erasure seals at erasure time, not at write time.** `sealPii` is available to
+  anything that writes, and nothing in the platform calls it yet: until somebody
+  is erased, their details sit in plaintext in the operational tables. What that
+  does *not* mean is plaintext in the chain — audit payloads carry references and
+  counts rather than addresses, checked against a database of really harvested
+  contacts. It does mean the guarantee is "erasable on request", not "never
+  stored readable", and those are different promises.
+- **Erasure reaches the columns it lists and no others**, by design — a regex
+  that decides what counts as personal data decides wrongly one day and quietly.
+  The list covers intelligence, support and the contact centre. It does **not**
+  reach `customers`, because that table stores no identifier at all: a customer
+  is a name and a company, and a walk that starts from an email address has
+  nothing there to match. Reaching it needs a schema change, not a longer list.
 
 ### The constitution
 
@@ -895,7 +946,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
   answers nothing about the company), and `/webhooks/*` — carrier callbacks
   from the phone network, which cannot hold a token and are authenticated by
   the carrier's own signature instead
-- **204 atomic permissions** across 105 families (`decisions.approve`,
+- **240 atomic permissions** across 121 families (`decisions.approve`,
   `treasury.payout`, `egress.grant`, …). The superadmin holds `*`
 - The launch audit checks that every permission the API demands exists in the
   catalogue — a route guarded by a permission nobody can hold is permanently
@@ -909,7 +960,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**542 routes** — all JSON, all
+**584 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -985,7 +1036,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 151 tests, on their own database files |
+| `npm test` | 177 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -993,6 +1044,7 @@ presence, the live ticker, and floor chat.
 | `npm run rotate-key` | re-seal every secret under a new master key (`-- --dry-run` first) |
 | `npm run anchor` | have a third party witness the chain's head now |
 | `npm run openapi` | regenerate the API description (`openapi:check` fails on drift) |
+| `npm run readme` | re-measure the numbers in this file (`readme:check` fails on drift) |
 | `npm run verify` | check a chain — **works copied out of this repository** |
 | `npm run icons` | redraw the app icons from scratch, no image library |
 | `node scripts/launch-audit.mjs` | the pre-flight audit — exits non-zero on a blocker |
@@ -1074,11 +1126,11 @@ credential — keep them together.
 
 ```
 crucible-core/
-  src/                113 modules, ~28,400 lines
+  src/                121 modules, ~31,600 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
-    db.js             165 tables, forward-only migrations
+    db.js             185 tables, forward-only migrations
     audit.js          the hash chain
-    auth.js           sessions, 219 permissions, password generation
+    auth.js           sessions, 240 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
     policy.js         reservation-first budgets
     ledger.js         double-entry books: the chart, the journal, four statements
@@ -1106,7 +1158,7 @@ crucible-core/
     …
   public/
     index.html        the shell
-    app.js            the console — 10,400 lines, vanilla, hash routing
+    app.js            the console — 11,200 lines, vanilla, hash routing
     styles.css        2,300 lines: design tokens, light and dark, RTL-aware
     i18n.js           Arabic as a first-class language
     sw.js             network-first service worker
@@ -1122,7 +1174,7 @@ crucible-core/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               151 tests across fourteen files
+  test/               177 tests across fifteen files
   docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
   config/             agents, providers, rituals
 ```
@@ -1131,16 +1183,29 @@ crucible-core/
 
 ## Verification
 
-Nothing here is claimed from inspection. Every number is measured.
+Nothing here is claimed from inspection. Every number is measured — including
+the numbers in this file.
 
 ```bash
-npm test                        # 151 tests
+npm test                        # 177 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
+npm run readme:check            # every count above, re-measured from the code
 ```
 
 All three proofs run in **mock mode**: no key, no network, no cost.
+
+**The README is checked too.** Departments, divisions, relationships, routes,
+permissions, tables, modules, tests — every count in this document is derived
+from the catalogue that produces it, the same way `openapi.json` is derived from
+the route table, and CI fails the build when one drifts. This was added after a
+reader found four counts contradicting each other *inside this file*: the
+headline said 122 departments, the badge said 130, and the diagram summed to
+124. A document arguing that nothing should be claimed from inspection had been
+written by inspection. The measurement runs against an **empty** database, so a
+number here means the same thing to every reader rather than describing whatever
+one machine happened to be holding.
 
 **The map is checked, not drawn.** Every department must have a real
 relationship, no department may hang by a single thread, **every declared
@@ -1194,8 +1259,8 @@ configured, the public URL set, the licence files present, no test residue).
   form and puts all thirteen perceived elements through the real gate: twelve
   proceed, and "Submit order" stops.
 
-**The browser sweep** opens all 130 departments in both themes and both
-languages, at 1440×900 and again at 390×844 — 488 renders each — and fails on a
+**The browser sweep** opens all 139 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 556 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
 somebody runs once is a state the code leaves within a month.
@@ -1264,6 +1329,14 @@ Choices that shaped this, and what they cost:
   exactly like a ranked list, which is worse than an error.
 - **A verifier that must be run by the system it checks is worth little.**
   `verify-chain.mjs` imports nothing from `src/` and can be copied away.
+- **The documentation is measured, like everything else.** The counts in this
+  README are derived from the catalogues and checked in CI. They were not, once,
+  and four of them contradicted each other in a file whose argument is that
+  nothing should be claimed from inspection — which costs more than a wrong
+  number, because a reader who catches one stops believing the ones that are
+  right. The cost is that a sentence cannot be rephrased freely: the checker
+  anchors on the words around each number, and rewriting them fails the build
+  until the number is re-checked. That is the intended cost.
 - **A reversed entry stays in the books.** The first version marked it
   `state='reversed'`, which dropped it out of every statement while its reversal
   stayed in — leaving each touched account wrong by exactly the correction, in
