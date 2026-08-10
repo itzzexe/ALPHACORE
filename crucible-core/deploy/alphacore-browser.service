@@ -1,0 +1,58 @@
+# The browser the employees drive.
+#
+# The platform attaches to Chrome over the DevTools protocol; it does not ship
+# one. With nothing listening the browser page says "no browser attached",
+# which is true and reads like a fault.
+#
+#   sudo useradd --system --create-home --home-dir /var/lib/alphabrowser \
+#        --shell /usr/sbin/nologin alphabrowser
+#   sudo install -d -o alphabrowser -g alphabrowser -m 0750 /var/lib/alphabrowser/profile
+#   sudo cp deploy/alphacore-browser.service /etc/systemd/system/
+#   sudo systemctl enable --now alphacore-browser
+#   sudo ufw deny 9333          # belt and braces; it already binds to loopback
+#
+# Three decisions worth keeping if you change this file:
+#
+#   * Not root. Chrome as root demands --no-sandbox, which switches off the
+#     boundary between a hostile page and the machine — on a box whose whole job
+#     is visiting pages nobody vetted.
+#   * Loopback only. The debugging port authenticates nobody at all: whatever
+#     can reach it can open any page, read any cookie and drive any session.
+#   * A memory ceiling. A browser that can grow without limit on a shared
+#     machine is an outage for everything else running on it.
+
+[Unit]
+Description=Headless Chrome the AI employees drive (DevTools on 127.0.0.1:9333)
+Documentation=https://github.com/itzzexe/crucible-core
+After=network.target
+
+[Service]
+Type=simple
+User=alphabrowser
+Group=alphabrowser
+ExecStart=/usr/bin/google-chrome-stable \
+  --headless=new \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=9333 \
+  --user-data-dir=/var/lib/alphabrowser/profile \
+  --no-first-run --no-default-browser-check \
+  --disable-gpu --disable-dev-shm-usage \
+  --disable-background-networking --disable-sync --disable-extensions \
+  --metrics-recording-only --mute-audio \
+  --window-size=1440,900 \
+  about:blank
+Restart=always
+RestartSec=5
+
+MemoryMax=1200M
+MemoryHigh=900M
+TasksMax=400
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/var/lib/alphabrowser
+
+[Install]
+WantedBy=multi-user.target

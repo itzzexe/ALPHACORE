@@ -717,6 +717,23 @@ have to do the clicking for.
 So there is a real browser, and an agent is given a goal in words. Each step is
 the three moves a person makes without noticing:
 
+> **It attaches to a browser; it does not ship one.** The platform drives Chrome
+> over the DevTools protocol on `127.0.0.1:9333`, and with nothing listening
+> there the page says *no browser attached* — which is true, and reads like a
+> fault. Start one and it works:
+>
+> ```bash
+> google-chrome --headless=new --remote-debugging-port=9333 about:blank
+> ```
+>
+> On a server, run it as a service under its own unprivileged user — as root it
+> needs `--no-sandbox`, which removes the thing standing between a hostile page
+> and the machine. `deploy/alphacore-browser.service` is that unit: headless,
+> bound to localhost, memory-capped so a browser cannot starve everything else
+> on the box. **The debugging port authenticates nobody** — whatever can reach it
+> controls the browser completely — so it binds to `127.0.0.1` and the firewall
+> refuses it from anywhere else.
+
 | | |
 |---|---|
 | **look** | a screenshot, plus **every element it could actually act on, numbered**. Not the HTML — a page is forty thousand tokens of markup and about fifteen things you can click, and handing a model the markup is how it starts inventing selectors. Given a numbered list of real, visible, hit-testable elements, it can only choose one that exists. |
