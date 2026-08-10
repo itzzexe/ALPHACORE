@@ -131,6 +131,20 @@ export const PERMS = [
   // Putting the company on record in a newspaper is its own act, separate from
   // running a campaign.
   'press.approve',
+
+  // The functions a company discovers it needed after somebody audited it.
+  // Each irreversible one is split from its read: classifying a transaction is
+  // not filing a return, drafting an article is not publishing it, and deciding
+  // a data flow is not looking at the list.
+  'tax.view', 'tax.classify', 'tax.file',
+  'privacy.view', 'privacy.assess', 'privacy.respond',
+  'ip.view', 'ip.manage',
+  'help.view', 'help.write', 'help.publish',
+  'datagov.view', 'datagov.classify',
+  'trust.view', 'trust.publish',
+  'status.view', 'status.post',
+  'partners.view', 'partners.manage',
+  'growth.view', 'growth.run',
 ];
 
 export const hashPassword = (pw) => {

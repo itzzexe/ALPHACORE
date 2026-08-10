@@ -1470,6 +1470,412 @@ async function renderContinuity() {
   </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// The departments a company discovers it needed once somebody audited it.
+// Every one of these pages leads with the number that would embarrass it, not
+// the number that flatters it — a tax page whose headline is "12 classified"
+// tells you nothing; "3 waiting on a person" tells you what to do today.
+// ---------------------------------------------------------------------------
+
+async function renderTax() {
+  const d = await api('/api/tax');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Awaiting a person', d.awaitingPerson, 'unclassified, or drafted above the limit', d.awaitingPerson ? 'bad' : '')}
+    ${tile('Held for authorities', money(d.owed), 'collected and not yet filed — never revenue')}
+    ${tile('Registered in', d.registered, `of ${d.jurisdictions.length} jurisdiction(s) on file`)}
+    ${tile('Lines', d.lines, 'each naming the event it came from')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">What this department will not do</div>
+    <div class="map-legend">${esc(d.note)} An employee may classify and post up to ${money(d.limitUsd)};
+      above that it drafts and a person posts. Filing is always a human act, at any amount.</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Jurisdictions</div>
+    ${d.jurisdictions.length ? `<table class="tbl"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Rate</th><th>Registered</th><th>Filing</th></tr></thead><tbody>
+      ${d.jurisdictions.map((j) => `<tr><td class="mono">${esc(j.code)}</td><td>${esc(j.name)}</td><td>${esc(j.kind)}</td>
+        <td>${j.rate}%</td><td>${j.registered ? 'yes' : '<span class="sub">no</span>'}</td><td>${esc(j.filing)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No jurisdiction on file. Nothing will be classified until one is — a rate nobody recorded is not a rate.</div>'}
+    ${hasPermC('tax.classify') ? `<div class="form-inline" style="margin-top:10px">
+      <div><label class="fl" for="tx-code">Code</label><input id="tx-code" placeholder="IQ"></div>
+      <div><label class="fl" for="tx-name">Name</label><input id="tx-name" placeholder="Iraq"></div>
+      <div><label class="fl" for="tx-rate">Rate %</label><input id="tx-rate" type="number" step="0.1" value="0"></div>
+      <div><label class="fl" for="tx-reg">Registered</label><select id="tx-reg"><option value="0">no</option><option value="1">yes</option></select></div>
+      <button class="btn" id="tx-add">Record</button>
+    </div>` : ''}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Recent lines</div>
+    ${d.recent.length ? `<table class="tbl"><thead><tr><th>Source</th><th>Where</th><th>Treatment</th><th>Basis</th><th>Amount</th><th>Why</th><th>State</th></tr></thead><tbody>
+      ${d.recent.map((l) => `<tr>
+        <td class="mono">${esc(l.source_kind)}#${esc(l.source_id)}</td><td class="mono">${esc(l.jurisdiction)}</td>
+        <td>${l.treatment === 'unclassified' ? '<span class="pill bad">unclassified</span>' : esc(l.treatment)}</td>
+        <td>${money(l.basis)}</td><td>${money(l.amount)}</td>
+        <td class="sub">${esc(l.reason)}</td>
+        <td>${esc(l.state)}${l.state === 'draft' && l.entry_id && hasPermC('tax.file') ? ` <button class="btn btn-sm" data-post="${l.id}">post</button>` : ''}</td>
+      </tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nothing classified yet.</div>'}
+    ${hasPermC('tax.classify') ? '<button class="btn" id="tx-sweep" style="margin-top:10px">Sweep unclassified invoices</button>' : ''}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Returns</div>
+    ${d.returns.length ? `<table class="tbl"><thead><tr><th>Where</th><th>Period</th><th>Collected</th><th>Paid</th><th>Net</th><th>State</th></tr></thead><tbody>
+      ${d.returns.map((r) => `<tr><td class="mono">${esc(r.jurisdiction)}</td><td>${esc(r.period_start)} → ${esc(r.period_end)}</td>
+        <td>${money(r.collected)}</td><td>${money(r.paid)}</td><td><b>${money(r.net)}</b></td>
+        <td>${esc(r.state)}${r.state === 'prepared' && hasPermC('tax.file') ? ` <button class="btn btn-sm" data-file="${r.id}">file</button>` : ''}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No return prepared.</div>'}
+  </div>`;
+  $('#tx-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/tax/jurisdiction', { method: 'POST', body: {
+        code: $('#tx-code').value, name: $('#tx-name').value,
+        rate: Number($('#tx-rate').value), registered: Number($('#tx-reg').value),
+      } });
+      toast('Recorded'); renderTax();
+    } catch (e) { toast(e.message, true); }
+  });
+  $('#tx-sweep')?.addEventListener('click', async () => {
+    try { const r = await api('/api/tax/sweep', { method: 'POST', body: {} }); toast(`${r.classified} classified, ${r.awaitingPerson} for a person`); renderTax(); }
+    catch (e) { toast(e.message, true); }
+  });
+  for (const b of view.querySelectorAll('[data-post]')) {
+    b.addEventListener('click', async () => {
+      try { await api(`/api/tax/line/${b.dataset.post}/post`, { method: 'POST', body: {} }); renderTax(); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+  for (const b of view.querySelectorAll('[data-file]')) {
+    b.addEventListener('click', async () => {
+      if (!confirm('Filing is a statement to a tax authority in this company\'s name. Continue?')) return;
+      try { await api(`/api/tax/return/${b.dataset.file}/file`, { method: 'POST', body: {} }); renderTax(); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+}
+
+async function renderPrivacy() {
+  const d = await api('/api/privacy');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Overdue', d.overdue, `answers past ${d.dueDays} days`, d.overdue ? 'bad' : '')}
+    ${tile('Open requests', d.open, 'people waiting to hear back')}
+    ${tile('High risk, undecided', d.highRiskUndecided, 'flows nobody has ruled on', d.highRiskUndecided ? 'bad' : '')}
+    ${tile('Copies handed over', d.exports.length, 'the half of the law built second')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Not the same question as security</div>
+    <div class="map-legend">The SOC asks whether somebody can take this. This department asks whether the company may
+      hold it at all, on what basis, and for how long. ${esc(d.note)}</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Requests from people about their own data</div>
+    ${d.requests.length ? `<table class="tbl"><thead><tr><th>Kind</th><th>Reference</th><th>Received</th><th>Due</th><th>State</th></tr></thead><tbody>
+      ${d.requests.map((r) => {
+    const late = ['received', 'working'].includes(r.state) && new Date(r.due_at.replace(' ', 'T') + 'Z') < new Date();
+    return `<tr class="${late ? 'row-bad' : ''}"><td>${esc(r.kind)}</td><td class="mono">${esc(r.subject_ref)}</td>
+      <td>${esc(r.received_at)}</td><td>${esc(r.due_at)}${late ? ' <span class="pill bad">overdue</span>' : ''}</td>
+      <td>${esc(r.state)}</td></tr>`;
+  }).join('')}
+    </tbody></table>` : '<div class="empty">Nobody has asked. That is normal and does not mean the path works — try one.</div>'}
+    ${hasPermC('privacy.assess') ? `<div class="form-inline" style="margin-top:10px">
+      <div><label class="fl" for="pv-kind">Kind</label><select id="pv-kind">${d.kinds.map((k) => `<option>${k}</option>`).join('')}</select></div>
+      <div style="flex:1"><label class="fl" for="pv-id">Email or telephone they used</label><input id="pv-id" placeholder="someone@example.com"></div>
+      <button class="btn" id="pv-log">Log request</button>
+    </div>` : ''}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Data flows</div>
+    ${d.flows.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Purpose</th><th>Basis</th><th>Keeps</th><th>Risk</th><th>State</th></tr></thead><tbody>
+      ${d.flows.map((f) => `<tr><td>${esc(f.name)}</td><td class="sub">${esc(f.purpose)}</td><td>${esc(f.lawful_basis)}</td>
+        <td>${f.retention_days ? `${f.retention_days}d` : '<span class="pill bad">for ever</span>'}</td>
+        <td>${f.risk === 'high' ? '<span class="pill bad">high</span>' : esc(f.risk)}</td><td>${esc(f.state)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No flow registered. Anything that moves personal data should be here before it runs.</div>'}
+  </div>`;
+  $('#pv-log')?.addEventListener('click', async () => {
+    try {
+      await api('/api/privacy/request', { method: 'POST', body: { kind: $('#pv-kind').value, identifier: $('#pv-id').value } });
+      toast('Logged — the clock has started'); renderPrivacy();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderIp() {
+  const d = await api('/api/ip');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Lapsing within 90 days', d.dueSoon.length, 'a date nobody watches is how a mark is lost', d.dueSoon.length ? 'bad' : '')}
+    ${tile('Registered', d.registered, 'granted or registered')}
+    ${tile('Unclaimed', d.unclaimed.length, 'shipped and never protected')}
+    ${tile('Spent', money(d.spend), 'filing and renewal')}
+  </div>
+  ${d.dueSoon.length ? `<div class="panel" style="margin-top:16px"><div class="panel-title">Renewals</div>
+    <table class="tbl"><thead><tr><th>Name</th><th>Kind</th><th>Where</th><th>Renew by</th></tr></thead><tbody>
+    ${d.dueSoon.map((a) => `<tr class="row-bad"><td>${esc(a.name)}</td><td>${esc(a.kind)}</td><td>${esc(a.jurisdiction || '—')}</td><td>${esc(a.renewal_at)}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">What the company owns</div>
+    ${d.assets.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Kind</th><th>Where</th><th>Reference</th><th>State</th><th>Owner</th></tr></thead><tbody>
+      ${d.assets.map((a) => `<tr><td>${esc(a.name)}</td><td>${esc(a.kind)}</td><td>${esc(a.jurisdiction || '—')}</td>
+        <td class="mono">${esc(a.reference || '—')}</td><td>${esc(a.state)}</td><td>${esc(a.owner)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nothing registered.</div>'}
+    ${hasPermC('ip.manage') ? `<div class="form-inline" style="margin-top:10px">
+      <div style="flex:1"><label class="fl" for="ip-name">Name</label><input id="ip-name" placeholder="AlphaCore"></div>
+      <div><label class="fl" for="ip-kind">Kind</label><select id="ip-kind">${d.kinds.map((k) => `<option>${k}</option>`).join('')}</select></div>
+      <div><label class="fl" for="ip-owner">Owner</label><input id="ip-owner" placeholder="the company"></div>
+      <button class="btn" id="ip-add">Record</button>
+    </div>` : ''}
+  </div>
+  ${d.unclaimed.length ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">Shipped and unprotected</div>
+    <div class="map-legend">Things this company made and never claimed. Not every one of these should be registered —
+      but somebody should have decided, rather than nobody noticing.</div>
+    <div class="sub" style="margin-top:8px">${d.unclaimed.map((u) => `${esc(u.name)} <span class="pill">${esc(u.suggest)}</span>`).join(' · ')}</div>
+  </div>` : ''}`;
+  $('#ip-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/ip', { method: 'POST', body: { name: $('#ip-name').value, kind: $('#ip-kind').value, owner: $('#ip-owner').value } });
+      toast('Recorded'); renderIp();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderHelp() {
+  const d = await api('/api/help');
+  const rate = d.tickets ? Math.round((d.deflections / Math.max(1, d.tickets)) * 100) : 0;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Asked three times, unanswered', d.repeated, 'the queue that should decide what to write', d.repeated ? 'bad' : '')}
+    ${tile('Published', d.published, `${d.drafts} in draft`)}
+    ${tile('Read', d.views, 'article views')}
+    ${tile('Tickets avoided', d.deflections, `${rate}% of the ticket volume`)}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Not support, and not the academy</div>
+    <div class="map-legend">Support answers one person; the academy trains the workforce. This is written once for
+      everybody who bought the product, and it is judged on the replies that never had to be written.</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Questions with no article</div>
+    ${d.gaps.length ? `<table class="tbl"><thead><tr><th>Question</th><th>Asked</th><th>State</th><th></th></tr></thead><tbody>
+      ${d.gaps.map((g) => `<tr class="${g.seen >= 3 && g.state === 'open' ? 'row-bad' : ''}">
+        <td>${esc(g.question)}</td><td>${g.seen}×</td><td>${esc(g.state)}</td>
+        <td>${g.state === 'open' && hasPermC('help.write') ? `<button class="btn btn-sm" data-draft="${g.id}">draft it</button>` : ''}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No gaps recorded. Sweep support to find them.</div>'}
+    ${hasPermC('help.write') ? '<button class="btn" id="hc-sweep" style="margin-top:10px">Sweep support for repeated questions</button>' : ''}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Articles</div>
+    ${d.articles.length ? `<table class="tbl"><thead><tr><th>Title</th><th>For</th><th>State</th><th>Views</th><th>Deflected</th><th></th></tr></thead><tbody>
+      ${d.articles.map((a) => `<tr><td>${esc(a.title)}</td><td>${esc(a.audience)}</td><td>${esc(a.state)}</td>
+        <td>${a.views}</td><td>${a.deflections}</td>
+        <td>${a.state !== 'published' && hasPermC('help.publish') ? `<button class="btn btn-sm" data-pub="${a.id}">publish</button>` : ''}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nothing written yet.</div>'}
+  </div>`;
+  $('#hc-sweep')?.addEventListener('click', async () => {
+    try { const r = await api('/api/help/sweep', { method: 'POST', body: {} }); toast(`${r.newGaps} new, ${r.repeatedUnanswered} repeating`); renderHelp(); }
+    catch (e) { toast(e.message, true); }
+  });
+  for (const b of view.querySelectorAll('[data-draft]')) {
+    b.addEventListener('click', async () => {
+      try { await api(`/api/help/gap/${b.dataset.draft}/draft`, { method: 'POST', body: {} }); toast('An employee is writing it'); renderHelp(); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+  for (const b of view.querySelectorAll('[data-pub]')) {
+    b.addEventListener('click', async () => {
+      if (!confirm('Publishing puts this in front of customers in the company\'s name.')) return;
+      try { await api(`/api/help/article/${b.dataset.pub}/publish`, { method: 'POST', body: {} }); renderHelp(); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+}
+
+async function renderDataGov() {
+  const d = await api('/api/datagov');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Personal and unerasable', d.gap, 'the finding this department exists for', d.gap ? 'bad' : '')}
+    ${tile('Columns', d.columns, `${d.classified} classified, ${d.reviewed} by a person`)}
+    ${tile('Personal', d.personal, `${d.erasable} the erasure walk reaches`)}
+    ${tile('Past retention', d.retention.length, 'tables holding rows longer than their class allows')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">The cross-check</div>
+    <div class="map-legend">A column classified as personal that the erasure walk cannot reach means
+      <em>a person can be forgotten</em> is untrue for whatever is in it. Neither module can see that on its own,
+      which is the whole reason this comparison is run here — against the real walk, not a description of it.
+      ${esc(d.note)}</div>
+  </div>
+  ${d.unerasable.length ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">Personal data an erasure would not touch</div>
+    <table class="tbl"><thead><tr><th>Column</th><th>Class</th><th>Reviewed by</th><th>Note</th></tr></thead><tbody>
+    ${d.unerasable.map((r) => `<tr class="row-bad"><td class="mono">${esc(r.table_name)}.${esc(r.column_name)}</td>
+      <td>${esc(r.class_name || '—')}</td><td>${esc(r.reviewed_by || 'nobody yet')}</td><td class="sub">${esc(r.note || '')}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+  ${d.retention.length ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">Kept longer than the class allows</div>
+    <div class="map-legend">Reported, never deleted here. Deleting somebody's data because a timer expired is a
+      decision, and it belongs to a person.</div>
+    <table class="tbl"><thead><tr><th>Table</th><th>Class</th><th>Keeps</th><th>Older rows</th></tr></thead><tbody>
+    ${d.retention.map((r) => `<tr><td class="mono">${esc(r.table)}</td><td>${esc(r.class)}</td><td>${r.retainDays}d</td><td>${r.older}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Classes</div>
+    <table class="tbl"><thead><tr><th>Name</th><th>Sensitivity</th><th>Keeps</th><th>Definition</th></tr></thead><tbody>
+    ${d.classes.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.sensitivity)}</td>
+      <td>${c.retain_days ? `${c.retain_days}d` : 'no limit'}</td><td class="sub">${esc(c.definition)}</td></tr>`).join('')}
+    </tbody></table>
+    ${hasPermC('datagov.classify') ? '<button class="btn" id="dg-rebuild" style="margin-top:10px">Rediscover columns from the schema</button>' : ''}
+  </div>`;
+  $('#dg-rebuild')?.addEventListener('click', async () => {
+    try { const r = await api('/api/datagov/rebuild', { method: 'POST', body: {} }); toast(`${r.added} new column(s), ${r.gap} personal and unerasable`); renderDataGov(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderTrust() {
+  const d = await api('/api/trust');
+  const e = d.evidence;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Open red-team findings', e.openRedTeamFindings ?? '—', 'published as-is', e.openRedTeamFindings ? 'bad' : '')}
+    ${tile('Hours since witnessed', e.hoursSinceWitnessed ?? 'never', 'the chain answering to somebody outside', e.hoursSinceWitnessed === null || e.hoursSinceWitnessed > 48 ? 'bad' : '')}
+    ${tile('Overdue privacy answers', e.overduePrivacyRequests ?? 0, 'people still waiting', e.overduePrivacyRequests ? 'bad' : '')}
+    ${tile('Processors with personal data', e.subprocessorsWithPersonalData ?? 0, 'everyone else who touches it')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">A claim that cannot be contradicted by its own system is marketing</div>
+    <div class="map-legend">${esc(d.note)}</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Published</div>
+    ${d.documents.length ? `<table class="tbl"><thead><tr><th>Title</th><th>Kind</th><th>State</th><th>Published</th></tr></thead><tbody>
+      ${d.documents.map((x) => `<tr><td>${esc(x.title)}</td><td>${esc(x.kind)}</td><td>${esc(x.state)}</td><td>${esc(x.published_at || '—')}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nothing published. The evidence above exists whether or not anybody outside can see it.</div>'}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Subprocessors</div>
+    ${d.subprocessors.length ? `<table class="tbl"><thead><tr><th>Name</th><th>For</th><th>Where</th><th>Personal data</th></tr></thead><tbody>
+      ${d.subprocessors.map((s) => `<tr><td>${esc(s.name)}</td><td class="sub">${esc(s.purpose)}</td><td>${esc(s.location || '—')}</td>
+        <td>${s.personal ? '<span class="pill bad">yes</span>' : 'no'}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">None listed.</div>'}
+    ${d.suggested.length ? `<div class="map-legend" style="margin-top:10px">Live connectors and providers that are not on the list:
+      ${d.suggested.map((s) => `<b>${esc(s.name)}</b> <span class="sub">(${esc(s.why)})</span>`).join(' · ')}</div>` : ''}
+  </div>`;
+}
+
+async function renderStatus() {
+  const d = await api('/api/status');
+  const cls = { operational: '', maintenance: '', degraded: 'bad', partial: 'bad', major: 'bad' };
+  view.innerHTML = `
+  <div class="grid grid-3">
+    ${tile('Overall', esc(d.overall), 'what a customer would see', cls[d.overall] || '')}
+    ${tile('Open notices', d.notices.filter((n) => n.state !== 'resolved').length, 'said in public')}
+    ${tile('Never mentioned', d.unannounced.length, 'open incidents with no public notice', d.unannounced.length ? 'bad' : '')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">A page that quietly goes green teaches people not to read it</div>
+    <div class="map-legend">${esc(d.note)}</div>
+  </div>
+  ${d.unannounced.length ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">Open incidents customers have not been told about</div>
+    <table class="tbl"><thead><tr><th>#</th><th>Title</th><th>Severity</th></tr></thead><tbody>
+    ${d.unannounced.map((i) => `<tr class="row-bad"><td>${i.id}</td><td>${esc(i.title)}</td><td>${esc(i.sev || '')}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Components</div>
+    ${d.components.length ? `<table class="tbl"><thead><tr><th>Name</th><th>State</th><th>Updated</th></tr></thead><tbody>
+      ${d.components.map((c) => `<tr class="${cls[c.state] ? 'row-bad' : ''}"><td>${esc(c.name)}<div class="sub">${esc(c.descr || '')}</div></td>
+        <td>${esc(c.state)}</td><td>${esc(c.updated_at)}</td></tr>`).join('')}
+    </tbody></table>` : `<div class="empty">No components yet.
+      ${hasPermC('status.post') ? '<button class="btn" id="st-seed">Create the usual four</button>' : ''}</div>`}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">What the company promised</div>
+    ${d.standing.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Target</th><th>Window</th><th>Credit</th><th>Measured by</th></tr></thead><tbody>
+      ${d.standing.map((s) => `<tr><td>${esc(s.name)}</td><td>${s.target_pct}%</td><td>${s.window_days}d</td><td>${s.credit_pct}%</td>
+        <td>${s.measuredBy === 'nothing yet' ? '<span class="pill bad">nothing yet</span>' : esc(s.measuredBy)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No SLA recorded. A promise nobody wrote down is a promise nobody can keep.</div>'}
+  </div>`;
+  $('#st-seed')?.addEventListener('click', async () => {
+    try { await api('/api/status/seed', { method: 'POST', body: {} }); renderStatus(); } catch (e) { toast(e.message, true); }
+  });
+}
+
+async function renderPartnerships() {
+  const d = await api('/api/partnerships');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Producing nothing', d.dormant.length, 'no deal, and quiet for 90 days', d.dormant.length ? 'bad' : '')}
+    ${tile('Partners', d.total, `${d.active} active`)}
+    ${tile('Producing', d.producing, 'have closed something')}
+    ${tile('Through partners', money(d.valueUsd), 'value of deals they brought')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Not sales</div>
+    <div class="map-legend">Sales asks whether they will buy. This asks whether anything actually flows through the
+      relationship — and for most partnerships, most of the time, the honest answer is nothing, which is what this
+      page is for. ${esc(d.note)}</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Partners</div>
+    ${d.partners.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Tier</th><th>State</th><th>Deals</th><th>Won</th><th>Value</th><th>Quiet for</th><th>Integration</th></tr></thead><tbody>
+      ${d.partners.map((p) => `<tr class="${p.won === 0 && (p.daysQuiet === null || p.daysQuiet > 90) ? 'row-bad' : ''}">
+        <td>${esc(p.name)}</td><td>${esc(p.tier)}</td><td>${esc(p.state)}</td>
+        <td>${p.deals}</td><td>${p.won}</td><td>${money(p.valueUsd)}</td>
+        <td>${p.daysQuiet === null ? 'never spoken' : `${p.daysQuiet}d`}</td>
+        <td class="sub">${esc(p.integration || '—')}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No partners. The table and the outreach drafting were already here — this page is the door.</div>'}
+  </div>`;
+}
+
+async function renderGrowth() {
+  const d = await api('/api/growth');
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile('Waiting on a decision', d.awaitingDecision.length, 'results in, nobody deciding', d.awaitingDecision.length ? 'bad' : '')}
+    ${tile('Running', d.running, 'hypotheses in flight')}
+    ${tile('Shipped', `${d.winRate}%`, 'of concluded experiments that changed something')}
+    ${tile('Inconclusive', d.inconclusive, 'the most common honest answer')}
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">A hypothesis is required before the result</div>
+    <div class="map-legend">Deciding what would count as success after seeing the numbers is how every experiment
+      succeeds. An experiment also cannot be concluded without saying what happens next — ship it, drop it, or run it
+      again bigger. ${esc(d.note)}</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Experiments</div>
+    ${d.experiments.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Moving</th><th>A</th><th>B</th><th>Uplift</th><th>Winner</th><th>Then what</th></tr></thead><tbody>
+      ${d.experiments.map((x) => `<tr class="${x.state === 'running' && x.result_a !== null ? 'row-bad' : ''}">
+        <td>${esc(x.name)}<div class="sub">${esc(x.hypothesis || '')}</div></td>
+        <td>${esc(x.metric || '—')}</td><td>${esc(x.result_a ?? '—')}</td><td>${esc(x.result_b ?? '—')}</td>
+        <td>${x.uplift === null || x.uplift === undefined ? '—' : `${x.uplift}%`}</td>
+        <td>${esc(x.winner || '—')}</td><td class="sub">${esc(x.decision || '')}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No growth experiment yet. The Lab compares prompts; this compares what a customer sees.</div>'}
+    ${hasPermC('growth.run') ? `<div class="form-inline" style="margin-top:10px">
+      <div><label class="fl" for="gr-name">Name</label><input id="gr-name" placeholder="Shorter sign-up"></div>
+      <div style="flex:1"><label class="fl" for="gr-hyp">Hypothesis</label><input id="gr-hyp" placeholder="Removing the company field will raise completion, because it is the only optional field people stop at"></div>
+      <div><label class="fl" for="gr-metric">Metric</label><input id="gr-metric" placeholder="signup completion"></div>
+      <button class="btn" id="gr-add">Start</button>
+    </div>
+    <div class="form-inline">
+      <div style="flex:1"><label class="fl" for="gr-a">Variant A</label><input id="gr-a" placeholder="the form as it is"></div>
+      <div style="flex:1"><label class="fl" for="gr-b">Variant B</label><input id="gr-b" placeholder="without the company field"></div>
+    </div>` : ''}
+  </div>`;
+  $('#gr-add')?.addEventListener('click', async () => {
+    try {
+      await api('/api/growth', { method: 'POST', body: {
+        name: $('#gr-name').value, hypothesis: $('#gr-hyp').value, metric: $('#gr-metric').value,
+        variantA: $('#gr-a').value, variantB: $('#gr-b').value,
+      } });
+      toast('Started'); renderGrowth();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
@@ -1592,6 +1998,15 @@ const routes = {
   packages: { title: 'Department packages — a department you can install', render: renderPackages },
   anchors: { title: 'Anchors — the record answering to something other than itself', render: renderAnchors, poll: 30000 },
   erasure: { title: 'Erasure — forgetting a person inside a record that cannot forget', render: renderErasure },
+  tax: { title: 'Tax — what was owed, where, and to whom', render: renderTax },
+  privacy: { title: 'Privacy — not whether it is safe, but whether we may hold it', render: renderPrivacy },
+  ip: { title: 'Intellectual property — what the company owns that is not a thing', render: renderIp },
+  help: { title: 'Help centre — the replies that never had to be written', render: renderHelp },
+  datagov: { title: 'Data governance — what a column is, and whether it can be forgotten', render: renderDataGov },
+  trust: { title: 'Trust centre — the claims, and the live numbers behind them', render: renderTrust },
+  status: { title: 'Status & SLA — what the company admits while it is happening', render: renderStatus, poll: 20000 },
+  partnerships: { title: 'Partnerships — whether anything actually flows through them', render: renderPartnerships },
+  growth: { title: 'Growth — moving a number on purpose, and knowing whether it moved', render: renderGrowth },
   approvals: { title: 'The desk — everything waiting on a person', render: renderApprovals, poll: 10000 },
   roles: { title: 'Roles — jobs instead of two hundred and four checkboxes', render: renderRoles },
   tiers: { title: 'Model chains — and the canary that has to pass first', render: renderTiers, poll: 20000 },

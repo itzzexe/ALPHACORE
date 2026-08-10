@@ -2508,6 +2508,295 @@ for (const sql of [
   'ALTER TABLE agents ADD COLUMN nickname TEXT',
 ]) { try { db.exec(sql); } catch { /* column exists */ } }
 
+// ---------------------------------------------------------------------------
+// The functions a company discovers it needed after somebody sued it, audited
+// it, or asked it a question it could not answer. Tax, the person answerable
+// for privacy, what the company owns, what it tells its customers, and what it
+// admits about itself in public.
+// ---------------------------------------------------------------------------
+db.exec(`
+-- Tax. Kept as its own thing rather than a report over the ledger, because a
+-- rate belongs to a jurisdiction and a jurisdiction has a registration, a
+-- threshold and a filing date — none of which are facts about an invoice.
+CREATE TABLE IF NOT EXISTS tax_jurisdictions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  code          TEXT NOT NULL UNIQUE,              -- IQ, GB, DE-BY, US-CA
+  name          TEXT NOT NULL,
+  kind          TEXT NOT NULL DEFAULT 'vat',       -- vat|sales|gst|withholding|none
+  rate          REAL NOT NULL DEFAULT 0,           -- per cent
+  registered    INTEGER NOT NULL DEFAULT 0,        -- are we registered to collect here
+  registration  TEXT,
+  threshold_usd REAL NOT NULL DEFAULT 0,           -- register above this turnover
+  filing        TEXT NOT NULL DEFAULT 'quarterly', -- monthly|quarterly|annual
+  note          TEXT,
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One tax consequence of one real event. Every line names the thing it came
+-- from: a number nobody can trace to an invoice is a number nobody can defend
+-- to a tax authority, which is the only audience this table has.
+CREATE TABLE IF NOT EXISTS tax_lines (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_kind   TEXT NOT NULL,                     -- invoice|payout|model_call|manual
+  source_id     TEXT NOT NULL,
+  jurisdiction  TEXT NOT NULL,
+  treatment     TEXT NOT NULL,                     -- collected|paid|reverse_charge|exempt|out_of_scope
+  basis         REAL NOT NULL DEFAULT 0,
+  rate          REAL NOT NULL DEFAULT 0,
+  amount        REAL NOT NULL DEFAULT 0,
+  reason        TEXT NOT NULL,                     -- why this treatment, in words
+  state         TEXT NOT NULL DEFAULT 'draft',     -- draft|posted|filed
+  entry_id      INTEGER,                           -- the journal entry in the real books
+  return_id     INTEGER,
+  classified_by TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS tax_lines_src ON tax_lines (source_kind, source_id);
+
+CREATE TABLE IF NOT EXISTS tax_returns (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  jurisdiction TEXT NOT NULL,
+  period_start TEXT NOT NULL,
+  period_end   TEXT NOT NULL,
+  collected    REAL NOT NULL DEFAULT 0,
+  paid         REAL NOT NULL DEFAULT 0,
+  net          REAL NOT NULL DEFAULT 0,
+  state        TEXT NOT NULL DEFAULT 'open',       -- open|prepared|filed
+  prepared_by  TEXT,
+  filed_by     TEXT,
+  filed_at     TEXT,
+  note         TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Privacy. A different question from security: not "is this safe" but "may we
+-- hold it at all". Kept apart from the SOC on purpose — one asks about attacks,
+-- the other about permission, and an install that merges them answers only the
+-- first.
+CREATE TABLE IF NOT EXISTS privacy_flows (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  purpose       TEXT NOT NULL,
+  lawful_basis  TEXT NOT NULL,                     -- consent|contract|legal_obligation|vital|public_task|legitimate_interest
+  categories    TEXT NOT NULL,                     -- what kinds of data
+  subjects      TEXT NOT NULL,                     -- whose
+  destination   TEXT,                              -- where it ends up; a connector, a country
+  connector     TEXT,
+  retention_days INTEGER NOT NULL DEFAULT 0,
+  crosses_border INTEGER NOT NULL DEFAULT 0,
+  risk          TEXT NOT NULL DEFAULT 'medium',    -- low|medium|high
+  state         TEXT NOT NULL DEFAULT 'proposed',  -- proposed|assessed|approved|refused|retired
+  assessment    TEXT,
+  run_id        TEXT,
+  decided_by    TEXT,
+  decided_at    TEXT,
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A request from a person about their own data. The identifier is never stored
+-- here: only the one-way reference, the same one erasure uses. Writing
+-- "alice@example.com asked to be forgotten" into a table is a way of not
+-- forgetting her.
+CREATE TABLE IF NOT EXISTS dsr_requests (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                       -- access|erasure|portability|rectification|objection
+  subject_ref TEXT NOT NULL,
+  channel     TEXT NOT NULL DEFAULT 'console',
+  received_at TEXT NOT NULL DEFAULT (datetime('now')),
+  due_at      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'received',    -- received|working|answered|refused
+  outcome     TEXT,
+  export_id   INTEGER,
+  handled_by  TEXT,
+  answered_at TEXT,
+  note        TEXT
+);
+
+-- Portability: the half of the law people build second. A copy, not a deletion.
+CREATE TABLE IF NOT EXISTS data_exports (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_ref  TEXT NOT NULL,
+  format       TEXT NOT NULL DEFAULT 'json',
+  state        TEXT NOT NULL DEFAULT 'requested',  -- requested|built|delivered|expired
+  file_ref     TEXT,
+  bytes        INTEGER NOT NULL DEFAULT 0,
+  records      INTEGER NOT NULL DEFAULT 0,
+  requested_by TEXT NOT NULL,
+  built_at     TEXT,
+  delivered_at TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- What the company owns that is not a thing: a name, a mark, an invention, a
+-- secret. It has renewal dates, and a renewal date nobody watches is how a
+-- trademark is lost.
+CREATE TABLE IF NOT EXISTS ip_assets (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL,                      -- trademark|patent|copyright|domain|trade_secret|design
+  jurisdiction TEXT,
+  reference    TEXT,
+  state        TEXT NOT NULL DEFAULT 'idea',       -- idea|filed|granted|registered|lapsed|abandoned|refused
+  owner        TEXT NOT NULL,
+  source_kind  TEXT,                               -- product|release|design|content
+  source_id    TEXT,
+  filed_at     TEXT,
+  granted_at   TEXT,
+  renewal_at   TEXT,
+  cost_usd     REAL NOT NULL DEFAULT 0,
+  evidence     TEXT,
+  note         TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Documentation for the people who bought the product, which is not the same
+-- audience as the academy and not the same job as answering a ticket.
+CREATE TABLE IF NOT EXISTS help_articles (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug         TEXT NOT NULL UNIQUE,
+  title        TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  audience     TEXT NOT NULL DEFAULT 'customer',   -- customer|internal
+  state        TEXT NOT NULL DEFAULT 'draft',      -- draft|review|published|retired
+  locale       TEXT NOT NULL DEFAULT 'en',
+  product_id   TEXT,
+  source_gap   INTEGER,
+  run_id       TEXT,
+  views        INTEGER NOT NULL DEFAULT 0,
+  deflections  INTEGER NOT NULL DEFAULT 0,         -- tickets that stopped happening
+  author       TEXT NOT NULL,
+  published_at TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A question that keeps arriving and has no article. This is the link that
+-- makes documentation pay for itself instead of being a wish.
+CREATE TABLE IF NOT EXISTS help_gaps (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  question   TEXT NOT NULL,
+  category   TEXT,
+  seen       INTEGER NOT NULL DEFAULT 1,
+  last_ticket INTEGER,
+  state      TEXT NOT NULL DEFAULT 'open',         -- open|drafted|answered|dismissed
+  article_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Data governance: what a column *is*, as a governance fact rather than an
+-- intelligence one. Separate from DATA, which is about finding things out.
+CREATE TABLE IF NOT EXISTS data_classes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL UNIQUE,
+  sensitivity TEXT NOT NULL,                       -- public|internal|confidential|personal|restricted
+  definition  TEXT NOT NULL,
+  retain_days INTEGER NOT NULL DEFAULT 0,          -- 0 = keep
+  basis       TEXT,
+  owner       TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS data_inventory (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  table_name  TEXT NOT NULL,
+  column_name TEXT NOT NULL,
+  class_name  TEXT,
+  personal    INTEGER NOT NULL DEFAULT 0,
+  erasable    INTEGER NOT NULL DEFAULT 0,          -- does the erasure walk actually reach it
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  note        TEXT,
+  UNIQUE (table_name, column_name)
+);
+
+-- What the company says about itself to people who have not bought yet, and to
+-- people who have and want to know whether it is down.
+CREATE TABLE IF NOT EXISTS trust_documents (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  title        TEXT NOT NULL,
+  kind         TEXT NOT NULL,                      -- policy|report|certificate|faq|architecture
+  body         TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'draft',      -- draft|review|published|retired
+  evidence     TEXT,                               -- what in this system backs the claim
+  owner        TEXT NOT NULL,
+  run_id       TEXT,
+  published_at TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS subprocessors (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  name      TEXT NOT NULL,
+  purpose   TEXT NOT NULL,
+  location  TEXT,
+  personal  INTEGER NOT NULL DEFAULT 0,
+  dpa_ref   TEXT,
+  state     TEXT NOT NULL DEFAULT 'active',        -- active|retired
+  added_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS status_components (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  descr      TEXT,
+  state      TEXT NOT NULL DEFAULT 'operational',  -- operational|degraded|partial|major|maintenance
+  objective  TEXT,                                 -- the watchtower objective that decides it
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS status_notices (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  impact      TEXT NOT NULL DEFAULT 'minor',       -- none|minor|major|critical
+  state       TEXT NOT NULL DEFAULT 'investigating', -- investigating|identified|monitoring|resolved
+  body        TEXT NOT NULL,
+  component   TEXT,
+  incident_id INTEGER,                             -- the internal incident it corresponds to
+  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT,
+  created_by  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sla_terms (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  target_pct REAL NOT NULL DEFAULT 99.9,
+  window_days INTEGER NOT NULL DEFAULT 30,
+  credit_pct REAL NOT NULL DEFAULT 0,
+  applies_to TEXT,
+  objective  TEXT,
+  note       TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+// Growth needs a few facts an A/B row did not carry: what was being moved, for
+// whom, and what was decided afterwards. A winner nobody acted on is a result,
+// not an experiment.
+for (const sql of [
+  // The Lab and Growth run different experiments over the same shape: one
+  // compares two prompts, the other compares two things a customer sees. Same
+  // table, named apart, because "which variant won" means something different
+  // in each and a mixed list answers neither question.
+  "ALTER TABLE experiments ADD COLUMN kind TEXT NOT NULL DEFAULT 'lab'",
+  'ALTER TABLE experiments ADD COLUMN metric TEXT',
+  'ALTER TABLE experiments ADD COLUMN audience TEXT',
+  'ALTER TABLE experiments ADD COLUMN baseline REAL',
+  'ALTER TABLE experiments ADD COLUMN uplift REAL',
+  'ALTER TABLE experiments ADD COLUMN decision TEXT',
+  'ALTER TABLE experiments ADD COLUMN product_id TEXT',
+  'ALTER TABLE experiments ADD COLUMN concluded_at TEXT',
+  // Partnerships: a relationship is worth having only if something flows
+  // through it, so the deal it produced is named on the partner.
+  'ALTER TABLE partners ADD COLUMN integration TEXT',
+  'ALTER TABLE partners ADD COLUMN agreement_ref TEXT',
+  'ALTER TABLE partners ADD COLUMN reviewed_at TEXT',
+]) { try { db.exec(sql); } catch { /* column exists */ } }
+
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }
 export function exec(sql, ...params) { return db.prepare(sql).run(...params); }

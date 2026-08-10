@@ -11,6 +11,32 @@ import {
 } from './push.js';
 import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anchor.js';
 import { erasureOverview, findSubject, eraseSubject, verifyErasure } from './erasure.js';
+import {
+  overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
+  sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
+} from './tax.js';
+import {
+  overview as privacyOverview, proposeFlow, decideFlow, logRequest, buildExport, answerRequest,
+} from './privacy.js';
+import { overview as ipOverview, register as registerIp, advance as advanceIp } from './ip.js';
+import {
+  overview as helpOverview, sweepTickets, draftForGap, write as writeArticle, publish as publishArticle,
+} from './helpcentre.js';
+import {
+  overview as datagovOverview, rebuild as rebuildInventory, defineClass, classifyColumn,
+} from './datagov.js';
+import {
+  overview as trustOverview, publishDocument as publishTrustDocument,
+  retireDocument as retireTrustDocument, addSubprocessor,
+} from './trustcentre.js';
+import {
+  overview as statusOverview, seedComponents, setComponent, postNotice, updateNotice, addTerm as addSlaTerm,
+} from './statuspage.js';
+import { overview as partnershipsOverview, setIntegration } from './partnerships.js';
+import {
+  overview as growthOverview, start as startExperiment, record as recordResult,
+  conclude as concludeExperiment2,
+} from './growth.js';
 // Aliased: securityOverview already means the SOC department in this file,
 // and an account's own second factor is a different thing entirely.
 import {
@@ -1434,6 +1460,96 @@ const routes = [
       body: JSON.stringify(exportAll(), null, 1),
     },
   })],
+
+  // ---- Tax --------------------------------------------------------------
+  ['GET', /^\/api\/tax$/, () => taxOverview()],
+  ['POST', /^\/api\/tax\/jurisdiction$/, (_p, body, user) => addJurisdiction({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/classify$/, (_p, body) => taxClassify({
+    jurisdiction: need(body, 'jurisdiction'), basis: Number(body.basis) || 0, kind: body.kind || 'invoice',
+  })],
+  ['POST', /^\/api\/tax\/line$/, (_p, body, user) => recordTaxLine({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/sweep$/, (_p, _b, user) => taxSweep({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/return$/, (_p, body, user) => buildReturn({
+    jurisdiction: need(body, 'jurisdiction'), periodStart: need(body, 'periodStart'),
+    periodEnd: need(body, 'periodEnd'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/tax\/return\/(\d+)\/file$/, (p, _b, user) => fileReturn({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/line\/(\d+)\/post$/, (p, _b, user) => postTaxDraft({ id: Number(p[1]), actor: `human:${user.username}` })],
+
+  // ---- Privacy ----------------------------------------------------------
+  ['GET', /^\/api\/privacy$/, () => privacyOverview()],
+  ['POST', /^\/api\/privacy\/flow$/, (_p, body, user) => proposeFlow({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/privacy\/flow\/(\d+)\/decide$/, (p, body, user) => decideFlow({
+    id: Number(p[1]), verdict: need(body, 'verdict'), assessment: need(body, 'assessment'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/privacy\/request$/, (_p, body, user) => logRequest({
+    kind: need(body, 'kind'), identifier: need(body, 'identifier'),
+    channel: body.channel, note: body.note, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/privacy\/request\/(\d+)\/export$/, (p, body, user) => buildExport({
+    id: Number(p[1]), identifier: need(body, 'identifier'), format: body.format || 'json', actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/privacy\/request\/(\d+)\/answer$/, (p, body, user) => answerRequest({
+    id: Number(p[1]), identifier: body.identifier || null, outcome: need(body, 'outcome'), actor: `human:${user.username}`,
+  })],
+
+  // ---- Intellectual property --------------------------------------------
+  ['GET', /^\/api\/ip$/, () => ipOverview()],
+  ['POST', /^\/api\/ip$/, (_p, body, user) => registerIp({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/ip\/(\d+)\/advance$/, (p, body, user) => advanceIp({
+    id: Number(p[1]), state: need(body, 'state'), reference: body.reference,
+    renewalAt: body.renewalAt, note: body.note, actor: `human:${user.username}`,
+  })],
+
+  // ---- Help centre ------------------------------------------------------
+  ['GET', /^\/api\/help$/, () => helpOverview()],
+  ['POST', /^\/api\/help\/sweep$/, () => sweepTickets()],
+  ['POST', /^\/api\/help\/gap\/(\d+)\/draft$/, (p, _b, user) => draftForGap({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/article$/, (_p, body, user) => writeArticle({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/article\/(\d+)\/publish$/, (p, _b, user) => publishArticle({ id: Number(p[1]), actor: `human:${user.username}` })],
+
+  // ---- Data governance --------------------------------------------------
+  ['GET', /^\/api\/datagov$/, () => datagovOverview()],
+  ['POST', /^\/api\/datagov\/rebuild$/, (_p, _b, user) => rebuildInventory({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/datagov\/class$/, (_p, body, user) => defineClass({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/datagov\/classify$/, (_p, body, user) => classifyColumn({
+    table: need(body, 'table'), column: need(body, 'column'), className: body.className,
+    personal: body.personal, note: body.note, actor: `human:${user.username}`,
+  })],
+
+  // ---- Trust centre -----------------------------------------------------
+  ['GET', /^\/api\/trust$/, () => trustOverview()],
+  ['POST', /^\/api\/trust\/document$/, (_p, body, user) => publishTrustDocument({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trust\/document\/(\d+)\/retire$/, (p, _b, user) => retireTrustDocument({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trust\/subprocessor$/, (_p, body, user) => addSubprocessor({ ...body, actor: `human:${user.username}` })],
+
+  // ---- Status and SLA ---------------------------------------------------
+  ['GET', /^\/api\/status$/, () => statusOverview()],
+  ['POST', /^\/api\/status\/seed$/, (_p, _b, user) => seedComponents({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/status\/component$/, (_p, body, user) => setComponent({
+    name: need(body, 'name'), state: need(body, 'state'), objective: body.objective, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/status\/notice$/, (_p, body, user) => postNotice({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/status\/notice\/(\d+)$/, (p, body, user) => updateNotice({
+    id: Number(p[1]), state: need(body, 'state'), body: need(body, 'body'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/status\/sla$/, (_p, body, user) => addSlaTerm({ ...body, actor: `human:${user.username}` })],
+
+  // ---- Partnerships -----------------------------------------------------
+  ['GET', /^\/api\/partnerships$/, () => partnershipsOverview()],
+  ['POST', /^\/api\/partnerships\/(\d+)\/integration$/, (p, body, user) => setIntegration({
+    id: Number(p[1]), integration: need(body, 'integration'), agreementRef: body.agreementRef, actor: `human:${user.username}`,
+  })],
+
+  // ---- Growth -----------------------------------------------------------
+  ['GET', /^\/api\/growth$/, () => growthOverview()],
+  ['POST', /^\/api\/growth$/, (_p, body, user) => startExperiment({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/growth\/(\d+)\/result$/, (p, body, user) => recordResult({
+    id: Number(p[1]), resultA: need(body, 'resultA'), resultB: need(body, 'resultB'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/growth\/(\d+)\/conclude$/, (p, body, user) => concludeExperiment2({
+    id: Number(p[1]), winner: need(body, 'winner'), decision: need(body, 'decision'), actor: `human:${user.username}`,
+  })],
 ];
 
 /** Path → permission key. One permission per capability; superadmin holds "*". */
@@ -1465,6 +1581,30 @@ function permFor(m, path) {
   if (path.startsWith('/api/delegations')) return null;
   if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
   if (path === '/api/erasure/erase') return 'compliance.manage';
+
+  // The read and the irreversible act are never the same key. Looking at the
+  // tax ledger is not filing a return; reading an article is not publishing it.
+  if (path === '/api/tax') return 'tax.view';
+  if (path === '/api/tax/file' || /^\/api\/tax\/return\/\d+\/file$/.test(path)) return 'tax.file';
+  if (path.startsWith('/api/tax')) return 'tax.classify';
+  if (path === '/api/privacy') return 'privacy.view';
+  if (/^\/api\/privacy\/request\/\d+\/(answer|export)$/.test(path)) return 'privacy.respond';
+  if (path.startsWith('/api/privacy')) return 'privacy.assess';
+  if (path === '/api/ip' && m === 'GET') return 'ip.view';
+  if (path.startsWith('/api/ip')) return 'ip.manage';
+  if (path === '/api/help') return 'help.view';
+  if (/^\/api\/help\/article\/\d+\/publish$/.test(path)) return 'help.publish';
+  if (path.startsWith('/api/help')) return 'help.write';
+  if (path === '/api/datagov') return 'datagov.view';
+  if (path.startsWith('/api/datagov')) return 'datagov.classify';
+  if (path === '/api/trust') return 'trust.view';
+  if (path.startsWith('/api/trust')) return 'trust.publish';
+  if (path === '/api/status') return 'status.view';
+  if (path.startsWith('/api/status')) return 'status.post';
+  if (path === '/api/partnerships') return 'partners.view';
+  if (path.startsWith('/api/partnerships')) return 'partners.manage';
+  if (path === '/api/growth' && m === 'GET') return 'growth.view';
+  if (path.startsWith('/api/growth')) return 'growth.run';
   if (path === '/api/anchors/verify') return 'audit.view';
   if (path.startsWith('/api/anchors')) return m === 'GET' ? 'audit.view' : 'settings.manage';
   if (path === '/api/push') return 'users.manage';

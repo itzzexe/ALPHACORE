@@ -302,6 +302,94 @@ export function pendingApprovals() {
     }
   }
 
+  // --- tax: an employee classified it and the amount is above the limit ---
+  for (const t of q(`SELECT * FROM tax_lines WHERE treatment = 'unclassified' OR state = 'draft'
+                      ORDER BY amount DESC LIMIT 20`)) {
+    const unclassified = t.treatment === 'unclassified';
+    items.push(item({
+      kind: 'taxLine', dept: 'tax', id: t.id,
+      title: `${t.source_kind} #${t.source_id} — ${t.jurisdiction || 'no jurisdiction'}`,
+      sub: unclassified ? t.reason : `drafted above the limit: ${t.reason}`,
+      href: '#/tax', at: t.created_at, severity: unclassified ? 'high' : 'normal',
+      action: t.entry_id && !unclassified ? { method: 'POST', path: `/api/tax/line/${t.id}/post`, body: {} } : null,
+      actionLabel: 'Post to the books',
+    }));
+  }
+
+  // --- privacy: a person is waiting, and the clock is statutory ---
+  for (const r of q(`SELECT * FROM dsr_requests WHERE state IN ('received','working') ORDER BY due_at LIMIT 20`)) {
+    const overdue = new Date(String(r.due_at).replace(' ', 'T') + 'Z') < new Date();
+    items.push(item({
+      kind: 'dsr', dept: 'privacy', id: r.id,
+      title: `${r.kind} request — ${r.subject_ref}`,
+      sub: overdue ? `overdue: it was due ${r.due_at}` : `due ${r.due_at}`,
+      href: '#/privacy', at: r.received_at, severity: overdue ? 'high' : 'normal',
+    }));
+  }
+  for (const f of q(`SELECT * FROM privacy_flows WHERE risk = 'high' AND state IN ('proposed','assessed') ORDER BY id LIMIT 10`)) {
+    items.push(item({
+      kind: 'privacyFlow', dept: 'privacy', id: f.id,
+      title: `${f.name} — high risk`,
+      sub: `${f.lawful_basis}${f.crosses_border ? ', crosses a border' : ''}${f.retention_days ? '' : ', kept for ever'}`,
+      href: '#/privacy', at: f.created_at, severity: 'high',
+    }));
+  }
+
+  // --- the help centre: nothing reaches a customer unsigned ---
+  for (const a of q("SELECT * FROM help_articles WHERE state IN ('draft','review') ORDER BY id DESC LIMIT 15")) {
+    items.push(item({
+      kind: 'helpArticle', dept: 'help', id: a.id,
+      title: a.title, sub: 'written by an employee, waiting for somebody to put the company behind it',
+      href: '#/help', at: a.created_at, severity: 'normal',
+      action: { method: 'POST', path: `/api/help/article/${a.id}/publish`, body: {} },
+      actionLabel: 'Publish',
+    }));
+  }
+
+  // --- an outage nobody has told the customers about ---
+  for (const i of q(`SELECT i.* FROM incidents i WHERE i.state <> 'closed'
+                       AND NOT EXISTS (SELECT 1 FROM status_notices n WHERE n.incident_id = i.id)
+                     ORDER BY i.id DESC LIMIT 10`)) {
+    items.push(item({
+      kind: 'unannounced', dept: 'status', id: i.id,
+      title: i.title, sub: 'open, and the status page says nothing about it',
+      href: '#/status', at: i.created_at, severity: 'high',
+    }));
+  }
+
+  // --- growth: a result in, and nobody deciding what to do about it ---
+  for (const x of q(`SELECT * FROM experiments WHERE kind = 'growth' AND state = 'running'
+                       AND result_a IS NOT NULL AND result_b IS NOT NULL ORDER BY id LIMIT 10`)) {
+    items.push(item({
+      kind: 'experiment', dept: 'growth', id: x.id,
+      title: `${x.name} — ${x.uplift === null ? 'result in' : `${x.uplift}%`}`,
+      sub: 'a winner nobody shipped is a report, not an experiment',
+      href: '#/growth', at: x.created_at, severity: 'normal',
+    }));
+  }
+
+  // --- intellectual property lapsing ---
+  for (const a of q(`SELECT * FROM ip_assets WHERE renewal_at IS NOT NULL AND state IN ('granted','registered')
+                       AND date(renewal_at) <= date('now', '+60 days') ORDER BY date(renewal_at) LIMIT 10`)) {
+    items.push(item({
+      kind: 'ipRenewal', dept: 'ip', id: a.id,
+      title: `${a.name} — renew by ${a.renewal_at}`,
+      sub: 'a mark lost this way cannot be bought back at any price',
+      href: '#/ip', at: a.created_at, severity: 'high',
+    }));
+  }
+
+  // --- personal data an erasure could not reach ---
+  const unerasable = one('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1 AND erasable = 0').n;
+  if (unerasable) {
+    items.push(item({
+      kind: 'datagovGap', dept: 'datagov', id: 'gap',
+      title: `${unerasable} personal column(s) an erasure would not reach`,
+      sub: 'while this is not zero, "a person can be forgotten" is not true of everything held about them',
+      href: '#/datagov', at: null, severity: 'high',
+    }));
+  }
+
   const order = { high: 0, normal: 1, low: 2 };
   items.sort((a, b) => (order[a.severity] - order[b.severity]) || (b.ageHours - a.ageHours));
   return items;

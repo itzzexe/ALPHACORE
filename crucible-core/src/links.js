@@ -471,6 +471,16 @@ export function sectionCatalog() {
     S('packages', 'Department packages', 'build', '#/packages', n('SELECT COUNT(*) AS n FROM packages'), 'A department as an installable manifest — tables, employees, permissions and a place on the map'),
     S('anchors', 'Anchors', 'govern', '#/anchors', n('SELECT COUNT(*) AS n FROM anchors WHERE ok = 1'), 'The chain answering to a witness outside this machine — the one check a rewritten history cannot pass'),
     S('erasure', 'Erasure', 'trust', '#/erasure', n('SELECT COUNT(*) AS n FROM pii_subjects WHERE erased_at IS NOT NULL'), 'Forgetting a person inside a record that cannot forget: the key is destroyed and every hash still verifies'),
+    // The functions a company discovers it needed after somebody audited it.
+    S('tax', 'Tax', 'capital', '#/tax', n('SELECT COUNT(*) AS n FROM tax_lines'), 'What was owed, where, and to whom — as entries in the same double-entry books, never a separate report'),
+    S('privacy', 'Privacy & DPO', 'trust', '#/privacy', n("SELECT COUNT(*) AS n FROM dsr_requests WHERE state IN ('received','working')"), 'Not whether the data is safe but whether the company may hold it at all — the question the SOC does not ask'),
+    S('ip', 'Intellectual property', 'operate', '#/ip', n('SELECT COUNT(*) AS n FROM ip_assets'), 'What the company owns that is not a thing, and the renewal date that loses it'),
+    S('help', 'Help centre', 'operate', '#/help', n("SELECT COUNT(*) AS n FROM help_articles WHERE state = 'published'"), 'Documentation for the people who bought it — judged on the replies that never had to be written'),
+    S('datagov', 'Data governance', 'govern', '#/datagov', n('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1 AND erasable = 0'), 'What a column is, and whether an erasure could actually reach it — the cross-check neither module can make alone'),
+    S('trustcentre', 'Trust centre', 'trust', '#/trust', n("SELECT COUNT(*) AS n FROM trust_documents WHERE state = 'published'"), 'What the company tells a prospect, with the live number behind every claim'),
+    S('status', 'Status & SLA', 'operate', '#/status', n("SELECT COUNT(*) AS n FROM status_notices WHERE state <> 'resolved'"), 'What the company admits in public while it is happening, and the promise it made about how often'),
+    S('partnerships', 'Partnerships', 'commerce', '#/partnerships', n('SELECT COUNT(*) AS n FROM partners'), 'Not sales: whether anything actually flows through the relationship'),
+    S('growth', 'Growth', 'marketing', '#/growth', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'growth'"), 'Moving one number on purpose, with the hypothesis written before the result'),
     S('approvals', 'The desk', 'decide', '#/approvals', n("SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'"), 'Everything waiting on a person, ordered by what it blocks rather than by who asked'),
     S('roles', 'Roles', 'govern', '#/roles', n('SELECT COUNT(*) AS n FROM users'), 'Jobs instead of 204 checkboxes, with each irreversible power in exactly one of them'),
     S('tiers', 'Model chains', 'engine', '#/tiers', n('SELECT COUNT(*) AS n FROM tier_proposals'), 'Which model does the work, and the canary that has to pass before that changes'),
@@ -980,6 +990,57 @@ export function relationshipMatrix() {
     edge('erasure', 'audit', 'the erasure is recorded; the identifier never is', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'pii.erased'"), '#/audit', 'audit'),
     edge('erasure', 'intel', 'the columns an erasure walks', n('SELECT COUNT(*) AS n FROM intel_records'), '#/intel'),
     edge('erasure', 'compliance', 'a request arrives there and is carried out here', n('SELECT COUNT(*) AS n FROM pii_subjects WHERE erased_at IS NOT NULL'), '#/compliance', 'gate'),
+    // Declared only because the walk really reaches these columns. A department
+    // that holds somebody's details and does not point here is a department
+    // where an erasure quietly stops — which is how "a person can be forgotten"
+    // becomes untrue without anybody editing the sentence that says it.
+    edge('support', 'erasure', 'what somebody wrote in, and the address they wrote from', n('SELECT COUNT(*) AS n FROM tickets'), '#/erasure'),
+    edge('contact', 'erasure', 'the number, the transcript and the recording of a voice', n('SELECT COUNT(*) AS n FROM calls') + n('SELECT COUNT(*) AS n FROM sms_messages'), '#/erasure'),
+    edge('intel', 'erasure', 'harvested contacts are people who never asked to be on file', n('SELECT COUNT(*) AS n FROM intel_contacts'), '#/erasure'),
+
+    // Every edge below names a code path that exists. Where one does not — the
+    // obvious example is a contract review that ought to happen before a deal
+    // is agreed — there is deliberately no line on the map, because a declared
+    // relationship nothing enforces is the decoration this whole design is
+    // supposed to refuse.
+    edge('tax', 'ledger', 'a tax line is a journal entry in the same books, not a report beside them', n('SELECT COUNT(*) AS n FROM tax_lines WHERE entry_id IS NOT NULL'), '#/ledger'),
+    edge('tax', 'money', 'the invoices it classifies', n('SELECT COUNT(*) AS n FROM invoices'), '#/money'),
+    edge('tax', 'approvals', 'above the limit an employee drafts and a person posts', n("SELECT COUNT(*) AS n FROM tax_lines WHERE state = 'draft' OR treatment = 'unclassified'"), '#/approvals', 'gate'),
+    edge('tax', 'bookkeeper', 'the same limit the bookkeeper obeys, for the same reason', n("SELECT COUNT(*) AS n FROM tax_lines WHERE state = 'posted'"), '#/bookkeeper'),
+
+    edge('privacy', 'erasure', 'an erasure request is carried out there, not noted here', n("SELECT COUNT(*) AS n FROM dsr_requests WHERE kind = 'erasure'"), '#/erasure', 'gate'),
+    edge('privacy', 'connectors', 'a flow names the connector that would carry it, before it carries anything', n('SELECT COUNT(*) AS n FROM privacy_flows WHERE connector IS NOT NULL'), '#/connectors', 'gate'),
+    edge('privacy', 'approvals', 'a high-risk flow is decided by a person', n("SELECT COUNT(*) AS n FROM privacy_flows WHERE risk = 'high' AND state IN ('proposed','assessed')"), '#/approvals', 'gate'),
+    edge('privacy', 'archive', 'the copy handed to somebody who asked for their data', n('SELECT COUNT(*) AS n FROM data_exports'), '#/archive'),
+
+    edge('datagov', 'erasure', 'every column called personal, checked against the walk that must reach it', n('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1'), '#/erasure', 'audit'),
+    edge('datagov', 'privacy', 'a personal column an erasure cannot reach is a promise the DPO cannot keep', n('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1 AND erasable = 0'), '#/privacy', 'audit'),
+    edge('datagov', 'observability', 'retention: what is kept longer than its class allows', n('SELECT COUNT(*) AS n FROM data_classes WHERE retain_days > 0'), '#/observability'),
+
+    edge('support', 'help', 'a question asked three times is a missing article, not a busy week', n("SELECT COUNT(*) AS n FROM help_gaps WHERE seen >= 3"), '#/help'),
+    edge('help', 'runs', 'an employee drafts the article; a person publishes it', n("SELECT COUNT(*) AS n FROM help_articles WHERE run_id IS NOT NULL"), '#/runs'),
+    edge('help', 'approvals', 'nothing reaches a customer until somebody signs it', n("SELECT COUNT(*) AS n FROM help_articles WHERE state IN ('draft','review')"), '#/approvals', 'gate'),
+
+    edge('trustcentre', 'redteam', 'what got through last time, published as it is', n("SELECT COUNT(*) AS n FROM redteam_runs WHERE outcome = 'breached' AND fixed_at IS NULL"), '#/redteam', 'audit'),
+    edge('trustcentre', 'anchors', 'how long since anybody outside this machine witnessed the record', n('SELECT COUNT(*) AS n FROM anchors WHERE ok = 1'), '#/anchors', 'audit'),
+    edge('trustcentre', 'privacy', 'how many people are still waiting for an answer', n("SELECT COUNT(*) AS n FROM dsr_requests WHERE state IN ('received','working')"), '#/privacy'),
+    edge('trustcentre', 'connectors', 'every processor that touches the data, named', n('SELECT COUNT(*) AS n FROM subprocessors'), '#/connectors'),
+
+    edge('status', 'incidents', 'an incident nobody told the customers about', n("SELECT COUNT(*) AS n FROM incidents WHERE state <> 'closed'"), '#/incidents', 'gate'),
+    edge('status', 'objectives', 'a promise is measured by the watchtower, not by the department that made it', n('SELECT COUNT(*) AS n FROM sla_terms WHERE objective IS NOT NULL'), '#/objectives', 'audit'),
+    edge('status', 'trustcentre', 'the same numbers, said to somebody who has not bought yet', n('SELECT COUNT(*) AS n FROM status_components'), '#/trust'),
+
+    edge('partnerships', 'sales', 'the deals a partner actually brought', n('SELECT COUNT(*) AS n FROM deals WHERE partner_id IS NOT NULL'), '#/sales'),
+    edge('partnerships', 'relations', 'the outreach draft and the health score were already here', n('SELECT COUNT(*) AS n FROM interactions WHERE partner_id IS NOT NULL'), '#/relations'),
+    edge('partnerships', 'egress', 'an outreach message leaves the way everything else does', n("SELECT COUNT(*) AS n FROM partners WHERE draft IS NOT NULL"), '#/egress', 'gate'),
+
+    edge('growth', 'products', 'the thing being changed', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'growth' AND product_id IS NOT NULL"), '#/products'),
+    edge('growth', 'lab', 'the Lab compares two prompts; this compares two things a customer sees', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'lab'"), '#/lab'),
+    edge('growth', 'insights', 'a result nobody decided on is a report, not an experiment', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'growth' AND state = 'running' AND result_a IS NOT NULL"), '#/insights'),
+
+    edge('ip', 'products', 'shipped and never claimed', n('SELECT COUNT(*) AS n FROM products'), '#/products'),
+    edge('ip', 'legal', 'a filing is legal work, and a lapse is a legal loss', n("SELECT COUNT(*) AS n FROM ip_assets WHERE state IN ('filed','granted','registered')"), '#/legal'),
+    edge('ip', 'finance', 'filing and renewal cost money on a schedule', n('SELECT COUNT(*) AS n FROM ip_assets WHERE cost_usd > 0'), '#/finance'),
     edge('approvals', 'gate', 'runs that stopped for a person', n("SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'"), '#/gate', 'gate'),
     edge('approvals', 'decisions', 'decisions nobody has ruled on', n("SELECT COUNT(*) AS n FROM decisions WHERE status IN ('proposed','deliberating')"), '#/decisions', 'gate'),
     edge('approvals', 'treasury', 'money waiting on a signature outranks everything else', n("SELECT COUNT(*) AS n FROM payouts WHERE state = 'prepared'"), '#/treasury', 'gate'),
