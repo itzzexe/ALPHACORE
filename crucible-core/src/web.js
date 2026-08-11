@@ -17,8 +17,12 @@ import dns from 'node:dns/promises';
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { getSecret } from './vault.js';
+import { mayFetch, isSearchResultsPage, userAgent } from './robots.js';
 
-const UA = 'AlphaCore/1.0 (+company research agent)';
+// Honest and well-formed. The bare token was truthful and got refused by sites
+// that reject anything not shaped like a browser — so the honest agent was
+// blocked while a dishonest one would have been served. See robots.js.
+const UA = () => userAgent();
 const TIMEOUT_MS = 15_000;
 const MAX_BYTES = 900_000;
 const BAD_HOSTS = /^(localhost|.*\.local|.*\.internal|metadata\.google\.internal)$/i;
@@ -117,12 +121,39 @@ export async function fetchPage(rawUrl, { agentId = null, runId = null, maxAgeMi
   if (cached) return { url: rawUrl, cached: true, id: cached.id, title: cached.title, text: cached.text, contentHash: cached.content_hash, injection: scanForInjection(cached.text || '') };
 
   const url = await assertPublicUrl(rawUrl);
+
+  // A results page is the one refusal worth naming precisely, because the
+  // person who asked for it wants search, and search already exists here
+  // through an interface the engines actually support.
+  if (isSearchResultsPage(rawUrl)) {
+    const err = new Error(
+      'that is a search engine results page — scraping one is refused by every engine and will be detected every time. '
+      + 'Use search instead: it goes through the engine\'s own interface, returns structured results, and nothing has to '
+      + 'pretend to be anybody. Add BRAVE_SEARCH_KEY, TAVILY_API_KEY or SERPAPI_KEY in Settings.',
+    );
+    err.status = 400;
+    remember({ url: rawUrl, mode: 'fetch', agentId, runId, status: 0, bytes: 0, text: null, title: null, error: 'search results page — use the search interface' });
+    throw err;
+  }
+
+  const verdict = await mayFetch(rawUrl);
+  if (!verdict.allowed) {
+    const err = new Error(`robots.txt refuses this: ${verdict.why}. The site has said what it wants; this platform honours it.`);
+    err.status = 403;
+    remember({ url: rawUrl, mode: 'fetch', agentId, runId, status: 0, bytes: 0, text: null, title: null, error: `robots.txt: ${verdict.why}` });
+    audit({
+      actorType: 'system', actorId: 'system:web', action: 'web.robots_refused',
+      subjectType: 'url', subjectId: rawUrl, payload: { why: verdict.why, policy: verdict.policy, agentId },
+    });
+    throw err;
+  }
+
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       signal: ctl.signal, redirect: 'follow',
-      headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml,text/plain', 'accept-language': 'ar,en' },
+      headers: { 'user-agent': UA(), accept: 'text/html,application/xhtml+xml,text/plain', 'accept-language': 'ar,en' },
     });
     const buf = Buffer.from((await res.arrayBuffer()).slice(0, MAX_BYTES));
     const html = buf.toString('utf8');

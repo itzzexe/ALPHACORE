@@ -38,6 +38,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { route, parseAgentJson } from './router.js';
 import { scanForInjection, assertPublicUrl } from './web.js';
+import { mayFetch, isSearchResultsPage, userAgent } from './robots.js';
 import { getSetting } from './settings.js';
 import { getSecret } from './vault.js';
 import { notify } from './notify.js';
@@ -237,6 +238,22 @@ async function performAction(cdp, action, el, session) {
       // a DNS lookup that refuses private addresses. A browser an agent steers
       // is the most convincing SSRF tool anyone could hand it.
       await assertPublicUrl(action.url);
+
+      // And the same two refusals the fetch path makes, or the browser is
+      // simply the way round them. A crawl policy that a page fetch honours and
+      // a browser ignores is not a policy, it is a formality.
+      if (isSearchResultsPage(action.url)) {
+        return 'refused: that is a search engine results page. Search goes through the engine\'s own '
+          + 'interface, not through a browser pretending to be a person. Nothing was loaded — ask for a search instead.';
+      }
+      const verdict = await mayFetch(action.url);
+      if (!verdict.allowed) {
+        audit({
+          actorType: 'system', actorId: 'system:browser', action: 'browser.robots_refused',
+          subjectType: 'url', subjectId: action.url, payload: { why: verdict.why, policy: verdict.policy },
+        });
+        return `refused by that site's robots.txt: ${verdict.why}. Nothing was loaded.`;
+      }
       await cdp.rpc('Page.navigate', { url: action.url });
       await sleep(2200);
       return `went to ${action.url}`;
@@ -377,7 +394,25 @@ export async function drive({
   let found = null;
 
   try {
+    // Say who is calling, in the browser as well as in the fetch path. Chrome
+    // announces itself as HeadlessChrome by default, which a great many sites
+    // refuse outright; this is a normal Chrome string with our own token and a
+    // URL appended, so a site owner reading their log can see exactly who came
+    // and where to complain. It identifies the platform rather than hiding it.
+    try { await cdp.rpc('Network.setUserAgentOverride', { userAgent: userAgent(), acceptLanguage: 'ar,en' }); }
+    catch { /* an older Chrome without the Network domain enabled — not fatal */ }
+
     if (startUrl && !step) {
+      if (isSearchResultsPage(startUrl)) {
+        throw Object.assign(new Error(
+          'that start address is a search engine results page. Every engine refuses automated reading of those, and no '
+          + 'amount of disguise changes that — it only escalates the block. Search is a first-class ability here: it goes '
+          + 'through the engine\'s own interface and returns structured results. Add BRAVE_SEARCH_KEY, TAVILY_API_KEY or '
+          + 'SERPAPI_KEY in Settings, then give the browser a real page to work on.',
+        ), { status: 400 });
+      }
+      const v = await mayFetch(startUrl);
+      if (!v.allowed) throw Object.assign(new Error(`that site's robots.txt refuses it: ${v.why}`), { status: 403 });
       await cdp.rpc('Page.navigate', { url: startUrl });
       await sleep(2500);
     }
@@ -616,9 +651,27 @@ export async function browserOverview() {
     live = { attached: false, how: `start Chrome with --remote-debugging-port=${PORT()} and the employees can drive it` };
   }
   const total = one('SELECT COUNT(*) AS n FROM browser_sessions').n;
+  // Surfaced here because this is where the confusion happens: somebody points
+  // the browser at a results page, is told they look like a bot, and concludes
+  // the browser is broken. It is not — searching is a different ability, and it
+  // is turned off until an engine key exists.
+  const searchKeys = {
+    brave: Boolean(getSecret('BRAVE_SEARCH_KEY')),
+    tavily: Boolean(getSecret('TAVILY_API_KEY')),
+    serpapi: Boolean(getSecret('SERPAPI_KEY')),
+  };
   return {
     live,
     port: PORT(),
+    userAgent: userAgent(),
+    search: {
+      configured: Object.values(searchKeys).some(Boolean),
+      engines: searchKeys,
+      why: 'Search engines refuse automated reading of their results pages, and no disguise changes that — it only '
+        + 'escalates the block. Every one of them offers an interface that does not mind being called by a machine, and '
+        + 'it returns cleaner data. Add a key in Settings and searching stops being a browsing problem.',
+    },
+    respectsRobots: getSetting('ROBOTS_RESPECT') !== 'false',
     maxSteps: Number(getSetting('BROWSER_MAX_STEPS') || 14),
     maxUsd: Number(getSetting('BROWSER_MAX_USD') || 1),
     total,

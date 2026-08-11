@@ -19,7 +19,7 @@ door — while humans hold every gate that matters: approving, publishing, signi
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-177-78bf6d?style=flat-square" alt="177 tests">
+<img src="https://img.shields.io/badge/tests-184-78bf6d?style=flat-square" alt="184 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
@@ -782,6 +782,30 @@ injection scanner runs over everything that comes back, in **English and
 Arabic**, because a scanner that only reads one language is a hole in the shape
 of the other.
 
+**It asks before it reads.** `robots.txt` is fetched, parsed to RFC 9309 —
+longest match wins, a group naming this agent beats the wildcard, `*` and `$`
+behave — cached for an hour, and obeyed by the page fetch, the intelligence
+crawler and the browser alike. A crawl policy one path honours and another
+ignores is not a policy. A 4xx means there is no policy and everything is
+allowed; a 5xx means the policy could not be read, and an unreadable policy is
+not permission.
+
+**And it says who it is.** The user-agent is a normal Chrome string with
+`AlphaCore/1.0` and this install's address appended, so a site owner reading
+their log knows exactly who called and where to complain. The earlier version
+was a bare token, which was perfectly honest and got refused by every site that
+rejects anything not shaped like a browser — the truthful agent was blocked
+while a dishonest one would have been served. This is both.
+
+**Searching is not browsing, and pointing a browser at a results page is
+refused.** Every engine forbids automated reading of its results, detects it,
+and escalates; and every engine offers an interface that does not mind being
+called by a machine and returns cleaner data. So the browser will not load one,
+and says what to do instead. There is no stealth mode here and there will not
+be: the same reason a CAPTCHA ends a session. A company whose research depends
+on not being recognised has built its research on a bug in somebody else's
+detector.
+
 ### The queue
 
 Durable jobs with attempts, exponential backoff, idempotency keys and a shelf
@@ -1053,7 +1077,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 177 tests, on their own database files |
+| `npm test` | 184 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1143,7 +1167,7 @@ credential — keep them together.
 
 ```
 crucible-core/
-  src/                121 modules, ~31,600 lines
+  src/                122 modules, ~31,600 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
     db.js             185 tables, forward-only migrations
     audit.js          the hash chain
@@ -1191,7 +1215,7 @@ crucible-core/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               177 tests across fifteen files
+  test/               184 tests across sixteen files
   docs/INSTALL.md     install, first run, phone, backups, upgrade, runbook
   config/             agents, providers, rituals
 ```
@@ -1204,7 +1228,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 177 tests
+npm test                        # 184 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker

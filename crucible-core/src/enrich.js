@@ -13,8 +13,7 @@
 // bounded page count. Untrusted HTML is never executed, only pattern-scanned.
 import dns from 'node:dns/promises';
 import net from 'node:net';
-
-const UA = 'AlphaCore/0.4 (+intelligence enrichment; contact discovery)';
+import { mayFetch, userAgent } from './robots.js';
 const TIMEOUT_MS = 8000;
 const MAX_BYTES = 1_500_000;
 const MAX_PAGES = 5;
@@ -65,13 +64,21 @@ async function assertPublicUrl(u) {
 
 async function fetchPage(u) {
   await assertPublicUrl(u);
+
+  // This is the busiest crawler in the building — it walks a company's whole
+  // site looking for a way to contact them. If anything here was going to get
+  // the platform's address blocked, it was this, and it was the one path that
+  // never asked whether it was welcome.
+  const verdict = await mayFetch(u);
+  if (!verdict.allowed) return null;
+
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(u, {
       signal: ctl.signal,
       redirect: 'follow',
-      headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml', 'accept-language': 'en,ar' },
+      headers: { 'user-agent': userAgent(), accept: 'text/html,application/xhtml+xml', 'accept-language': 'en,ar' },
     });
     if (!res.ok) return null;
     const type = res.headers.get('content-type') || '';

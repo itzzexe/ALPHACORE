@@ -1158,6 +1158,11 @@ async function renderBrowser() {
       <span class="chip ${b.live.attached ? 'chip-ok' : 'chip-bad'}">${b.live.attached ? esc(b.live.browser) : 'no browser attached'}</span>
     </div>
     ${b.live.attached ? '' : `<div class="empty" style="text-align:left">${esc(b.live.how)}</div>`}
+    ${b.search && !b.search.configured ? `<div class="empty" style="text-align:left;border-color:#c0563a">
+      <b>Do not point this at a search engine.</b> ${esc(b.search.why)}
+      <div style="margin-top:6px"><a class="btn btn-sm" href="#/settings">Add a search key</a>
+      <a class="btn btn-sm" href="#/hunt">Deep search</a></div>
+    </div>` : ''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
       <input id="br-goal" class="input" placeholder="What should it do? e.g. find the pricing page for acme.com and tell me the top tier" aria-label="What should the browser do?" style="flex:1;min-width:240px">
       <input id="br-url" class="input input-sm" placeholder="start at (optional)" aria-label="Start URL" style="width:190px">
