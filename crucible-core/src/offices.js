@@ -518,7 +518,12 @@ export function overview() {
     on: isOn(),
     floor: FLOOR,
     building: building(),
-    encounters: q(`SELECT e.*, r.name AS room_name FROM sim_encounters e
+    // The line count comes with it so the page can tell a conversation from an
+    // encounter that produced nothing. A "Watch" button on an empty one is a
+    // control that does nothing, which teaches people not to trust the others.
+    encounters: q(`SELECT e.*, r.name AS room_name,
+                          (SELECT COUNT(*) FROM agent_messages m WHERE m.scene_id = e.id AND m.kind = 'sim') AS lines
+                     FROM sim_encounters e
                      LEFT JOIN sim_rooms r ON r.id = e.room_id
                     ORDER BY e.id DESC LIMIT 40`),
     learnings: learnings(40),

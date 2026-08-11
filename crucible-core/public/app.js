@@ -2084,7 +2084,7 @@ async function renderOffices() {
     ? '<button class="btn btn-bad" id="of-stop">Stop it</button>'
     : '<button class="btn btn-primary" id="of-start">Start it</button>')
     + '<button class="btn" id="of-play">Play one encounter now</button>' : ''}
-      ${d.encounters.length ? `<button class="btn" id="of-watch" data-enc="${d.encounters[0].id}">Watch the last one</button>` : ''}
+      ${(d.encounters.find((e) => e.lines) || {}).id ? `<button class="btn" id="of-watch" data-enc="${d.encounters.find((e) => e.lines).id}">Watch the last one</button>` : ''}
       <span class="sub">${d.on
     ? 'A room meets every six minutes. Nothing waits for you.'
     : 'Stopped: nobody moves, nothing is spent.'}</span>
@@ -2141,12 +2141,13 @@ async function renderOffices() {
 
   <div class="panel" style="margin-top:16px">
     <div class="panel-title">Recent encounters</div>
-    ${d.encounters.length ? `<table class="tbl"><thead><tr><th>Room</th><th>Kind</th><th>Tension</th><th>What came of it</th><th></th></tr></thead><tbody>
+    ${d.encounters.length ? `<table class="tbl"><thead><tr><th>Room</th><th>Kind</th><th>Said</th><th>Tension</th><th>What came of it</th><th></th></tr></thead><tbody>
       ${d.encounters.map((e) => `<tr class="${e.tension >= 0.6 ? 'row-bad' : ''}">
         <td>${esc(e.room_name || e.room_id)}</td><td>${esc(e.kind)}</td>
+        <td>${e.lines || 0}</td>
         <td>${Math.round((e.tension || 0) * 100)}%</td>
-        <td class="sub">${esc(e.outcome || '')}${e.dispute_id ? ' <span class="pill bad">went to HR</span>' : ''}</td>
-        <td><button class="btn btn-sm" data-watch="${e.id}">Watch</button></td></tr>`).join('')}
+        <td class="sub">${e.lines ? esc(e.outcome || '') : '<i>nothing was said — the scene did not come back</i>'}${e.dispute_id ? ' <span class="pill bad">went to HR</span>' : ''}</td>
+        <td>${e.lines ? `<button class="btn btn-sm" data-watch="${e.id}">Watch</button>` : ''}</td></tr>`).join('')}
     </tbody></table>` : '<div class="empty">Nobody has met yet.</div>'}
   </div>`;
 
@@ -2167,14 +2168,22 @@ async function renderOffices() {
     } catch (err) { toast(err.message, true); b.disabled = false; b.textContent = 'Play one encounter now'; }
   });
 
-  /** Play a conversation back, a line at a time. */
-  async function watch(encId) {
+  /**
+   * Play a conversation back, a line at a time.
+   *
+   * `atOnce` is what a refresh uses. Without it the thirty-second poll restored
+   * the transcript by starting the replay again from line one, so a page you
+   * were reading threw you back to the beginning of the conversation — worse
+   * than losing it, because it looked deliberate.
+   */
+  async function watch(encId, atOnce = false) {
     const stage = $('#of-stage');
     if (officesReplay) { clearTimeout(officesReplay); officesReplay = null; }
     let data;
     try { data = await api(`/api/sim/encounter/${encId}`); } catch (e) { return toast(e.message, true); }
     if (!data?.lines?.length) return toast('nothing was said in that one');
-    officesStage = { kind: 'encounter', id: encId };
+    const same = officesStage?.id === encId;
+    officesStage = { kind: 'encounter', id: encId, played: same ? officesStage.played : false, at: same ? officesStage.at : undefined };
 
     stage.hidden = false;
     stage.innerHTML = `<div class="of-stage-head">
@@ -2188,12 +2197,15 @@ async function renderOffices() {
     const box = $('#of-lines');
     const closeStage = () => {
       if (officesReplay) clearTimeout(officesReplay);
-      officesReplay = null; officesStage = null; stage.hidden = true;
+      officesReplay = null; officesStage = null;
+      holdPoll('offices-replay', false);
+      stage.hidden = true;
     };
     $('#of-close-stage').addEventListener('click', closeStage);
     $('#of-skip').addEventListener('click', () => {
       if (officesReplay) clearTimeout(officesReplay);
       officesReplay = null;
+      holdPoll('offices-replay', false);
       while (i < data.lines.length) emit(data.lines[i++]);
       finish();
     });
@@ -2211,7 +2223,24 @@ async function renderOffices() {
       }
       if (data.encounter.outcome) box.insertAdjacentHTML('beforeend', `<div class="sub" style="margin-top:8px">${esc(data.encounter.outcome)}</div>`);
       box.scrollTop = box.scrollHeight;
+      holdPoll('offices-replay', false);
+      if (officesStage) officesStage.played = true;
     };
+
+    // Remember where you were reading, so a rebuild for any reason puts you
+    // back rather than at one end or the other.
+    box.addEventListener('scroll', () => { if (officesStage) officesStage.at = box.scrollTop; });
+
+    // A refresh restores what you were reading whole. Only a deliberate click
+    // plays it out, and while it is playing the page holds still.
+    if (atOnce || officesStage.played) {
+      while (i < data.lines.length) emit(data.lines[i++]);
+      finish();
+      if (officesStage.at !== undefined) box.scrollTop = officesStage.at;
+      return;
+    }
+
+    holdPoll('offices-replay', true);
     const step = () => {
       if (i >= data.lines.length) { officesReplay = null; return finish(); }
       const l = data.lines[i++];
@@ -2268,7 +2297,7 @@ async function renderOffices() {
   // makes somebody stop using a page rather than report a bug.
   if (officesStage) {
     if (officesStage.kind === 'room') openRoom(officesStage.id);
-    else watch(officesStage.id);
+    else watch(officesStage.id, true);   // whole, not replayed from the top
   }
 }
 
@@ -2449,8 +2478,71 @@ function hasUnsavedInput() {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Keeping your place.
+//
+// Ninety-six pages refresh themselves on a timer, and the guard below used to
+// protect only somebody *typing*. Reading was not protected at all: you would
+// scroll up through a conversation and the page would rebuild underneath you,
+// throwing you back to the top mid-sentence. On a page whose whole purpose is
+// watching a conversation, that is not a rough edge, it is the page not working.
+//
+// Three things now hold a refresh off, and a fourth puts you back where you
+// were when one does happen.
+// ---------------------------------------------------------------------------
+
+/** Feeds long enough to scroll. A page may add its own with data-keep-scroll. */
+const SCROLLERS = '.chat, .chat-log, .of-lines, .pal-list, [data-keep-scroll]';
+
+/** Anything a page must not be interrupted during — a replay, an animation. */
+const pollHolds = new Set();
+function holdPoll(reason, on) {
+  if (on) pollHolds.add(reason); else pollHolds.delete(reason);
+}
+
+/**
+ * Is somebody reading?
+ *
+ * Selected text means they are reading or copying it. A feed scrolled up away
+ * from the bottom means they have gone back through the history deliberately —
+ * whereas a feed sitting at the bottom is somebody waiting for the next line,
+ * who does want the refresh.
+ */
+function isReading() {
+  const sel = window.getSelection?.();
+  if (sel && !sel.isCollapsed && sel.toString().trim() && view.contains(sel.anchorNode)) return true;
+  for (const el of view.querySelectorAll(SCROLLERS)) {
+    const scrollable = el.scrollHeight - el.clientHeight > 12;
+    // Anywhere but the bottom means reading. The first version of this also
+    // required scrollTop > 8, which excluded the most obvious case of all:
+    // somebody who scrolled right to the top to read from the beginning.
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 28;
+    if (scrollable && !atBottom) return true;
+  }
+  return false;
+}
+
+/** Where everything was, so a refresh can put it back. */
+function snapshotScroll() {
+  const boxes = [];
+  view.querySelectorAll(SCROLLERS).forEach((el, i) => boxes.push([`${el.className}#${i}`, el.scrollTop]));
+  return { win: window.scrollY, boxes };
+}
+
+function restoreScroll(snap) {
+  if (!snap) return;
+  const want = new Map(snap.boxes);
+  view.querySelectorAll(SCROLLERS).forEach((el, i) => {
+    const top = want.get(`${el.className}#${i}`);
+    if (top !== undefined) el.scrollTop = top;
+  });
+  // The page itself, too: a table that gained a row must not shift what you
+  // were looking at up the screen.
+  if (Math.abs(window.scrollY - snap.win) > 2) window.scrollTo({ top: snap.win, behavior: 'instant' });
+}
+
 function pollPaused() {
-  return document.hidden || isEditingField() || hasUnsavedInput();
+  return document.hidden || isEditingField() || hasUnsavedInput() || pollHolds.size > 0 || isReading();
 }
 
 function showPollState(paused) {
@@ -2498,10 +2590,12 @@ async function navigate() {
   catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
   if (r.poll) {
     pollTimer = setInterval(() => {
-      // Never re-render out from under someone who is typing.
+      // Never re-render out from under somebody who is typing, reading, or
+      // watching something play out.
       if (pollPaused()) { showPollState(true); return; }
       showPollState(false);
-      r.render(arg).then(afterRender).catch(() => {});
+      const place = snapshotScroll();
+      r.render(arg).then(() => { afterRender(); restoreScroll(place); }).catch(() => {});
     }, r.poll);
   }
 }

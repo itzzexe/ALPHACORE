@@ -1477,40 +1477,40 @@ const routes = [
     jurisdiction: need(body, 'jurisdiction'), periodStart: need(body, 'periodStart'),
     periodEnd: need(body, 'periodEnd'), actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/tax\/return\/(\d+)\/file$/, (p, _b, user) => fileReturn({ id: Number(p[1]), actor: `human:${user.username}` })],
-  ['POST', /^\/api\/tax\/line\/(\d+)\/post$/, (p, _b, user) => postTaxDraft({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/return\/(\d+)\/file$/, (p, _b, user) => fileReturn({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/line\/(\d+)\/post$/, (p, _b, user) => postTaxDraft({ id: Number(p[0]), actor: `human:${user.username}` })],
 
   // ---- Privacy ----------------------------------------------------------
   ['GET', /^\/api\/privacy$/, () => privacyOverview()],
   ['POST', /^\/api\/privacy\/flow$/, (_p, body, user) => proposeFlow({ ...body, actor: `human:${user.username}` })],
   ['POST', /^\/api\/privacy\/flow\/(\d+)\/decide$/, (p, body, user) => decideFlow({
-    id: Number(p[1]), verdict: need(body, 'verdict'), assessment: need(body, 'assessment'), actor: `human:${user.username}`,
+    id: Number(p[0]), verdict: need(body, 'verdict'), assessment: need(body, 'assessment'), actor: `human:${user.username}`,
   })],
   ['POST', /^\/api\/privacy\/request$/, (_p, body, user) => logRequest({
     kind: need(body, 'kind'), identifier: need(body, 'identifier'),
     channel: body.channel, note: body.note, actor: `human:${user.username}`,
   })],
   ['POST', /^\/api\/privacy\/request\/(\d+)\/export$/, (p, body, user) => buildExport({
-    id: Number(p[1]), identifier: need(body, 'identifier'), format: body.format || 'json', actor: `human:${user.username}`,
+    id: Number(p[0]), identifier: need(body, 'identifier'), format: body.format || 'json', actor: `human:${user.username}`,
   })],
   ['POST', /^\/api\/privacy\/request\/(\d+)\/answer$/, (p, body, user) => answerRequest({
-    id: Number(p[1]), identifier: body.identifier || null, outcome: need(body, 'outcome'), actor: `human:${user.username}`,
+    id: Number(p[0]), identifier: body.identifier || null, outcome: need(body, 'outcome'), actor: `human:${user.username}`,
   })],
 
   // ---- Intellectual property --------------------------------------------
   ['GET', /^\/api\/ip$/, () => ipOverview()],
   ['POST', /^\/api\/ip$/, (_p, body, user) => registerIp({ ...body, actor: `human:${user.username}` })],
   ['POST', /^\/api\/ip\/(\d+)\/advance$/, (p, body, user) => advanceIp({
-    id: Number(p[1]), state: need(body, 'state'), reference: body.reference,
+    id: Number(p[0]), state: need(body, 'state'), reference: body.reference,
     renewalAt: body.renewalAt, note: body.note, actor: `human:${user.username}`,
   })],
 
   // ---- Help centre ------------------------------------------------------
   ['GET', /^\/api\/help$/, () => helpOverview()],
   ['POST', /^\/api\/help\/sweep$/, () => sweepTickets()],
-  ['POST', /^\/api\/help\/gap\/(\d+)\/draft$/, (p, _b, user) => draftForGap({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/gap\/(\d+)\/draft$/, (p, _b, user) => draftForGap({ id: Number(p[0]), actor: `human:${user.username}` })],
   ['POST', /^\/api\/help\/article$/, (_p, body, user) => writeArticle({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/help\/article\/(\d+)\/publish$/, (p, _b, user) => publishArticle({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/article\/(\d+)\/publish$/, (p, _b, user) => publishArticle({ id: Number(p[0]), actor: `human:${user.username}` })],
 
   // ---- Data governance --------------------------------------------------
   ['GET', /^\/api\/datagov$/, () => datagovOverview()],
@@ -1524,7 +1524,7 @@ const routes = [
   // ---- Trust centre -----------------------------------------------------
   ['GET', /^\/api\/trust$/, () => trustOverview()],
   ['POST', /^\/api\/trust\/document$/, (_p, body, user) => publishTrustDocument({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/trust\/document\/(\d+)\/retire$/, (p, _b, user) => retireTrustDocument({ id: Number(p[1]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trust\/document\/(\d+)\/retire$/, (p, _b, user) => retireTrustDocument({ id: Number(p[0]), actor: `human:${user.username}` })],
   ['POST', /^\/api\/trust\/subprocessor$/, (_p, body, user) => addSubprocessor({ ...body, actor: `human:${user.username}` })],
 
   // ---- Status and SLA ---------------------------------------------------
@@ -1535,14 +1535,14 @@ const routes = [
   })],
   ['POST', /^\/api\/status\/notice$/, (_p, body, user) => postNotice({ ...body, actor: `human:${user.username}` })],
   ['POST', /^\/api\/status\/notice\/(\d+)$/, (p, body, user) => updateNotice({
-    id: Number(p[1]), state: need(body, 'state'), body: need(body, 'body'), actor: `human:${user.username}`,
+    id: Number(p[0]), state: need(body, 'state'), body: need(body, 'body'), actor: `human:${user.username}`,
   })],
   ['POST', /^\/api\/status\/sla$/, (_p, body, user) => addSlaTerm({ ...body, actor: `human:${user.username}` })],
 
   // ---- Partnerships -----------------------------------------------------
   ['GET', /^\/api\/partnerships$/, () => partnershipsOverview()],
   ['POST', /^\/api\/partnerships\/(\d+)\/integration$/, (p, body, user) => setIntegration({
-    id: Number(p[1]), integration: need(body, 'integration'), agreementRef: body.agreementRef, actor: `human:${user.username}`,
+    id: Number(p[0]), integration: need(body, 'integration'), agreementRef: body.agreementRef, actor: `human:${user.username}`,
   })],
 
   // ---- The simulation: the workforce in a building ------------------------
@@ -1551,16 +1551,17 @@ const routes = [
   ['POST', /^\/api\/sim\/stop$/, (_p, _b, user) => setOfficesOn(false, `human:${user.username}`)],
   ['POST', /^\/api\/sim\/seed$/, (_p, _b, user) => officesSeed({ actor: `human:${user.username}` })],
   ['POST', /^\/api\/sim\/play$/, (_p, body, user) => officesPlay({ roomId: body?.roomId || null, actor: `human:${user.username}` })],
-  ['GET', /^\/api\/sim\/room\/([a-z0-9-]+)$/, (p) => ({ room: p[1], feed: officesRoomFeed(p[1]) })],
+  ['GET', /^\/api\/sim\/room\/([a-z0-9-]+)$/, (p) => ({ room: p[0], feed: officesRoomFeed(p[0]) })],
+  ['GET', /^\/api\/sim\/encounter\/(\d+)$/, (p) => officesLines(Number(p[0]))],
 
   // ---- Growth -----------------------------------------------------------
   ['GET', /^\/api\/growth$/, () => growthOverview()],
   ['POST', /^\/api\/growth$/, (_p, body, user) => startExperiment({ ...body, actor: `human:${user.username}` })],
   ['POST', /^\/api\/growth\/(\d+)\/result$/, (p, body, user) => recordResult({
-    id: Number(p[1]), resultA: need(body, 'resultA'), resultB: need(body, 'resultB'), actor: `human:${user.username}`,
+    id: Number(p[0]), resultA: need(body, 'resultA'), resultB: need(body, 'resultB'), actor: `human:${user.username}`,
   })],
   ['POST', /^\/api\/growth\/(\d+)\/conclude$/, (p, body, user) => concludeExperiment2({
-    id: Number(p[1]), winner: need(body, 'winner'), decision: need(body, 'decision'), actor: `human:${user.username}`,
+    id: Number(p[0]), winner: need(body, 'winner'), decision: need(body, 'decision'), actor: `human:${user.username}`,
   })],
 ];
 
@@ -1617,7 +1618,8 @@ function permFor(m, path) {
   if (path.startsWith('/api/partnerships')) return 'partners.manage';
   // `simulation.*` is the shadow company, which forks the database. This is the
   // building the workforce walks around in — a different thing, so a different key.
-  if (path === '/api/sim' || path.startsWith('/api/sim/room')) return 'sim.view';
+  // Reading a room or a transcript is not the same power as making people meet.
+  if (path === '/api/sim' || path.startsWith('/api/sim/room') || path.startsWith('/api/sim/encounter')) return 'sim.view';
   if (path.startsWith('/api/sim')) return 'sim.run';
   if (path === '/api/growth' && m === 'GET') return 'growth.view';
   if (path.startsWith('/api/growth')) return 'growth.run';
