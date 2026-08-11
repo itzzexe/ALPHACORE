@@ -50,27 +50,60 @@ const MOODS = ['steady', 'pleased', 'frustrated', 'tired', 'curious', 'tense'];
  * the shared rooms exist because the useful conversations in any company happen
  * between people who were not scheduled to meet.
  */
+// id, name, kind, division, capacity, about, and where it sits on a 12-wide
+// floor. The layout is data because the floor plan is drawn from it: a picture
+// maintained by hand in the page is a picture that stops matching the building.
 export const SEED_ROOMS = [
-  ['engine-floor', 'The engine floor', 'office', 'engine', 10, 'Where work is picked up and carried out. Loud, and nobody minds.'],
-  ['build-room', 'The build room', 'office', 'build', 10, 'Specifications, products, releases. Whiteboard permanently full.'],
-  ['data-desk', 'The data desk', 'office', 'data', 8, 'Intelligence, segments, the knowledge graph. Quiet by preference.'],
-  ['studio', 'The studio', 'office', 'marketing', 12, 'Content, design, social. The only room with anything on the walls.'],
-  ['sales-floor', 'The sales floor', 'office', 'commerce', 8, 'Pricing, deals, customers. Somebody is always on a call.'],
-  ['counting-house', 'The counting house', 'office', 'capital', 8, 'The ledger, the books, the money desk. Interruptions are unwelcome.'],
-  ['ops-room', 'The ops room', 'office', 'operate', 8, 'Incidents, support, the contact centre. Calm until it is not.'],
-  ['people-room', 'The people room', 'office', 'talent', 8, 'Hiring, the academy, and where a dispute is heard.'],
-  ['trust-office', 'The trust office', 'office', 'trust', 6, 'Security, compliance, privacy, the red team. The door is usually shut.'],
-  ['boardroom', 'The boardroom', 'meeting', 'exec', 10, 'Booked for the long view, used for the urgent one.'],
-  ['kitchen', 'The kitchen', 'social', null, 6, 'Where the company actually finds out what is going on.'],
-  ['corridor', 'The corridor', 'corridor', null, 20, 'Nobody stays. A great deal is decided here anyway.'],
-  ['lab', 'The lab', 'lab', 'build', 6, 'Experiments, and the arguments experiments cause.'],
+  ['engine-floor', 'The engine floor', 'office', 'engine', 10, 'Where work is picked up and carried out. Loud, and nobody minds.', 0, 0, 3, 2],
+  ['build-room', 'The build room', 'office', 'build', 10, 'Specifications, products, releases. Whiteboard permanently full.', 3, 0, 3, 2],
+  ['data-desk', 'The data desk', 'office', 'data', 8, 'Intelligence, segments, the knowledge graph. Quiet by preference.', 6, 0, 3, 2],
+  ['studio', 'The studio', 'office', 'marketing', 12, 'Content, design, social. The only room with anything on the walls.', 9, 0, 3, 2],
+  ['corridor', 'The corridor', 'corridor', null, 20, 'Nobody stays. A great deal is decided here anyway.', 0, 2, 12, 1],
+  ['sales-floor', 'The sales floor', 'office', 'commerce', 8, 'Pricing, deals, customers. Somebody is always on a call.', 0, 3, 3, 2],
+  ['counting-house', 'The counting house', 'office', 'capital', 8, 'The ledger, the books, the money desk. Interruptions are unwelcome.', 3, 3, 3, 2],
+  ['ops-room', 'The ops room', 'office', 'operate', 8, 'Incidents, support, the contact centre. Calm until it is not.', 6, 3, 3, 2],
+  ['people-room', 'The people room', 'office', 'talent', 8, 'Hiring, the academy, and where a dispute is heard.', 9, 3, 3, 2],
+  ['trust-office', 'The trust office', 'office', 'trust', 6, 'Security, compliance, privacy, the red team. The door is usually shut.', 0, 5, 3, 2],
+  ['boardroom', 'The boardroom', 'meeting', 'exec', 10, 'Booked for the long view, used for the urgent one.', 3, 5, 4, 2],
+  ['lab', 'The lab', 'lab', 'build', 6, 'Experiments, and the arguments experiments cause.', 7, 5, 3, 2],
+  ['kitchen', 'The kitchen', 'social', null, 6, 'Where the company actually finds out what is going on.', 10, 5, 2, 2],
 ];
 
-// A rough map from an agent's group to the room it belongs in. Anything
-// unmatched lands on the engine floor, which is what happens to new starters.
+/** The floor is twelve wide and seven deep. The page needs to know only this. */
+export const FLOOR = { cols: 12, rows: 7 };
+
+/**
+ * Which floor somebody works on.
+ *
+ * The obvious approach — map the six role groups to six rooms — puts twelve
+ * people in the boardroom and leaves the sales floor empty, which is not a
+ * company, it is a bar chart. What the workforce actually carries is a job
+ * title, and a title says where somebody sits far better than a group does:
+ * Legal Counsel and Support Agent are both "run", and they do not share a desk.
+ *
+ * So: the title first, the group as a fallback, and the corridor when a room is
+ * full — which is where the overflow of any real office ends up.
+ */
+const BY_TITLE = [
+  [/legal|counsel|contract/i, 'ops-room'],
+  [/recruit|talent|coach|train|academy|\bhr\b|people|enablement/i, 'people-room'],
+  [/procure|vendor|supplier|purchas/i, 'sales-floor'],
+  [/sales|account exec|customer|success|revenue|pricing|deal|partner/i, 'sales-floor'],
+  [/financ|bookkeep|ledger|treasur|\btax\b|payroll|controller|\bcfo\b/i, 'counting-house'],
+  [/support|incident|ops|monitor|reliab|\bsre\b|devops|release|deploy|contact/i, 'ops-room'],
+  [/\bdata\b|analyst|intel|research|insight|scientist|knowledge/i, 'data-desk'],
+  [/content|copy|writer|design|\bux\b|brand|social|community|market|localiz|\bseo\b|press/i, 'studio'],
+  [/security|ethic|complian|privacy|risk|audit|red.?team|\bqa\b|quality|review/i, 'trust-office'],
+  [/experiment|prototype|\blab\b/i, 'lab'],
+  [/architect|engineer|developer|frontend|backend|full.?stack|product manager/i, 'build-room'],
+  [/program manager|\bpmo\b|project|chief|exec|strateg|board|governance|invest/i, 'boardroom'],
+];
+
 const GROUP_ROOM = {
-  build: 'build-room', engineering: 'build-room', product: 'build-room',
-  data: 'data-desk', intel: 'data-desk', research: 'data-desk',
+  steer: 'boardroom', run: 'ops-room', discover: 'data-desk',
+  create: 'studio', assure: 'trust-office', build: 'build-room',
+  // Older installs used division names for the group.
+  engineering: 'build-room', product: 'build-room', data: 'data-desk', intel: 'data-desk',
   marketing: 'studio', content: 'studio', design: 'studio', social: 'studio',
   commerce: 'sales-floor', sales: 'sales-floor', success: 'sales-floor',
   finance: 'counting-house', capital: 'counting-house',
@@ -79,6 +112,20 @@ const GROUP_ROOM = {
   trust: 'trust-office', security: 'trust-office', compliance: 'trust-office',
   exec: 'boardroom', governance: 'boardroom',
 };
+
+/** Where this employee belongs, given who is already sitting there. */
+function deskFor({ id, name, roleGroup }) {
+  const wanted = (BY_TITLE.find(([re]) => re.test(`${name || ''} ${id}`)) || [])[1]
+    || GROUP_ROOM[String(roleGroup || '').toLowerCase()]
+    || 'engine-floor';
+  for (const candidate of [wanted, 'engine-floor', 'corridor']) {
+    const room = one('SELECT capacity FROM sim_rooms WHERE id = ?', candidate);
+    if (!room) continue;
+    const here = one('SELECT COUNT(*) AS n FROM sim_presence WHERE room_id = ?', candidate).n;
+    if (here < room.capacity) return candidate;
+  }
+  return 'corridor';
+}
 
 export function isOn() { return String(getSetting('OFFICES_ENABLED') || 'false') === 'true'; }
 
@@ -97,18 +144,24 @@ export function setOn(on, actor) {
 /** Build the rooms and put everybody somewhere. Safe to run again. */
 export function seed({ actor = 'system:sim' } = {}) {
   let rooms = 0;
-  for (const [id, name, kind, division, capacity, about] of SEED_ROOMS) {
-    if (one('SELECT id FROM sim_rooms WHERE id = ?', id)) continue;
-    exec('INSERT INTO sim_rooms (id, name, kind, division, capacity, about) VALUES (?,?,?,?,?,?)',
-      id, name, kind, division, capacity, about);
+  for (const [id, name, kind, division, capacity, about, gx, gy, gw, gh] of SEED_ROOMS) {
+    if (one('SELECT id FROM sim_rooms WHERE id = ?', id)) {
+      // A building that already exists still learns where its rooms are, so an
+      // install from before the floor plan does not come up with everything
+      // stacked in one corner.
+      exec('UPDATE sim_rooms SET gx = ?, gy = ?, gw = ?, gh = ? WHERE id = ? AND gw = 3 AND gx = 0 AND gy = 0',
+        gx, gy, gw, gh, id);
+      continue;
+    }
+    exec('INSERT INTO sim_rooms (id, name, kind, division, capacity, about, gx, gy, gw, gh) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      id, name, kind, division, capacity, about, gx, gy, gw, gh);
     rooms++;
   }
   let placed = 0;
-  for (const a of q("SELECT id, role_group FROM agents WHERE status = 'active'")) {
+  for (const a of q("SELECT id, name, role_group FROM agents WHERE status = 'active'")) {
     if (one('SELECT agent_id FROM sim_presence WHERE agent_id = ?', a.id)) continue;
-    const room = GROUP_ROOM[String(a.role_group || '').toLowerCase()] || 'engine-floor';
     exec('INSERT INTO sim_presence (agent_id, room_id, energy, mood) VALUES (?,?,?,?)',
-      a.id, one('SELECT id FROM sim_rooms WHERE id = ?', room) ? room : 'engine-floor',
+      a.id, deskFor({ id: a.id, name: a.name, roleGroup: a.role_group }),
       60 + Math.floor(Math.random() * 30), 'steady');
     placed++;
   }
@@ -135,8 +188,9 @@ export function drift() {
   const moved = [];
   for (const p of q('SELECT * FROM sim_presence')) {
     if (Math.random() > 0.35) continue;
-    const agent = one('SELECT role_group FROM agents WHERE id = ?', p.agent_id);
-    const home = GROUP_ROOM[String(agent?.role_group || '').toLowerCase()] || 'engine-floor';
+    const agent = one('SELECT name, role_group FROM agents WHERE id = ?', p.agent_id);
+    const home = (BY_TITLE.find(([re]) => re.test(`${agent?.name || ''} ${p.agent_id}`)) || [])[1]
+      || GROUP_ROOM[String(agent?.role_group || '').toLowerCase()] || 'engine-floor';
 
     let target;
     const roll = Math.random();
@@ -342,15 +396,48 @@ export async function officesTick() {
 // ------------------------------------------------------------------ reading --
 
 export function building() {
-  const rooms = q('SELECT * FROM sim_rooms ORDER BY kind, name');
-  return rooms.map((r) => ({
-    ...r,
-    people: q(
-      `SELECT p.agent_id, p.mood, p.energy, p.note, a.name, a.role_group
-         FROM sim_presence p JOIN agents a ON a.id = p.agent_id
-        WHERE p.room_id = ? ORDER BY a.name`, r.id,
+  const rooms = q('SELECT * FROM sim_rooms ORDER BY gy, gx');
+  return rooms.map((r) => {
+    // The last thing said in this room, so the floor plan can show a room that
+    // is talking rather than a room that merely has people in it.
+    const last = one(
+      `SELECT m.from_agent, m.body, m.scene_id, a.name
+         FROM agent_messages m LEFT JOIN agents a ON a.id = m.from_agent
+        WHERE m.channel = ? AND m.kind = 'sim' ORDER BY m.id DESC LIMIT 1`, `room:${r.id}`,
+    );
+    const enc = last?.scene_id
+      ? one('SELECT id, kind, tension, outcome, dispute_id FROM sim_encounters WHERE id = ?', last.scene_id)
+      : null;
+    return {
+      ...r,
+      people: q(
+        `SELECT p.agent_id, p.mood, p.energy, p.note, a.name, a.role_group
+           FROM sim_presence p JOIN agents a ON a.id = p.agent_id
+          WHERE p.room_id = ? ORDER BY a.name`, r.id,
+      ),
+      lastLine: last ? { from: last.from_agent, name: last.name, body: last.body } : null,
+      lastEncounter: enc || null,
+    };
+  });
+}
+
+/**
+ * Every line of one encounter, in order — what the page replays so you can
+ * watch a conversation happen rather than read a table of it afterwards.
+ */
+export function encounterLines(encounterId) {
+  const e = one(`SELECT e.*, r.name AS room_name FROM sim_encounters e
+                   LEFT JOIN sim_rooms r ON r.id = e.room_id WHERE e.id = ?`, encounterId);
+  if (!e) return null;
+  return {
+    encounter: e,
+    lines: q(
+      `SELECT m.from_agent, m.to_agent, m.body, a.name
+         FROM agent_messages m LEFT JOIN agents a ON a.id = m.from_agent
+        WHERE m.scene_id = ? AND m.kind = 'sim' ORDER BY m.id`, encounterId,
     ),
-  }));
+    learnings: q('SELECT l.*, a.name FROM sim_learnings l LEFT JOIN agents a ON a.id = l.agent_id WHERE l.encounter_id = ?', encounterId),
+  };
 }
 
 export function roomFeed(roomId, limit = 60) {
@@ -373,6 +460,7 @@ export function overview() {
   const n = (sql, ...p) => one(sql, ...p).n;
   return {
     on: isOn(),
+    floor: FLOOR,
     building: building(),
     encounters: q(`SELECT e.*, r.name AS room_name FROM sim_encounters e
                      LEFT JOIN sim_rooms r ON r.id = e.room_id

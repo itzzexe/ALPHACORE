@@ -35,7 +35,7 @@ import {
 import { overview as partnershipsOverview, setIntegration } from './partnerships.js';
 import {
   overview as officesOverview, setOn as setOfficesOn, playOne as officesPlay,
-  roomFeed as officesRoomFeed, seed as officesSeed,
+  roomFeed as officesRoomFeed, seed as officesSeed, encounterLines as officesLines,
 } from './offices.js';
 import {
   overview as growthOverview, start as startExperiment, record as recordResult,

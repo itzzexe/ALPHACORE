@@ -2837,6 +2837,16 @@ CREATE TABLE IF NOT EXISTS sim_learnings (
 CREATE INDEX IF NOT EXISTS sim_learn_agent ON sim_learnings (agent_id, id);
 `);
 
+// Where each room sits on the floor. Kept in the database rather than in the
+// page, because a floor plan drawn by the view is a picture that drifts from the
+// building — the same reason the map is generated from the catalogue.
+for (const sql of [
+  'ALTER TABLE sim_rooms ADD COLUMN gx INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE sim_rooms ADD COLUMN gy INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE sim_rooms ADD COLUMN gw INTEGER NOT NULL DEFAULT 3',
+  'ALTER TABLE sim_rooms ADD COLUMN gh INTEGER NOT NULL DEFAULT 2',
+]) { try { db.exec(sql); } catch { /* column exists */ } }
+
 // Growth needs a few facts an A/B row did not carry: what was being moved, for
 // whom, and what was decided afterwards. A winner nobody acted on is a result,
 // not an experiment.

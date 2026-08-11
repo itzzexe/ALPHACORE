@@ -2374,3 +2374,54 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
 @media (prefers-reduced-motion: reduce) {
   .skip-link { transition: none; }
 }
+
+/* --------------------------------------------------------------------------
+   The offices.
+
+   A floor plan rather than a table, because "six people are in the kitchen and
+   the trust office is empty" is a thing you see and not a thing you read. Every
+   figure is inline SVG drawn from the employee's own id — no sprite sheet, no
+   icon font, nothing fetched: the console makes no external requests and that
+   is checked rather than intended.
+   -------------------------------------------------------------------------- */
+.of-scroll { overflow-x: auto; padding: 4px 0 8px; }
+.of-floor { display: block; min-width: 720px; max-width: 100%; height: auto; }
+
+.of-room rect:first-of-type { transition: stroke .18s ease, filter .18s ease; }
+.of-room { cursor: pointer; }
+.of-room:hover rect:first-of-type,
+.of-room:focus-visible rect:first-of-type { stroke: var(--ember); stroke-width: 1.8; }
+.of-room:focus-visible { outline: none; }
+.of-room.is-hot rect:first-of-type { stroke: var(--bad); stroke-width: 1.8; }
+
+/* Somebody is mid-sentence. Slow enough to read, quiet enough to ignore. */
+.of-bubble { animation: ofRise .5s ease-out; }
+@keyframes ofRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+.of-fig { transition: transform .25s ease; }
+.of-room:hover .of-fig { transform: translateY(-1px); }
+
+.of-key { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; }
+.of-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-inline-end: 3px; }
+
+.of-stage { margin-top: 12px; border-top: 1px solid var(--seam); padding-top: 12px; }
+.of-stage-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.of-lines { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.of-line {
+  background: var(--bg-sunk); border-radius: 8px; padding: 7px 10px; font-size: 13px;
+  animation: ofSay .28s ease-out;
+}
+@keyframes ofSay { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+.of-who { font-weight: 600; margin-inline-end: 8px; color: var(--ember); }
+.of-learn {
+  margin-top: 10px; padding: 9px 11px; border-radius: 8px; font-size: 13px;
+  background: var(--accent-wash); border: 1px solid var(--seam);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .of-bubble, .of-line { animation: none; }
+  .of-fig { transition: none; }
+}
+@media (max-width: 860px) {
+  .of-floor { min-width: 860px; }
+  .of-key { display: none; }
+}

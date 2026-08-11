@@ -1881,28 +1881,144 @@ async function renderGrowth() {
   });
 }
 
-const MOOD_MARK = {
-  steady: '·', pleased: '☺', frustrated: '✖', tired: '˷', curious: '?', tense: '!',
-};
+// ---------------------------------------------------------------------------
+// The offices, drawn.
+//
+// A table of who is in which room is accurate and tells you nothing you would
+// notice. A floor plan tells you at a glance that six people are in the kitchen
+// and the trust office is empty — which is the actual state of a company on a
+// Thursday afternoon, and the only reason to have built rooms at all.
+//
+// Everything here is drawn by hand in SVG. No sprite sheet, no icon font, no
+// request to anybody: the console makes no external requests and that is
+// checked rather than intended. A figure is derived from the employee's own id,
+// so the same person is the same person every time you look, and their shirt is
+// their division's colour — which is how you spot somebody sitting on another
+// team's floor without reading a single label.
+// ---------------------------------------------------------------------------
+
+/** A stable number from a string. Same employee, same face, for ever. */
+function hashOf(s) {
+  let h = 2166136261;
+  for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619); }
+  return Math.abs(h);
+}
+
+const SKIN = ['#f0d5b8', '#e3bd97', '#c99a6e', '#a9784f', '#7d5433', '#5c3c26'];
+const HAIR = ['#241a12', '#3d2a1a', '#5a3d24', '#7d5a33', '#a8802f', '#2f2f33', '#6b1f14', '#8a8a8a'];
+
+/**
+ * One employee, about the size of a thumbnail.
+ *
+ * Mood is the face, because that is where a person looks first. Energy is the
+ * ground shadow — somebody running on empty stands on almost nothing.
+ */
+function figure(p, colour, x, y, scale = 1) {
+  const h = hashOf(p.agent_id);
+  const skin = SKIN[h % SKIN.length];
+  const hair = HAIR[(h >> 3) % HAIR.length];
+  const hairStyle = (h >> 6) % 4;
+  const s = scale;
+  const tired = p.energy < 30;
+
+  const mouth = {
+    pleased: `M -3 3.4 q 3 2.6 6 0`,
+    steady: `M -2.6 3.6 h 5.2`,
+    curious: `M -2.6 3.6 h 3.6`,
+    tired: `M -2.6 4 h 5.2`,
+    frustrated: `M -3 4.4 q 3 -2.2 6 0`,
+    tense: `M -3 4.4 q 3 -2.6 6 0`,
+  }[p.mood] || `M -2.6 3.6 h 5.2`;
+
+  const brows = p.mood === 'frustrated' || p.mood === 'tense'
+    ? `<path d="M -4.4 -1.6 l 3 1.1 M 4.4 -1.6 l -3 1.1" stroke="var(--ink)" stroke-width="0.9" fill="none" stroke-linecap="round"/>`
+    : (p.mood === 'curious' ? `<path d="M -4.4 -1.2 l 3 -0.7" stroke="var(--ink)" stroke-width="0.9" fill="none" stroke-linecap="round"/>` : '');
+
+  const hairPath = [
+    `<path d="M -7 -1 a 7 7 0 0 1 14 0 v -1 a 7 8 0 0 0 -14 0 z" fill="${hair}"/>`,
+    `<path d="M -7 -1.5 a 7 7 0 0 1 14 0 q -3 -4 -7 -4 t -7 4 z" fill="${hair}"/><circle cx="0" cy="-7.4" r="2.1" fill="${hair}"/>`,
+    `<path d="M -7 -0.5 a 7 7 0 0 1 14 0 v -2 a 7 8 0 0 0 -14 0 z" fill="${hair}"/><path d="M -7.4 -0.5 q -1.6 4 -0.4 7" stroke="${hair}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
+    `<path d="M -6.6 -2.2 a 7 7 0 0 1 13.2 0 z" fill="${hair}"/>`,
+  ][hairStyle];
+
+  return `<g transform="translate(${x} ${y}) scale(${s})" class="of-fig" data-agent="${esc(p.agent_id)}">
+    <ellipse cx="0" cy="20" rx="${6 + (p.energy / 100) * 3}" ry="1.8" fill="var(--ink)" opacity="${0.05 + (p.energy / 100) * 0.12}"/>
+    <path d="M -7.5 20 v -6 a 7.5 8 0 0 1 15 0 v 6 z" fill="${colour}" opacity="${tired ? 0.7 : 1}"/>
+    <circle cx="0" cy="0" r="7" fill="${skin}"/>
+    ${hairPath}
+    <circle cx="-2.6" cy="1" r="0.95" fill="var(--ink)"/>
+    <circle cx="2.6" cy="1" r="0.95" fill="var(--ink)"/>
+    ${brows}
+    <path d="${mouth}" stroke="var(--ink)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+    ${tired ? '<text x="7" y="-6" font-size="6" fill="var(--ink-faint)">z</text>' : ''}
+  </g>`;
+}
+
+/** A speech bubble that points down at whoever said it. */
+function bubble(x, y, text, w = 150) {
+  const body = String(text).replace(/\s+/g, ' ').slice(0, 110);
+  const lines = [];
+  let line = '';
+  for (const word of body.split(' ')) {
+    if ((line + ' ' + word).length > 30) { lines.push(line); line = word; } else { line = line ? `${line} ${word}` : word; }
+    if (lines.length >= 3) break;
+  }
+  if (line && lines.length < 3) lines.push(line);
+  const h = 12 + lines.length * 11;
+  return `<g class="of-bubble" transform="translate(${x} ${y - h - 26})">
+    <rect x="${-w / 2}" y="0" width="${w}" height="${h}" rx="7" fill="var(--paper-veil)" stroke="var(--seam)"/>
+    <path d="M -5 ${h} l 5 7 l 5 -7 z" fill="var(--paper-veil)" stroke="var(--seam)"/>
+    ${lines.map((l, i) => `<text x="${-w / 2 + 8}" y="${14 + i * 11}" font-size="9.5" fill="var(--ink)">${esc(l)}</text>`).join('')}
+  </g>`;
+}
+
+let officesReplay = null;   // the timer for the walkthrough, so it can be stopped
 
 async function renderOffices() {
   const d = await api('/api/sim');
   const c = d.counts;
-  const room = (r) => `
-    <div class="panel" style="margin:0">
-      <div class="panel-title">
-        <span>${esc(r.name)}</span>
-        <span class="chip chip-dim">${r.people.length}/${r.capacity}</span>
-      </div>
-      <div class="sub" style="margin-bottom:6px">${esc(r.about || '')}</div>
-      ${r.people.length ? r.people.map((p) => `<div style="display:flex;gap:6px;align-items:baseline">
-        <span class="mono" title="${esc(p.mood)}, energy ${p.energy}">${MOOD_MARK[p.mood] || '·'}</span>
-        <span>${esc(p.name)}</span>
-        <span class="sub" style="font-size:11px">${esc(p.role_group || '')}</span>
-      </div>${p.note ? `<div class="sub" style="font-size:11px;margin:0 0 4px 16px">“${esc(p.note)}”</div>` : ''}`).join('')
-    : '<div class="sub">empty</div>'}
-      ${hasPermC('sim.run') && r.people.length >= 2 ? `<button class="btn btn-sm" data-play="${esc(r.id)}" style="margin-top:8px">See what happens</button>` : ''}
-    </div>`;
+  const map = await api('/api/map').catch(() => ({ divisions: [] }));
+  const divColour = Object.fromEntries((map.divisions || []).map((x) => [x.id, x.color]));
+  const colourFor = (p, room) => divColour[String(p.role_group || '').toLowerCase()]
+    || divColour[room.division] || 'var(--steel)';
+
+  // Geometry. One cell is 84 by 74; everything else follows from the room's
+  // own gx/gy/gw/gh, which live in the database.
+  const CW = 84;
+  const CH = 74;
+  const W = d.floor.cols * CW;
+  const H = d.floor.rows * CH;
+
+  const roomSvg = (r) => {
+    const x = r.gx * CW + 5;
+    const y = r.gy * CH + 5;
+    const w = r.gw * CW - 10;
+    const h = r.gh * CH - 10;
+    const tint = divColour[r.division] || 'var(--ink-faint)';
+    const busy = r.lastEncounter && r.people.length >= 2;
+    const hot = r.lastEncounter && Number(r.lastEncounter.tension) >= 0.6;
+
+    // People are laid out in rows inside the room, so a full room looks full.
+    const perRow = Math.max(2, Math.floor((w - 24) / 26));
+    const people = r.people.slice(0, 12).map((p, i) => {
+      const px = x + 20 + (i % perRow) * 26;
+      const py = y + 40 + Math.floor(i / perRow) * 30;
+      return { p, px, py };
+    });
+    const speaker = r.lastLine ? people.find((q2) => q2.p.agent_id === r.lastLine.from) : null;
+
+    return `<g class="of-room ${hot ? 'is-hot' : ''}" data-room="${esc(r.id)}" tabindex="0"
+              role="button" aria-label="${esc(r.name)}, ${r.people.length} people. ${esc(r.about || '')}">
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10"
+            fill="var(--bg-raise)" stroke="${busy ? tint : 'var(--seam)'}" stroke-width="${busy ? 1.6 : 1}"/>
+      <rect x="${x}" y="${y}" width="4" height="${h}" rx="2" fill="${tint}" opacity="0.85"/>
+      <text x="${x + 12}" y="${y + 20}" font-size="11.5" font-weight="600" fill="var(--ink)">${esc(r.name)}</text>
+      <text x="${x + w - 10}" y="${y + 20}" font-size="10" text-anchor="end" fill="var(--ink-faint)">${r.people.length}/${r.capacity}</text>
+      ${r.people.length > 12 ? `<text x="${x + w - 10}" y="${y + h - 8}" font-size="9" text-anchor="end" fill="var(--ink-faint)">+${r.people.length - 12} more</text>` : ''}
+      ${people.map(({ p, px, py }) => figure(p, colourFor(p, r), px, py, 0.86)).join('')}
+      ${speaker && r.lastLine ? bubble(Math.min(Math.max(speaker.px, x + 80), x + w - 80), speaker.py, r.lastLine.body, Math.min(160, w - 20)) : ''}
+    </g>`;
+  };
 
   view.innerHTML = `
   <div class="panel">
@@ -1911,38 +2027,58 @@ async function renderOffices() {
       <span class="chip ${d.on ? 'chip-ok' : 'chip-dim'}">${d.on ? 'running' : 'stopped'}</span>
     </div>
     <div class="map-legend">${esc(d.note)}</div>
-    ${hasPermC('sim.run') ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-      ${d.on ? '<button class="btn btn-bad" id="of-stop">Stop it</button>'
-    : '<button class="btn" id="of-start">Start it</button>'}
-      <button class="btn" id="of-play">Play one encounter now</button>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${hasPermC('sim.run') ? (d.on
+    ? '<button class="btn btn-bad" id="of-stop">Stop it</button>'
+    : '<button class="btn" id="of-start">Start it</button>')
+    + '<button class="btn" id="of-play">Play one encounter</button>' : ''}
+      ${d.encounters.length ? `<button class="btn" id="of-watch" data-enc="${d.encounters[0].id}">Watch the last one</button>` : ''}
+      <span class="sub">${d.on ? 'A room meets every six minutes.' : 'Stopped: nothing moves, nothing is spent.'}</span>
     </div>
-    ${d.on ? '' : '<div class="sub" style="margin-top:6px">While it is stopped nothing moves and nothing is spent.</div>'}` : ''}
   </div>
 
   <div class="grid grid-4" style="margin-top:16px">
-    ${tile('Learned, and kept', c.inMemory, 'written into an employee\'s memory')}
-    ${tile('Encounters', c.encounters, `${c.rooms} rooms, ${c.placed} at a desk`)}
-    ${tile('Went to HR', c.disputes, 'disagreements that would not resolve', c.disputes ? 'bad' : '')}
+    ${tile('Learned, and kept', c.inMemory, 'written into an employee’s memory')}
+    ${tile('Encounters', c.encounters, `${c.rooms} rooms · ${c.placed} at a desk`)}
+    ${tile('Went to HR', c.disputes, 'would not resolve between them', c.disputes ? 'bad' : '')}
     ${tile('Spent', money4(c.spentUsd || 0), 'on the whole building')}
   </div>
 
-  <div class="grid grid-3" style="margin-top:16px;align-items:start">${d.building.map(room).join('')}</div>
+  <div class="panel of-floor-wrap" style="margin-top:16px">
+    <div class="panel-title">
+      <span>The floor</span>
+      <span class="sub of-key">
+        <span><i class="of-dot" style="background:var(--ok)"></i> pleased</span>
+        <span><i class="of-dot" style="background:var(--warn)"></i> tired</span>
+        <span><i class="of-dot" style="background:var(--bad)"></i> tense</span>
+        · shirt is their division · click a room to read it
+      </span>
+    </div>
+    <div class="of-scroll">
+      <svg class="of-floor" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
+           role="img" aria-label="Floor plan of the offices with ${c.placed} employees in ${c.rooms} rooms">
+        ${d.building.map(roomSvg).join('')}
+      </svg>
+    </div>
+    <div id="of-stage" class="of-stage" hidden></div>
+  </div>
 
   <div class="panel" style="margin-top:16px">
     <div class="panel-title">What somebody walked away with</div>
     ${d.learnings.length ? `<table class="tbl"><thead><tr><th>Who</th><th>Took away</th><th>From</th><th>Where</th></tr></thead><tbody>
       ${d.learnings.map((l) => `<tr><td>${esc(l.name || l.agent_id)}</td><td>${esc(l.learned)}</td>
         <td class="sub">${esc(l.from_agent || '—')}</td><td class="sub">${esc(l.room_id || '')}</td></tr>`).join('')}
-    </tbody></table>` : '<div class="empty">Nothing yet. A learning only counts here when it is written into that employee\'s memory.</div>'}
+    </tbody></table>` : '<div class="empty">Nothing yet. A learning only counts here once it is in that employee’s memory.</div>'}
   </div>
 
   <div class="panel" style="margin-top:16px">
     <div class="panel-title">Recent encounters</div>
-    ${d.encounters.length ? `<table class="tbl"><thead><tr><th>Room</th><th>Kind</th><th>Tension</th><th>What came of it</th></tr></thead><tbody>
+    ${d.encounters.length ? `<table class="tbl"><thead><tr><th>Room</th><th>Kind</th><th>Tension</th><th>What came of it</th><th></th></tr></thead><tbody>
       ${d.encounters.map((e) => `<tr class="${e.tension >= 0.6 ? 'row-bad' : ''}">
         <td>${esc(e.room_name || e.room_id)}</td><td>${esc(e.kind)}</td>
         <td>${Math.round((e.tension || 0) * 100)}%</td>
-        <td class="sub">${esc(e.outcome || '')}${e.dispute_id ? ` <span class="pill bad">went to HR</span>` : ''}</td></tr>`).join('')}
+        <td class="sub">${esc(e.outcome || '')}${e.dispute_id ? ' <span class="pill bad">went to HR</span>' : ''}</td>
+        <td><button class="btn btn-sm" data-watch="${e.id}">Watch</button></td></tr>`).join('')}
     </tbody></table>` : '<div class="empty">Nobody has met yet.</div>'}
   </div>`;
 
@@ -1952,12 +2088,84 @@ async function renderOffices() {
   };
   $('#of-start')?.addEventListener('click', () => act('/api/sim/start'));
   $('#of-stop')?.addEventListener('click', () => act('/api/sim/stop'));
-  $('#of-play')?.addEventListener('click', async () => {
-    toast('Watching a room…');
-    await act('/api/sim/play');
-  });
-  for (const b of view.querySelectorAll('[data-play]')) {
-    b.addEventListener('click', () => act('/api/sim/play', { roomId: b.dataset.play }));
+  $('#of-play')?.addEventListener('click', async () => { toast('Watching a room…'); await act('/api/sim/play'); });
+
+  /**
+   * Play the conversation back, a line at a time.
+   *
+   * The transcript is already on the page below. This exists because reading a
+   * table of what was said and watching it happen are different experiences,
+   * and only one of them makes you notice that two of them never speak.
+   */
+  const watch = async (encId) => {
+    const stage = $('#of-stage');
+    if (officesReplay) { clearTimeout(officesReplay); officesReplay = null; }
+    let data;
+    try { data = await api(`/api/sim/encounter/${encId}`); } catch (e) { return toast(e.message, true); }
+    if (!data?.lines?.length) return toast('nothing was said in that one');
+
+    stage.hidden = false;
+    stage.innerHTML = `<div class="of-stage-head">
+        <b>${esc(data.encounter.room_name || data.encounter.room_id)}</b>
+        <span class="sub">${esc(data.encounter.kind)} · tension ${Math.round((data.encounter.tension || 0) * 100)}%</span>
+        <button class="btn btn-sm" id="of-stop-watch">Stop</button>
+      </div><div class="of-lines" id="of-lines"></div>`;
+    $('#of-stop-watch').addEventListener('click', () => {
+      if (officesReplay) clearTimeout(officesReplay);
+      officesReplay = null;
+      stage.hidden = true;
+    });
+
+    const box = $('#of-lines');
+    let i = 0;
+    const step = () => {
+      if (i >= data.lines.length) {
+        if (data.learnings.length) {
+          box.insertAdjacentHTML('beforeend', `<div class="of-learn">${data.learnings.map((l) =>
+            `<b>${esc(l.name || l.agent_id)}</b> walked away with: ${esc(l.learned)}`).join('<br>')}</div>`);
+        }
+        box.insertAdjacentHTML('beforeend', `<div class="sub" style="margin-top:8px">${esc(data.encounter.outcome || '')}</div>`);
+        box.scrollTop = box.scrollHeight;
+        officesReplay = null;
+        return;
+      }
+      const l = data.lines[i++];
+      box.insertAdjacentHTML('beforeend',
+        `<div class="of-line"><span class="of-who">${esc(l.name || l.from_agent)}</span>${esc(l.body)}</div>`);
+      box.scrollTop = box.scrollHeight;
+      officesReplay = setTimeout(step, 1500 + Math.min(2200, String(l.body).length * 22));
+    };
+    step();
+    stage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  $('#of-watch')?.addEventListener('click', (e) => watch(e.currentTarget.dataset.enc));
+  for (const b of view.querySelectorAll('[data-watch]')) b.addEventListener('click', () => watch(b.dataset.watch));
+
+  // A room is a button: click it to read what has been said in it, and to send
+  // the people in it to talk to each other.
+  for (const g of view.querySelectorAll('.of-room')) {
+    const open = async () => {
+      const id = g.dataset.room;
+      const r = d.building.find((x) => x.id === id);
+      let feed = { feed: [] };
+      try { feed = await api(`/api/sim/room/${id}`); } catch { /* nothing said in there yet */ }
+      const stage = $('#of-stage');
+      stage.hidden = false;
+      stage.innerHTML = `<div class="of-stage-head">
+          <b>${esc(r.name)}</b><span class="sub">${esc(r.about || '')}</span>
+          ${hasPermC('sim.run') && r.people.length >= 2 ? `<button class="btn btn-sm" id="of-here">See what happens here</button>` : ''}
+          ${r.lastEncounter ? `<button class="btn btn-sm" id="of-replay">Watch the last one</button>` : ''}
+        </div>
+        <div class="of-lines">${feed.feed.length
+    ? feed.feed.map((m) => `<div class="of-line"><span class="of-who">${esc(m.name || m.from_agent)}</span>${esc(m.body)}</div>`).join('')
+    : '<div class="sub">Nothing has been said in here yet.</div>'}</div>`;
+      $('#of-here')?.addEventListener('click', async () => { toast('…'); await act('/api/sim/play', { roomId: id }); });
+      $('#of-replay')?.addEventListener('click', () => watch(r.lastEncounter.id));
+      stage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+    g.addEventListener('click', open);
+    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
   }
 }
 

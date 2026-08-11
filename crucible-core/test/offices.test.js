@@ -49,11 +49,47 @@ test('starting it twice does not build a second building', () => {
   assert.equal(one('SELECT COUNT(*) AS n FROM sim_rooms').n, before);
 });
 
-test('people are put on the floor their work is on, not at random', () => {
-  const rows = q(`SELECT p.room_id, a.role_group FROM sim_presence p JOIN agents a ON a.id = p.agent_id`);
+test('people sit by what they do, not by the six groups they are filed under', () => {
+  const rows = q(`SELECT p.room_id, a.name, a.role_group FROM sim_presence p JOIN agents a ON a.id = p.agent_id`);
   assert.ok(rows.length, 'somebody is at a desk');
-  const build = rows.filter((r) => String(r.role_group).toLowerCase() === 'build');
-  if (build.length) assert.ok(build.every((r) => r.room_id === 'build-room'), 'the build group sits in the build room');
+
+  // The workforce has six role groups and thirteen rooms, so mapping the group
+  // to a room put twelve people in the boardroom and left the sales floor
+  // empty — a bar chart, not a company. The title is the better signal.
+  const where = (re) => rows.filter((r) => re.test(r.name)).map((r) => r.room_id);
+  for (const [who, re, room] of [
+    ['anyone counting money', /financ|tax|bookkeep|ledger|treasur/i, 'counting-house'],
+    ['anyone writing', /copywriter|content|community|localiz/i, 'studio'],
+    ['anyone assuring', /privacy|ethic|security|code reviewer/i, 'trust-office'],
+  ]) {
+    const seats = where(re);
+    if (seats.length) assert.ok(seats.every((s) => s === room), `${who} sits in the ${room}, found: ${[...new Set(seats)].join(', ')}`);
+  }
+
+  // The failure this replaced: one room holding most of the company.
+  const byRoom = {};
+  for (const r of rows) byRoom[r.room_id] = (byRoom[r.room_id] || 0) + 1;
+  const biggest = Math.max(...Object.values(byRoom));
+  assert.ok(biggest <= rows.length / 2, `one room holds ${biggest} of ${rows.length} — the building is a bar chart again`);
+  assert.ok(Object.keys(byRoom).length >= 6, 'the workforce is spread across the building');
+});
+
+test('nobody is put in a room that is already full', () => {
+  for (const room of q('SELECT id, capacity FROM sim_rooms')) {
+    const here = one('SELECT COUNT(*) AS n FROM sim_presence WHERE room_id = ?', room.id).n;
+    assert.ok(here <= room.capacity, `${room.id} seats ${here} of ${room.capacity}`);
+  }
+});
+
+test('every room knows where it is on the floor, and no two share a corner', () => {
+  const rooms = q('SELECT id, gx, gy, gw, gh FROM sim_rooms');
+  assert.equal(rooms.length, O.SEED_ROOMS.length);
+  const corners = new Set(rooms.map((r) => `${r.gx},${r.gy}`));
+  assert.equal(corners.size, rooms.length, 'a floor plan with two rooms in one place is a picture, not a plan');
+  for (const r of rooms) {
+    assert.ok(r.gx + r.gw <= O.FLOOR.cols, `${r.id} runs off the side of the floor`);
+    assert.ok(r.gy + r.gh <= O.FLOOR.rows, `${r.id} runs off the bottom of the floor`);
+  }
 });
 
 test('a tick with the department stopped does nothing at all', async () => {
