@@ -486,6 +486,23 @@ export function roomFeed(roomId, limit = 60) {
   ).reverse();
 }
 
+/**
+ * The last few things said anywhere in the building.
+ *
+ * So the page can be watched rather than clicked through: the question "what is
+ * happening right now" should not require choosing a room first.
+ */
+export function recent(limit = 12) {
+  return q(
+    `SELECT m.body, m.from_agent, m.scene_id, a.name, r.name AS room_name, e.room_id
+       FROM agent_messages m
+       LEFT JOIN agents a ON a.id = m.from_agent
+       LEFT JOIN sim_encounters e ON e.id = m.scene_id
+       LEFT JOIN sim_rooms r ON r.id = e.room_id
+      WHERE m.kind = 'sim' ORDER BY m.id DESC LIMIT ?`, limit,
+  );
+}
+
 export function learnings(limit = 60) {
   return q(
     `SELECT l.*, a.name, e.room_id FROM sim_learnings l
@@ -505,6 +522,7 @@ export function overview() {
                      LEFT JOIN sim_rooms r ON r.id = e.room_id
                     ORDER BY e.id DESC LIMIT 40`),
     learnings: learnings(40),
+    recent: recent(12),
     counts: {
       rooms: n('SELECT COUNT(*) AS n FROM sim_rooms'),
       placed: n('SELECT COUNT(*) AS n FROM sim_presence'),

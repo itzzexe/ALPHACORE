@@ -2378,38 +2378,59 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
 /* --------------------------------------------------------------------------
    The offices.
 
-   A floor plan rather than a table, because "six people are in the kitchen and
-   the trust office is empty" is a thing you see and not a thing you read. Every
-   figure is inline SVG drawn from the employee's own id — no sprite sheet, no
-   icon font, nothing fetched: the console makes no external requests and that
-   is checked rather than intended.
+   A floor plan rather than a table, because "the studio is full and the lab is
+   empty" is a thing you see, not a thing you read. Everything is inline SVG
+   drawn from the employee's own id — no sprite sheet, no icon font, nothing
+   fetched: the console makes no external requests and that is checked.
    -------------------------------------------------------------------------- */
-.of-scroll { overflow-x: auto; padding: 4px 0 8px; }
-.of-floor { display: block; min-width: 720px; max-width: 100%; height: auto; }
+.of-controls { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.of-hint {
+  margin-top: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
+  background: var(--accent-wash); border: 1px solid var(--seam);
+}
 
-.of-room rect:first-of-type { transition: stroke .18s ease, filter .18s ease; }
+.of-scroll { overflow-x: auto; padding: 2px 0 6px; }
+.of-floor { display: block; min-width: 1000px; max-width: 100%; height: auto; }
+
+.of-room-box { fill: var(--bg-raise); stroke: var(--seam); stroke-width: 1; transition: stroke .16s ease; }
 .of-room { cursor: pointer; }
-.of-room:hover rect:first-of-type,
-.of-room:focus-visible rect:first-of-type { stroke: var(--ember); stroke-width: 1.8; }
+.of-room:hover .of-room-box,
+.of-room:focus-visible .of-room-box { stroke: var(--ember); stroke-width: 1.7; }
 .of-room:focus-visible { outline: none; }
-.of-room.is-hot rect:first-of-type { stroke: var(--bad); stroke-width: 1.8; }
+.of-room.is-hot .of-room-box { stroke: var(--bad); stroke-width: 1.7; }
+/* An empty room should read as a space, not as a broken card. */
+.of-room.is-empty .of-room-box { fill: none; stroke-dasharray: 4 4; stroke: var(--seam-soft); }
 
-/* Somebody is mid-sentence. Slow enough to read, quiet enough to ignore. */
-.of-bubble { animation: ofRise .5s ease-out; }
-@keyframes ofRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
-.of-fig { transition: transform .25s ease; }
-.of-room:hover .of-fig { transform: translateY(-1px); }
+.of-fig { cursor: pointer; }
+.of-fig.is-speaking { filter: drop-shadow(0 0 5px var(--accent-wash)); }
+.of-bubble { animation: ofRise .45s ease-out; }
+@keyframes ofRise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
 
-.of-key { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; }
-.of-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-inline-end: 3px; }
+.of-key { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--ink-mute); margin: 2px 0 8px; }
+.of-k { display: inline-flex; gap: 4px; align-items: center; }
+.of-k svg { display: block; }
+.of-k-do { color: var(--ink-faint); font-style: italic; }
+
+/* What is happening right now, without choosing a room first. */
+.of-ticker .of-tick {
+  display: flex; gap: 8px; align-items: baseline; padding: 5px 0; font-size: 12.5px;
+  border-top: 1px solid var(--seam-soft);
+}
+.of-ticker .of-tick:first-of-type { border-top: none; }
+.of-tick-room { color: var(--ink-faint); font-size: 11px; min-width: 108px; }
 
 .of-stage { margin-top: 12px; border-top: 1px solid var(--seam); padding-top: 12px; }
 .of-stage-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.of-lines { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
-.of-line {
-  background: var(--bg-sunk); border-radius: 8px; padding: 7px 10px; font-size: 13px;
-  animation: ofSay .28s ease-out;
+.of-roster { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.of-chip {
+  display: inline-flex; gap: 6px; align-items: center; font-size: 11.5px;
+  background: var(--bg-sunk); border-radius: 999px; padding: 3px 10px 3px 6px;
 }
+.of-chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.of-chip em { color: var(--ink-faint); font-style: normal; font-size: 10.5px; }
+
+.of-lines { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.of-line { background: var(--bg-sunk); border-radius: 8px; padding: 7px 10px; font-size: 13px; animation: ofSay .26s ease-out; }
 @keyframes ofSay { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 .of-who { font-weight: 600; margin-inline-end: 8px; color: var(--ember); }
 .of-learn {
@@ -2419,9 +2440,8 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
 
 @media (prefers-reduced-motion: reduce) {
   .of-bubble, .of-line { animation: none; }
-  .of-fig { transition: none; }
 }
 @media (max-width: 860px) {
-  .of-floor { min-width: 860px; }
-  .of-key { display: none; }
+  .of-tick-room { min-width: 0; }
+  .of-key .of-k-do { display: none; }
 }

@@ -1884,17 +1884,17 @@ async function renderGrowth() {
 // ---------------------------------------------------------------------------
 // The offices, drawn.
 //
-// A table of who is in which room is accurate and tells you nothing you would
-// notice. A floor plan tells you at a glance that six people are in the kitchen
-// and the trust office is empty — which is the actual state of a company on a
-// Thursday afternoon, and the only reason to have built rooms at all.
+// The first version of this page was a floor plan with nobody identifiable on
+// it: figures seven pixels tall, no names, and a colour key promising a mood
+// indicator that was not there. It looked like a company and could not be used
+// to watch one. What follows was rebuilt from a screenshot of that.
 //
-// Everything here is drawn by hand in SVG. No sprite sheet, no icon font, no
-// request to anybody: the console makes no external requests and that is
-// checked rather than intended. A figure is derived from the employee's own id,
-// so the same person is the same person every time you look, and their shirt is
-// their division's colour — which is how you spot somebody sitting on another
-// team's floor without reading a single label.
+// Three things a person actually does here: see at a glance where everybody is
+// and how they are; find one employee; read what was just said. Everything is
+// arranged around those and nothing else.
+//
+// Drawn by hand in SVG. No sprite sheet, no icon font, no request to anybody —
+// the console makes no external requests and that is checked, not intended.
 // ---------------------------------------------------------------------------
 
 /** A stable number from a string. Same employee, same face, for ever. */
@@ -1907,72 +1907,97 @@ function hashOf(s) {
 const SKIN = ['#f0d5b8', '#e3bd97', '#c99a6e', '#a9784f', '#7d5433', '#5c3c26'];
 const HAIR = ['#241a12', '#3d2a1a', '#5a3d24', '#7d5a33', '#a8802f', '#2f2f33', '#6b1f14', '#8a8a8a'];
 
+// Mood is a ring, not just a face. A face at this size is four pixels of mouth;
+// a ring is legible across the whole floor, which is the point of a floor plan.
+const MOOD = {
+  pleased: { ring: 'var(--ok)', word: 'pleased' },
+  curious: { ring: 'var(--steel)', word: 'curious' },
+  steady: { ring: 'transparent', word: 'steady' },
+  tired: { ring: 'var(--warn)', word: 'tired' },
+  frustrated: { ring: 'var(--bad)', word: 'frustrated' },
+  tense: { ring: 'var(--bad)', word: 'tense' },
+};
+
 /**
- * One employee, about the size of a thumbnail.
+ * The name you can actually fit under a figure.
  *
- * Mood is the face, because that is where a person looks first. Energy is the
- * ground shadow — somebody running on empty stands on almost nothing.
+ * Nine characters, because at ten the labels in a full room run into each
+ * other and a floor plan of colliding text is worse than one with no names.
  */
-function figure(p, colour, x, y, scale = 1) {
+const shortName = (n) => {
+  const s = String(n || '').replace(/\s*\(.*\)$/, '').trim();
+  if (s.length <= 9) return s;
+  const first = s.split(/[\s&/]+/)[0];
+  return first.length <= 9 ? first : `${first.slice(0, 8)}…`;
+};
+
+/**
+ * One employee, big enough to recognise.
+ *
+ * The ring is mood, the shirt is their division, the shadow is energy, and the
+ * name is under them because a floor plan of anonymous people is a chart.
+ */
+function figure(p, colour, x, y, speaking) {
   const h = hashOf(p.agent_id);
   const skin = SKIN[h % SKIN.length];
   const hair = HAIR[(h >> 3) % HAIR.length];
-  const hairStyle = (h >> 6) % 4;
-  const s = scale;
+  const style = (h >> 6) % 4;
+  const mood = MOOD[p.mood] || MOOD.steady;
   const tired = p.energy < 30;
 
   const mouth = {
-    pleased: `M -3 3.4 q 3 2.6 6 0`,
-    steady: `M -2.6 3.6 h 5.2`,
-    curious: `M -2.6 3.6 h 3.6`,
-    tired: `M -2.6 4 h 5.2`,
-    frustrated: `M -3 4.4 q 3 -2.2 6 0`,
-    tense: `M -3 4.4 q 3 -2.6 6 0`,
-  }[p.mood] || `M -2.6 3.6 h 5.2`;
-
-  const brows = p.mood === 'frustrated' || p.mood === 'tense'
-    ? `<path d="M -4.4 -1.6 l 3 1.1 M 4.4 -1.6 l -3 1.1" stroke="var(--ink)" stroke-width="0.9" fill="none" stroke-linecap="round"/>`
-    : (p.mood === 'curious' ? `<path d="M -4.4 -1.2 l 3 -0.7" stroke="var(--ink)" stroke-width="0.9" fill="none" stroke-linecap="round"/>` : '');
+    pleased: 'M -3 3.4 q 3 2.6 6 0',
+    steady: 'M -2.6 3.6 h 5.2',
+    curious: 'M -2.6 3.6 h 3.6',
+    tired: 'M -2.6 4 h 5.2',
+    frustrated: 'M -3 4.4 q 3 -2.2 6 0',
+    tense: 'M -3 4.4 q 3 -2.6 6 0',
+  }[p.mood] || 'M -2.6 3.6 h 5.2';
 
   const hairPath = [
     `<path d="M -7 -1 a 7 7 0 0 1 14 0 v -1 a 7 8 0 0 0 -14 0 z" fill="${hair}"/>`,
     `<path d="M -7 -1.5 a 7 7 0 0 1 14 0 q -3 -4 -7 -4 t -7 4 z" fill="${hair}"/><circle cx="0" cy="-7.4" r="2.1" fill="${hair}"/>`,
     `<path d="M -7 -0.5 a 7 7 0 0 1 14 0 v -2 a 7 8 0 0 0 -14 0 z" fill="${hair}"/><path d="M -7.4 -0.5 q -1.6 4 -0.4 7" stroke="${hair}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
     `<path d="M -6.6 -2.2 a 7 7 0 0 1 13.2 0 z" fill="${hair}"/>`,
-  ][hairStyle];
+  ][style];
 
-  return `<g transform="translate(${x} ${y}) scale(${s})" class="of-fig" data-agent="${esc(p.agent_id)}">
-    <ellipse cx="0" cy="20" rx="${6 + (p.energy / 100) * 3}" ry="1.8" fill="var(--ink)" opacity="${0.05 + (p.energy / 100) * 0.12}"/>
-    <path d="M -7.5 20 v -6 a 7.5 8 0 0 1 15 0 v 6 z" fill="${colour}" opacity="${tired ? 0.7 : 1}"/>
+  return `<g class="of-fig${speaking ? ' is-speaking' : ''}" transform="translate(${x} ${y})" data-agent="${esc(p.agent_id)}">
+    <title>${esc(p.name)} · ${esc(p.role_group || '')} · ${esc(mood.word)}, energy ${p.energy}%${p.note ? ` · “${esc(p.note)}”` : ''}</title>
+    <ellipse cx="0" cy="21" rx="${5 + (p.energy / 100) * 4}" ry="1.7" fill="var(--ink)" opacity="${0.05 + (p.energy / 100) * 0.12}"/>
+    ${mood.ring !== 'transparent'
+    ? `<circle cx="0" cy="1" r="12.5" fill="none" stroke="${mood.ring}" stroke-width="1.6" opacity="0.85"/>` : ''}
+    <path d="M -7.5 20 v -6 a 7.5 8 0 0 1 15 0 v 6 z" fill="${colour}" opacity="${tired ? 0.72 : 1}"/>
     <circle cx="0" cy="0" r="7" fill="${skin}"/>
     ${hairPath}
     <circle cx="-2.6" cy="1" r="0.95" fill="var(--ink)"/>
     <circle cx="2.6" cy="1" r="0.95" fill="var(--ink)"/>
-    ${brows}
     <path d="${mouth}" stroke="var(--ink)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-    ${tired ? '<text x="7" y="-6" font-size="6" fill="var(--ink-faint)">z</text>' : ''}
+    <text x="0" y="31" font-size="7.4" text-anchor="middle" fill="var(--ink-mute)">${esc(shortName(p.name))}</text>
   </g>`;
 }
 
 /** A speech bubble that points down at whoever said it. */
-function bubble(x, y, text, w = 150) {
-  const body = String(text).replace(/\s+/g, ' ').slice(0, 110);
+function bubble(x, y, who, text, w) {
+  const body = String(text).replace(/\s+/g, ' ').slice(0, 130);
   const lines = [];
   let line = '';
+  const perLine = Math.floor(w / 5.2);
   for (const word of body.split(' ')) {
-    if ((line + ' ' + word).length > 30) { lines.push(line); line = word; } else { line = line ? `${line} ${word}` : word; }
+    if ((`${line} ${word}`).length > perLine) { lines.push(line); line = word; } else { line = line ? `${line} ${word}` : word; }
     if (lines.length >= 3) break;
   }
   if (line && lines.length < 3) lines.push(line);
-  const h = 12 + lines.length * 11;
-  return `<g class="of-bubble" transform="translate(${x} ${y - h - 26})">
-    <rect x="${-w / 2}" y="0" width="${w}" height="${h}" rx="7" fill="var(--paper-veil)" stroke="var(--seam)"/>
-    <path d="M -5 ${h} l 5 7 l 5 -7 z" fill="var(--paper-veil)" stroke="var(--seam)"/>
-    ${lines.map((l, i) => `<text x="${-w / 2 + 8}" y="${14 + i * 11}" font-size="9.5" fill="var(--ink)">${esc(l)}</text>`).join('')}
+  const h = 15 + lines.length * 11;
+  return `<g class="of-bubble" transform="translate(${x} ${y})">
+    <rect x="${-w / 2}" y="0" width="${w}" height="${h}" rx="7" fill="var(--paper-veil)" stroke="var(--ember)" stroke-opacity="0.45"/>
+    <path d="M -5 ${h} l 5 6 l 5 -6 z" fill="var(--paper-veil)" stroke="var(--ember)" stroke-opacity="0.45"/>
+    <text x="${-w / 2 + 8}" y="11" font-size="7.6" fill="var(--ember)">${esc(who)}</text>
+    ${lines.map((l, i) => `<text x="${-w / 2 + 8}" y="${23 + i * 11}" font-size="9.3" fill="var(--ink)">${esc(l)}</text>`).join('')}
   </g>`;
 }
 
-let officesReplay = null;   // the timer for the walkthrough, so it can be stopped
+let officesReplay = null;   // the walkthrough timer
+let officesStage = null;    // { kind: 'room'|'encounter', id } — survives a refresh
 
 async function renderOffices() {
   const d = await api('/api/sim');
@@ -1982,43 +2007,71 @@ async function renderOffices() {
   const colourFor = (p, room) => divColour[String(p.role_group || '').toLowerCase()]
     || divColour[room.division] || 'var(--steel)';
 
-  // Geometry. One cell is 84 by 74; everything else follows from the room's
-  // own gx/gy/gw/gh, which live in the database.
-  const CW = 84;
-  const CH = 74;
+  // --- geometry ------------------------------------------------------------
+  // Rows are as tall as their fullest room needs, rather than a fixed height
+  // that clipped people's heads in the version this replaces.
+  const CW = 92;
+  const PITCH_X = 39;
+  const PITCH_Y = 42;
+  const HEAD = 40;
+  const perRowFor = (r) => Math.max(2, Math.floor((r.gw * CW - 30) / PITCH_X));
+  const rowsNeededFor = (r) => Math.max(1, Math.ceil(Math.min(r.people.length, 18) / perRowFor(r)));
+
+  const gridRows = [...new Set(d.building.map((r) => r.gy))].sort((a, b) => a - b);
+  const rowHeight = {};
+  const bubbleBand = {};
+  for (const gy of gridRows) {
+    const inRow = d.building.filter((r) => r.gy === gy);
+    const tallest = Math.max(...inRow.map((r) => (r.people.length ? rowsNeededFor(r) : 0)));
+    // A speech bubble needs a band of its own. Reserved for the whole row so
+    // rooms beside each other stay aligned, and paid for only when somebody in
+    // the row has actually said something.
+    bubbleBand[gy] = inRow.some((r) => r.lastLine) ? 52 : 0;
+    rowHeight[gy] = HEAD + bubbleBand[gy] + tallest * PITCH_Y + 16;
+  }
+  const rowTop = {};
+  let acc = 0;
+  for (const gy of gridRows) { rowTop[gy] = acc; acc += rowHeight[gy] + 8; }
   const W = d.floor.cols * CW;
-  const H = d.floor.rows * CH;
+  const H = acc;
 
   const roomSvg = (r) => {
     const x = r.gx * CW + 5;
-    const y = r.gy * CH + 5;
+    const y = rowTop[r.gy];
     const w = r.gw * CW - 10;
-    const h = r.gh * CH - 10;
+    const h = rowHeight[r.gy];
     const tint = divColour[r.division] || 'var(--ink-faint)';
-    const busy = r.lastEncounter && r.people.length >= 2;
+    const empty = r.people.length === 0;
     const hot = r.lastEncounter && Number(r.lastEncounter.tension) >= 0.6;
+    const perRow = perRowFor(r);
 
-    // People are laid out in rows inside the room, so a full room looks full.
-    const perRow = Math.max(2, Math.floor((w - 24) / 26));
-    const people = r.people.slice(0, 12).map((p, i) => {
-      const px = x + 20 + (i % perRow) * 26;
-      const py = y + 40 + Math.floor(i / perRow) * 30;
-      return { p, px, py };
-    });
+    const shown = r.people.slice(0, perRow * 3);
+    const people = shown.map((p, i) => ({
+      p,
+      px: x + 22 + (i % perRow) * PITCH_X,
+      py: y + HEAD + bubbleBand[r.gy] + Math.floor(i / perRow) * PITCH_Y,
+    }));
     const speaker = r.lastLine ? people.find((q2) => q2.p.agent_id === r.lastLine.from) : null;
 
-    return `<g class="of-room ${hot ? 'is-hot' : ''}" data-room="${esc(r.id)}" tabindex="0"
-              role="button" aria-label="${esc(r.name)}, ${r.people.length} people. ${esc(r.about || '')}">
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10"
-            fill="var(--bg-raise)" stroke="${busy ? tint : 'var(--seam)'}" stroke-width="${busy ? 1.6 : 1}"/>
-      <rect x="${x}" y="${y}" width="4" height="${h}" rx="2" fill="${tint}" opacity="0.85"/>
-      <text x="${x + 12}" y="${y + 20}" font-size="11.5" font-weight="600" fill="var(--ink)">${esc(r.name)}</text>
-      <text x="${x + w - 10}" y="${y + 20}" font-size="10" text-anchor="end" fill="var(--ink-faint)">${r.people.length}/${r.capacity}</text>
-      ${r.people.length > 12 ? `<text x="${x + w - 10}" y="${y + h - 8}" font-size="9" text-anchor="end" fill="var(--ink-faint)">+${r.people.length - 12} more</text>` : ''}
-      ${people.map(({ p, px, py }) => figure(p, colourFor(p, r), px, py, 0.86)).join('')}
-      ${speaker && r.lastLine ? bubble(Math.min(Math.max(speaker.px, x + 80), x + w - 80), speaker.py, r.lastLine.body, Math.min(160, w - 20)) : ''}
+    return `<g class="of-room${empty ? ' is-empty' : ''}${hot ? ' is-hot' : ''}" data-room="${esc(r.id)}" tabindex="0"
+              role="button" aria-label="${esc(r.name)} — ${r.people.length} of ${r.capacity} people. ${esc(r.about || '')}">
+      <title>${esc(r.about || r.name)}</title>
+      <rect class="of-room-box" x="${x}" y="${y}" width="${w}" height="${h}" rx="10"/>
+      <rect x="${x}" y="${y}" width="4" height="${h}" rx="2" fill="${tint}" opacity="${empty ? 0.35 : 0.9}"/>
+      <text x="${x + 13}" y="${y + 20}" font-size="11.5" font-weight="600" fill="var(--ink)">${esc(r.name)}</text>
+      <text x="${x + w - 11}" y="${y + 20}" font-size="10" text-anchor="end"
+            fill="${r.people.length >= r.capacity ? 'var(--warn)' : 'var(--ink-faint)'}">${r.people.length}/${r.capacity}</text>
+      ${empty ? `<text x="${x + w / 2}" y="${y + h / 2 + 6}" font-size="10" text-anchor="middle" fill="var(--ink-ghost)">empty</text>` : ''}
+      ${people.map(({ p, px, py }) => figure(p, colourFor(p, r), px, py, speaker && speaker.p.agent_id === p.agent_id)).join('')}
+      ${r.people.length > shown.length ? `<text x="${x + w - 11}" y="${y + h - 9}" font-size="9" text-anchor="end" fill="var(--ink-faint)">+${r.people.length - shown.length} more</text>` : ''}
+      ${speaker && r.lastLine
+    ? bubble(Math.min(Math.max(speaker.px, x + 100), x + w - 100), y + 26, r.lastLine.name || r.lastLine.from, r.lastLine.body, Math.min(190, w - 20))
+    : ''}
     </g>`;
   };
+
+  const busiest = [...d.building].filter((r) => r.people.length).sort((a, b) => b.people.length - a.people.length)[0];
+  const empties = d.building.filter((r) => !r.people.length).length;
 
   view.innerHTML = `
   <div class="panel">
@@ -2026,37 +2079,52 @@ async function renderOffices() {
       <span>The building</span>
       <span class="chip ${d.on ? 'chip-ok' : 'chip-dim'}">${d.on ? 'running' : 'stopped'}</span>
     </div>
-    <div class="map-legend">${esc(d.note)}</div>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="of-controls">
       ${hasPermC('sim.run') ? (d.on
     ? '<button class="btn btn-bad" id="of-stop">Stop it</button>'
-    : '<button class="btn" id="of-start">Start it</button>')
-    + '<button class="btn" id="of-play">Play one encounter</button>' : ''}
+    : '<button class="btn btn-primary" id="of-start">Start it</button>')
+    + '<button class="btn" id="of-play">Play one encounter now</button>' : ''}
       ${d.encounters.length ? `<button class="btn" id="of-watch" data-enc="${d.encounters[0].id}">Watch the last one</button>` : ''}
-      <span class="sub">${d.on ? 'A room meets every six minutes.' : 'Stopped: nothing moves, nothing is spent.'}</span>
+      <span class="sub">${d.on
+    ? 'A room meets every six minutes. Nothing waits for you.'
+    : 'Stopped: nobody moves, nothing is spent.'}</span>
     </div>
+    ${!c.encounters ? `<div class="of-hint">
+      Nobody has met yet. <b>Play one encounter now</b> puts whoever is in a room together and shows you the result in
+      about half a minute — you do not have to wait six for the first one.
+    </div>` : ''}
   </div>
 
   <div class="grid grid-4" style="margin-top:16px">
-    ${tile('Learned, and kept', c.inMemory, 'written into an employee’s memory')}
-    ${tile('Encounters', c.encounters, `${c.rooms} rooms · ${c.placed} at a desk`)}
+    ${tile('Learned, and kept', c.inMemory, 'in an employee’s memory, recalled into later prompts')}
+    ${tile('Encounters', c.encounters, `${c.placed} people · ${c.rooms - empties} rooms in use`)}
     ${tile('Went to HR', c.disputes, 'would not resolve between them', c.disputes ? 'bad' : '')}
     ${tile('Spent', money4(c.spentUsd || 0), 'on the whole building')}
   </div>
 
+  ${d.recent && d.recent.length ? `<div class="panel of-ticker" style="margin-top:16px">
+    <div class="panel-title"><span>Just said</span><span class="sub">newest first</span></div>
+    ${d.recent.slice(0, 6).map((m) => `<div class="of-tick">
+      <span class="of-tick-room">${esc(m.room_name || m.room_id)}</span>
+      <span class="of-who">${esc(m.name || m.from_agent)}</span>${esc(m.body)}
+    </div>`).join('')}
+  </div>` : ''}
+
   <div class="panel of-floor-wrap" style="margin-top:16px">
-    <div class="panel-title">
-      <span>The floor</span>
-      <span class="sub of-key">
-        <span><i class="of-dot" style="background:var(--ok)"></i> pleased</span>
-        <span><i class="of-dot" style="background:var(--warn)"></i> tired</span>
-        <span><i class="of-dot" style="background:var(--bad)"></i> tense</span>
-        · shirt is their division · click a room to read it
-      </span>
+    <div class="panel-title"><span>The floor</span></div>
+    <div class="of-key" aria-hidden="true">
+      <span class="of-k"><svg width="20" height="20" viewBox="-11 -11 22 22"><circle r="8.5" fill="none" stroke="var(--ok)" stroke-width="1.6"/></svg> pleased</span>
+      <span class="of-k"><svg width="20" height="20" viewBox="-11 -11 22 22"><circle r="8.5" fill="none" stroke="var(--steel)" stroke-width="1.6"/></svg> curious</span>
+      <span class="of-k"><svg width="20" height="20" viewBox="-11 -11 22 22"><circle r="8.5" fill="none" stroke="var(--warn)" stroke-width="1.6"/></svg> tired</span>
+      <span class="of-k"><svg width="20" height="20" viewBox="-11 -11 22 22"><circle r="8.5" fill="none" stroke="var(--bad)" stroke-width="1.6"/></svg> tense</span>
+      <span class="of-k">no ring = steady</span>
+      <span class="of-k">shirt = their division</span>
+      <span class="of-k">shadow = energy</span>
+      <span class="of-k of-k-do">click a room to read it · hover anyone for their name</span>
     </div>
     <div class="of-scroll">
       <svg class="of-floor" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
-           role="img" aria-label="Floor plan of the offices with ${c.placed} employees in ${c.rooms} rooms">
+           role="img" aria-label="Floor plan: ${c.placed} employees across ${c.rooms} rooms. Busiest is ${esc(busiest ? busiest.name : 'nowhere')}.">
         ${d.building.map(roomSvg).join('')}
       </svg>
     </div>
@@ -2083,89 +2151,124 @@ async function renderOffices() {
   </div>`;
 
   const act = async (path, body = {}) => {
-    try { await api(path, { method: 'POST', body }); renderOffices(); }
+    try { await api(path, { method: 'POST', body }); await renderOffices(); }
     catch (e) { toast(e.message, true); }
   };
   $('#of-start')?.addEventListener('click', () => act('/api/sim/start'));
   $('#of-stop')?.addEventListener('click', () => act('/api/sim/stop'));
-  $('#of-play')?.addEventListener('click', async () => { toast('Watching a room…'); await act('/api/sim/play'); });
+  $('#of-play')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'They are talking…';
+    try {
+      const r = await api('/api/sim/play', { method: 'POST', body: {} });
+      await renderOffices();
+      if (r?.id) watch(r.id);            // land straight on what just happened
+      else toast(r?.skipped || 'nothing came of it');
+    } catch (err) { toast(err.message, true); b.disabled = false; b.textContent = 'Play one encounter now'; }
+  });
 
-  /**
-   * Play the conversation back, a line at a time.
-   *
-   * The transcript is already on the page below. This exists because reading a
-   * table of what was said and watching it happen are different experiences,
-   * and only one of them makes you notice that two of them never speak.
-   */
-  const watch = async (encId) => {
+  /** Play a conversation back, a line at a time. */
+  async function watch(encId) {
     const stage = $('#of-stage');
     if (officesReplay) { clearTimeout(officesReplay); officesReplay = null; }
     let data;
     try { data = await api(`/api/sim/encounter/${encId}`); } catch (e) { return toast(e.message, true); }
     if (!data?.lines?.length) return toast('nothing was said in that one');
+    officesStage = { kind: 'encounter', id: encId };
 
     stage.hidden = false;
     stage.innerHTML = `<div class="of-stage-head">
         <b>${esc(data.encounter.room_name || data.encounter.room_id)}</b>
         <span class="sub">${esc(data.encounter.kind)} · tension ${Math.round((data.encounter.tension || 0) * 100)}%</span>
-        <button class="btn btn-sm" id="of-stop-watch">Stop</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" id="of-skip">Show it all</button>
+        <button class="btn btn-sm" id="of-close-stage">Close</button>
       </div><div class="of-lines" id="of-lines"></div>`;
-    $('#of-stop-watch').addEventListener('click', () => {
-      if (officesReplay) clearTimeout(officesReplay);
-      officesReplay = null;
-      stage.hidden = true;
-    });
 
     const box = $('#of-lines');
+    const closeStage = () => {
+      if (officesReplay) clearTimeout(officesReplay);
+      officesReplay = null; officesStage = null; stage.hidden = true;
+    };
+    $('#of-close-stage').addEventListener('click', closeStage);
+    $('#of-skip').addEventListener('click', () => {
+      if (officesReplay) clearTimeout(officesReplay);
+      officesReplay = null;
+      while (i < data.lines.length) emit(data.lines[i++]);
+      finish();
+    });
+
     let i = 0;
-    const step = () => {
-      if (i >= data.lines.length) {
-        if (data.learnings.length) {
-          box.insertAdjacentHTML('beforeend', `<div class="of-learn">${data.learnings.map((l) =>
-            `<b>${esc(l.name || l.agent_id)}</b> walked away with: ${esc(l.learned)}`).join('<br>')}</div>`);
-        }
-        box.insertAdjacentHTML('beforeend', `<div class="sub" style="margin-top:8px">${esc(data.encounter.outcome || '')}</div>`);
-        box.scrollTop = box.scrollHeight;
-        officesReplay = null;
-        return;
-      }
-      const l = data.lines[i++];
+    const emit = (l) => {
       box.insertAdjacentHTML('beforeend',
         `<div class="of-line"><span class="of-who">${esc(l.name || l.from_agent)}</span>${esc(l.body)}</div>`);
       box.scrollTop = box.scrollHeight;
-      officesReplay = setTimeout(step, 1500 + Math.min(2200, String(l.body).length * 22));
+    };
+    const finish = () => {
+      if (data.learnings.length) {
+        box.insertAdjacentHTML('beforeend', `<div class="of-learn">${data.learnings.map((l) =>
+          `<b>${esc(l.name || l.agent_id)}</b> walked away with: ${esc(l.learned)}`).join('<br>')}</div>`);
+      }
+      if (data.encounter.outcome) box.insertAdjacentHTML('beforeend', `<div class="sub" style="margin-top:8px">${esc(data.encounter.outcome)}</div>`);
+      box.scrollTop = box.scrollHeight;
+    };
+    const step = () => {
+      if (i >= data.lines.length) { officesReplay = null; return finish(); }
+      const l = data.lines[i++];
+      emit(l);
+      officesReplay = setTimeout(step, 1300 + Math.min(2000, String(l.body).length * 20));
     };
     step();
     stage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  };
+  }
+
+  async function openRoom(id) {
+    const r = d.building.find((x) => x.id === id);
+    if (!r) return;
+    officesStage = { kind: 'room', id };
+    let feed = { feed: [] };
+    try { feed = await api(`/api/sim/room/${id}`); } catch { /* nothing said in there yet */ }
+    const stage = $('#of-stage');
+    stage.hidden = false;
+    stage.innerHTML = `<div class="of-stage-head">
+        <b>${esc(r.name)}</b><span class="sub">${r.people.length}/${r.capacity} · ${esc(r.about || '')}</span>
+        <span style="flex:1"></span>
+        ${hasPermC('sim.run') && r.people.length >= 2 ? '<button class="btn btn-sm" id="of-here">See what happens here</button>' : ''}
+        ${r.lastEncounter ? '<button class="btn btn-sm" id="of-replay">Watch the last one</button>' : ''}
+        <button class="btn btn-sm" id="of-close-stage">Close</button>
+      </div>
+      ${r.people.length ? `<div class="of-roster">${r.people.map((p) => `<span class="of-chip">
+        <i style="background:${colourFor(p, r)}"></i>${esc(p.name)}
+        <em>${esc((MOOD[p.mood] || MOOD.steady).word)} · ${p.energy}%</em></span>`).join('')}</div>` : ''}
+      <div class="of-lines">${feed.feed.length
+    ? feed.feed.map((m) => `<div class="of-line"><span class="of-who">${esc(m.name || m.from_agent)}</span>${esc(m.body)}</div>`).join('')
+    : '<div class="sub">Nothing has been said in here yet.</div>'}</div>`;
+    $('#of-close-stage').addEventListener('click', () => { officesStage = null; stage.hidden = true; });
+    $('#of-here')?.addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true; e.currentTarget.textContent = 'They are talking…';
+      try {
+        const res = await api('/api/sim/play', { method: 'POST', body: { roomId: id } });
+        await renderOffices();
+        if (res?.id) watch(res.id); else toast(res?.skipped || 'nothing came of it');
+      } catch (err) { toast(err.message, true); }
+    });
+    $('#of-replay')?.addEventListener('click', () => watch(r.lastEncounter.id));
+    stage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 
   $('#of-watch')?.addEventListener('click', (e) => watch(e.currentTarget.dataset.enc));
   for (const b of view.querySelectorAll('[data-watch]')) b.addEventListener('click', () => watch(b.dataset.watch));
-
-  // A room is a button: click it to read what has been said in it, and to send
-  // the people in it to talk to each other.
   for (const g of view.querySelectorAll('.of-room')) {
-    const open = async () => {
-      const id = g.dataset.room;
-      const r = d.building.find((x) => x.id === id);
-      let feed = { feed: [] };
-      try { feed = await api(`/api/sim/room/${id}`); } catch { /* nothing said in there yet */ }
-      const stage = $('#of-stage');
-      stage.hidden = false;
-      stage.innerHTML = `<div class="of-stage-head">
-          <b>${esc(r.name)}</b><span class="sub">${esc(r.about || '')}</span>
-          ${hasPermC('sim.run') && r.people.length >= 2 ? `<button class="btn btn-sm" id="of-here">See what happens here</button>` : ''}
-          ${r.lastEncounter ? `<button class="btn btn-sm" id="of-replay">Watch the last one</button>` : ''}
-        </div>
-        <div class="of-lines">${feed.feed.length
-    ? feed.feed.map((m) => `<div class="of-line"><span class="of-who">${esc(m.name || m.from_agent)}</span>${esc(m.body)}</div>`).join('')
-    : '<div class="sub">Nothing has been said in here yet.</div>'}</div>`;
-      $('#of-here')?.addEventListener('click', async () => { toast('…'); await act('/api/sim/play', { roomId: id }); });
-      $('#of-replay')?.addEventListener('click', () => watch(r.lastEncounter.id));
-      stage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
-    g.addEventListener('click', open);
-    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    g.addEventListener('click', () => openRoom(g.dataset.room));
+    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRoom(g.dataset.room); } });
+  }
+
+  // The page refreshes itself every half minute. Without this, a transcript you
+  // were reading disappeared mid-sentence — which is the kind of thing that
+  // makes somebody stop using a page rather than report a bug.
+  if (officesStage) {
+    if (officesStage.kind === 'room') openRoom(officesStage.id);
+    else watch(officesStage.id);
   }
 }
 
