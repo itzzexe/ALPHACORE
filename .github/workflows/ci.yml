@@ -22,9 +22,9 @@ jobs:
         working-directory: crucible-core
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
 
@@ -62,8 +62,8 @@ jobs:
         working-directory: crucible-core
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
       - run: npm ci --no-audit --no-fund
@@ -91,7 +91,7 @@ jobs:
     name: No secrets in the tree
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Nothing under data/, no keys, no .env
         run: |
           bad=$(git ls-files | grep -E '(^|/)data/|\.env$|\.env\..*|\.key$|\.pem$' | grep -v '\.env\.example$' || true)

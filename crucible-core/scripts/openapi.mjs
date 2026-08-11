@@ -243,7 +243,14 @@ const text = `${JSON.stringify(spec, null, 2)}\n`;
 
 if (process.argv.includes('--check')) {
   const current = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
-  if (current !== text) {
+  // Compare the description, not the line endings. A repository checked out on
+  // Windows can hold the same file with CRLF, and a byte comparison then fails
+  // on an artefact that is perfectly current — which is a check that cries wolf
+  // on the platform, and a check that cries wolf is a check people switch off.
+  // .gitattributes stops this happening; this stops it mattering if somebody
+  // clones with different settings.
+  const same = (s) => s.replace(/\r\n/g, '\n');
+  if (same(current) !== same(text)) {
     console.error('public/openapi.json is out of date — run: npm run openapi');
     process.exit(1);
   }

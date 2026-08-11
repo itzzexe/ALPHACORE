@@ -1,0 +1,29 @@
+# Every checkout of this repository holds the same bytes, on every platform.
+#
+# Without this, Git on Windows checks files out with CRLF while the tools that
+# generate them write LF. Nothing looks wrong — the code runs, the tests pass —
+# right up until something compares a generated file with the one on disk. The
+# OpenAPI check did exactly that and failed both Windows jobs in CI with
+# "openapi.json is out of date", while the two files were byte-for-byte
+# identical apart from thirty-one thousand carriage returns.
+#
+# A generated artefact that is only correct on one operating system is not a
+# generated artefact anybody can check.
+* text=auto eol=lf
+
+# Generated and compared byte for byte — these are the ones the rule exists for.
+*.json     text eol=lf
+*.mjs      text eol=lf
+*.js       text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.css      text eol=lf
+*.html     text eol=lf
+
+# Written by scripts/make-icons.mjs, which emits PNG bytes by hand. Touching a
+# newline in one of these corrupts it.
+*.png      binary
+
+# Windows launchers only work with CRLF.
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
