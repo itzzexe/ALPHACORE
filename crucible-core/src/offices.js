@@ -165,13 +165,52 @@ export function seed({ actor = 'system:sim' } = {}) {
       60 + Math.floor(Math.random() * 30), 'steady');
     placed++;
   }
-  if (rooms || placed) {
+  // Self-healing, because the first version of this seated people by role group
+  // and left fifty-one of them on one floor of a room that holds ten. Nothing
+  // in a presence row is precious — it is where somebody is standing — so if the
+  // building is impossible, everybody is seated again by the current rule.
+  const overfull = q(`SELECT r.id, r.capacity, COUNT(p.agent_id) AS here
+                        FROM sim_rooms r LEFT JOIN sim_presence p ON p.room_id = r.id
+                       GROUP BY r.id HAVING here > r.capacity`);
+  const reseated = overfull.length ? reseat({ actor, why: `${overfull[0].id} held ${overfull[0].here} of ${overfull[0].capacity}` }) : 0;
+
+  if (rooms || placed || reseated) {
     audit({
       actorType: 'system', actorId: actor, action: 'sim.seeded',
-      subjectType: 'simulation', subjectId: 'building', payload: { rooms, placed },
+      subjectType: 'simulation', subjectId: 'building', payload: { rooms, placed, reseated },
     });
   }
-  return { rooms, placed };
+  return { rooms, placed, reseated };
+}
+
+/**
+ * Seat everybody again by the current rule, keeping how they are.
+ *
+ * Mood and energy survive; only the desk changes. Somebody who was tired before
+ * the furniture moved is still tired afterwards.
+ */
+export function reseat({ actor = 'system:sim', why = 'asked for' } = {}) {
+  const people = q(`SELECT p.agent_id, p.mood, p.energy, p.note, a.name, a.role_group
+                      FROM sim_presence p JOIN agents a ON a.id = p.agent_id`);
+  if (!people.length) return 0;
+  exec('DELETE FROM sim_presence');
+  // Titles that match a specific room are seated first, so the people with the
+  // strongest claim to a desk get it before the fallbacks fill it up.
+  const ranked = [...people].sort((a, b) => {
+    const m = (p) => (BY_TITLE.some(([re]) => re.test(`${p.name || ''} ${p.agent_id}`)) ? 0 : 1);
+    return m(a) - m(b);
+  });
+  for (const p of ranked) {
+    exec('INSERT INTO sim_presence (agent_id, room_id, energy, mood, note) VALUES (?,?,?,?,?)',
+      p.agent_id, deskFor({ id: p.agent_id, name: p.name, roleGroup: p.role_group }),
+      p.energy, p.mood, p.note);
+  }
+  audit({
+    actorType: String(actor).startsWith('human:') ? 'human' : 'system', actorId: actor,
+    action: 'sim.reseated', subjectType: 'simulation', subjectId: 'building',
+    payload: { people: people.length, why },
+  });
+  return people.length;
 }
 
 /**

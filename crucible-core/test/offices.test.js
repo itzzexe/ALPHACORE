@@ -166,3 +166,31 @@ test('turning it on or off is signed, and lands on the chain', () => {
   assert.ok(entry, 'the switch is on the record');
   assert.equal(entry.actor_id, 'human:owner');
 });
+
+// The migration that mattered. The first version seated people by role group,
+// which put fifty-one of them on a floor that holds ten. Nothing in a presence
+// row is precious, so an impossible building fixes itself.
+test('a building left overfull by an older rule seats itself again', () => {
+  O.setOn(true, 'human:owner');
+  // Put everybody in one room, the way the first version did.
+  exec("UPDATE sim_presence SET room_id = 'engine-floor'");
+  const crammed = one("SELECT COUNT(*) AS n FROM sim_presence WHERE room_id = 'engine-floor'").n;
+  const capacity = one("SELECT capacity FROM sim_rooms WHERE id = 'engine-floor'").capacity;
+  assert.ok(crammed > capacity, 'the broken state is really broken before we assert it is fixed');
+
+  const r = O.seed({ actor: 'human:owner' });
+  assert.ok(r.reseated > 0, 'it noticed and did something about it');
+  for (const room of q('SELECT id, capacity FROM sim_rooms')) {
+    const here = one('SELECT COUNT(*) AS n FROM sim_presence WHERE room_id = ?', room.id).n;
+    assert.ok(here <= room.capacity, `${room.id} still seats ${here} of ${room.capacity}`);
+  }
+  assert.equal(one('SELECT COUNT(*) AS n FROM sim_presence').n, crammed, 'and lost nobody doing it');
+});
+
+test('being seated again does not change how anybody is feeling', () => {
+  exec("UPDATE sim_presence SET mood = 'tired', energy = 12");
+  O.reseat({ actor: 'human:owner' });
+  const rows = q('SELECT mood, energy FROM sim_presence');
+  assert.ok(rows.every((x) => x.mood === 'tired' && x.energy === 12),
+    'somebody who was tired before the furniture moved is still tired afterwards');
+});
