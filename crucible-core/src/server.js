@@ -40,6 +40,7 @@ import { syncDisputes, ruleAutoDisputes } from './disputes.js';
 import { seedPersonas } from './org.js';
 import { autonomyTick } from './autonomy.js';
 import { societyTick } from './society.js';
+import { officesTick } from './offices.js';
 import { syncExpansion } from './expansion.js';
 import { advanceWorkstreams, syncAudits } from './cycles.js';
 import { ensurePlaybooks, syncReflections, syncExternalMemory, gradeEpisodes } from './memory.js';
@@ -283,6 +284,9 @@ setInterval(() => { maestroTick().catch(() => { /* next tick retries */ }); }, 2
 setInterval(() => { autonomyTick().catch(() => { /* next tick retries */ }); }, 15_000).unref?.();
 // The social layer runs slowly on purpose — a workplace does not talk constantly.
 setInterval(() => { societyTick().catch(() => { /* next tick retries */ }); }, 8 * 60_000).unref?.();
+// Off until somebody starts it, and then it is the whole department: people
+// move, meet, argue, and occasionally walk away having learned something.
+setInterval(() => { officesTick().catch(() => { /* next tick retries */ }); }, 6 * 60_000).unref?.();
 setInterval(() => { try { advanceRequests(); } catch { /* next tick retries */ } }, 3000).unref?.();
 setInterval(() => { try { syncExpansion(); } catch { /* next tick retries */ } }, 3500).unref?.();
 // The iteration engine: audits land first, then workstreams move a phase.

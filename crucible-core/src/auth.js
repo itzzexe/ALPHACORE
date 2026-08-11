@@ -145,6 +145,7 @@ export const PERMS = [
   'status.view', 'status.post',
   'partners.view', 'partners.manage',
   'growth.view', 'growth.run',
+  'sim.view', 'sim.run',
 ];
 
 export const hashPassword = (pw) => {

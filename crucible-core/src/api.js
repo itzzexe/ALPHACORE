@@ -34,6 +34,10 @@ import {
 } from './statuspage.js';
 import { overview as partnershipsOverview, setIntegration } from './partnerships.js';
 import {
+  overview as officesOverview, setOn as setOfficesOn, playOne as officesPlay,
+  roomFeed as officesRoomFeed, seed as officesSeed,
+} from './offices.js';
+import {
   overview as growthOverview, start as startExperiment, record as recordResult,
   conclude as concludeExperiment2,
 } from './growth.js';
@@ -1541,6 +1545,14 @@ const routes = [
     id: Number(p[1]), integration: need(body, 'integration'), agreementRef: body.agreementRef, actor: `human:${user.username}`,
   })],
 
+  // ---- The simulation: the workforce in a building ------------------------
+  ['GET', /^\/api\/sim$/, () => officesOverview()],
+  ['POST', /^\/api\/sim\/start$/, (_p, _b, user) => setOfficesOn(true, `human:${user.username}`)],
+  ['POST', /^\/api\/sim\/stop$/, (_p, _b, user) => setOfficesOn(false, `human:${user.username}`)],
+  ['POST', /^\/api\/sim\/seed$/, (_p, _b, user) => officesSeed({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/sim\/play$/, (_p, body, user) => officesPlay({ roomId: body?.roomId || null, actor: `human:${user.username}` })],
+  ['GET', /^\/api\/sim\/room\/([a-z0-9-]+)$/, (p) => ({ room: p[1], feed: officesRoomFeed(p[1]) })],
+
   // ---- Growth -----------------------------------------------------------
   ['GET', /^\/api\/growth$/, () => growthOverview()],
   ['POST', /^\/api\/growth$/, (_p, body, user) => startExperiment({ ...body, actor: `human:${user.username}` })],
@@ -1603,6 +1615,10 @@ function permFor(m, path) {
   if (path.startsWith('/api/status')) return 'status.post';
   if (path === '/api/partnerships') return 'partners.view';
   if (path.startsWith('/api/partnerships')) return 'partners.manage';
+  // `simulation.*` is the shadow company, which forks the database. This is the
+  // building the workforce walks around in — a different thing, so a different key.
+  if (path === '/api/sim' || path.startsWith('/api/sim/room')) return 'sim.view';
+  if (path.startsWith('/api/sim')) return 'sim.run';
   if (path === '/api/growth' && m === 'GET') return 'growth.view';
   if (path.startsWith('/api/growth')) return 'growth.run';
   if (path === '/api/anchors/verify') return 'audit.view';

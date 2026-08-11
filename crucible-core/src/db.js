@@ -2774,6 +2774,69 @@ CREATE TABLE IF NOT EXISTS sla_terms (
 );
 `);
 
+// ---------------------------------------------------------------------------
+// The simulation — a building the workforce is actually in.
+//
+// The society layer already had them talking. What it had no notion of was
+// *where*, and a conversation with no room in it is a feed. Put people in rooms
+// and the interesting things follow on their own: who is standing next to whom,
+// who never leaves their desk, which two are always in the kitchen at the same
+// time, and what somebody walked away having learned.
+// ---------------------------------------------------------------------------
+db.exec(`
+CREATE TABLE IF NOT EXISTS sim_rooms (
+  id        TEXT PRIMARY KEY,
+  name      TEXT NOT NULL,
+  kind      TEXT NOT NULL DEFAULT 'office',   -- office|meeting|social|lab|corridor
+  division  TEXT,                             -- whose floor this is, if anyone's
+  capacity  INTEGER NOT NULL DEFAULT 8,
+  about     TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Where each employee is, and how they are. Mood is not decoration: a tired
+-- agent argues differently from a fresh one, and the difference is most of what
+-- makes a simulated workplace read as a workplace.
+CREATE TABLE IF NOT EXISTS sim_presence (
+  agent_id  TEXT PRIMARY KEY,
+  room_id   TEXT NOT NULL,
+  mood      TEXT NOT NULL DEFAULT 'steady',   -- steady|pleased|frustrated|tired|curious|tense
+  energy    INTEGER NOT NULL DEFAULT 70,      -- 0..100
+  note      TEXT,                             -- what they are doing right now
+  since     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sim_encounters (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id    TEXT NOT NULL,
+  kind       TEXT NOT NULL,                   -- work|teaching|disagreement|small_talk|review|crisis
+  cast       TEXT NOT NULL,                   -- JSON agent ids
+  premise    TEXT,
+  tension    REAL NOT NULL DEFAULT 0,         -- 0..1, decided by the scene not by us
+  state      TEXT NOT NULL DEFAULT 'writing', -- writing|played|failed
+  outcome    TEXT,
+  dispute_id INTEGER,                         -- if it escalated to HR
+  run_id     TEXT,
+  cost_usd   REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The point of the whole department. A learning is not a counter going up: it
+-- is written into the agent's memory, which is recalled into its later prompts,
+-- so the employee that had the conversation is afterwards a slightly different
+-- employee. Without this the simulation is a soap opera.
+CREATE TABLE IF NOT EXISTS sim_learnings (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id     TEXT NOT NULL,
+  from_agent   TEXT,
+  encounter_id INTEGER NOT NULL,
+  learned      TEXT NOT NULL,
+  mem_id       INTEGER,                       -- the row in mem_docs it became
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS sim_learn_agent ON sim_learnings (agent_id, id);
+`);
+
 // Growth needs a few facts an A/B row did not carry: what was being moved, for
 // whom, and what was decided afterwards. A winner nobody acted on is a result,
 // not an experiment.

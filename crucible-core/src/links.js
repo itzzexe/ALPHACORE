@@ -481,6 +481,7 @@ export function sectionCatalog() {
     S('status', 'Status & SLA', 'operate', '#/status', n("SELECT COUNT(*) AS n FROM status_notices WHERE state <> 'resolved'"), 'What the company admits in public while it is happening, and the promise it made about how often'),
     S('partnerships', 'Partnerships', 'commerce', '#/partnerships', n('SELECT COUNT(*) AS n FROM partners'), 'Not sales: whether anything actually flows through the relationship'),
     S('growth', 'Growth', 'marketing', '#/growth', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'growth'"), 'Moving one number on purpose, with the hypothesis written before the result'),
+    S('offices', 'The offices', 'talent', '#/offices', n('SELECT COUNT(*) AS n FROM sim_learnings'), 'The workforce in a building rather than a feed — who is in which room, what was said, and what somebody walked away having learned'),
     S('approvals', 'The desk', 'decide', '#/approvals', n("SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'"), 'Everything waiting on a person, ordered by what it blocks rather than by who asked'),
     S('roles', 'Roles', 'govern', '#/roles', n('SELECT COUNT(*) AS n FROM users'), 'Jobs instead of 204 checkboxes, with each irreversible power in exactly one of them'),
     S('tiers', 'Model chains', 'engine', '#/tiers', n('SELECT COUNT(*) AS n FROM tier_proposals'), 'Which model does the work, and the canary that has to pass before that changes'),
@@ -1037,6 +1038,15 @@ export function relationshipMatrix() {
     edge('growth', 'products', 'the thing being changed', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'growth' AND product_id IS NOT NULL"), '#/products'),
     edge('growth', 'lab', 'the Lab compares two prompts; this compares two things a customer sees', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'lab'"), '#/lab'),
     edge('growth', 'insights', 'a result nobody decided on is a report, not an experiment', n("SELECT COUNT(*) AS n FROM experiments WHERE kind = 'growth' AND state = 'running' AND result_a IS NOT NULL"), '#/insights'),
+
+    // The offices are only worth having because of where what happens in them
+    // goes. Each of these is a call this module actually makes.
+    edge('offices', 'memory', 'what somebody walked away with is written into their memory, and recalled into their later prompts', n("SELECT COUNT(*) AS n FROM mem_docs WHERE source_type = 'simulation'"), '#/memory'),
+    edge('offices', 'society', 'the same relationships the feed shows, moved by what was actually said', n('SELECT COUNT(*) AS n FROM agent_relations'), '#/society'),
+    edge('offices', 'disputes', 'a disagreement that will not resolve is heard by HR, and the ruling is the owner\'s', n('SELECT COUNT(*) AS n FROM sim_encounters WHERE dispute_id IS NOT NULL'), '#/disputes', 'gate'),
+    edge('offices', 'org', 'each employee arrives with their own voice, not a generic one', n('SELECT COUNT(*) AS n FROM sim_presence'), '#/org'),
+    edge('offices', 'agents', 'everybody active has a desk', n("SELECT COUNT(*) AS n FROM agents WHERE status = 'active'"), '#/agents'),
+    edge('offices', 'chat', 'the room is a channel, so a conversation held in one can be read in the other', n("SELECT COUNT(*) AS n FROM agent_messages WHERE kind = 'sim'"), '#/chat'),
 
     edge('ip', 'products', 'shipped and never claimed', n('SELECT COUNT(*) AS n FROM products'), '#/products'),
     edge('ip', 'legal', 'a filing is legal work, and a lapse is a legal loss', n("SELECT COUNT(*) AS n FROM ip_assets WHERE state IN ('filed','granted','registered')"), '#/legal'),

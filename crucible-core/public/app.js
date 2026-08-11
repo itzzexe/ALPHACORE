@@ -1881,6 +1881,86 @@ async function renderGrowth() {
   });
 }
 
+const MOOD_MARK = {
+  steady: '·', pleased: '☺', frustrated: '✖', tired: '˷', curious: '?', tense: '!',
+};
+
+async function renderOffices() {
+  const d = await api('/api/sim');
+  const c = d.counts;
+  const room = (r) => `
+    <div class="panel" style="margin:0">
+      <div class="panel-title">
+        <span>${esc(r.name)}</span>
+        <span class="chip chip-dim">${r.people.length}/${r.capacity}</span>
+      </div>
+      <div class="sub" style="margin-bottom:6px">${esc(r.about || '')}</div>
+      ${r.people.length ? r.people.map((p) => `<div style="display:flex;gap:6px;align-items:baseline">
+        <span class="mono" title="${esc(p.mood)}, energy ${p.energy}">${MOOD_MARK[p.mood] || '·'}</span>
+        <span>${esc(p.name)}</span>
+        <span class="sub" style="font-size:11px">${esc(p.role_group || '')}</span>
+      </div>${p.note ? `<div class="sub" style="font-size:11px;margin:0 0 4px 16px">“${esc(p.note)}”</div>` : ''}`).join('')
+    : '<div class="sub">empty</div>'}
+      ${hasPermC('sim.run') && r.people.length >= 2 ? `<button class="btn btn-sm" data-play="${esc(r.id)}" style="margin-top:8px">See what happens</button>` : ''}
+    </div>`;
+
+  view.innerHTML = `
+  <div class="panel">
+    <div class="panel-title">
+      <span>The building</span>
+      <span class="chip ${d.on ? 'chip-ok' : 'chip-dim'}">${d.on ? 'running' : 'stopped'}</span>
+    </div>
+    <div class="map-legend">${esc(d.note)}</div>
+    ${hasPermC('sim.run') ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      ${d.on ? '<button class="btn btn-bad" id="of-stop">Stop it</button>'
+    : '<button class="btn" id="of-start">Start it</button>'}
+      <button class="btn" id="of-play">Play one encounter now</button>
+    </div>
+    ${d.on ? '' : '<div class="sub" style="margin-top:6px">While it is stopped nothing moves and nothing is spent.</div>'}` : ''}
+  </div>
+
+  <div class="grid grid-4" style="margin-top:16px">
+    ${tile('Learned, and kept', c.inMemory, 'written into an employee\'s memory')}
+    ${tile('Encounters', c.encounters, `${c.rooms} rooms, ${c.placed} at a desk`)}
+    ${tile('Went to HR', c.disputes, 'disagreements that would not resolve', c.disputes ? 'bad' : '')}
+    ${tile('Spent', money4(c.spentUsd || 0), 'on the whole building')}
+  </div>
+
+  <div class="grid grid-3" style="margin-top:16px;align-items:start">${d.building.map(room).join('')}</div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">What somebody walked away with</div>
+    ${d.learnings.length ? `<table class="tbl"><thead><tr><th>Who</th><th>Took away</th><th>From</th><th>Where</th></tr></thead><tbody>
+      ${d.learnings.map((l) => `<tr><td>${esc(l.name || l.agent_id)}</td><td>${esc(l.learned)}</td>
+        <td class="sub">${esc(l.from_agent || '—')}</td><td class="sub">${esc(l.room_id || '')}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nothing yet. A learning only counts here when it is written into that employee\'s memory.</div>'}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">Recent encounters</div>
+    ${d.encounters.length ? `<table class="tbl"><thead><tr><th>Room</th><th>Kind</th><th>Tension</th><th>What came of it</th></tr></thead><tbody>
+      ${d.encounters.map((e) => `<tr class="${e.tension >= 0.6 ? 'row-bad' : ''}">
+        <td>${esc(e.room_name || e.room_id)}</td><td>${esc(e.kind)}</td>
+        <td>${Math.round((e.tension || 0) * 100)}%</td>
+        <td class="sub">${esc(e.outcome || '')}${e.dispute_id ? ` <span class="pill bad">went to HR</span>` : ''}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nobody has met yet.</div>'}
+  </div>`;
+
+  const act = async (path, body = {}) => {
+    try { await api(path, { method: 'POST', body }); renderOffices(); }
+    catch (e) { toast(e.message, true); }
+  };
+  $('#of-start')?.addEventListener('click', () => act('/api/sim/start'));
+  $('#of-stop')?.addEventListener('click', () => act('/api/sim/stop'));
+  $('#of-play')?.addEventListener('click', async () => {
+    toast('Watching a room…');
+    await act('/api/sim/play');
+  });
+  for (const b of view.querySelectorAll('[data-play]')) {
+    b.addEventListener('click', () => act('/api/sim/play', { roomId: b.dataset.play }));
+  }
+}
+
 const routes = {
   '': { title: 'Overview', render: renderOverview, poll: 5000 },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
@@ -2011,6 +2091,7 @@ const routes = {
   trust: { title: 'Trust centre — the claims, and the live numbers behind them', render: renderTrust },
   status: { title: 'Status & SLA — what the company admits while it is happening', render: renderStatus, poll: 20000 },
   partnerships: { title: 'Partnerships — whether anything actually flows through them', render: renderPartnerships },
+  offices: { title: 'The offices — the workforce in a building, not a feed', render: renderOffices, poll: 30000 },
   growth: { title: 'Growth — moving a number on purpose, and knowing whether it moved', render: renderGrowth },
   approvals: { title: 'The desk — everything waiting on a person', render: renderApprovals, poll: 10000 },
   roles: { title: 'Roles — jobs instead of two hundred and four checkboxes', render: renderRoles },

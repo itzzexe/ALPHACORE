@@ -25073,7 +25073,7 @@
         "tags": [
           "simulation"
         ],
-        "description": "Requires the `simulation.view` permission.",
+        "description": "Requires the `sim.run` permission.",
         "responses": {
           "200": {
             "description": "OK",
@@ -25090,7 +25090,7 @@
             "description": "No valid session or API key"
           },
           "403": {
-            "description": "Missing the `simulation.view` permission"
+            "description": "Missing the `sim.run` permission"
           },
           "404": {
             "description": "No such record"
@@ -25113,7 +25113,7 @@
         "tags": [
           "simulation"
         ],
-        "description": "Requires the `simulation.run` permission.",
+        "description": "Requires the `sim.run` permission.",
         "requestBody": {
           "required": false,
           "content": {
@@ -25142,7 +25142,7 @@
             "description": "No valid session or API key"
           },
           "403": {
-            "description": "Missing the `simulation.run` permission"
+            "description": "Missing the `sim.run` permission"
           },
           "404": {
             "description": "No such record"
@@ -25167,7 +25167,7 @@
         "tags": [
           "simulation"
         ],
-        "description": "Requires the `simulation.view` permission.",
+        "description": "Requires the `sim.run` permission.",
         "parameters": [
           {
             "name": "simulationId",
@@ -25195,7 +25195,7 @@
             "description": "No valid session or API key"
           },
           "403": {
-            "description": "Missing the `simulation.view` permission"
+            "description": "Missing the `sim.run` permission"
           },
           "404": {
             "description": "No such record"
@@ -25218,7 +25218,7 @@
         "tags": [
           "simulation"
         ],
-        "description": "Requires the `simulation.run` permission.",
+        "description": "Requires the `sim.run` permission.",
         "parameters": [
           {
             "name": "simulationId",
@@ -25258,7 +25258,7 @@
             "description": "No valid session or API key"
           },
           "403": {
-            "description": "Missing the `simulation.run` permission"
+            "description": "Missing the `sim.run` permission"
           },
           "404": {
             "description": "No such record"
@@ -30783,6 +30783,317 @@
           },
           "403": {
             "description": "Missing the `partners.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/sim": {
+      "get": {
+        "summary": "GET /api/sim",
+        "tags": [
+          "sim"
+        ],
+        "description": "Requires the `sim.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `sim.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/sim/start": {
+      "post": {
+        "summary": "POST /api/sim/start",
+        "tags": [
+          "sim"
+        ],
+        "description": "Requires the `sim.run` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `sim.run` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/sim/stop": {
+      "post": {
+        "summary": "POST /api/sim/stop",
+        "tags": [
+          "sim"
+        ],
+        "description": "Requires the `sim.run` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `sim.run` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/sim/seed": {
+      "post": {
+        "summary": "POST /api/sim/seed",
+        "tags": [
+          "sim"
+        ],
+        "description": "Requires the `sim.run` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `sim.run` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/sim/play": {
+      "post": {
+        "summary": "POST /api/sim/play",
+        "tags": [
+          "sim"
+        ],
+        "description": "Requires the `sim.run` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `sim.run` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/sim/room/{roomId}": {
+      "get": {
+        "summary": "GET /api/sim/room/{roomId}",
+        "tags": [
+          "sim"
+        ],
+        "description": "Requires the `sim.view` permission.",
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "matched by `[a-z0-9-]+`"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `sim.view` permission"
           },
           "404": {
             "description": "No such record"
