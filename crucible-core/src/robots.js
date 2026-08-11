@@ -159,6 +159,45 @@ const SEARCH_PATHS = /^\/(search|s|web|results)\b/i;
 export function isSearchResultsPage(rawUrl) {
   try {
     const u = new URL(rawUrl);
-    return SEARCH_HOSTS.test(u.hostname) && (SEARCH_PATHS.test(u.pathname) || u.searchParams.has('q'));
+    if (!SEARCH_HOSTS.test(u.hostname)) return false;
+    // /sorry/ is where Google sends a client it has decided is a machine. It is
+    // not a results page, but going there is the same mistake one redirect
+    // later, and it must not be treated as an ordinary page to work on.
+    if (/^\/(sorry|challenge)\b/i.test(u.pathname)) return true;
+    return SEARCH_PATHS.test(u.pathname) || u.searchParams.has('q');
   } catch { return false; }
+}
+
+// The wall itself, in the shapes it actually arrives in. Recognised so a session
+// can end saying what happened and what to do instead — "stuck" is true and
+// useless, and the person reading it cannot tell a broken page from a refusal.
+const WALL_URLS = /(\/sorry\/|\/challenge|captcha|cdn-cgi\/challenge|__cf_chl|\/checkpoint\/challenge|hcaptcha|recaptcha)/i;
+const WALL_TEXT = /(unusual traffic|i'?m not a robot|verify (you are|you're) human|are you a robot|checking your browser|enable javascript and cookies to continue|أثبت أنك لست روبوت|حركة مرور غير عادية)/i;
+
+/**
+ * Has this page stopped being a page and become a checkpoint?
+ *
+ * Returns what to say rather than a boolean, because the useful part is the
+ * sentence: which wall, and what the person should do now that going round it
+ * is not on the table.
+ */
+export function botWall(url, text = '', title = '') {
+  const byUrl = WALL_URLS.test(String(url));
+  const byText = WALL_TEXT.test(`${title}\n${String(text).slice(0, 4000)}`);
+  if (!byUrl && !byText) return null;
+
+  const engine = (() => { try { return SEARCH_HOSTS.test(new URL(url).hostname); } catch { return false; } })();
+  return {
+    wall: byUrl ? 'the address is a verification checkpoint' : 'the page is asking the visitor to prove they are human',
+    why: engine
+      ? 'This is a search engine refusing automated access to its results. It is not a bug and not a fingerprint '
+        + 'problem: reading those pages by machine is refused by every engine, and disguising the client only widens '
+        + 'the block from a page to an address range.'
+      : 'This site has put a human check in front of the page. It has said it does not want machines here.',
+    instead: engine
+      ? 'Search through the engine\'s own interface instead — add BRAVE_SEARCH_KEY, TAVILY_API_KEY or SERPAPI_KEY in '
+        + 'Settings. To find a company\'s contact details specifically, Intelligence is the department for it: it reads '
+        + 'the company\'s own site and needs no search key at all.'
+      : 'Ask the site for an interface or for permission. This platform does not go around a human check.',
+  };
 }

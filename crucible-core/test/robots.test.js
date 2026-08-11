@@ -96,3 +96,28 @@ test('an empty Disallow forbids nothing — the classic way to say "come in"', (
   const groups = parseForTest('User-agent: *\nDisallow:');
   assert.equal(decideForTest(groups, '/anything').allowed, true);
 });
+
+// The wall itself. A session that meets one should say which wall and what to
+// do, not "stuck" — the word that is true and tells nobody anything.
+test('a verification checkpoint is recognised by its address', () => {
+  const w = R.botWall('https://www.google.com/sorry/index?continue=https://www.google.com/search%3Fq%3Dx', '', '');
+  assert.ok(w, 'the /sorry/ interstitial is where Google sends a client it has decided is a machine');
+  assert.match(w.instead, /BRAVE_SEARCH_KEY/, 'and it says where searching actually lives');
+  assert.match(w.instead, /Intelligence/, 'and which department finds contact details without one');
+});
+
+test('and by what the page says, in either language', () => {
+  assert.ok(R.botWall('https://example.com/x', 'Our systems have detected unusual traffic from your computer network'));
+  assert.ok(R.botWall('https://example.com/x', 'من فضلك أثبت أنك لست روبوت'));
+  assert.ok(R.botWall('https://example.com/x', '', "I'm not a robot"));
+  assert.ok(R.botWall('https://shop.example/x', 'Checking your browser before accessing'));
+});
+
+test('an ordinary page is not mistaken for a checkpoint', () => {
+  assert.equal(R.botWall('https://genelenergy.com/contact', 'Contact us on +964 770 000 0000', 'Contact'), null);
+  assert.equal(R.botWall('https://example.com/robots', 'robots.txt explained', 'Robots'), null);
+});
+
+test('the /sorry/ page is refused as a destination too', () => {
+  assert.equal(R.isSearchResultsPage('https://www.google.com/sorry/index?continue=x'), true);
+});

@@ -38,7 +38,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { route, parseAgentJson } from './router.js';
 import { scanForInjection, assertPublicUrl } from './web.js';
-import { mayFetch, isSearchResultsPage, userAgent } from './robots.js';
+import { mayFetch, isSearchResultsPage, userAgent, botWall } from './robots.js';
 import { getSetting } from './settings.js';
 import { getSecret } from './vault.js';
 import { notify } from './notify.js';
@@ -402,6 +402,17 @@ export async function drive({
     try { await cdp.rpc('Network.setUserAgentOverride', { userAgent: userAgent(), acceptLanguage: 'ar,en' }); }
     catch { /* an older Chrome without the Network domain enabled — not fatal */ }
 
+    // A session with no start address used to begin wherever the last one
+    // stopped. One tab is shared, so yesterday's dead end was today's step one:
+    // a session opened this morning found itself on a Google CAPTCHA wall left
+    // behind the previous evening, and reported being stuck on a page it had
+    // never asked for. Worse than confusing — it carries one goal's logged-in
+    // state into the next one's screenshots.
+    if (!step && !startUrl) {
+      await cdp.rpc('Page.navigate', { url: 'about:blank' });
+      await sleep(400);
+    }
+
     if (startUrl && !step) {
       if (isSearchResultsPage(startUrl)) {
         throw Object.assign(new Error(
@@ -421,6 +432,26 @@ export async function drive({
       step += 1;
       const page = await look(cdp);
       const picture = await shot(cdp);
+
+      // A checkpoint is not a page to work on, and it is not the model's job to
+      // notice that. Ending here costs nothing and stops the session burning
+      // its remaining steps in front of a wall — and it says which wall and
+      // what to do instead, because "stuck" is true and useless.
+      const wall = botWall(page.url, page.text, page.title);
+      if (wall) {
+        outcome = `${wall.wall}. ${wall.why} ${wall.instead}`;
+        exec(
+          `INSERT INTO browser_steps (session_id, step, url, title, action, thought, result, screenshot, elements)
+           VALUES (?,?,?,?,?,?,?,?,?)`,
+          id, step, page.url, page.title, JSON.stringify({ do: 'stop' }),
+          'this is a human-verification checkpoint, not a page', outcome, picture, JSON.stringify([]),
+        );
+        audit({
+          actorType: 'system', actorId: 'system:browser', action: 'browser.bot_wall',
+          subjectType: 'browser', subjectId: String(id), payload: { url: page.url, wall: wall.wall },
+        });
+        break;
+      }
       // A form with a password field changes what a click means, so it is part
       // of the state rather than something re-derived at judgement time.
       const formHasPassword = page.elements.some((e) => e.kind === 'input:password');
@@ -532,6 +563,11 @@ ${listing || '(none — try scrolling, or navigate somewhere)'}`,
       if (spent >= maxUsd) { outcome = 'stuck'; found = `stopped at the ${maxUsd} cap`; break; }
     }
   } finally {
+    // Leave the tab where the next session can safely begin. One browser is
+    // shared between every goal, so a page left open is the next session's
+    // starting point — and if it was a login, a checkout or a checkpoint, that
+    // is somebody else's state in a screenshot they never asked for.
+    try { await cdp.rpc('Page.navigate', { url: 'about:blank' }); } catch { /* the browser may already be gone */ }
     cdp.close();
   }
 
