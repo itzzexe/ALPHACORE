@@ -5,9 +5,14 @@ will save you an afternoon.
 
 ## What this is
 
-`app/` is the running platform: one Node process, no frameworks, no
-build step. The eleven `Part-*.md` files at the root are the blueprint it was
-built from — they are documents, not code, and they change rarely.
+`app/` is the running platform: one Node process, no frameworks, no build step.
+[`docs/blueprint/`](docs/blueprint/) holds the eleven documents it was designed
+from — documents, not code, and they change rarely. Where a document and the
+running platform disagree, the platform is what is true.
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing anything
+structural: it explains the four rules the rest of the design follows from, and
+what a new department actually needs. [docs/](docs/) is everything else.
 
 ## Getting it running
 
@@ -33,9 +38,19 @@ npm test             # unit tests — they use their own database file
 npm run prove        # end-to-end proof of the core promises
 npm run prove:platform
 node scripts/launch-audit.mjs    # needs the server running
+npm run openapi:check            # the API description still matches the routes
+npm run readme:check             # the README's numbers still match the code
 ```
 
-All four must pass. `npm test` writes to `data/test.db`, never to your real
+All six must pass, and CI runs every one of them on Node 22 and 24, on Ubuntu
+and Windows. If you added a department or a permission, `npm run readme` and
+`npm run openapi` regenerate what the last two check.
+
+By opening a pull request you agree to the [contributor licence](CLA.md): you
+keep the copyright in what you wrote, and the project gets a licence broad
+enough to ship it under both the AGPL and a commercial licence. It is one page.
+
+All six must pass. `npm test` writes to `data/test.db`, never to your real
 database — if you see it touch `data/alphacore.db`, that is a bug worth
 reporting on its own.
 

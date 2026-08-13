@@ -22,12 +22,12 @@ door — while humans hold every gate that matters: approving, publishing, signi
 <img src="https://img.shields.io/badge/tests-207-78bf6d?style=flat-square" alt="207 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
-<img src="https://img.shields.io/badge/licence-MIT-948b7d?style=flat-square" alt="MIT licence">
+<img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
 
 *No frameworks. No build step. One process, one SQLite file, and a living map
 where you watch the company work.*
 
-**[Install & run](docs/INSTALL.md)** · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Licence](LICENSE)
+**[Install & run](docs/INSTALL.md)** · [Documentation](docs/) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Licence](LICENSE)
 
 </div>
 
@@ -1444,9 +1444,63 @@ Choices that shaped this, and what they cost:
 
 ---
 
+## Contributing
+
+Changes are welcome, including the ones that say a decision here was wrong.
+
+Read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the house style and what the
+tests expect, and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** before
+changing anything structural — it explains the four rules the rest of the design
+follows from, and exactly what a new department needs.
+
+Six checks have to pass, and CI runs every one of them on Node 22 and 24, on
+Ubuntu and Windows:
+
+```bash
+cd app
+npm test  &&  npm run prove  &&  npm run prove:platform
+npm run openapi:check  &&  npm run readme:check
+node scripts/launch-audit.mjs      # with the server running
+```
+
+Two of those exist because this project keeps a promise most do not: the API
+description and the numbers in this README are **generated from the code**, and
+the build fails when either drifts. If you add a department or a permission,
+`npm run openapi` and `npm run readme` regenerate them.
+
+| | |
+|---|---|
+| [Code of conduct](CODE_OF_CONDUCT.md) | Argue about the work, not the person. |
+| [Contributor licence](CLA.md) | One page. You keep your copyright. |
+| [Support](SUPPORT.md) | Where to ask, and where not to. |
+| [Changelog](CHANGELOG.md) | What changed, and what was broken before it. |
+| [Authors](AUTHORS.md) | Add yourself when a change of yours lands. |
+
+## Licence
+
+**[AGPL-3.0](LICENSE).** Use it, change it, run it, fork it, sell what you build
+with it. The one thing it asks: if you run a *modified* copy as a service other
+people reach over a network, those people are entitled to your modified source.
+Not your data, not the rest of your company — the source of the thing they are
+using.
+
+That clause is the whole reason this is not MIT. Under MIT anybody could take
+this, close it, and sell it back; under the AGPL an improvement made in public
+stays in public.
+
+If you cannot accept that — you are embedding it in a closed product, or you
+need a warranty the AGPL deliberately does not give — there is a
+**[commercial licence](COMMERCIAL-LICENCE.md)**, and the honest answer is
+sometimes "the AGPL already covers you, keep your money".
+
+Contributions are accepted under the [contributor licence](CLA.md), which is
+what makes both possible at once. You keep the copyright in what you write.
+
+---
+
 <div align="center">
 
-**[Install & run](docs/INSTALL.md)** · **[Security](SECURITY.md)** · **[Contributing](CONTRIBUTING.md)** · **[MIT](LICENSE)**
+**[Install & run](docs/INSTALL.md)** · **[Docs](docs/)** · **[Contributing](CONTRIBUTING.md)** · **[Security](SECURITY.md)** · **[AGPL-3.0](LICENSE)**
 
 *The AI does the work. The humans keep the authority. The chain keeps them both honest.*
 

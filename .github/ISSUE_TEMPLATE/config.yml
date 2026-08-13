@@ -1,5 +1,11 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Getting help
+    url: https://github.com/itzzexe/crucible-core/blob/main/SUPPORT.md
+    about: Where to look first, and what to include in a report.
+  - name: Commercial licence
+    url: https://github.com/itzzexe/crucible-core/blob/main/COMMERCIAL-LICENCE.md
+    about: If the AGPL does not work for you.
   - name: Security vulnerability
     url: https://github.com/itzzexe/crucible-core/blob/main/SECURITY.md
     about: Do not open a public issue — report it privately instead.
