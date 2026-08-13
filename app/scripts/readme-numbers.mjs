@@ -21,7 +21,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const README = path.join(ROOT, 'README.md');
+// The README is the repository's, not the platform's: one description of this
+// project, at the top, where somebody arriving from GitHub lands. The catalogues
+// it counts are still in here, which is why this script lives in the app.
+const README = path.join(ROOT, '..', 'README.md');
 
 // Numbers written as words keep the opening paragraph readable. They are still
 // checked: the expected count is spelled and compared, so "one hundred and

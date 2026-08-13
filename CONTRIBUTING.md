@@ -5,14 +5,14 @@ will save you an afternoon.
 
 ## What this is
 
-`crucible-core/` is the running platform: one Node process, no frameworks, no
+`app/` is the running platform: one Node process, no frameworks, no
 build step. The eleven `Part-*.md` files at the root are the blueprint it was
 built from — they are documents, not code, and they change rarely.
 
 ## Getting it running
 
 ```bash
-cd crucible-core
+cd app
 npm install          # only @anthropic-ai/sdk and its deps
 npm start            # http://localhost:8484
 ```

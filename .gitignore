@@ -11,8 +11,8 @@ node_modules/
 # and would not have matched `data/simulations/sim-1.db`, a complete fork of the
 # company database, or `data/master.key` at all.
 data/
-crucible-core/data/
-crucible-core/workspace/
+app/data/
+app/workspace/
 
 # Backups, wherever somebody puts them.
 *-backup-*/

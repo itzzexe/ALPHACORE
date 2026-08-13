@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 title AlphaCore - Operations Console
-cd /d "%~dp0crucible-core"
+cd /d "%~dp0app"
 
 echo.
 echo   ^> ALPHACORE ^| operations console

@@ -23,7 +23,7 @@ One process, one file.
 ## 2. First run
 
 ```bash
-cd crucible-core
+cd app
 npm install
 npm start
 ```
@@ -524,7 +524,7 @@ have nothing in common.
 
 ## 9. Backups
 
-The whole company is `crucible-core/data/`. Two things live there:
+The whole company is `app/data/`. Two things live there:
 
 - `alphacore.db` — every record, including the audit chain.
 - `master.key` — the AES key that decrypts the vault. **It is not in the
@@ -993,7 +993,7 @@ environment when a machine should be configured before it first starts.
 | Variable | Meaning |
 |---|---|
 | `PORT` | Listening port. Default `8484`. |
-| `ALPHACORE_DB` | Path to the database file, relative to `crucible-core/`. Default `data/alphacore.db`. |
+| `ALPHACORE_DB` | Path to the database file, relative to `app/`. Default `data/alphacore.db`. |
 | `ALPHACORE_MOCK` | `true` forces mock mode even when a key is present. |
 | `ALPHACORE_MASTER_KEY_COMMAND` | A command printing the master key material. The KMS door. |
 | `ALPHACORE_MASTER_KEY` | The material directly, base64. For container secrets. |

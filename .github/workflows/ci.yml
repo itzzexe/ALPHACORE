@@ -19,7 +19,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: crucible-core
+        working-directory: app
 
     steps:
       - uses: actions/checkout@v5
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: crucible-core
+        working-directory: app
 
     steps:
       - uses: actions/checkout@v5
