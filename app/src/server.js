@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { PORT, ROOT, mockMode } from './env.js';
+import { bootCheck } from './production.js';
 import './db.js';
 import { audit } from './audit.js';
 import { seedChart, periodOf } from './ledger.js';
@@ -578,9 +579,41 @@ server.on('upgrade', (req, socket, head) => {
 });
 setInterval(() => { try { liveTick(); } catch { /* a dropped socket costs a nicety, never a fact */ } }, 1500).unref?.();
 
+// Before anything listens. A machine that is telling us it is production gets
+// held to it: the key comes from outside the disk, and something is terminating
+// TLS in front. Either can be accepted deliberately, and accepting one is
+// written to the chain rather than to nobody.
+const boot = bootCheck();
+if (boot.stop) {
+  process.stderr.write(boot.message);
+  audit({
+    actorType: 'system',
+    actorId: 'system:boot',
+    action: 'boot.refused',
+    subjectType: 'server',
+    subjectId: 'startup',
+    payload: { production: boot.production, refused: boot.refusals.map((r) => r.name) },
+  });
+  process.exit(1);
+}
+for (const a of boot.accepted) {
+  audit({
+    actorType: 'system',
+    actorId: 'system:boot',
+    action: 'boot.risk_accepted',
+    subjectType: 'server',
+    subjectId: 'startup',
+    payload: { production: boot.production, risk: a.name, why: a.why, via: a.variable },
+  });
+  process.stderr.write(`\n  accepted in production: ${a.name} — ${a.why}\n  (recorded on the chain)\n\n`);
+}
+
 server.listen(PORT, () => {
-  audit({ actorType: 'system', actorId: 'server', action: 'server.started', payload: { port: PORT, mockMode: mockMode() } });
-  console.log(`AlphaCore running on http://localhost:${PORT} ${mockMode() ? '(mock mode — no provider keys configured)' : ''}`);
+  audit({
+    actorType: 'system', actorId: 'server', action: 'server.started',
+    payload: { port: PORT, mockMode: mockMode(), production: boot.production },
+  });
+  console.log(`AlphaCore running on http://localhost:${PORT} ${mockMode() ? '(mock mode — no provider keys configured)' : ''}${boot.production ? ' [PRODUCTION]' : ''}`);
 
   // The console is built for a phone as well as a desktop, and a phone cannot
   // reach "localhost" — it needs this machine's address on the network. The

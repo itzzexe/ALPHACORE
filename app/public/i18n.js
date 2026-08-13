@@ -73,6 +73,17 @@ export const SECTION_AR = {
 
 // ---------- interface strings ----------
 const AR = {
+  // وضع الإنتاج — الفرق بين حاسبة شخصية وآلة يصلها الإنترنت
+  'PRODUCTION': 'إنتاج',
+  'Production mode': 'وضع الإنتاج',
+  'This install declares itself production: the master key must come from outside this disk, and the public address must be https behind a trusted proxy.':
+    'هذا التنصيب يعلن أنه إنتاجي: يجب أن يأتي المفتاح الرئيسي من خارج هذا القرص، وأن يكون العنوان العام https خلف وكيل موثوق.',
+  'Held to two things every public machine needs: a master key from outside this disk, and https behind a trusted proxy. Without them it refuses to start.':
+    'يُلزَم بأمرين تحتاجهما كل آلة عامة: مفتاح رئيسي من خارج هذا القرص، وhttps خلف وكيل موثوق. وبدونهما يرفض الإقلاع.',
+  'The master key comes from': 'المفتاح الرئيسي يأتي من',
+  'this disk': 'هذا القرص',
+  'outside this disk': 'خارج هذا القرص',
+
   // الدفاتر — المصطلحات المحاسبية بالعربية المستعملة فعلاً، لا الترجمة الحرفية
   'Trial balance': 'ميزان المراجعة',
   'Balance sheet': 'الميزانية العمومية',

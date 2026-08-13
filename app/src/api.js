@@ -10,6 +10,7 @@ import {
   unsubscribe as pushUnsubscribe, deliver as pushDeliver,
 } from './push.js';
 import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anchor.js';
+import { isProduction } from './production.js';
 import { erasureOverview, findSubject, eraseSubject, verifyErasure } from './erasure.js';
 import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
@@ -245,7 +246,7 @@ const need = (obj, key) => {
 
 // route table: [method, pattern, handler(params, body, url)]
 const routes = [
-  ['GET', /^\/api\/health$/, () => ({ ok: true, mockMode: mockMode(), now: new Date().toISOString() })],
+  ['GET', /^\/api\/health$/, () => ({ ok: true, mockMode: mockMode(), production: isProduction(), now: new Date().toISOString() })],
 
   // Everything in the company that is waiting on a person, in one queue.
   ['GET', /^\/api\/inbox$/, () => inboxSummary()],

@@ -569,6 +569,16 @@ async function refreshShell() {
     cc.textContent = chain.ok ? `${t('chain —').replace('—', '')}✓ ${chain.checked}` : `chain BROKEN @${chain.brokenAt}`;
     cc.className = 'chip ' + (chain.ok ? 'chip-ok' : 'chip-bad');
     cc.title = health.mockMode ? 'MOCK MODE — no provider keys' : 'LIVE';
+
+    // The mode a machine says it is in belongs next to the chain, not buried in
+    // Settings: it is the difference between a laptop and something the
+    // internet can reach, and it changes what the platform refuses to do.
+    const pc = $('#prod-chip');
+    if (pc) {
+      pc.hidden = !health.production;
+      pc.textContent = t('PRODUCTION');
+      pc.title = t('This install declares itself production: the master key must come from outside this disk, and the public address must be https behind a trusted proxy.');
+    }
     // Everything waiting on a person surfaces on the rail, so a blocked item
     // is visible from any page without opening a menu.
     const waiting = stats.inboxTotal || stats.awaitingHuman || 0;
@@ -6121,6 +6131,22 @@ async function renderSettings() {
     </div>
   </div>
   <div class="panel" style="margin-top:16px">
+    <div class="panel-title">
+      <span>${esc(t('Production mode'))}</span>
+      <span class="chip ${s.production ? 'chip-bad' : 'chip-dim'}">${s.production ? esc(t('PRODUCTION')) : 'off'}</span>
+    </div>
+    <div class="map-legend">${esc(t('Held to two things every public machine needs: a master key from outside this disk, and https behind a trusted proxy. Without them it refuses to start.'))}</div>
+    <div class="form-inline" style="margin-top:10px">
+      <div><label class="fl" for="s-prod">${esc(t('Production mode'))}</label>
+        <select id="s-prod" aria-label="${esc(t('Production mode'))}">
+          <option value="false"${s.production ? '' : ' selected'}>off</option>
+          <option value="true"${s.production ? ' selected' : ''}>on</option>
+        </select></div>
+      <button class="btn" id="s-prod-save">Save</button>
+      <span class="sub">${esc(t('The master key comes from'))}: <b>${esc(s.masterKeySource || '—')}</b></span>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
     <div class="panel-title">This account — a second factor, and where it is signed in</div>
     <div class="map-legend">A password is one secret, and it is reused, phished and leaked more often than
       anybody admits. A one-time code from a phone is the cheapest thing that makes a stolen password
@@ -6292,6 +6318,16 @@ async function renderSettings() {
   });
   $('#s-mock').addEventListener('click', async () => {
     try { await api('/api/settings', { method: 'POST', body: { key: 'ALPHACORE_MOCK', value: s.mockForced ? null : 'true' } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
+  });
+  // Turning this on can stop the next boot. Say so before it is saved rather
+  // than after somebody restarts a machine and finds it will not come back.
+  $('#s-prod-save')?.addEventListener('click', async () => {
+    const on = $('#s-prod').value === 'true';
+    if (on && !confirm(t('This install will refuse to start unless the master key comes from outside this disk and the public address is https behind a trusted proxy. Continue?'))) return;
+    try {
+      await api('/api/settings', { method: 'POST', body: { key: 'PRODUCTION_MODE', value: on ? 'true' : 'false' } });
+      toast(t('Saved')); renderSettings(); refreshShell();
+    } catch (e) { toast(e.message, true); }
   });
   $('#s-probe').addEventListener('click', async (e) => {
     e.target.disabled = true; $('#s-probe-out').textContent = 'probing…';

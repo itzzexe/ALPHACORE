@@ -47,6 +47,26 @@ const wide = q("SELECT username, perms FROM users WHERE role != 'superadmin'").f
 if (wide.length) note('HIGH', 'security', 'a non-superadmin holds the wildcard permission', wide.map((u) => u.username).join(', '));
 else pass('security', 'no ordinary account holds "*"');
 
+// The two production gates. Off a production machine these are advice, because
+// a master key in a file and a console on http are both correct on a laptop.
+// On one that says it is production they are the reason it will not start —
+// and the audit says so before the operator finds out from a refusal to boot.
+{
+  const { gates, isProduction } = await import('../src/production.js');
+  const g = gates();
+  const level = isProduction() ? 'BLOCKER' : 'MEDIUM';
+
+  if (g.masterKey.severity === 'ok') pass('security', `the master key comes from ${g.masterKey.source}, not from this disk`);
+  else if (g.masterKey.severity === 'accepted') note('HIGH', 'security', 'the master key is on this disk, accepted deliberately', `${g.masterKey.why} Accepted via ALPHACORE_ACCEPT_LOCAL_MASTER_KEY and recorded on the chain.`);
+  else note(level, 'security', 'the master key is a file on the disk that holds the database', g.masterKey.why);
+
+  if (g.https.severity === 'ok') pass('security', 'the public address is https behind a trusted proxy');
+  else if (g.https.severity === 'accepted') note('HIGH', 'security', 'plain HTTP, accepted deliberately', `${g.https.why} Accepted via ALPHACORE_ACCEPT_PLAIN_HTTP and recorded on the chain.`);
+  else note(level, 'security', 'the console is reachable over plain HTTP', g.https.why);
+
+  if (isProduction()) pass('readiness', 'this install declares itself production, and is held to it');
+}
+
 // The master key is created lazily, by the first secret. Its absence on a
 // fresh install is correct; its absence once secrets exist would mean they
 // cannot be read, which is a different and much louder problem.

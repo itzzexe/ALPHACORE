@@ -60,10 +60,29 @@ export function settingsOverview() {
       available: isProviderAvailable(name),
     });
   }
+  // Production mode and where the master key comes from are read lazily and
+  // defensively: this page must still render on an install where the key has
+  // never been created, which is every fresh one.
+  let production = false;
+  let masterKeySource = null;
+  try {
+    production = String(getSetting('PRODUCTION_MODE') ?? '') === 'true'
+      || (getSetting('PRODUCTION_MODE') === null && String(process.env.ALPHACORE_ENV || '').toLowerCase() === 'production');
+  } catch { /* a settings read that fails is not worth losing the page over */ }
+  try {
+    // Imported lazily to keep settings.js free of a cycle: masterkey → vault →
+    // settings is a path that exists, and this would close the loop.
+    masterKeySource = process.env.ALPHACORE_MASTER_KEY_COMMAND ? 'a secret manager'
+      : process.env.ALPHACORE_MASTER_KEY ? 'the environment'
+        : 'this disk';
+  } catch { /* leave it null */ }
+
   return {
     providers: rows,
     company: { name: getSetting('COMPANY_NAME') || '', publicBaseUrl: getSecret('PUBLIC_BASE_URL') || '' },
     mockForced: String(getSecret('ALPHACORE_MOCK') || '').toLowerCase() === 'true',
     mockMode: isMockMode(),
+    production,
+    masterKeySource,
   };
 }
