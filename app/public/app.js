@@ -1749,8 +1749,64 @@ async function renderDataGov() {
   });
 }
 
+/**
+ * The certification matrix — a table nobody typed.
+ *
+ * Every other integration table in the industry is written by hand and starts
+ * decaying the day it ships. This one is a view over evidence the egress gate
+ * writes on every call, so the cells that read "untested" are the honest half
+ * of the page and are deliberately not styled to look like a failure.
+ */
+const CERT_TONE = {
+  'live-verified': 'chip-ok', 'sandbox-verified': 'chip-ok', 'paper-verified': 'chip-warn',
+  'mock-only': 'chip-warn', untested: 'chip-dim', 'not yet observable': 'chip-dim',
+};
+
+function certCell(c) {
+  const tone = CERT_TONE[c.state] || 'chip-dim';
+  const why = c.why ? esc(c.why)
+    : `${c.observations || 0} ${t('observations')}${c.lastSeenAt ? ` · ${c.lastSeenAt}` : ''}`;
+  // A cell that only ever climbs is lying by omission: a live-verified column
+  // with a failure yesterday must say so on the same line.
+  const failed = c.lastFailureAt
+    ? `<div class="sub" style="color:var(--bad)">${esc(t('last failure'))}: ${esc(String(c.lastFailure || '').slice(0, 90))}</div>` : '';
+  return `<td title="${esc(why)}"><span class="chip ${tone}">${esc(t(c.state))}</span>${failed}</td>`;
+}
+
+function certificationPanel(m) {
+  if (!m) return '';
+  const c = m.counts;
+  return `
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Connector certification — measured, not claimed'))}</div>
+    <div class="map-legend">${esc(t(m.note))}</div>
+    <div class="grid grid-4" style="margin-top:12px">
+      ${tile(t('Live-verified'), c.liveVerified, esc(t('a real call really left this machine')), c.liveVerified ? 'tile-ok' : '')}
+      ${tile(t('Paper-verified'), c.paperVerified, esc(t('read the real world, changed nothing')))}
+      ${tile(t('Untested'), c.untested, esc(t('no evidence either way')), c.untested ? 'tile-warn' : '')}
+      ${tile(t('With a recent failure'), c.withRecentFailure, esc(t('shown beside the state, not hidden')), c.withRecentFailure ? 'tile-bad' : '')}
+    </div>
+    <div style="overflow-x:auto;margin-top:12px">
+      <table class="tbl"><thead><tr>
+        <th>${esc(t('Connector'))}</th>
+        ${m.capabilities.map((x) => `<th title="${esc(t(x.about))}">${esc(t(x.label))}</th>`).join('')}
+      </tr></thead><tbody>
+        ${m.connectors.map((row) => `<tr>
+          <td><b>${esc(row.label || row.connector)}</b><div class="sub">${esc(row.connector)} · ${esc(t(row.connectorState))}</div></td>
+          ${row.cells.map(certCell).join('')}
+        </tr>`).join('')}
+      </tbody></table>
+    </div>
+    <div class="map-legend" style="margin-top:10px">${esc(t('Evidence rows behind this table'))}: <b>${c.cells ? m.evidence : 0}</b></div>
+  </div>`;
+}
+
 async function renderTrust() {
   const d = await api('/api/trust');
+  // A matrix that fails to load must leave the rest of the page standing —
+  // this section is evidence about the connectors, not part of the trust page's
+  // own claims.
+  const cert = await api('/api/connectors/certification').catch(() => null);
   const e = d.evidence;
   view.innerHTML = `
   <div class="grid grid-4">
@@ -1777,7 +1833,8 @@ async function renderTrust() {
     </tbody></table>` : '<div class="empty">None listed.</div>'}
     ${d.suggested.length ? `<div class="map-legend" style="margin-top:10px">Live connectors and providers that are not on the list:
       ${d.suggested.map((s) => `<b>${esc(s.name)}</b> <span class="sub">(${esc(s.why)})</span>`).join(' · ')}</div>` : ''}
-  </div>`;
+  </div>
+  ${certificationPanel(cert)}`;
 }
 
 async function renderStatus() {

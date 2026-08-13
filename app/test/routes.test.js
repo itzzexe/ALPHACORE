@@ -95,3 +95,36 @@ test('every route the offices page calls is registered', () => {
   }
   assert.deepEqual(missing, [], `the console calls endpoints that do not exist:\n${missing.join('\n')}`);
 });
+
+test('a literal route is never shadowed by an earlier pattern that would swallow it', () => {
+  // /api/connectors/certification is a fixed path, and "certification" is a
+  // perfectly legal connector id as far as /api/connectors/([a-z0-9:_-]+)$/ is
+  // concerned. First match wins, so the fixed route has to come first — and
+  // when it does not, the symptom is a 404 saying "no such connector", which
+  // reads like a data problem rather than a routing one.
+  const parsed = routeLines.map(({ n, text }) => {
+    const m = text.match(/^\s*\['([A-Z]+)',\s*(\/\^.*?\$\/),/);
+    if (!m) return null;
+    let re = null;
+    try { re = new RegExp(m[2].slice(1, -1)); } catch { return null; }
+    const src = m[2].slice(2, -2);                       // between /^ and $/
+    // A fixed path: word characters and escaped slashes, nothing else. Anything
+    // with a group, a class or a quantifier is a pattern and is skipped.
+    const literal = /^(?:[\w.-]|\\\/)*$/.test(src) ? src.replace(/\\(.)/g, '$1') : null;
+    return { n, method: m[1], re, literal };
+  }).filter(Boolean);
+
+  const shadowed = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const later = parsed[i];
+    if (!later.literal) continue;
+    for (let j = 0; j < i; j++) {
+      const earlier = parsed[j];
+      if (earlier.method !== later.method || earlier.literal) continue;
+      if (earlier.re.test(later.literal)) {
+        shadowed.push(`line ${later.n}: ${later.method} ${later.literal} is caught first by ${earlier.re} on line ${earlier.n}`);
+      }
+    }
+  }
+  assert.deepEqual(shadowed, [], `\n${shadowed.join('\n')}`);
+});

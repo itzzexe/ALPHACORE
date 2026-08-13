@@ -23022,6 +23022,48 @@
         ]
       }
     },
+    "/api/connectors/certification": {
+      "get": {
+        "summary": "GET /api/connectors/certification",
+        "tags": [
+          "connectors"
+        ],
+        "description": "Requires the `connectors.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `connectors.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
     "/api/connectors/{connectorId}": {
       "get": {
         "summary": "GET /api/connectors/{connectorId}",

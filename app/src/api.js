@@ -121,6 +121,7 @@ import {
   DRIVERS, addConnector, connect, setConnectorState, setAllowlist,
   getConnector, connectorsOverview, callConnector,
 } from './connectors/index.js';
+import { overview as certificationOverview } from './certification.js';
 import { authorizeUrl } from './connectors/oauth.js';
 import { getSetting } from './settings.js';
 import { egressOverview, releaseGated, denyGated, grantScope, revokeScope, scopesFor } from './egress.js';
@@ -1207,6 +1208,9 @@ const routes = [
 
   // --- connectors: the services the company can reach ---
   ['GET', /^\/api\/connectors$/, () => connectorsOverview()],
+  // Above the :id route deliberately — "certification" is a legal connector id
+  // as far as that pattern is concerned, and first match wins.
+  ['GET', /^\/api\/connectors\/certification$/, () => certificationOverview()],
   ['GET', /^\/api\/connectors\/([a-z0-9:_-]+)$/, ([id]) => getConnector(id) || (() => { throw new HttpError(404, 'no such connector'); })()],
   ['POST', /^\/api\/connectors$/, (_p, body) => addConnector({
     id: need(body, 'id'), driver: need(body, 'driver'), label: body.label,

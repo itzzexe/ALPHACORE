@@ -16,6 +16,7 @@
 // recorded, and nothing leaves.
 import { createHash } from 'node:crypto';
 import { q, one, exec } from './db.js';
+import { record as certRecord, modeForVerdict } from './certification.js';
 import { audit } from './audit.js';
 import { getSetting } from './settings.js';
 import { checkConstitution } from './constitution.js';
@@ -186,7 +187,13 @@ export async function attempt({
 
   // 5. Volume.
   const quota = quotaCheck(conn, agentId);
-  if (!quota.ok) return refuse(quota.rule, quota.why);
+  if (!quota.ok) {
+    // Our own limit, hit and respected. The matrix's rate-limit column says
+    // "theirs or ours", and this is the ours half — the call was stopped here
+    // rather than going out and being stopped there.
+    certify({ connectorId, capability, verdict: conn.state === 'dry' ? 'dry' : 'allowed', outcome: 'ok', detail: quota.why, dimension: 'rate_limit' });
+    return refuse(quota.rule, quota.why);
+  }
 
   // 6. The constitution gets a veto that no scope can override.
   const law = checkConstitution({ connector: connectorId, capability, target, payload: safePayload, valueUsd, agentId });
@@ -206,6 +213,7 @@ export async function attempt({
   //    trusted, and it is the default for every new connector.
   if (conn.state === 'dry') {
     const id = record('dry', { result: { dryRun: true, wouldCall: capability, target } });
+    certify({ connectorId, capability, verdict: 'dry', outcome: 'ok', egressId: id });
     return { verdict: 'dry', id, result: { dryRun: true }, why: `${connectorId} is in dry-run — nothing left the machine` };
   }
 
@@ -223,6 +231,7 @@ export async function attempt({
     const id = record('paper', {
       result: { paperTrading: true, wouldCall: capability, target, valueUsd },
     });
+    certify({ connectorId, capability, verdict: 'paper', outcome: 'ok', egressId: id });
     return {
       verdict: 'paper',
       id,
@@ -237,13 +246,45 @@ export async function attempt({
     const result = await call();
     exec("UPDATE egress_log SET result = ? WHERE id = ?", JSON.stringify(redact(result ?? { ok: true })), id);
     exec("UPDATE connectors SET last_call = datetime('now'), health = 'ok' WHERE id = ?", connectorId);
+    certify({ connectorId, capability, verdict: 'allowed', outcome: 'ok', egressId: id });
     return { verdict: 'allowed', id, result };
   } catch (err) {
     const msg = String(err?.message || err).slice(0, 400);
     exec("UPDATE egress_log SET result = ? WHERE id = ?", JSON.stringify({ error: msg }), id);
     exec("UPDATE connectors SET last_call = datetime('now'), health = 'failing' WHERE id = ?", connectorId);
+    certify({ connectorId, capability, verdict: 'allowed', outcome: 'failed', detail: msg, egressId: id });
     throw err;
   }
+}
+
+/**
+ * Evidence, written as a by-product of the call rather than by anybody.
+ *
+ * A failure produces two rows and the second is the interesting one: the read
+ * or write failed, *and* failure handling was exercised and worked — the call
+ * threw, it was caught, the log and the connector's health were updated, and
+ * nothing crashed. That is the only honest evidence that a failure path exists,
+ * and it can only be collected by failing.
+ *
+ * Nothing here can throw. Evidence is a by-product; a certification that could
+ * break a connector call would be worse than no certification at all.
+ */
+function certify({ connectorId, capability, verdict, outcome, detail = null, egressId = null, dimension = null }) {
+  try {
+    const mode = modeForVerdict(verdict);
+    if (!mode) return;
+    const column = dimension || (isRead(capability) ? 'read' : 'write');
+    certRecord({ connector: connectorId, capability: column, operation: capability, mode, outcome, detail, egressId });
+
+    if (outcome === 'failed') {
+      certRecord({ connector: connectorId, capability: 'failure', operation: capability, mode, outcome: 'ok', detail, egressId });
+      // Their limit, not ours — ours is the quota check above, which never
+      // reaches this line because it refuses before the call is made.
+      if (/\b429\b|rate.?limit|too many requests|quota exceeded/i.test(String(detail || ''))) {
+        certRecord({ connector: connectorId, capability: 'rate_limit', operation: capability, mode, outcome: 'ok', detail, egressId });
+      }
+    }
+  } catch { /* by-product */ }
 }
 
 /** A person releasing something the gate held. */

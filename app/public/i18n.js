@@ -586,6 +586,47 @@ const AR = {
     'وقفة إلزامية. الآلة تُجهّز، وشخص باسمه يقرّر، ويُكتب القرار على سلسلة التجزئة باسمه. ولا شيء يعبر هذا الخط تلقائيًا.',
   'Experience moving in and out of storage: finished work leaves an episode behind, and future work retrieves what is relevant before it starts — so the same mistake is not made twice.':
     'الخبرة تدخل وتخرج من المخزن: العمل المنتهي يترك أثرًا، والعمل القادم يسترجع ما يخصّه قبل أن يبدأ — كي لا يتكرر الخطأ ذاته مرتين.',
+
+  // اعتماد الموصلات — جدول لم يكتبه أحد بيده. الحالات تُترك بالإنجليزية عمدًا
+  // حيث تُقرأ كمصطلح تقني، ويُشرح معناها في العمود المجاور.
+  'Connector certification — measured, not claimed': 'اعتماد الموصلات — مقيس لا مُدّعى',
+  'Connector': 'الموصل',
+  'observations': 'ملاحظة مسجّلة',
+  'last failure': 'آخر إخفاق',
+  'Evidence rows behind this table': 'صفوف الأدلة خلف هذا الجدول',
+  'Live-verified': 'مُتحقَّق حيًّا',
+  'Paper-verified': 'مُتحقَّق على الورق',
+  'Untested': 'غير مُختبَر',
+  'With a recent failure': 'فيه إخفاق حديث',
+  'a real call really left this machine': 'نداء حقيقي غادر هذه الآلة فعلًا',
+  'read the real world, changed nothing': 'قرأ العالم الحقيقي ولم يغيّر شيئًا',
+  'no evidence either way': 'لا دليل بأي اتجاه',
+  'shown beside the state, not hidden': 'يُعرض بجانب الحالة لا يُخفى',
+  'live-verified': 'مُتحقَّق حيًّا',
+  'sandbox-verified': 'مُتحقَّق في بيئة اختبار',
+  'paper-verified': 'مُتحقَّق على الورق',
+  'mock-only': 'محاكاة فقط',
+  'untested': 'غير مُختبَر',
+  'not yet observable': 'غير قابل للرصد بعد',
+  // حالات الموصل نفسه، كما تظهر تحت اسمه في الجدول
+  'disconnected': 'غير موصول',
+  'dry': 'تشغيل جاف',
+  'live': 'حيّ',
+  'paused': 'موقوف مؤقتًا',
+  'Read': 'قراءة',
+  'Write': 'كتابة',
+  'OAuth flow': 'مصافحة OAuth',
+  'Failure handling': 'معالجة الإخفاق',
+  'Rate limit': 'حدّ المعدّل',
+  'Token refresh': 'تجديد الرمز',
+  'fetching something without changing it': 'جلب شيء دون تغييره',
+  'changing something on the other side': 'تغيير شيء في الطرف الآخر',
+  'a code exchanged for a token': 'رمز تفويض بُودل برمز وصول',
+  'the call failed and was handled rather than crashing': 'أخفق النداء فعُولج بدل أن ينهار',
+  'a limit was hit — theirs or ours — and respected': 'بُلغ حدّ — حدّهم أو حدّنا — واحتُرم',
+  'an expiring token renewed, or a revoked one noticed': 'رمز على وشك الانتهاء جُدِّد، أو ملغى لوحظ',
+  'Nothing on this page is typed by anybody. It is a view over evidence the gate writes on every call, so a certification with no call behind it cannot exist — there is no table to put one in. "sandbox-verified" is a rung nothing can currently reach: this platform has no sandbox, and a tick there would be a claim rather than a reading.':
+    'لا شيء في هذا الجدول يكتبه أحد. إنه عرض (view) فوق أدلة تكتبها البوابة عند كل نداء، فاعتمادٌ لا نداء خلفه لا يمكن أن يوجد — إذ لا يوجد جدول يُوضع فيه أصلًا. و"مُتحقَّق في بيئة اختبار" درجة لا يبلغها شيء حاليًا: لا بيئة اختبار في هذه المنصّة، وعلامةٌ هناك ستكون ادّعاءً لا قراءة.',
 };
 
 export function t(s) {

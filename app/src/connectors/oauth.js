@@ -9,6 +9,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { q, one, exec } from './../db.js';
 import { audit } from './../audit.js';
 import { getSecret, putSecret } from './../vault.js';
+import { record as certRecord } from './../certification.js';
 import { wire } from './wire.js';
 
 const PROVIDERS = {
@@ -55,15 +56,25 @@ export function verifyState(state) {
 
 export async function exchangeCode({ connector, provider, code, clientId, clientSecret, redirectUri, account = 'default' }) {
   const p = PROVIDERS[provider];
-  const tok = await wire(p.tokenUrl, {
-    method: 'POST', service: `${provider} oauth`,
-    headers: { accept: 'application/json' },
-    form: {
-      grant_type: 'authorization_code', code, client_id: clientId,
-      client_secret: clientSecret, redirect_uri: redirectUri,
-      ...(provider === 'x' ? { code_verifier: 'challenge' } : {}),
-    },
-  });
+  let tok;
+  try {
+    tok = await wire(p.tokenUrl, {
+      method: 'POST', service: `${provider} oauth`,
+      headers: { accept: 'application/json' },
+      form: {
+        grant_type: 'authorization_code', code, client_id: clientId,
+        client_secret: clientSecret, redirect_uri: redirectUri,
+        ...(provider === 'x' ? { code_verifier: 'challenge' } : {}),
+      },
+    });
+  } catch (err) {
+    // The certification matrix has an OAuth column, and this is the only place
+    // in the system that can fill it. wire() always reaches the real provider —
+    // there is no mock token endpoint — so anything that happens here is live.
+    certRecord({ connector, capability: 'oauth', operation: 'authorization_code', mode: 'live', outcome: 'failed', detail: String(err.message) });
+    throw err;
+  }
+  certRecord({ connector, capability: 'oauth', operation: 'authorization_code', mode: 'live', outcome: 'ok' });
   return storeTokens({ connector, account, tok, provider });
 }
 
@@ -119,10 +130,20 @@ export async function refreshAccount(connectorId, account = 'default') {
   const clientId = getSecret(`${connectorId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_ID`) || cfg.clientId;
   const clientSecret = getSecret(`${connectorId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_SECRET`);
   if (!refresh || !clientId) return { ok: false, why: 'missing refresh credentials' };
-  const tok = await wire(p.tokenUrl, {
-    method: 'POST', service: `${provider} refresh`,
-    form: { grant_type: 'refresh_token', refresh_token: refresh, client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
-  });
+  let tok;
+  try {
+    tok = await wire(p.tokenUrl, {
+      method: 'POST', service: `${provider} refresh`,
+      form: { grant_type: 'refresh_token', refresh_token: refresh, client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
+    });
+  } catch (err) {
+    // A revoked token noticed is the token-lifecycle column working, not
+    // failing — but it is recorded as a failure because the renewal did fail,
+    // and a matrix that hides that is the kind this one is meant to replace.
+    certRecord({ connector: connectorId, capability: 'token_lifecycle', operation: 'refresh_token', mode: 'live', outcome: 'failed', detail: String(err.message) });
+    throw err;
+  }
+  certRecord({ connector: connectorId, capability: 'token_lifecycle', operation: 'refresh_token', mode: 'live', outcome: 'ok' });
   return storeTokens({ connector: connectorId, account, tok: { ...tok, refresh_token: tok.refresh_token || refresh }, provider });
 }
 

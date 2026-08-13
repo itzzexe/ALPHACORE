@@ -2837,6 +2837,59 @@ CREATE TABLE IF NOT EXISTS sim_learnings (
 CREATE INDEX IF NOT EXISTS sim_learn_agent ON sim_learnings (agent_id, id);
 `);
 
+// ---------------------------------------------------------------------------
+// Connector certification.
+//
+// "Which of these integrations actually works, and how do you know" is normally
+// answered by a table somebody maintains, and a table somebody maintains is a
+// table that says ✓ next to a connector nobody has run since March.
+//
+// So there is no certification table. There is an evidence table that the
+// egress layer writes to automatically, and the certification is a VIEW over
+// it. A fabricated certification is not refused — it is impossible: SQLite has
+// nowhere to put it. That is a stronger guarantee than a trigger, which can be
+// dropped by anything holding the connection that wants to insert.
+// ---------------------------------------------------------------------------
+db.exec(`
+CREATE TABLE IF NOT EXISTS connector_evidence (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  connector   TEXT NOT NULL,
+  capability  TEXT NOT NULL,   -- read|write|oauth|failure|rate_limit|token_lifecycle
+  operation   TEXT,            -- the capability id the caller asked for
+  mode        TEXT NOT NULL CHECK (mode IN ('mock','paper','sandbox','live')),
+  outcome     TEXT NOT NULL CHECK (outcome IN ('ok','failed','blocked')),
+  detail      TEXT,
+  egress_id   INTEGER,         -- the egress_log row this came from, when there is one
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS connector_evidence_lookup ON connector_evidence (connector, capability, id);
+
+CREATE VIEW IF NOT EXISTS connector_certification AS
+SELECT
+  connector,
+  capability,
+  -- The ladder: the highest mode at which this dimension was exercised and
+  -- worked. A failure never promotes anything.
+  CASE MAX(CASE WHEN outcome = 'ok' THEN
+      CASE mode WHEN 'live' THEN 4 WHEN 'sandbox' THEN 3 WHEN 'paper' THEN 2 WHEN 'mock' THEN 1 ELSE 0 END
+    ELSE 0 END)
+    WHEN 4 THEN 'live-verified'
+    WHEN 3 THEN 'sandbox-verified'
+    WHEN 2 THEN 'paper-verified'
+    WHEN 1 THEN 'mock-only'
+    ELSE 'untested'
+  END AS state,
+  COUNT(*)                                                        AS observations,
+  SUM(CASE WHEN outcome = 'ok'      THEN 1 ELSE 0 END)             AS successes,
+  SUM(CASE WHEN outcome = 'failed'  THEN 1 ELSE 0 END)             AS failures,
+  SUM(CASE WHEN outcome = 'blocked' THEN 1 ELSE 0 END)             AS blocked,
+  MAX(CASE WHEN outcome = 'failed' THEN occurred_at END)           AS last_failure_at,
+  MAX(CASE WHEN outcome = 'failed' THEN detail END)                AS last_failure,
+  MAX(occurred_at)                                                 AS last_seen_at
+FROM connector_evidence
+GROUP BY connector, capability;
+`);
+
 // Where each room sits on the floor. Kept in the database rather than in the
 // page, because a floor plan drawn by the view is a picture that drifts from the
 // building — the same reason the map is generated from the catalogue.
