@@ -21,7 +21,9 @@
     "readme": "node --experimental-sqlite scripts/readme-numbers.mjs --fix",
     "readme:check": "node --experimental-sqlite scripts/readme-numbers.mjs",
     "verify": "node --experimental-sqlite scripts/verify-chain.mjs",
-    "rotate-key": "node --experimental-sqlite scripts/rotate-key.mjs"
+    "rotate-key": "node --experimental-sqlite scripts/rotate-key.mjs",
+    "sweep": "node scripts/sweep.mjs",
+    "sweep:fast": "node scripts/sweep.mjs --fast"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"

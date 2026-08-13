@@ -101,3 +101,62 @@ jobs:
             exit 1
           fi
           echo "clean"
+
+  # Every department, opened. The console has no build step and no framework, so
+  # a broken render is a runtime error in one function and nothing else notices:
+  # unit tests never open a page, and the launch audit checks that a department
+  # has a route, not that the route draws anything.
+  sweep:
+    name: Browser sweep
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+      - run: npm ci --no-audit --no-fund
+
+      # A throwaway database with a known password. The first-run account is
+      # generated and must be changed before the API answers, which is correct
+      # behaviour and useless to a sweep.
+      - name: A database to sweep
+        run: |
+          node --experimental-sqlite -e "
+            import('./src/db.js').then(async ({ exec }) => {
+              const { hashPassword } = await import('./src/auth.js');
+              const { seedAdmin } = await import('./src/auth.js');
+              seedAdmin();
+              exec('UPDATE users SET pass = ?, must_change = 0', hashPassword('sweep-password-1'));
+            });
+          "
+        env:
+          ALPHACORE_DB: data/ci-sweep.db
+          ALPHACORE_MOCK: 'true'
+
+      - name: Start the server
+        run: |
+          ALPHACORE_DB=data/ci-sweep.db ALPHACORE_MOCK=true PORT=8484 \
+            node --experimental-sqlite src/server.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8484/api/ping >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8484/api/ping || (cat /tmp/server.log && exit 1)
+
+      - name: Start a browser
+        run: |
+          google-chrome --headless=new --remote-debugging-port=9222 \
+            --no-sandbox --disable-gpu --disable-dev-shm-usage about:blank > /tmp/chrome.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9222/json/version >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:9222/json/version >/dev/null || (cat /tmp/chrome.log && exit 1)
+
+      # 140 departments x 2 themes x 2 languages x 2 viewports.
+      - name: Sweep
+        run: npm run sweep -- --user=owner --pass=sweep-password-1
