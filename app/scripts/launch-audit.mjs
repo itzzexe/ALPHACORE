@@ -12,7 +12,7 @@ import { ROOT } from '../src/env.js';
 import { q, one, db } from '../src/db.js';
 import { verifyChain } from '../src/audit.js';
 import { PERMS } from '../src/auth.js';
-import { sectionCatalog, relationshipMatrix, connectivityAudit, DIVISIONS } from '../src/links.js';
+import { sectionCatalog, relationshipMatrix, connectivityAudit, surfaceAudit, DIVISIONS } from '../src/links.js';
 
 const findings = [];
 const ok = [];
@@ -161,6 +161,26 @@ if (audit.dangling?.length) {
   note('HIGH', 'wiring', `${audit.dangling.length} relationship(s) name a department that does not exist`,
     audit.dangling.map((d) => `${d.from} → ${d.to} (no such: ${d.missing})`).join(', '));
 } else pass('wiring', 'every declared relationship names two departments that exist');
+
+// Every department must sit behind exactly one of the eight surfaces. The
+// navigation is drawn from that mapping, so a department nobody filed is not a
+// cosmetic problem — it is a page that exists, works, and cannot be reached
+// except by typing its URL. Filed twice is the opposite failure: a menu that
+// disagrees with itself. Packages add sections at runtime, which is why this
+// runs against the live catalogue rather than against the source.
+const surfaces = surfaceAudit();
+if (surfaces.unfiled.length) {
+  note('BLOCKER', 'wiring', `${surfaces.unfiled.length} department(s) belong to no surface and cannot be navigated to`,
+    surfaces.unfiled.join(', '));
+} else if (surfaces.duplicated.length) {
+  note('HIGH', 'wiring', `${surfaces.duplicated.length} department(s) are filed under two surfaces`,
+    surfaces.duplicated.join(', '));
+} else if (surfaces.dangling.length) {
+  note('HIGH', 'wiring', `${surfaces.dangling.length} surface entr(ies) name a department that does not exist`,
+    surfaces.dangling.join(', '));
+} else {
+  pass('wiring', `all ${surfaces.departments} departments sit behind exactly one of the ${surfaces.surfaces} surfaces`);
+}
 
 // Every division must touch every other. A division that connects to nothing
 // outside itself is a silo with a colour, and the map exists to make that

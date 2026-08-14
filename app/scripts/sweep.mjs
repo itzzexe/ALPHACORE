@@ -186,10 +186,23 @@ const token = await (async () => {
 const map = await (await fetch(`${ORIGIN}/api/map`, { headers: { 'x-auth-token': token } })).json();
 let departments = (map.sections || []).map((s) => ({ id: s.id, route: String(s.href || '').replace('#/', '').split('/')[0] }))
   .filter((d) => d.route);
+
+// The eight doors, the full list behind them, and the one box in front. These
+// are the pages most people will actually stand on, and until now the sweep
+// covered every department and none of the surfaces — which is the wrong way
+// round if you are checking that the console still draws.
+const surfaces = [
+  { id: 'ask', route: 'ask' },
+  { id: 'departments', route: 'departments' },
+  ...(map.surfaces || []).map((s) => ({ id: `surface:${s.id}`, route: `s/${s.id}` })),
+];
+departments = [...surfaces, ...departments];
+
 if (ONLY.length) departments = departments.filter((d) => ONLY.includes(d.id));
 
 const total = departments.length * VIEWPORTS.length * THEMES.length * LANGS.length;
-console.log(`\n  Sweeping ${departments.length} departments × ${THEMES.length} theme(s) × ${LANGS.length} language(s)`
+console.log(`\n  Sweeping ${departments.length} pages (${surfaces.length} surfaces + ${departments.length - surfaces.length} departments)`
+  + ` × ${THEMES.length} theme(s) × ${LANGS.length} language(s)`
   + ` × ${VIEWPORTS.length} viewport(s) = ${total} renders\n`);
 
 const b = await connect();

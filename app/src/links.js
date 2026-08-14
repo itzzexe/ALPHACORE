@@ -532,6 +532,142 @@ export const DIVISIONS = [
 ];
 
 /**
+ * The eight surfaces — what somebody is trying to do, rather than which
+ * department owns the answer.
+ *
+ * A hundred and forty departments is the right number for a company and the
+ * wrong number for a menu. The divisions above are an org chart: they say who
+ * something belongs to. These say what you came here for, which is a different
+ * question and the only one a person actually asks. Nothing is removed and
+ * nothing is renamed — every department keeps its page, its route and its
+ * division, and gains one line saying which door you reach it through.
+ *
+ * The mapping is data rather than layout for one reason: a menu written in
+ * markup can be edited to disagree with the catalogue and nobody finds out.
+ * This can be counted. The launch audit checks that every department belongs
+ * to exactly one surface, so a new department that nobody filed shows up as a
+ * blocker rather than as a page you can only reach by typing its URL.
+ */
+export const SURFACES = [
+  {
+    id: 'ask',
+    label: 'Ask AlphaCore',
+    hint: 'Say what you need. The company works out which departments are involved.',
+    // The three things an open-ended question can become. Ask routes to these
+    // and nothing else — see src/ask.js for the rules.
+    departments: ['requests', 'hunt', 'chat'],
+  },
+  {
+    id: 'work',
+    label: 'Work',
+    hint: 'Make something: the workforce, the queue, and everything being built.',
+    departments: [
+      'agents', 'workforce', 'runs', 'pipelines', 'providers', 'artifacts', 'capacity', 'workstreams', 'tiers',
+      'systems', 'infra', 'products', 'journeys', 'projects', 'tasks', 'lab', 'releases', 'sprints', 'packages',
+      'jobs', 'deadletter',
+    ],
+  },
+  {
+    id: 'approvals',
+    label: 'Approvals',
+    hint: 'Everything stopped, waiting for a person to decide.',
+    departments: ['gate', 'decisions', 'budgets', 'risks', 'quality', 'evals', 'pmo', 'auditor', 'simulation', 'approvals'],
+  },
+  {
+    id: 'company',
+    label: 'Company',
+    hint: 'The company\'s own record: how it governs itself, and what it owes.',
+    departments: [
+      'standing', 'harmony', 'autopilot', 'governance', 'oversight', 'scorecard', 'users', 'settings', 'audit',
+      'constitution', 'timemachine', 'observe', 'anchors', 'datagov', 'roles', 'observability', 'backups',
+      'board', 'ir', 'comms', 'chief',
+      'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'privacy', 'trustcentre',
+      'continuity', 'incidents', 'assets', 'legal', 'vendors', 'objectives', 'ip',
+    ],
+  },
+  {
+    id: 'intelligence',
+    label: 'Intelligence',
+    hint: 'Find something out — about a market, a company, or your own records.',
+    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'insights', 'kgraph', 'embeddings'],
+  },
+  {
+    id: 'money',
+    label: 'Money',
+    hint: 'Money in, money out, and what everything cost.',
+    departments: [
+      'finance', 'finreports', 'ledger', 'bookkeeper', 'economics', 'finops', 'treasury', 'money', 'tax',
+      'pricing', 'success', 'sales', 'customers', 'relations', 'procurement', 'revenue', 'partnerships',
+    ],
+  },
+  {
+    id: 'people',
+    label: 'People',
+    hint: 'The workforce, human and synthetic — and how it gets better.',
+    departments: ['people', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
+  },
+  {
+    id: 'world',
+    label: 'World',
+    hint: 'Anything that reaches a person outside this company.',
+    departments: [
+      'localization', 'social', 'content', 'design', 'marketing', 'marketwatch', 'mkt', 'brand', 'personas',
+      'positioning', 'seo', 'paidmedia', 'lifecycle', 'calendar', 'events', 'press', 'community', 'attribution',
+      'pages', 'mktops', 'growth',
+      'browser', 'connectors', 'egress', 'vault', 'web', 'mcp', 'tenants', 'keys', 'webhooks',
+      'support', 'contact', 'help', 'status', 'deliverability',
+    ],
+  },
+];
+
+const SURFACE_OF = new Map(SURFACES.flatMap((s) => s.departments.map((d) => [d, s.id])));
+
+/** Which door does this department sit behind? */
+export const surfaceOf = (deptId) => SURFACE_OF.get(deptId) || null;
+
+/**
+ * The check the launch audit runs, and the reason this is data.
+ *
+ * Two failures are possible and both are silent without this: a department in
+ * the catalogue that no surface lists, which is a page reachable only by typing
+ * its URL; and a department listed by two surfaces, which is a menu that
+ * disagrees with itself. Packages install new sections at runtime, so this
+ * cannot be a check that only runs at build time.
+ */
+export function surfaceAudit() {
+  const sections = sectionCatalog();
+  const listed = SURFACES.flatMap((s) => s.departments);
+  const counts = new Map();
+  for (const d of listed) counts.set(d, (counts.get(d) || 0) + 1);
+
+  const known = new Set(sections.map((s) => s.id));
+  return {
+    departments: sections.length,
+    surfaces: SURFACES.length,
+    // Filed nowhere: reachable only by URL.
+    unfiled: sections.filter((s) => !SURFACE_OF.has(s.id)).map((s) => s.id),
+    // Filed twice: the menu disagrees with itself.
+    duplicated: [...counts.entries()].filter(([, n]) => n > 1).map(([d]) => d),
+    // Filed but gone: a surface pointing at a department that no longer exists.
+    dangling: listed.filter((d) => !known.has(d)),
+  };
+}
+
+/** The surfaces with their departments resolved, for the navigation to draw. */
+export function surfaceCatalog() {
+  const sections = sectionCatalog();
+  const by = new Map(sections.map((s) => [s.id, s]));
+  return SURFACES.map((s) => ({
+    id: s.id,
+    label: s.label,
+    hint: s.hint,
+    departments: s.departments.map((d) => by.get(d)).filter(Boolean),
+    // The number people actually navigate by: how much is in there.
+    count: s.departments.reduce((a, d) => a + (by.get(d)?.count || 0), 0),
+  }));
+}
+
+/**
  * Prove the wiring: every section must participate in at least one live or
  * declared relationship. Anything that does not is reported as an orphan
  * rather than quietly looking connected on a diagram.

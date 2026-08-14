@@ -16,6 +16,15 @@ import { fileURLToPath } from 'node:url';
 
 process.env.ALPHACORE_MOCK = 'true';
 process.env.ALPHACORE_DB = 'data/test-sealing.db';
+// Its own master key, not the shared file.
+//
+// Every test file gets its own database, but `data/master.key` is one file for
+// all of them, and the rotation test rotates it. Test files run concurrently,
+// so this suite could have its key changed underneath it half way through and
+// fail with "sealed under key A, key in use is B" — which is the retirement
+// machinery working correctly on a problem the tests created. Pinning it here
+// makes this file independent of what any other file does to the key.
+process.env.ALPHACORE_MASTER_KEY = Buffer.alloc(48, 42).toString('base64');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DB = path.join(root, 'data', 'test-sealing.db');
 for (const suffix of ['', '-wal', '-shm']) {

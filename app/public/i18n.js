@@ -587,6 +587,81 @@ const AR = {
   'Experience moving in and out of storage: finished work leaves an episode behind, and future work retrieves what is relevant before it starts — so the same mistake is not made twice.':
     'الخبرة تدخل وتخرج من المخزن: العمل المنتهي يترك أثرًا، والعمل القادم يسترجع ما يخصّه قبل أن يبدأ — كي لا يتكرر الخطأ ذاته مرتين.',
 
+  // الأبواب الثمانية — ١٤٠ قسمًا عدد صحيح لشركة وخاطئ لقائمة
+  'Ask AlphaCore': 'اسأل ألفاكور',
+  'Work': 'العمل',
+  'Approvals': 'الموافقات',
+  'Company': 'الشركة',
+  'Intelligence': 'الاستخبارات',
+  'Money': 'المال',
+  'People': 'الناس',
+  'World': 'العالم',
+  'All departments': 'كل الأقسام',
+  'Every department': 'كل قسم',
+  'Door': 'الباب',
+  'Division': 'الشعبة',
+  'Records': 'السجلات',
+  'unfiled': 'غير مصنّف',
+  'Filter departments': 'تصفية الأقسام',
+  'The map': 'الخريطة',
+  'No such surface.': 'لا يوجد سطح بهذا الاسم.',
+  'Nothing here you have permission to see.': 'لا شيء هنا لديك صلاحية لرؤيته.',
+  'waiting on you': 'بانتظارك',
+  'Say what you need. The company works out which departments are involved.':
+    'قل ما تحتاجه، والشركة تستنتج أي الأقسام معنية.',
+  'Make something: the workforce, the queue, and everything being built.':
+    'اصنع شيئًا: القوى العاملة، والطابور، وكل ما يُبنى.',
+  'Everything stopped, waiting for a person to decide.': 'كل ما توقّف بانتظار قرار إنسان.',
+  'The company\'s own record: how it governs itself, and what it owes.':
+    'سجل الشركة عن نفسها: كيف تحكم ذاتها، وما الذي تدين به.',
+  'Find something out — about a market, a company, or your own records.':
+    'اعرف شيئًا — عن سوق، أو شركة، أو عن سجلاتك أنت.',
+  'Money in, money out, and what everything cost.': 'المال داخلًا وخارجًا، وكم كلّف كل شيء.',
+  'The workforce, human and synthetic — and how it gets better.':
+    'القوى العاملة، بشرية واصطناعية — وكيف تتحسّن.',
+  'Anything that reaches a person outside this company.': 'كل ما يصل إلى شخص خارج هذه الشركة.',
+  'Every department still has its own page and its own address — nothing was removed. This is a door, not a replacement.':
+    'كل قسم ما زال له صفحته وعنوانه — لم يُحذف شيء. هذا باب، وليس بديلًا.',
+  'The eight doors are a way in, not a shorter list. All of it is still here, still grouped by division the way the org chart groups it, and every route that ever worked still works.':
+    'الأبواب الثمانية مدخل، لا قائمة أقصر. كل شيء ما زال هنا، مجموعًا بالشُعب كما يجمعه الهيكل التنظيمي، وكل مسار عمل يومًا ما زال يعمل.',
+
+  // اسأل ألفاكور — توجيه فقط، بلا أي نموذج
+  'Say what you need. The records are searched straight away and cost nothing; anything that spends money or opens work comes back as a button, not as a surprise.':
+    'قل ما تحتاجه. تُبحث السجلات فورًا بلا تكلفة؛ وأي شيء ينفق مالًا أو يفتح عملًا يعود إليك كزر، لا كمفاجأة.',
+  'e.g. who are the top logistics companies in Baghdad': 'مثلًا: من أبرز شركات النقل في بغداد',
+  'Ask': 'اسأل',
+  'How it decides': 'كيف يقرّر',
+  'Rule': 'القاعدة',
+  'Goes to': 'يذهب إلى',
+  'Why': 'لماذا',
+  'Looking…': 'يبحث…',
+  'Working…': 'ينفّذ…',
+  'Done': 'تم',
+  'Answered by': 'أجاب عنه',
+  'No department has anything on this yet.': 'لا قسم لديه شيء عن هذا بعد.',
+  'Routed by the': 'وُجِّه بقاعدة',
+  'rule': '',
+  'From the records': 'من السجلات',
+  'What': 'ماذا',
+  'Where': 'أين',
+  'Matched': 'تطابق في',
+  'Nothing in the records matched. That is an answer too.': 'لا شيء في السجلات تطابق. وهذه إجابة أيضًا.',
+  'Searched': 'بُحث في',
+  'tables. This cost nothing.': 'جدولًا. ولم يكلّف هذا شيئًا.',
+  'What happens next, if you say so': 'ما سيحدث تاليًا، إن أذنت',
+  'The search above already ran and cost nothing. Anything that spends money or opens work is a proposal until you press the button — routing is done by reading the words you typed, not by asking a model, so it is occasionally wrong and never expensively wrong.':
+    'البحث أعلاه جرى فعلًا ولم يكلّف شيئًا. وأي شيء ينفق مالًا أو يفتح عملًا يبقى اقتراحًا حتى تضغط الزر — والتوجيه يقرأ كلماتك ولا يسأل نموذجًا، فهو يخطئ أحيانًا ولا يخطئ بثمن أبدًا.',
+  'First match wins, and the last rule matches everything. Routing is regex over the words typed — no model call, so it is fast, free and legible. The default is the read-only one on purpose.':
+    'أول قاعدة تطابق تفوز، وآخر قاعدة تطابق كل شيء. التوجيه تعبير نمطي على الكلمات المكتوبة — بلا نداء نموذج، فهو سريع ومجاني ومقروء. والافتراضي هو الخيار القارئ فقط، عن قصد.',
+  'it names an employee or a department, so it is a question for them rather than a search':
+    'يسمّي موظفًا أو قسمًا، فهو سؤال لهم لا بحث',
+  'it asks for something to be done, which is what the request desk routes department to department':
+    'يطلب إنجاز شيء، وهذا ما يوجّهه مكتب الطلبات من قسم إلى قسم',
+  'it needs more than one pass and may need the open web, which is what a hunt is for':
+    'يحتاج أكثر من جولة وقد يحتاج الويب المفتوح، وهذا ما تُصنع له المطاردة',
+  'anything else is answered from the records first — it is instant, it costs nothing, and it is usually enough':
+    'ما عدا ذلك يُجاب من السجلات أولًا — فوري، بلا تكلفة، وغالبًا يكفي',
+
   // اعتماد الموصلات — جدول لم يكتبه أحد بيده. الحالات تُترك بالإنجليزية عمدًا
   // حيث تُقرأ كمصطلح تقني، ويُشرح معناها في العمود المجاور.
   'Connector certification — measured, not claimed': 'اعتماد الموصلات — مقيس لا مُدّعى',

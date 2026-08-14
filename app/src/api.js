@@ -188,7 +188,11 @@ import {
   createDataset, listDatasets, getDataset, transformDataset, datasetFromSource, listInternalSources,
   listArchive, getArchiveItem, archiveItem, archiveStats,
 } from './data.js';
-import { connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats } from './links.js';
+import {
+  connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats,
+  SURFACES, surfaceCatalog, surfaceAudit,
+} from './links.js';
+import { ask, askRules } from './ask.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
 import {
   createPricing, listPricing, setPricingState, approvedPricing,
@@ -907,11 +911,21 @@ const routes = [
   ['GET', /^\/api\/map$/, () => ({
     divisions: DIVISIONS,
     sections: sectionCatalog(),
+    // The eight doors, and which departments sit behind each. The console's
+    // navigation is drawn from this rather than from a list in the markup, so
+    // a department that nobody filed cannot quietly become unreachable.
+    surfaces: surfaceCatalog(),
+    surfaceAudit: surfaceAudit(),
     edges: relationshipMatrix(),
     audit: connectivityAudit(),
     flow: flowStats(),
     harmony: harmonyScore(),
   })],
+  ['GET', /^\/api\/surfaces$/, () => ({ surfaces: surfaceCatalog(), audit: surfaceAudit(), declared: SURFACES.length })],
+
+  // --- Ask AlphaCore: one input in front of a hundred and forty departments ---
+  ['GET', /^\/api\/ask$/, () => askRules()],
+  ['POST', /^\/api\/ask$/, (_p, body, _url, user) => ask(need(body, 'q'), { actor: `human:${user.username}` })],
 
   // --- Pricing: the record every other agent must cite ---
   ['GET', /^\/api\/pricing$/, () => ({ records: listPricing(), approved: approvedPricing() })],
@@ -1720,6 +1734,13 @@ function permFor(m, path) {
   if (path.startsWith('/api/infra')) return m === 'GET' ? 'infra.view' : 'infra.manage';
   if (path.startsWith('/api/finreports')) return m === 'GET' ? 'finreports.view' : 'finreports.manage';
   if (path === '/api/scorecard' || path === '/api/graph' || path === '/api/map' || path.startsWith('/api/links/')) return 'dashboard.view';
+  // The eight doors are the navigation itself: anybody who may see a dashboard
+  // may see which departments exist and which surface they sit behind.
+  if (path === '/api/surfaces') return 'dashboard.view';
+  // Ask reads across every table in one pass, so it is guarded by the same
+  // permission as the deep search it delegates to — not by a weaker one just
+  // because the box it sits in is friendlier.
+  if (path === '/api/ask') return 'hunt.view';
   if (path.startsWith('/api/harmony')) return m === 'GET' ? 'harmony.view' : 'harmony.manage';
   // Handing the company's decisions to the AI, and taking them back, is the
   // owner's call alone — it is not a management permission.
