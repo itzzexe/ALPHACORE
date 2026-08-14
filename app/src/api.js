@@ -11,7 +11,8 @@ import {
 } from './push.js';
 import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anchor.js';
 import { isProduction } from './production.js';
-import { erasureOverview, findSubject, eraseSubject, verifyErasure } from './erasure.js';
+import { openPii, erasureOverview, findSubject, eraseSubject, verifyErasure } from './erasure.js';
+import { startBackfill, backfillOverview } from './backfill.js';
 import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
@@ -25,6 +26,7 @@ import {
 } from './helpcentre.js';
 import {
   overview as datagovOverview, rebuild as rebuildInventory, defineClass, classifyColumn,
+  recordTiering, tiering,
 } from './datagov.js';
 import {
   overview as trustOverview, publishDocument as publishTrustDocument,
@@ -316,7 +318,7 @@ const routes = [
     const rows = state
       ? q('SELECT * FROM runs WHERE state = ? ORDER BY created_at DESC LIMIT 200', state)
       : q('SELECT * FROM runs ORDER BY created_at DESC LIMIT 200');
-    return rows.map((r) => ({ ...r, input: r.input ? JSON.parse(r.input) : null, output: r.output ? JSON.parse(r.output) : null, flags: r.flags ? JSON.parse(r.flags) : [] }));
+    return rows.map((r) => ({ ...r, input: r.input ? JSON.parse(r.input) : null, output: r.output ? JSON.parse(openPii(r.output)) : null, flags: r.flags ? JSON.parse(r.flags) : [] }));
   }],
 
   ['POST', /^\/api\/runs$/, (_p, body) => {
@@ -602,6 +604,10 @@ const routes = [
   ['POST', /^\/api\/erasure\/verify$/, (_p, body) => verifyErasure({
     kind: body.kind || 'contact', identifier: body.identifier || null, ref: body.ref || null,
   })],
+  // Sealing what was written before there was sealing. A queue job rather than
+  // a script, so it resumes where it stopped and says so on the chain.
+  ['GET', /^\/api\/erasure\/backfill$/, () => backfillOverview()],
+  ['POST', /^\/api\/erasure\/backfill$/, (_p, _b, user) => startBackfill({ actor: `human:${user.username}` })],
 
   // --- Anchoring: the record answering to something other than itself ---
   ['GET', /^\/api\/anchors$/, () => anchorsOverview()],
@@ -1520,6 +1526,9 @@ const routes = [
   // ---- Data governance --------------------------------------------------
   ['GET', /^\/api\/datagov$/, () => datagovOverview()],
   ['POST', /^\/api\/datagov\/rebuild$/, (_p, _b, user) => rebuildInventory({ actor: `human:${user.username}` })],
+  // Which columns are sealed at write, and the signature under that decision.
+  ['GET', /^\/api\/datagov\/tiering$/, () => tiering()],
+  ['POST', /^\/api\/datagov\/tiering$/, (_p, body, user) => recordTiering({ actor: `human:${user.username}`, basis: body.basis })],
   ['POST', /^\/api\/datagov\/class$/, (_p, body, user) => defineClass({ ...body, actor: `human:${user.username}` })],
   ['POST', /^\/api\/datagov\/classify$/, (_p, body, user) => classifyColumn({
     table: need(body, 'table'), column: need(body, 'column'), className: body.className,
@@ -1598,6 +1607,9 @@ function permFor(m, path) {
   if (path.startsWith('/api/roles')) return m === 'GET' ? 'users.manage' : 'users.manage';
   if (path.startsWith('/api/delegations')) return null;
   if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
+  // Reading how much is left to seal is a view; starting the backfill rewrites
+  // every Tier A row in the database, which is not.
+  if (path === '/api/erasure/backfill') return m === 'GET' ? 'compliance.view' : 'compliance.manage';
   if (path === '/api/erasure/erase') return 'compliance.manage';
 
   // The read and the irreversible act are never the same key. Looking at the
@@ -1614,6 +1626,8 @@ function permFor(m, path) {
   if (/^\/api\/help\/article\/\d+\/publish$/.test(path)) return 'help.publish';
   if (path.startsWith('/api/help')) return 'help.write';
   if (path === '/api/datagov') return 'datagov.view';
+  // Reading the tiering is a view. Signing it is the classification act.
+  if (path === '/api/datagov/tiering' && m === 'GET') return 'datagov.view';
   if (path.startsWith('/api/datagov')) return 'datagov.classify';
   if (path === '/api/trust') return 'trust.view';
   if (path.startsWith('/api/trust')) return 'trust.publish';

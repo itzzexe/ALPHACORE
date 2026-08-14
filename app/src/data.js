@@ -6,6 +6,7 @@ import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { createCampaign } from './commercial.js';
+import { openPii } from './erasure.js';
 
 // ---------- Archive (used by everyone) ----------
 export function archiveItem({ title, kind, subjectType = null, subjectId = null, snapshot = null, fileRef = null, actor }) {
@@ -264,7 +265,7 @@ export function transformDataset(id, { op, actor }) {
 export function syncDataRuns() {
   // AI segmentation results
   for (const run of q("SELECT * FROM runs WHERE task_type LIKE 'segment:%' AND state IN ('done','awaiting_human') AND id NOT IN (SELECT COALESCE(subject_id,'') FROM audit_log WHERE action = 'segment.auto_applied')")) {
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     if (!parsed?.segments) continue;
     for (const s of parsed.segments) {
       const segId = createSegment({ name: s.name || 'Unnamed segment', description: s.description || null, source: 'ai', actor: 'agent:AGT-INT-001' });
@@ -281,7 +282,7 @@ export function syncDataRuns() {
   for (const d of q("SELECT * FROM datasets WHERE state = 'processing' AND run_id IS NOT NULL")) {
     const run = one('SELECT * FROM runs WHERE id = ?', d.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     if ((run.state === 'done' || run.state === 'awaiting_human') && parsed) {
       exec("UPDATE datasets SET state = 'done', result = ? WHERE id = ?", JSON.stringify(parsed), d.id);
       if (d.op === 'extract-entities' && parsed.records) {

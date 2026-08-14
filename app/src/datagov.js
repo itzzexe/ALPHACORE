@@ -17,7 +17,7 @@
 // description of it.
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
-import { erasureOverview } from './erasure.js';
+import { erasureOverview, TIER_A, isTierA, tierAUnreachable } from './erasure.js';
 
 const clean = (s, n = 600) => String(s ?? '').trim().slice(0, n);
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
@@ -98,20 +98,27 @@ export function rebuild({ actor = 'system:datagov' } = {}) {
     const key = `${table}.${column}`;
     const suggestedPersonal = LOOKS_PERSONAL.test(column) ? 1 : 0;
     const erasable = reachable.has(key) ? 1 : 0;
+    // The tier is not a proposal the way `personal` is. It is read from the
+    // list the sealing code itself uses, so the inventory cannot claim a column
+    // is sealed at write while the write path leaves it in plaintext — the two
+    // are the same fact read twice, not two facts kept in step by hand.
+    const sealed = isTierA(table, column) ? 1 : 0;
     const existing = one('SELECT * FROM data_inventory WHERE table_name = ? AND column_name = ?', table, column);
     if (existing) {
-      if (existing.erasable !== erasable) {
-        exec('UPDATE data_inventory SET erasable = ? WHERE id = ?', erasable, existing.id);
+      if (existing.erasable !== erasable || existing.sealed_at_write !== sealed) {
+        exec('UPDATE data_inventory SET erasable = ?, sealed_at_write = ?, tier = ? WHERE id = ?',
+          erasable, sealed, sealed ? 'A' : existing.tier, existing.id);
         updated++;
       }
       continue;
     }
-    exec(`INSERT INTO data_inventory (table_name, column_name, class_name, personal, erasable, note)
-          VALUES (?,?,?,?,?,?)`,
+    exec(`INSERT INTO data_inventory (table_name, column_name, class_name, personal, erasable, note, tier, sealed_at_write)
+          VALUES (?,?,?,?,?,?,?,?)`,
     table, column,
     LOOKS_SECRET.test(column) ? 'credential' : (suggestedPersonal ? 'personal' : null),
-    suggestedPersonal, erasable,
-    suggestedPersonal && !erasable ? 'proposed as personal by its name; the erasure walk does not reach it' : null);
+    suggestedPersonal || sealed, erasable,
+    suggestedPersonal && !erasable ? 'proposed as personal by its name; the erasure walk does not reach it' : null,
+    sealed ? 'A' : null, sealed);
     added++;
   }
   audit({
@@ -151,6 +158,53 @@ export function unerasablePersonal() {
               ORDER BY table_name, column_name`);
 }
 
+/**
+ * The tiering, as a governance record with a name against it.
+ *
+ * The tier itself is derived — see rebuild() — so this does not decide
+ * anything. What it does is put a person's name and a date beside a decision
+ * that was previously only visible by reading two source files, and record the
+ * act on the chain. A classification nobody signed is a comment.
+ */
+export function recordTiering({ actor, basis = 'encryption-at-write, phase 3' }) {
+  if (!actor || !String(actor).startsWith('human:')) refuse('tiering is a judgement and carries a name');
+  rebuild({ actor: 'system:datagov' });
+
+  const gap = tierAUnreachable();
+  // Failure-closed: signing a tiering that contains a column nobody can erase
+  // would be signing the opposite of the promise.
+  if (gap.length) refuse(`these Tier A columns are not reachable by erasure: ${gap.join(', ')}`);
+
+  let signed = 0;
+  for (const { table, column } of TIER_A) {
+    const row = one('SELECT id FROM data_inventory WHERE table_name = ? AND column_name = ?', table, column);
+    if (!row) continue;
+    exec(`UPDATE data_inventory SET tier = 'A', sealed_at_write = 1, personal = 1, class_name = 'personal',
+            reviewed_by = ?, reviewed_at = datetime('now'), note = ? WHERE id = ?`,
+    actor, `Tier A: sealed at write under the person's own key (${basis})`, row.id);
+    signed++;
+  }
+  audit({
+    actorType: 'human', actorId: actor, action: 'datagov.tiering_recorded',
+    subjectType: 'data_inventory', subjectId: 'tier-a',
+    payload: { columns: signed, basis, unreachable: gap.length },
+  });
+  return { signed, tierA: TIER_A.length, unreachable: gap, ...coverage() };
+}
+
+/** Tier A, as the inventory has it, with what is sealed and what is reachable. */
+export function tiering() {
+  return {
+    tierA: q(`SELECT table_name, column_name, tier, sealed_at_write, erasable, reviewed_by, reviewed_at
+                FROM data_inventory WHERE tier = 'A' ORDER BY table_name, column_name`),
+    declared: TIER_A.map((c) => `${c.table}.${c.column}`),
+    unreachable: tierAUnreachable(),
+    note: 'Tier A is sealed at write under the subject\'s own key; Tier B is plaintext by design because the company '
+      + 'has to match on it, and its protection is disk encryption plus a master key from outside the disk. The split '
+      + 'and what it does not protect against are set out in docs/THREAT-MODEL-PII.md.',
+  };
+}
+
 export function coverage() {
   const n = (sql, ...p) => one(sql, ...p).n;
   return {
@@ -160,6 +214,10 @@ export function coverage() {
     personal: n('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1'),
     erasable: n('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1 AND erasable = 1'),
     gap: n('SELECT COUNT(*) AS n FROM data_inventory WHERE personal = 1 AND erasable = 0'),
+    sealedAtWrite: n('SELECT COUNT(*) AS n FROM data_inventory WHERE sealed_at_write = 1'),
+    // The number that must always be zero: a column sealed at write that the
+    // erasure walk cannot reach is data nobody can delete.
+    sealedButUnerasable: n('SELECT COUNT(*) AS n FROM data_inventory WHERE sealed_at_write = 1 AND erasable = 0'),
   };
 }
 
@@ -185,6 +243,7 @@ export function overview() {
     classes: classes(),
     ...coverage(),
     unerasable: unerasablePersonal(),
+    tiering: tiering(),
     retention: retentionBreaches(),
     unreviewedPersonal: q(`SELECT table_name, column_name, note FROM data_inventory
                             WHERE personal = 1 AND reviewed_by IS NULL ORDER BY table_name LIMIT 100`),

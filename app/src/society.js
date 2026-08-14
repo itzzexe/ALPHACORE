@@ -22,6 +22,7 @@ import { getSetting, setSetting } from './settings.js';
 import { route, parseAgentJson } from './router.js';
 import { budgetsConfig } from './env.js';
 import { getPersona } from './org.js';
+import { openPii } from './erasure.js';
 
 const MAX_MESSAGES_PER_SCENE = 8;
 
@@ -184,7 +185,7 @@ export async function societyTick() {
   for (const s of q("SELECT * FROM society_scenes WHERE state = 'writing' AND run_id IS NOT NULL")) {
     const run = one('SELECT state, output FROM runs WHERE id = ?', s.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     const msgs = Array.isArray(parsed?.messages) ? parsed.messages : [];
     if (!msgs.length) { exec("UPDATE society_scenes SET state = 'failed' WHERE id = ?", s.id); continue; }
     const cast = JSON.parse(s.cast);

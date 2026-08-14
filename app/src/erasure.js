@@ -87,6 +87,30 @@ export function sealPii(value, { kind, identifier }) {
 }
 
 /**
+ * Seal under a reference we already hold, rather than deriving one.
+ *
+ * Same key, same cipher, same everything — this skips only the derivation,
+ * for the case where the row knows *which* person it belongs to but no longer
+ * holds anything readable that says who they are. A run's output is written
+ * minutes after its input was sealed; re-deriving would mean keeping the
+ * address in memory for the whole round trip in order to compute a value that
+ * is already sitting in the row.
+ *
+ * Returns the value untouched when there is no such subject: sealing under a
+ * reference nobody minted would produce something unreadable and unerasable.
+ */
+export function sealForRef(value, ref) {
+  if (value === null || value === undefined || value === '' || !ref) return value;
+  if (isSealed(value)) return value;
+  const key = subjectKey(ref, { create: false });
+  if (!key) return value;
+  const iv = randomBytes(12);
+  const c = createCipheriv('aes-256-gcm', key, iv);
+  const data = Buffer.concat([c.update(String(value), 'utf8'), c.final()]);
+  return `${PREFIX}${ref}:${Buffer.concat([iv, c.getAuthTag(), data]).toString('base64')}`;
+}
+
+/**
  * Read it back, if the key still exists.
  *
  * After an erasure this returns a marker rather than throwing. A page that
@@ -107,6 +131,55 @@ export function openPii(sealed) {
   } catch {
     return '[unreadable]';
   }
+}
+
+/**
+ * Seal a row on its way into the database.
+ *
+ * One helper, called by every Tier A write path, so that no write path has to
+ * know which columns are Tier A — the list lives in one place and adding to it
+ * seals the new column everywhere at once. Anything not Tier A is passed
+ * through untouched, so this is safe to wrap around a whole row object.
+ *
+ * `subject_ref` is set on the same row while we still have the identifier in
+ * hand. That is the only thing this adds that was not already there, and it is
+ * one-way: it is the same reference erasure derives, not a copy of the address.
+ *
+ * @param {string} table
+ * @param {object} row          the values about to be written
+ * @param {object} [opts]
+ * @param {string} [opts.identifier]  whose data this is, when the caller knows
+ *                                    better than the column order can say
+ */
+export function sealRow(table, row, { identifier = null, kind = 'contact' } = {}) {
+  const cols = TIER_A.filter((c) => c.table === table);
+  if (!cols.length) return row;
+
+  // Whose row is this? An explicit identifier wins — the contact centre knows
+  // that an outbound call's person is the number it dialled, and no ordering of
+  // columns can work that out on its own.
+  let who = identifier;
+  if (!who) {
+    for (const candidate of cols[0].subject) {
+      const v = row[candidate];
+      if (v === null || v === undefined || v === '') continue;
+      who = isSealed(v) ? openPii(v) : v;
+      if (who && who !== '[erased]' && who !== '[unreadable]') break;
+      who = null;
+    }
+  }
+  // No identifier means no person to seal under. Writing the row in plaintext
+  // is the honest outcome — a row sealed under a made-up subject would be
+  // unreadable *and* unerasable, which is the worst of both.
+  if (!who) return row;
+
+  const out = { ...row };
+  for (const { column } of cols) {
+    if (!(column in out)) continue;
+    out[column] = sealPii(out[column], { kind, identifier: who });
+  }
+  out.subject_ref = subjectRef(kind, who);
+  return out;
 }
 
 /** Walk any structure and open every sealed value in it. */
@@ -157,8 +230,124 @@ const PII_COLUMNS = [
   ['sms_messages', ['from_number', 'to_number'], ['body']],
 ];
 
+/**
+ * Tables reached by reference rather than by scanning.
+ *
+ * The walk above finds a person by comparing values to the identifier they
+ * named. That works when a column holds the identifier, and it cannot work at
+ * all for a provenance row reading `Ahmed Hassan: ahmed@acme.iq at /team` —
+ * which is about the person, contains their address, and will never be equal to
+ * it. Those rows carry `subject_ref` from the moment they are written, so they
+ * are found by lookup instead of by comparison.
+ *
+ * This is not a second identity scheme: the reference is the same one-way
+ * value `subjectRef` derives, stored rather than recomputed.
+ */
+const PII_BY_REF = [
+  ['intel_evidence', ['value']],
+  // A run's prompt is a copy of whatever it was asked to work on, and its
+  // output is a copy of what it wrote about them. Sealing a support ticket
+  // while the drafting run beside it holds the same message in plaintext moves
+  // the leak one table to the left; this is where the test found it.
+  ['runs', ['input', 'output']],
+];
+
 /** Every column of a table that an erasure may touch, matched or carried. */
 const allColumns = (match, also) => [...match, ...also];
+
+/**
+ * Tier A — sealed at write, under the person's own key.
+ *
+ * The content of what somebody said, wrote or typed, and the identifiers that
+ * reach them. Reading any one of these tells you something about a specific
+ * person that they did not intend for you, and nothing in the company's own
+ * operation needs to search or aggregate them.
+ *
+ * `subject` names the column on the same row that says *whose* data this is,
+ * because sealing needs a person, not a table. Where two columns could serve
+ * (an inbound call's number is `from`, an outbound call's is `to`), the list
+ * gives both and the writer picks the one that is not the company's own line.
+ *
+ * Deliberately not here, each for a stated reason — see docs/THREAT-MODEL-PII.md
+ * and the DECISIONS in the release notes:
+ *   tickets.customer      the controller's reconciliation joins on it
+ *   calls.from_number     the contact centre matches an inbound webhook on it
+ *   customers.name        every report in the company groups by it
+ * Their protection is disk encryption and a master key from outside the disk,
+ * which is documented guidance rather than something this file enforces.
+ *
+ * The invariant, enforced as a test rather than promised here: every column in
+ * this list must also be reachable by the walk above. A column sealed at write
+ * but invisible to erasure is data nobody can delete, which is worse than
+ * plaintext data everybody can.
+ */
+export const TIER_A = [
+  // The contact centre. A recording and a transcript of somebody's voice are
+  // the most sensitive things this company holds about anyone.
+  { table: 'calls', column: 'transcript', subject: ['to_number', 'from_number'] },
+  { table: 'calls', column: 'recording', subject: ['to_number', 'from_number'] },
+  { table: 'sms_messages', column: 'body', subject: ['to_number', 'from_number'] },
+  // Support: what somebody wrote in, what we drafted about them, what we sent.
+  { table: 'tickets', column: 'subject', subject: ['customer'] },
+  { table: 'tickets', column: 'body', subject: ['customer'] },
+  { table: 'tickets', column: 'draft', subject: ['customer'] },
+  { table: 'tickets', column: 'sent_body', subject: ['customer'] },
+  // Intelligence: the identifiers that reach a named human being. These are the
+  // rows an enrichment run produces by the thousand, and they are the ones a
+  // stolen database is actually worth money for.
+  { table: 'intel_contacts', column: 'email', subject: ['email', 'phone'] },
+  { table: 'intel_contacts', column: 'phone', subject: ['email', 'phone'] },
+  { table: 'intel_records', column: 'email', subject: ['email', 'phone'] },
+  { table: 'intel_records', column: 'phone', subject: ['email', 'phone'] },
+  { table: 'intel_records', column: 'email2', subject: ['email', 'phone'] },
+  { table: 'intel_records', column: 'phone2', subject: ['email', 'phone'] },
+  { table: 'intel_records', column: 'whatsapp', subject: ['email', 'phone'] },
+  // A postal address is as much a way to reach somebody as a phone number, and
+  // the provenance row that carries it is sealed — leaving the column it came
+  // from readable would move the leak rather than close it.
+  { table: 'intel_records', column: 'address', subject: ['email', 'phone'] },
+  // The provenance trail beside them. "Ahmed Hassan: ahmed@acme.iq, seen at
+  // /team" is a copy of the address the record was sealed for, and sealing the
+  // record while leaving this in plaintext would have moved the leak rather
+  // than closed it. Reached by reference, not by comparison — see PII_BY_REF.
+  // `parent` is for the backfill only. This row has no readable identifier of
+  // its own, so an existing one can only be sealed by asking the record it
+  // belongs to who it is about — and only while that record is still readable,
+  // which is why the backfill does this table before its parent. Once both are
+  // sealed the reference is the only way back, and it is one-way by design.
+  {
+    table: 'intel_evidence',
+    column: 'value',
+    subject: [],
+    parent: { table: 'intel_records', on: 'record_id', subject: ['email', 'phone'] },
+  },
+  // The work itself. `runs.input` is the prompt an employee was given, which
+  // for anything to do with a person is a verbatim copy of what they wrote;
+  // `runs.output` is what was written back about them. Neither has a
+  // subject column of its own — the caller names the person at enqueue time
+  // and the row carries the reference from then on.
+  { table: 'runs', column: 'input', subject: [] },
+  { table: 'runs', column: 'output', subject: [] },
+];
+
+const TIER_A_KEYS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));
+export const isTierA = (table, column) => TIER_A_KEYS.has(`${table}.${column}`);
+
+/**
+ * Which Tier A columns the erasure walk cannot reach.
+ *
+ * This is the cross-check the whole tiering rests on, and it is computed from
+ * the two lists rather than asserted between them, so adding a Tier A column
+ * and forgetting the walk fails a test instead of quietly shipping data that
+ * nobody can delete.
+ */
+export function tierAUnreachable() {
+  const reachable = new Set([
+    ...PII_COLUMNS.flatMap(([table, match, also]) => allColumns(match, also).map((c) => `${table}.${c}`)),
+    ...PII_BY_REF.flatMap(([table, cols]) => cols.map((c) => `${table}.${c}`)),
+  ]);
+  return TIER_A.map((c) => `${c.table}.${c.column}`).filter((k) => !reachable.has(k));
+}
 
 /**
  * Everything held about one person, before deciding what to do about it.
@@ -194,6 +383,20 @@ export function findSubject({ kind = 'contact', identifier }) {
           table, rowid: row._rowid, column: col, sealed: isSealed(v),
           carried: !matched.includes(col),
         });
+      }
+    }
+  }
+
+  // The rows that carry the reference. No comparison, no decryption, no scan —
+  // and no chance of missing one because its text did not look like an email.
+  for (const [table, cols] of PII_BY_REF) {
+    let rows = [];
+    try { rows = q(`SELECT rowid AS _rowid, ${cols.join(', ')} FROM ${table} WHERE subject_ref = ?`, ref); } catch { continue; }
+    for (const row of rows) {
+      for (const col of cols) {
+        const v = row[col];
+        if (v === null || v === undefined || v === '') continue;
+        hits.push({ table, rowid: row._rowid, column: col, sealed: isSealed(v), carried: true, byRef: true });
       }
     }
   }
@@ -288,7 +491,8 @@ export function verifyErasure({ kind = 'contact', identifier = null, ref = null 
   if (!subject.erased_at) return { ok: false, reason: 'this subject has not been erased' };
 
   const leaks = [];
-  for (const [table, match, also] of PII_COLUMNS) {
+  const byRef = PII_BY_REF.map(([table, cols]) => [table, cols, []]);
+  for (const [table, match, also] of [...PII_COLUMNS, ...byRef]) {
     const cols = allColumns(match, also);
     let rows = [];
     try { rows = q(`SELECT rowid AS _rowid, ${cols.join(', ')} FROM ${table}`); } catch { continue; }
@@ -330,7 +534,10 @@ export function erasureOverview() {
     // a matched column can be named in a request, a carried one is only reached
     // because it sits on a row that was matched.
     columnsCovered: PII_COLUMNS.flatMap(([t, match]) => match.map((c) => `${t}.${c}`)),
-    columnsCarried: PII_COLUMNS.flatMap(([t, , also]) => also.map((c) => `${t}.${c}`)),
+    columnsCarried: [
+      ...PII_COLUMNS.flatMap(([t, , also]) => also.map((c) => `${t}.${c}`)),
+      ...PII_BY_REF.flatMap(([t, cols]) => cols.map((c) => `${t}.${c}`)),
+    ],
     subjects: subjects.map((s) => ({
       ref: s.ref, erasedAt: s.erased_at, erasedBy: s.erased_by, reason: s.reason, since: s.created_at,
     })),

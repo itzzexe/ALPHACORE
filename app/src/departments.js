@@ -16,6 +16,7 @@ import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { enrichFromWeb } from './enrich.js';
+import { openPii } from './erasure.js';
 
 // ---------- Pricing ----------
 export function createPricing({ name, productId = null, plan = 'standard', currency = 'USD', amount = 0, unit = 'per month', rationale = null, draftWithAi = false, actor }) {
@@ -283,7 +284,7 @@ export function syncDepartments() {
   const pull = (row) => {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', row.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) return null;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     return { parsed, run };
   };
 

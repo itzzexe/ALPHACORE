@@ -35,6 +35,7 @@ import { createFinReport } from './finreports.js';
 import { createBlueprint } from './systemdesign.js';
 import { createInfraPlan } from './infra.js';
 import { createJourney } from './journey.js';
+import { openPii } from './erasure.js';
 
 const ACTOR = 'system:maestro';
 const MAX_ACTIONS = 5;
@@ -292,7 +293,7 @@ export async function maestroTick() {
   for (const c of q("SELECT * FROM maestro_cycles WHERE state = 'planning' AND run_id IS NOT NULL")) {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', c.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     if (!parsed || !Array.isArray(parsed.plan)) {
       exec("UPDATE maestro_cycles SET state = 'failed', assessment = ? WHERE id = ?", run.failure_reason || 'planner returned no usable plan', c.id);
       continue;

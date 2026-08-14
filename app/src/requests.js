@@ -25,6 +25,7 @@ import { createBlueprint } from './systemdesign.js';
 import { createInfraPlan } from './infra.js';
 import { createFinReport } from './finreports.js';
 import { createTask } from './pm.js';
+import { openPii } from './erasure.js';
 
 const REQ_DIR = path.join(WS_ROOT, '_requests');
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44) || 'request';
@@ -308,12 +309,12 @@ export function advanceRequests() {
   for (const r of q("SELECT * FROM requests WHERE state = 'triaging' AND run_id IS NOT NULL")) {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', r.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     const steps = Array.isArray(parsed?.steps) ? parsed.steps.filter((s) => s?.dept && DEPT_BY_NAME[s.dept]) : [];
     if (!steps.length) {
       const declined = /declined this work/.test(String(run.failure_reason || ''));
       const words = (() => {
-        try { return String(JSON.parse(run.output)?.raw || '').replace(/\s+/g, ' ').trim().slice(0, 600); }
+        try { return String(JSON.parse(openPii(run.output))?.raw || '').replace(/\s+/g, ' ').trim().slice(0, 600); }
         catch { return ''; }
       })();
       // A model that returns prose instead of JSON is a technical stumble, not
@@ -348,7 +349,7 @@ export function advanceRequests() {
       if (active.run_id) {
         const run = one('SELECT state, output, cost_usd, failure_reason FROM runs WHERE id = ?', active.run_id);
         if (!run || ['queued', 'leased', 'running'].includes(run?.state)) continue;
-        const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+        const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
         const text = parsed
           ? (parsed.markdown || parsed.draft || parsed.summary || parsed.article || parsed.proposal || parsed.artifact || JSON.stringify(parsed).slice(0, 3000))
           : (run.failure_reason || 'no output');

@@ -14,6 +14,7 @@ import { companyName } from './settings.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { providersConfig } from './env.js';
+import { openPii } from './erasure.js';
 
 const writerAgent = () =>
   one("SELECT id FROM agents WHERE status = 'active' AND (id LIKE 'AGT-DOC%' OR role_group = 'docs') LIMIT 1")?.id
@@ -26,7 +27,7 @@ const runText = (runId) => {
   const r = one('SELECT state, output FROM runs WHERE id = ?', runId);
   if (r?.state !== 'done' || !r.output) return null;
   try {
-    let o = JSON.parse(r.output);
+    let o = JSON.parse(openPii(r.output));
     // Some agents return { raw: "<json-string>" } — unwrap before extracting.
     if (o && typeof o.raw === 'string') {
       try { o = JSON.parse(o.raw); } catch { return o.raw; }
@@ -45,7 +46,7 @@ function extractSpec(runId) {
   const r = one('SELECT state, output FROM runs WHERE id = ?', runId);
   if (r?.state !== 'done' || !r.output) return null;
   let o;
-  try { o = JSON.parse(r.output); } catch { return null; }
+  try { o = JSON.parse(openPii(r.output)); } catch { return null; }
   let spec = o?.parsed ?? o;
   if (spec && typeof spec.raw === 'string') {
     try { spec = JSON.parse(spec.raw); } catch { /* fall through to the check below */ }

@@ -6,6 +6,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
+import { openPii } from './erasure.js';
 
 const STAGES = ['lead', 'qualified', 'proposal', 'won', 'lost'];
 
@@ -72,7 +73,7 @@ export function syncProposalDrafts() {
     const run = one('SELECT state, output FROM runs WHERE id = ?', d.draft_run_id);
     if (!run) { exec('UPDATE deals SET draft_run_id = NULL WHERE id = ?', d.id); continue; }
     if (run.state === 'done' || run.state === 'awaiting_human') {
-      const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+      const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
       if (parsed?.proposal) {
         exec('UPDATE deals SET proposal = ? WHERE id = ?', parsed.proposal, d.id);
         notify({ level: 'info', source: 'sales', message: `Proposal draft ready for deal "${d.name}" — review and send it yourself.`, subjectType: 'deal', subjectId: d.id });

@@ -17,6 +17,7 @@ import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { DIVISIONS, sectionCatalog } from './links.js';
+import { openPii } from './erasure.js';
 
 const lastId = () => one('SELECT last_insert_rowid() AS id').id;
 const J = (v, d = null) => { try { return JSON.parse(v); } catch { return d; } };
@@ -398,11 +399,11 @@ export async function syncChat() {
     }
     let parsed = null;
     try {
-      const o = JSON.parse(run.output || 'null');
+      const o = JSON.parse(openPii(run.output) || 'null');
       parsed = o?.parsed || (typeof o?.raw === 'string' ? JSON.parse(o.raw) : null);
     } catch { /* falls through to the raw text below */ }
     const text = clean(parsed?.text || parsed?.draft || parsed?.body)
-      || clean(String(run.output || '').slice(0, 600))
+      || clean(String(openPii(run.output) || '').slice(0, 600))
       || '(no answer)';
 
     let action = null;

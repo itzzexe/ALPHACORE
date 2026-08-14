@@ -18,6 +18,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
+import { openPii } from './erasure.js';
 
 export function raiseDispute({ title, partyA, positionA, partyB, positionB, subjectType = null, subjectId = null, context = null, actor }) {
   if (!title?.trim() || !partyA?.trim() || !partyB?.trim()) throw new Error('title and both parties required');
@@ -100,7 +101,7 @@ export function syncDisputes() {
   for (const d of q("SELECT * FROM disputes WHERE state = 'arbitrating' AND hr_run_id IS NOT NULL")) {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', d.hr_run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const p = run.output ? JSON.parse(run.output)?.parsed : null;
+    const p = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     if (p?.recommendation) {
       const reasoning = [
         p.whereTheyDisagree ? `Where they actually disagree: ${p.whereTheyDisagree}` : null,
@@ -127,7 +128,7 @@ export function ruleAutoDisputes() {
   for (const r of q(`SELECT * FROM runs WHERE state IN ('awaiting_human','done') AND output IS NOT NULL
                      AND agent_id IN ('AGT-REV-001','AGT-SEC-001') AND created_at >= datetime('now','-3 days') LIMIT 20`)) {
     let parsed;
-    try { parsed = JSON.parse(r.output)?.parsed; } catch { continue; }
+    try { parsed = JSON.parse(openPii(r.output))?.parsed; } catch { continue; }
     const blocking = parsed && (parsed.verdict === 'block' || parsed.verdict === 'request-changes');
     if (!blocking || seen(r.id)) continue;
     const author = one("SELECT agent_id FROM runs WHERE pipeline_id = ? AND agent_id IN ('AGT-ENG-001','AGT-ARC-001') ORDER BY created_at DESC LIMIT 1", r.pipeline_id)?.agent_id;

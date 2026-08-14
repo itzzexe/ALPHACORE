@@ -8,6 +8,7 @@ import { pipelinesConfig } from './env.js';
 import { audit } from './audit.js';
 import { enqueueRun } from './workflow.js';
 import { writeStepArtifact } from './artifacts.js';
+import { openPii } from './erasure.js';
 
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
@@ -68,7 +69,7 @@ export function createPipeline({ template, goal, productId = null, actor = 'huma
 function outputText(run) {
   if (!run?.output) return '';
   try {
-    const out = JSON.parse(run.output);
+    const out = JSON.parse(openPii(run.output));
     const body = out.parsed ? JSON.stringify(out.parsed, null, 2) : String(out.raw || '');
     return body.slice(0, 8000);
   } catch { return ''; }

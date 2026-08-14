@@ -19,6 +19,7 @@ import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { WS_ROOT } from './artifacts.js';
 import { archiveItem } from './data.js';
+import { openPii } from './erasure.js';
 
 const BP_ROOT = path.join(WS_ROOT, '_blueprints');
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'blueprint';
@@ -189,7 +190,7 @@ export function advanceBlueprints() {
       const run = writing.run_id ? one('SELECT state, output, cost_usd, failure_reason FROM runs WHERE id = ?', writing.run_id) : null;
       if (!run) { exec("UPDATE blueprint_docs SET state = 'pending' WHERE id = ?", writing.id); continue; }
       if (['queued', 'leased', 'running'].includes(run.state)) continue;
-      const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+      const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
       if (parsed?.markdown) {
         // A run held at the human gate — below its confidence floor, say —
         // still produced the document. Keep the text and route it to review

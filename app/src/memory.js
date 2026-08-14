@@ -25,6 +25,7 @@ import path from 'node:path';
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { ROOT } from './env.js';
+import { openPii } from './erasure.js';
 // workflow.js pulls recall() from here, so the run queue is loaded lazily
 // inside startReflection rather than creating an import cycle at module load.
 
@@ -197,7 +198,7 @@ export function captureEpisode(run) {
   let input = {}; let output = null;
   try { input = JSON.parse(run.input || '{}'); } catch { /* keep going */ }
   try {
-    const o = JSON.parse(run.output || 'null');
+    const o = JSON.parse(openPii(run.output) || 'null');
     output = o?.parsed || o;
     if (output && typeof output.raw === 'string') output = { text: output.raw };
   } catch { /* keep going */ }
@@ -279,7 +280,7 @@ export function syncReflections() {
     }
     let parsed = null;
     try {
-      const o = JSON.parse(run.output || 'null');
+      const o = JSON.parse(openPii(run.output) || 'null');
       parsed = o?.parsed || (typeof o?.raw === 'string' ? JSON.parse(o.raw) : null);
     } catch { /* handled below */ }
     const lessons = Array.isArray(parsed?.lessons) ? parsed.lessons.filter((l) => typeof l === 'string' && l.trim()) : [];

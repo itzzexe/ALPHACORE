@@ -11,6 +11,7 @@ import { companyName } from './settings.js';
 import { route, parseAgentJson, RouterExhausted, BudgetExceeded } from './router.js';
 import { personaPrompt } from './org.js';
 import { recall, captureEpisode } from './memory.js';
+import { sealPii, sealForRef, openPii, refFor } from './erasure.js';
 import { promptVersion } from './canary.js';
 
 const MAX_ATTEMPTS = 3;
@@ -54,14 +55,29 @@ export function getAgentSpec(agentId) {
   };
 }
 
-export function enqueueRun({ agentId, taskType, input, decisionId = null, parentRunId = null, pipelineId = null, actor = 'human:admin' }) {
+/**
+ * Queue work for an employee.
+ *
+ * `subject` names the person the work is about, when there is one. A support
+ * ticket's drafting prompt is a verbatim copy of what somebody wrote in, so
+ * sealing the ticket and leaving the prompt beside it in plaintext would have
+ * moved the leak one table to the left rather than closing it — which is
+ * exactly what the raw-bytes test found. Naming the subject seals the prompt
+ * under their key and puts their reference on the run, so the answer can be
+ * sealed too and an erasure can find both.
+ */
+export function enqueueRun({ agentId, taskType, input, decisionId = null, parentRunId = null, pipelineId = null, subject = null, actor = 'human:admin' }) {
   const spec = getAgentSpec(agentId);
   if (!spec) throw new Error(`unknown agent ${agentId}`);
   if (spec.status !== 'active') throw new Error(`agent ${agentId} is ${spec.status}`);
   const id = uuid();
+  const ref = subject ? refFor('contact', subject) : null;
+  const payload = subject
+    ? sealPii(JSON.stringify(input), { kind: 'contact', identifier: subject })
+    : JSON.stringify(input);
   exec(
-    'INSERT INTO runs (id, agent_id, parent_run_id, decision_id, task_type, input, pipeline_id) VALUES (?,?,?,?,?,?,?)',
-    id, agentId, parentRunId, decisionId, taskType, JSON.stringify(input), pipelineId,
+    'INSERT INTO runs (id, agent_id, parent_run_id, decision_id, task_type, input, pipeline_id, subject_ref) VALUES (?,?,?,?,?,?,?,?)',
+    id, agentId, parentRunId, decisionId, taskType, payload, pipelineId, ref,
   );
   audit({ actorType: actor.startsWith('human') ? 'human' : 'system', actorId: actor, action: 'run.enqueued', subjectType: 'run', subjectId: id, payload: { agentId, taskType } });
   return id;
@@ -71,7 +87,14 @@ function setState(runId, state, extra = {}) {
   const sets = ['state = ?'];
   const vals = [state];
   if (extra.failureReason !== undefined) { sets.push('failure_reason = ?'); vals.push(extra.failureReason); }
-  if (extra.output !== undefined) { sets.push('output = ?'); vals.push(JSON.stringify(extra.output)); }
+  if (extra.output !== undefined) {
+    // What was written back about a person is as much theirs as what they
+    // wrote. The reference is already on the row, so this seals under a key we
+    // hold rather than keeping their address in memory for the round trip.
+    const ref = one('SELECT subject_ref FROM runs WHERE id = ?', runId)?.subject_ref;
+    sets.push('output = ?');
+    vals.push(ref ? sealForRef(JSON.stringify(extra.output), ref) : JSON.stringify(extra.output));
+  }
   if (extra.flags !== undefined) { sets.push('flags = ?'); vals.push(JSON.stringify(extra.flags)); }
   // Recorded on every terminal state, not only success: a run that stopped at
   // the gate is exactly the one somebody will want to reproduce.
@@ -119,7 +142,10 @@ function declinedReason(text) {
 /** Execute one leased run end-to-end. */
 export async function executeRun(run) {
   const spec = getAgentSpec(run.agent_id);
-  const input = run.input ? JSON.parse(run.input) : {};
+  // Opened here, at the moment the work is done, and never written back. The
+  // threat model is explicit that this process can read what it sealed; the
+  // point is that the disk cannot.
+  const input = run.input ? JSON.parse(openPii(run.input)) : {};
   setState(run.id, 'running');
   audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.started', subjectType: 'run', subjectId: run.id });
 

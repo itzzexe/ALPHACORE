@@ -16,6 +16,7 @@ import { enqueueRun } from './workflow.js';
 import { WS_ROOT } from './artifacts.js';
 import { archiveItem } from './data.js';
 import { budgetsConfig } from './env.js';
+import { openPii } from './erasure.js';
 
 const FIN_DIR = path.join(WS_ROOT, '_finance');
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44) || 'report';
@@ -143,7 +144,7 @@ export function syncFinReports() {
   for (const r of q("SELECT * FROM fin_reports WHERE state = 'drafting' AND run_id IS NOT NULL")) {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', r.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     if (parsed?.markdown) {
       // Financial work held at the gate (low self-reported confidence, say) is
       // still the analysis. Publish it for review with that caveat attached

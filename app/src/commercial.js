@@ -8,6 +8,7 @@ import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { archiveItem } from './data.js';
+import { openPii } from './erasure.js';
 
 // ---------- Marketing ----------
 export function createCampaign({ name, channel = 'landing', productId = null, budgetUsd = 0, brief, actor }) {
@@ -45,7 +46,7 @@ export function syncCampaignDrafts() {
     const run = one('SELECT * FROM runs WHERE id = ?', c.draft_run_id);
     if (!run) continue;
     if (run.state === 'done' || run.state === 'awaiting_human') {
-      const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+      const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
       exec("UPDATE campaigns SET state = 'pending_approval', draft = ? WHERE id = ?", parsed?.draft || '(draft unusable — human writes copy)', c.id);
     } else if (['failed', 'cancelled'].includes(run.state)) {
       exec("UPDATE campaigns SET state = 'pending_approval', draft = '(drafting failed — human writes copy)' WHERE id = ?", c.id);

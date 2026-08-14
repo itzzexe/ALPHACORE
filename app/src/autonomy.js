@@ -44,6 +44,7 @@ import { setRiskState } from './pm.js';
 import { setContractState } from './corporate.js';
 import { decideDecision } from './registry.js';
 import { advanceGate } from './products.js';
+import { openPii } from './erasure.js';
 
 const ACTOR = 'system:autonomy';
 const MAX_PER_CYCLE = 12;
@@ -315,7 +316,7 @@ export async function autonomyTick() {
   for (const pendingRun of q("SELECT DISTINCT run_id AS id FROM autonomy_log WHERE verdict = 'pending' AND run_id IS NOT NULL")) {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', pendingRun.id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     const rows = q("SELECT * FROM autonomy_log WHERE run_id = ? AND verdict = 'pending'", pendingRun.id);
     const byRef = Object.fromEntries((parsed?.decisions || []).map((d) => [String(d.ref), d]));
 

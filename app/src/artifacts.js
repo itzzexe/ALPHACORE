@@ -11,6 +11,7 @@ import path from 'node:path';
 import { ROOT } from './env.js';
 import { one } from './db.js';
 import { audit } from './audit.js';
+import { openPii } from './erasure.js';
 
 export const WS_ROOT = path.join(ROOT, 'workspace');
 
@@ -50,7 +51,7 @@ export function applyRunFiles(runId, actor) {
   const run = one('SELECT * FROM runs WHERE id = ?', runId);
   if (!run) throw new Error('run not found');
   if (run.state !== 'done') throw new Error(`run is ${run.state}; only done runs can be applied`);
-  const output = run.output ? JSON.parse(run.output) : null;
+  const output = run.output ? JSON.parse(openPii(run.output)) : null;
   const files = output?.parsed?.files;
   if (!Array.isArray(files) || !files.length) throw new Error('run output has no files[]');
 

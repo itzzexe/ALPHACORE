@@ -19,6 +19,7 @@ import { audit } from './audit.js';
 import { enqueueRun } from './workflow.js';
 import { callConnector } from './connectors/index.js';
 import { enqueue } from './jobs.js';
+import { openPii } from './erasure.js';
 
 const STAGES = ['sourced', 'contacted', 'replied', 'meeting', 'proposal', 'agreed', 'invoiced', 'paid', 'delivering', 'delivered'];
 
@@ -138,7 +139,7 @@ export async function sendOutreach({ dealId, connector = 'gmail', to, agentId = 
   if (!run?.output) throw new Error('there is no approach written for this deal yet');
   let draft;
   try {
-    const out = JSON.parse(run.output);
+    const out = JSON.parse(openPii(run.output));
     draft = out.parsed || out;
     if (typeof draft === 'string') draft = JSON.parse(draft);
   } catch { throw new Error('the drafted approach could not be read'); }

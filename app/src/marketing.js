@@ -14,6 +14,7 @@ import { audit } from './audit.js';
 import { companyName } from './settings.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
+import { openPii } from './erasure.js';
 
 const lastId = () => one('SELECT last_insert_rowid() AS id').id;
 const clean = (s) => String(s || '').trim();
@@ -75,7 +76,7 @@ const runText = (runId) => {
   const r = one('SELECT state, output FROM runs WHERE id = ?', runId);
   if (r?.state !== 'done' || !r.output) return null;
   try {
-    const o = JSON.parse(r.output);
+    const o = JSON.parse(openPii(r.output));
     const p = o?.parsed || (typeof o?.raw === 'string' ? JSON.parse(o.raw) : null);
     return p || { text: String(o?.raw || '').slice(0, 4000) };
   } catch { return null; }

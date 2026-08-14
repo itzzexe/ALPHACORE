@@ -17,11 +17,25 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
+import { sealPii, openPii, openDeep, refFor } from './erasure.js';
 import { getSecret, getSetting, companyName } from './settings.js';
 
 const lastId = () => one('SELECT last_insert_rowid() AS id').id;
 const clean = (s) => String(s || '').trim();
 const E164 = /^\+[1-9]\d{6,15}$/;
+
+/**
+ * Whose call or message is this?
+ *
+ * One of the two numbers on the row is ours and one belongs to a person, and
+ * which is which is decided entirely by direction. Sealing under the company's
+ * own line would put every customer's transcript behind one shared key — the
+ * exact failure that makes per-subject shredding worthless.
+ */
+const counterparty = (row) => clean(row.direction === 'in' ? row.from_number : row.to_number);
+
+/** A transcript, a recording or a body, sealed under the person on the other end. */
+const sealFor = (row, value) => sealPii(value, { kind: 'contact', identifier: counterparty(row) });
 
 /** The voice roster. Names map to real carrier voices; Arabic included. */
 export const VOICES = {
@@ -114,11 +128,14 @@ Language: ${language === 'ar' ? 'Arabic' : language}
 It will be spoken aloud by a synthetic voice, so: short sentences, no bullet points, no markdown, under 90 words, and open by saying who is calling and why. End with one clear question.
 Reply as JSON {"text": "<the spoken script>"}.`,
     },
+    // The prompt names the person and quotes their notes, so it is sealed
+    // under the same key as the call it belongs to.
+    subject: to,
     actor,
   }) : null;
-  exec(`INSERT INTO calls (direction, from_number, to_number, customer_id, agent_id, voice, language, purpose, state, run_id, created_by)
-        VALUES ('out',?,?,?,?,?,?,?, 'drafting', ?, ?)`,
-    from.number, to, customerId, worker, voice, language, clean(purpose), runId, actor);
+  exec(`INSERT INTO calls (direction, from_number, to_number, customer_id, agent_id, voice, language, purpose, state, run_id, created_by, subject_ref)
+        VALUES ('out',?,?,?,?,?,?,?, 'drafting', ?, ?, ?)`,
+    from.number, to, customerId, worker, voice, language, clean(purpose), runId, actor, refFor('contact', to));
   const id = lastId();
   audit({ actorType: actor.startsWith('human') ? 'human' : 'agent', actorId: actor, action: 'call.scheduled', subjectType: 'call', subjectId: id, payload: { to, voice, purpose } });
   return id;
@@ -132,7 +149,8 @@ export async function placeCall(id, { actor }) {
   if (c.state === 'live' || c.state === 'completed') throw new Error('that call already went out');
   if (isSimulated()) {
     exec("UPDATE calls SET state='completed', outcome='reached', duration_s=?, transcript=?, ended_at=datetime('now') WHERE id = ?",
-      30 + (id % 45), `[simulated] ${c.script}\n\n[the other side answered and the conversation was recorded]`, id);
+      30 + (id % 45),
+      sealFor(c, `[simulated] ${c.script}\n\n[the other side answered and the conversation was recorded]`), id);
     audit({ actorType: 'system', actorId: 'comms', action: 'call.simulated', subjectType: 'call', subjectId: id, payload: { to: c.to_number } });
     notify({ level: 'info', source: 'comms', message: `Simulated call to ${c.to_number} completed — add Twilio credentials in Settings to place it for real.`, subjectType: 'call', subjectId: id });
     return { simulated: true };
@@ -174,14 +192,17 @@ export function sendMessage({ toNumber, body, channel = 'sms', customerId = null
       agentId: draftWith,
       taskType: `sms:${to}`,
       input: { prompt: `Write one short ${channel.toUpperCase()} message to ${cust?.name || to}. Under 300 characters, plain text, no markdown, no emoji unless it genuinely helps. Reply as JSON {"text": "<the message>"}.` },
+      subject: to,
       actor,
     });
     text = '…';
     state = 'drafting';
   }
-  exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, customer_id, agent_id, body, state, thread_key, run_id, created_by)
-        VALUES ('out',?,?,?,?,?,?,?,?,?,?)`,
-    channel, from.number, to, customerId, draftWith, text, state, threadKey(from.number, to), runId, actor);
+  exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, customer_id, agent_id, body, state, thread_key, run_id, created_by, subject_ref)
+        VALUES ('out',?,?,?,?,?,?,?,?,?,?,?)`,
+    channel, from.number, to, customerId, draftWith,
+    sealPii(text, { kind: 'contact', identifier: to }), state,
+    threadKey(from.number, to), runId, actor, refFor('contact', to));
   const id = lastId();
   audit({ actorType: actor.startsWith('human') ? 'human' : 'agent', actorId: actor, action: 'sms.queued', subjectType: 'sms', subjectId: id, payload: { to, channel, drafted: Boolean(runId) } });
   return id;
@@ -198,7 +219,10 @@ export async function deliverMessage(id, { actor }) {
     return { simulated: true };
   }
   const prefix = m.channel === 'whatsapp' ? 'whatsapp:' : '';
-  const res = await twilio('Messages.json', { To: prefix + m.to_number, From: prefix + m.from_number, Body: m.body });
+  // The carrier needs the words, not the ciphertext. This is the boundary the
+  // threat model draws: the live process can read what it wrote, and that is
+  // precisely what it cannot protect against.
+  const res = await twilio('Messages.json', { To: prefix + m.to_number, From: prefix + m.from_number, Body: openPii(m.body) });
   exec("UPDATE sms_messages SET state='sent', provider_sid=? WHERE id = ?", res.sid, id);
   audit({ actorType: 'human', actorId: actor, action: 'sms.sent', subjectType: 'sms', subjectId: id, payload: { to: m.to_number, sid: res.sid } });
   return { sid: res.sid };
@@ -217,25 +241,33 @@ function matchCustomer(number) {
 /** A message arrived on the company number. */
 export function receiveMessage({ from, to, body, channel = 'sms', sid = null }) {
   const cust = matchCustomer(from);
-  exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, customer_id, body, state, thread_key, provider_sid, created_by)
-        VALUES ('in',?,?,?,?,?, 'received', ?, ?, 'inbound')`,
-    channel, clean(from), clean(to), cust?.id || null, clean(body), threadKey(from, to), sid);
+  exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, customer_id, body, state, thread_key, provider_sid, created_by, subject_ref)
+        VALUES ('in',?,?,?,?,?, 'received', ?, ?, 'inbound', ?)`,
+    channel, clean(from), clean(to), cust?.id || null,
+    sealPii(clean(body), { kind: 'contact', identifier: clean(from) }),
+    threadKey(from, to), sid, refFor('contact', clean(from)));
   const id = lastId();
   audit({ actorType: 'system', actorId: 'comms', action: 'sms.received', subjectType: 'sms', subjectId: id, payload: { from: clean(from), channel } });
-  notify({ level: 'info', source: 'comms', message: `Message from ${clean(from)}: ${clean(body).slice(0, 90)}`, subjectType: 'sms', subjectId: id });
+  // The message body used to be quoted here. A notification is a row in a table
+  // the erasure walk does not reach, so quoting it copied sealed content back
+  // out into plaintext and put it beyond deletion — sealing the thread and then
+  // announcing its first ninety characters would have been theatre.
+  notify({ level: 'info', source: 'comms', message: `Message from ${clean(from)} — open the thread to read it.`, subjectType: 'sms', subjectId: id });
   // An inbound message is answered by an employee, not left to rot in a queue.
   const worker = one("SELECT id FROM agents WHERE status='active' AND role_group='run' ORDER BY id LIMIT 1")?.id;
   if (worker) {
     const history = q('SELECT direction, body FROM sms_messages WHERE thread_key = ? ORDER BY id DESC LIMIT 6', threadKey(from, to))
-      .reverse().map((x) => `${x.direction === 'in' ? 'them' : 'us'}: ${x.body}`).join('\n');
+      .reverse().map((x) => `${x.direction === 'in' ? 'them' : 'us'}: ${openPii(x.body)}`).join('\n');
     const runId = enqueueRun({
       agentId: worker, taskType: `sms-reply:${id}`,
       input: { prompt: `Reply to this ${channel.toUpperCase()} conversation. Under 300 characters, plain text, same language they used.\n\n${history}\n\nReply as JSON {"text": "<the reply>"}.` },
+      subject: clean(from),
       actor: 'system:comms',
     });
-    exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, customer_id, agent_id, body, state, thread_key, run_id, created_by)
-          VALUES ('out',?,?,?,?,?, '…', 'drafting', ?, ?, 'system:comms')`,
-      channel, clean(to), clean(from), cust?.id || null, worker, threadKey(from, to), runId);
+    exec(`INSERT INTO sms_messages (direction, channel, from_number, to_number, customer_id, agent_id, body, state, thread_key, run_id, created_by, subject_ref)
+          VALUES ('out',?,?,?,?,?, '…', 'drafting', ?, ?, 'system:comms', ?)`,
+      channel, clean(to), clean(from), cust?.id || null, worker, threadKey(from, to), runId,
+      refFor('contact', clean(from)));
   }
   return id;
 }
@@ -244,9 +276,10 @@ export function receiveMessage({ from, to, body, channel = 'sms', sid = null }) 
 export function receiveCall({ from, to, sid = null }) {
   const cust = matchCustomer(from);
   const voice = String(clean(from)).startsWith('+964') ? 'hala' : 'ava';
-  exec(`INSERT INTO calls (direction, from_number, to_number, customer_id, voice, language, purpose, state, provider_sid, created_by)
-        VALUES ('in',?,?,?,?,?, 'inbound call', 'live', ?, 'inbound')`,
-    clean(from), clean(to), cust?.id || null, voice, voice === 'hala' ? 'ar' : 'en', sid);
+  exec(`INSERT INTO calls (direction, from_number, to_number, customer_id, voice, language, purpose, state, provider_sid, created_by, subject_ref)
+        VALUES ('in',?,?,?,?,?, 'inbound call', 'live', ?, 'inbound', ?)`,
+    clean(from), clean(to), cust?.id || null, voice, voice === 'hala' ? 'ar' : 'en', sid,
+    refFor('contact', clean(from)));
   const id = lastId();
   audit({ actorType: 'system', actorId: 'comms', action: 'call.received', subjectType: 'call', subjectId: id, payload: { from: clean(from) } });
   notify({ level: 'warn', source: 'comms', message: `Incoming call from ${clean(from)}${cust ? ` (${cust.name})` : ''}.`, subjectType: 'call', subjectId: id });
@@ -267,7 +300,7 @@ export async function commsTick() {
     const r = one('SELECT state, output FROM runs WHERE id = ?', runId);
     if (r?.state !== 'done' || !r.output) return null;
     try {
-      const o = JSON.parse(r.output);
+      const o = JSON.parse(openPii(r.output));
       const p = o?.parsed || (typeof o?.raw === 'string' ? JSON.parse(o.raw) : null);
       return clean(p?.text || p?.draft || p?.body) || null;
     } catch { return null; }
@@ -276,24 +309,27 @@ export async function commsTick() {
     const t = text(c.run_id);
     if (t) exec("UPDATE calls SET script = ?, state = 'queued' WHERE id = ?", t, c.id);
   }
-  for (const m of q("SELECT id, run_id FROM sms_messages WHERE state = 'drafting' AND run_id IS NOT NULL")) {
+  for (const m of q("SELECT id, run_id, direction, from_number, to_number FROM sms_messages WHERE state = 'drafting' AND run_id IS NOT NULL")) {
     const t = text(m.run_id);
-    if (t) exec("UPDATE sms_messages SET body = ?, state = 'queued' WHERE id = ?", t, m.id);
+    if (t) exec("UPDATE sms_messages SET body = ?, state = 'queued' WHERE id = ?", sealFor(m, t), m.id);
   }
 }
 
 // ---------- the view ----------
 export function commsOverview() {
+  // Opened on the way out, not on the way in. The route that reaches this
+  // function is permission-checked; the database it read from is not, and that
+  // asymmetry is the entire point of sealing at write.
   const threads = q(`SELECT thread_key, MAX(id) AS last_id, COUNT(*) AS n FROM sms_messages GROUP BY thread_key ORDER BY last_id DESC LIMIT 20`)
     .map((t) => ({
       key: t.thread_key, count: t.n,
-      messages: q('SELECT * FROM sms_messages WHERE thread_key = ? ORDER BY id DESC LIMIT 12', t.thread_key).reverse(),
+      messages: openDeep(q('SELECT * FROM sms_messages WHERE thread_key = ? ORDER BY id DESC LIMIT 12', t.thread_key).reverse()),
     }));
   return {
     mode: isSimulated() ? 'simulated' : 'live',
     numbers: q("SELECT * FROM phone_numbers WHERE state = 'active' ORDER BY id"),
     voices: Object.entries(VOICES).map(([id, v]) => ({ id, ...v })),
-    calls: q('SELECT * FROM calls ORDER BY id DESC LIMIT 40'),
+    calls: openDeep(q('SELECT * FROM calls ORDER BY id DESC LIMIT 40')),
     threads,
     stats: {
       callsOut: one("SELECT COUNT(*) AS n FROM calls WHERE direction = 'out'").n,

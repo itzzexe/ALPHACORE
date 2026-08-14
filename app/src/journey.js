@@ -10,6 +10,7 @@ import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { archiveItem } from './data.js';
+import { openPii } from './erasure.js';
 
 export const JOURNEY_STAGES = [
   { dept: 'strategy',     title: 'Strategy alignment — OKR fit, named sponsor', mode: 'human', link: '#/objectives' },
@@ -138,7 +139,7 @@ Do this stage's work for the journey goal above. Follow your role's output contr
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', s.run_id);
     if (!run) continue;
     if (run.state === 'done') {
-      const out = run.output ? JSON.parse(run.output) : {};
+      const out = run.output ? JSON.parse(openPii(run.output)) : {};
       const p = out.parsed || {};
       const summary = p.summary || p.artifact || p.verdict || p.draft || p.report?.[0]?.criterion || out.text?.slice(0, 300) || 'done';
       exec("UPDATE journey_stages SET state = 'done', summary = ?, ended_at = datetime('now') WHERE id = ?", String(summary).slice(0, 500), s.id);

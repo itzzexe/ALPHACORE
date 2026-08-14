@@ -18,6 +18,15 @@ export const db = new DatabaseSync(DB_FILE);
 
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
+// Overwritten and deleted content is zeroed rather than just marked free.
+//
+// Without this, sealing a personal-data column leaves the plaintext sitting on
+// the freed page: invisible to every SELECT, and perfectly readable to anybody
+// who runs `strings` over the file. Since the whole point of sealing is to
+// protect a stolen disk, a design that leaves the cleartext on that disk is not
+// a small gap — it is the gap. Costs a little write throughput; buys the thing
+// the encryption was for.
+try { db.exec('PRAGMA secure_delete = ON;'); } catch { /* older SQLite: the backfill vacuums instead */ }
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS agents (
@@ -2921,7 +2930,48 @@ for (const sql of [
   'ALTER TABLE partners ADD COLUMN integration TEXT',
   'ALTER TABLE partners ADD COLUMN agreement_ref TEXT',
   'ALTER TABLE partners ADD COLUMN reviewed_at TEXT',
+
+  // Personal data at rest. Two tiers, and the inventory is where the judgement
+  // is recorded with a name against it: 'A' is sealed at write under the
+  // person's own key, 'B' is plaintext by design because the company has to
+  // match on it. NULL means nobody has ruled on this column yet, which is the
+  // correct state for one that arrived last week.
+  'ALTER TABLE data_inventory ADD COLUMN tier TEXT',
+  'ALTER TABLE data_inventory ADD COLUMN sealed_at_write INTEGER NOT NULL DEFAULT 0',
+
+  // A person on file needs a reference that is not their name. The customers
+  // table stores no identifier by design, which is the right instinct and
+  // leaves nothing to seal *under* — so the one-way reference erasure already
+  // derives is stored here at write, and only that.
+  'ALTER TABLE customers ADD COLUMN subject_ref TEXT',
+  // Same for an intelligence contact, where it does a second job: two sightings
+  // of the same person can no longer be matched on a sealed email, so they are
+  // matched on the reference derived from it instead.
+  'ALTER TABLE intel_contacts ADD COLUMN subject_ref TEXT',
+  'ALTER TABLE intel_records ADD COLUMN subject_ref TEXT',
+  'ALTER TABLE tickets ADD COLUMN subject_ref TEXT',
+  'ALTER TABLE calls ADD COLUMN subject_ref TEXT',
+  'ALTER TABLE sms_messages ADD COLUMN subject_ref TEXT',
+  // The provenance trail an enrichment run leaves: about a person, containing
+  // their address, and never equal to it — so it is reached by reference.
+  'ALTER TABLE intel_evidence ADD COLUMN subject_ref TEXT',
+  // A run about a person carries their reference, so its prompt and its answer
+  // are sealed under the same key as the row that caused it.
+  'ALTER TABLE runs ADD COLUMN subject_ref TEXT',
 ]) { try { db.exec(sql); } catch { /* column exists */ } }
+
+// Finding everything held about one person is a scan today. These make it a
+// lookup, and the backfill below leans on them heavily.
+for (const sql of [
+  'CREATE INDEX IF NOT EXISTS customers_subject ON customers (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS intel_contacts_subject ON intel_contacts (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS intel_records_subject ON intel_records (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS tickets_subject ON tickets (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS calls_subject ON calls (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS sms_messages_subject ON sms_messages (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS intel_evidence_subject ON intel_evidence (subject_ref)',
+  'CREATE INDEX IF NOT EXISTS runs_subject ON runs (subject_ref)',
+]) { try { db.exec(sql); } catch { /* index exists */ } }
 
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }

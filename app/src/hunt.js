@@ -34,6 +34,7 @@ import { search as memorySearch } from './memory.js';
 import { semanticSearch, neighbourhood } from './graph.js';
 import { searchWeb, fetchPage, scanForInjection } from './web.js';
 import { getSetting } from './settings.js';
+import { TIER_A } from './erasure.js';
 import { notify } from './notify.js';
 
 // ------------------------------------------------------------- the sources --
@@ -52,7 +53,22 @@ const NEVER_READ = new Set([
 ]);
 // Columns that hold ciphertext, hashes or keys: matching on them is noise at
 // best and a leak at worst.
-const NEVER_COLUMN = /(^|_)(secret|password|token|key|hash|ciphertext|iv|tag|salt|signature|private)(_|$)/i;
+const NEVER_COLUMN = /(^|_)(secret|password|token|key|hash|ciphertext|iv|tag|salt|signature|private|subject_ref)(_|$)/i;
+
+/**
+ * Sealed columns are excluded by name, not by inspecting their contents.
+ *
+ * `LIKE '%alice%'` against ciphertext returns nothing, so leaving these in
+ * would look harmless — right up until one row happens to contain the search
+ * term as a base64 fragment and gets returned with a snippet of somebody
+ * else's encrypted transcript as the reason. The rule the search has always
+ * followed is that no column holding a hash, a token or ciphertext may be the
+ * reason a row came back, and a sealed column is ciphertext.
+ *
+ * Read from the tiering rather than a second list: adding a Tier A column
+ * removes it from search in the same commit that starts sealing it.
+ */
+const SEALED_COLUMNS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));
 
 let tableCache = null;
 function searchableTables() {
@@ -64,7 +80,9 @@ function searchableTables() {
     let cols;
     try { cols = q(`PRAGMA table_info(${t})`); } catch { continue; }
     const text = cols
-      .filter((c) => /TEXT|CHAR|CLOB|BLOB|^$/i.test(c.type || '') && !NEVER_COLUMN.test(c.name))
+      .filter((c) => /TEXT|CHAR|CLOB|BLOB|^$/i.test(c.type || '')
+        && !NEVER_COLUMN.test(c.name)
+        && !SEALED_COLUMNS.has(`${t}.${c.name}`))
       .map((c) => c.name);
     if (text.length) tableCache.push({ table: t, columns: text, id: cols.find((c) => c.pk)?.name || 'rowid' });
   }

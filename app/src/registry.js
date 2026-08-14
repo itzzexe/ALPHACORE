@@ -3,6 +3,7 @@
 // human-only (Part 3 §4.1 note 2); expiry triggers reopen decisions.
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
+import { openPii } from './erasure.js';
 
 export function nextDecisionId() {
   const year = new Date().getFullYear();
@@ -48,7 +49,7 @@ export function getDecision(id) {
     dissent: d.dissent ? JSON.parse(d.dissent) : null,
     evidence: q('SELECT * FROM decision_evidence WHERE decision_id = ? ORDER BY id', id),
     rounds: q('SELECT * FROM tribunal_rounds WHERE decision_id = ? ORDER BY round, id', id)
-      .map((r) => ({ ...r, output: JSON.parse(r.output) })),
+      .map((r) => ({ ...r, output: JSON.parse(openPii(r.output)) })),
     approvals: q("SELECT * FROM approvals WHERE subject_type = 'decision' AND subject_id = ? ORDER BY id", id),
     related: {
       runs: q('SELECT id, agent_id, state, task_type, cost_usd FROM runs WHERE decision_id = ? ORDER BY created_at DESC LIMIT 20', id),

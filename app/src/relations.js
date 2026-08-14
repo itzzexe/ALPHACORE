@@ -8,6 +8,7 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
+import { openPii } from './erasure.js';
 
 const KINDS = ['partner', 'investor', 'government', 'media', 'community', 'strategic'];
 const TIERS = ['strategic', 'key', 'standard'];
@@ -126,7 +127,7 @@ export function syncOutreachDrafts() {
     const run = one('SELECT state, output FROM runs WHERE id = ?', p.draft_run_id);
     if (!run) { exec('UPDATE partners SET draft_run_id = NULL WHERE id = ?', p.id); continue; }
     if (run.state === 'done') {
-      const out = run.output ? JSON.parse(run.output) : {};
+      const out = run.output ? JSON.parse(openPii(run.output)) : {};
       const draft = out.parsed?.draft || out.parsed?.summary || null;
       if (draft) {
         exec('UPDATE partners SET draft = ? WHERE id = ?', draft, p.id);

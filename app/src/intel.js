@@ -29,6 +29,20 @@ import { WS_ROOT } from './artifacts.js';
 import { createCustomer } from './commercial.js';
 import { archiveItem } from './data.js';
 import { enrichFromWeb, discoverPeople, deepCrawl, inferEmailPattern, applyEmailPattern } from './enrich.js';
+import { openPii, sealPii, openDeep, refFor } from './erasure.js';
+
+/**
+ * Seal a contact identifier under itself.
+ *
+ * An email address is both the data and the person it identifies, so its own
+ * subject is itself. That is what makes an erasure request naming one address
+ * destroy exactly that address wherever an enrichment run put it, and leave the
+ * one beside it — belonging to somebody who did not ask — alone.
+ */
+const sealSelf = (v) => (v ? sealPii(v, { kind: 'contact', identifier: v }) : v);
+
+/** The stable reference for a sighting, from whichever channel we have. */
+const contactRef = (email, phone) => (email || phone ? refFor('contact', email || phone) : null);
 
 const INTEL_DIR = path.join(WS_ROOT, '_intel');
 const MAX_ROUNDS = 4;
@@ -53,10 +67,33 @@ function refreshScore(id) {
   exec('UPDATE intel_records SET completeness = ?, gaps = ? WHERE id = ?', completeness, JSON.stringify(gaps), id);
 }
 
-function evidence(recordId, field, value, method, sourceUrl = null, confidence = null) {
+/**
+ * Fields whose evidence value contains a way to reach a human being.
+ *
+ * Everything else an enrichment run records — a website, a sector, a city — is
+ * about an organization and stays readable, because the whole department exists
+ * to search on it.
+ */
+const CONTACT_EVIDENCE = /^(person-)?(email|phone|whatsapp|address)(-derived)?$/;
+
+/**
+ * One provenance row: what was found, where, and how sure we are.
+ *
+ * When the value carries a contact detail it is sealed under the person it
+ * reaches, and the row carries their reference so an erasure can find it. The
+ * value is never equal to the identifier — it reads `Ahmed Hassan: ahmed@acme.iq`
+ * — so a scan for the address would never have matched this row. That is the
+ * failure this reference exists to prevent.
+ */
+function evidence(recordId, field, value, method, sourceUrl = null, confidence = null, subject = null) {
   if (!value) return;
-  exec('INSERT INTO intel_evidence (record_id, field, value, method, source_url, confidence) VALUES (?,?,?,?,?,?)',
-    recordId, field, String(value).slice(0, 400), method, sourceUrl, confidence);
+  const text = String(value).slice(0, 400);
+  const personal = CONTACT_EVIDENCE.test(String(field)) && subject;
+  exec('INSERT INTO intel_evidence (record_id, field, value, method, source_url, confidence, subject_ref) VALUES (?,?,?,?,?,?,?)',
+    recordId, field,
+    personal ? sealPii(text, { kind: 'contact', identifier: subject }) : text,
+    method, sourceUrl, confidence,
+    personal ? refFor('contact', subject) : null);
 }
 
 // ---------- rules: conditional escalation ----------
@@ -224,15 +261,25 @@ export function getIntelQuery(id) {
   };
 }
 
+/**
+ * Every intel read comes through here, which is why the opening happens here
+ * and nowhere else.
+ *
+ * `openDeep` walks the whole shape and turns sealed values back into text; it
+ * leaves everything else exactly as it found it, so the counts above
+ * (`withEmail`, `withPhone`) keep working — a sealed column is still not null,
+ * and "does this record have an address at all" was never a question that
+ * needed to read the address.
+ */
 function hydrate(r) {
-  return {
+  return openDeep({
     ...r,
     gaps: r.gaps ? JSON.parse(r.gaps) : [],
     rulesLog: r.rules_log ? JSON.parse(r.rules_log) : [],
     social: r.social ? JSON.parse(r.social) : null,
     contacts: q('SELECT * FROM intel_contacts WHERE record_id = ? ORDER BY confidence DESC LIMIT 10', r.id),
     evidence: q('SELECT field, value, method, source_url, confidence FROM intel_evidence WHERE record_id = ? ORDER BY id DESC LIMIT 20', r.id),
-  };
+  });
 }
 
 export function listIntelQueries() {
@@ -326,24 +373,28 @@ async function enrichPending() {
               source = 'web-scrape',
               enrichment = 'enriched', enriched_at = datetime('now')
             WHERE id = ?`,
-        res.sourceUrl, res.domain, email, email2, phone, phone2,
-        res.whatsapp?.value || null, res.address?.value || null,
+        res.sourceUrl, res.domain, sealSelf(email), sealSelf(email2), sealSelf(phone), sealSelf(phone2),
+        sealSelf(res.whatsapp?.value || null), sealSelf(res.address?.value || null),
         res.social.linkedin || null,
         Object.keys(res.social).length ? JSON.stringify(res.social) : null,
         res.profile?.value || null, r.id);
+      // The record now points at whoever it is reachable through, so an
+      // erasure naming that address finds this row by lookup.
+      const recRef = contactRef(email, phone);
+      if (recRef) exec('UPDATE intel_records SET subject_ref = COALESCE(subject_ref, ?) WHERE id = ?', recRef, r.id);
 
       for (const e of res.emails) {
-        evidence(r.id, 'email', e.value, 'web-scrape', e.sourceUrl, e.confidence);
-        exec('INSERT OR IGNORE INTO intel_contacts (record_id, email, method, source_url, confidence) VALUES (?,?,?,?,?)',
-          r.id, e.value, 'web-scrape', e.sourceUrl, e.confidence);
+        evidence(r.id, 'email', e.value, 'web-scrape', e.sourceUrl, e.confidence, e.value);
+        exec('INSERT OR IGNORE INTO intel_contacts (record_id, email, method, source_url, confidence, subject_ref) VALUES (?,?,?,?,?,?)',
+          r.id, sealSelf(e.value), 'web-scrape', e.sourceUrl, e.confidence, contactRef(e.value, null));
       }
       for (const p of res.phones) {
-        evidence(r.id, 'phone', p.value, 'web-scrape', p.sourceUrl, p.confidence);
-        exec('INSERT OR IGNORE INTO intel_contacts (record_id, phone, method, source_url, confidence) VALUES (?,?,?,?,?)',
-          r.id, p.value, 'web-scrape', p.sourceUrl, p.confidence);
+        evidence(r.id, 'phone', p.value, 'web-scrape', p.sourceUrl, p.confidence, p.value);
+        exec('INSERT OR IGNORE INTO intel_contacts (record_id, phone, method, source_url, confidence, subject_ref) VALUES (?,?,?,?,?,?)',
+          r.id, sealSelf(p.value), 'web-scrape', p.sourceUrl, p.confidence, contactRef(null, p.value));
       }
-      if (res.address) evidence(r.id, 'address', res.address.value, 'web-scrape', res.address.sourceUrl, 0.7);
-      if (res.whatsapp) evidence(r.id, 'whatsapp', res.whatsapp.value, 'web-scrape', res.whatsapp.sourceUrl, 0.8);
+      if (res.address) evidence(r.id, 'address', res.address.value, 'web-scrape', res.address.sourceUrl, 0.7, res.address.value);
+      if (res.whatsapp) evidence(r.id, 'whatsapp', res.whatsapp.value, 'web-scrape', res.whatsapp.sourceUrl, 0.8, res.whatsapp.value);
       for (const [k, v] of Object.entries(res.social)) evidence(r.id, `social:${k}`, v, 'web-scrape', res.sourceUrl, 0.8);
       refreshScore(r.id);
       audit({ actorType: 'system', actorId: 'system:intel', action: 'intel.record_enriched', subjectType: 'intelRecord', subjectId: r.id, payload: { domain: res.domain, emails: res.emails.length, phones: res.phones.length, pages: res.pages.length } });
@@ -359,21 +410,31 @@ let rulesInFlight = false;
 // both insert. Match explicitly instead — by name, or by any shared channel.
 function addContact({ recordId, name = null, role = null, email = null, phone = null, method, sourceUrl = null, confidence = null, note = null }) {
   if (!name && !email && !phone) return false;
+  // Two sightings of the same person can no longer be matched on the address
+  // itself — a sealed value is different bytes every time it is written, which
+  // is what makes it worth sealing. They are matched on the one-way reference
+  // derived from it instead: same input, same reference, and nothing readable.
+  const refs = [email, phone].filter(Boolean).map((v) => refFor('contact', v));
   const existing = name
     ? one('SELECT * FROM intel_contacts WHERE record_id = ? AND name IS NOT NULL AND lower(trim(name)) = lower(trim(?))', recordId, name)
-    : one('SELECT * FROM intel_contacts WHERE record_id = ? AND ((email IS NOT NULL AND email = ?) OR (phone IS NOT NULL AND phone = ?))', recordId, email, phone);
+    : (refs.length
+      ? one(`SELECT * FROM intel_contacts WHERE record_id = ? AND subject_ref IN (${refs.map(() => '?').join(',')})`, recordId, ...refs)
+      : null);
   if (existing) {
     // Fill blanks from the new sighting; a web-scraped fact outranks a guess.
     const better = existing.method !== 'web-scrape' && method === 'web-scrape';
     exec(`UPDATE intel_contacts SET role = COALESCE(role, ?), email = COALESCE(email, ?), phone = COALESCE(phone, ?),
           method = CASE WHEN ? THEN ? ELSE method END,
-          source_url = COALESCE(source_url, ?), confidence = MAX(COALESCE(confidence,0), COALESCE(?,0))
+          source_url = COALESCE(source_url, ?), confidence = MAX(COALESCE(confidence,0), COALESCE(?,0)),
+          subject_ref = COALESCE(subject_ref, ?)
           WHERE id = ?`,
-      role, email, phone, better ? 1 : 0, method, sourceUrl, confidence, existing.id);
+    role, sealSelf(email), sealSelf(phone), better ? 1 : 0, method, sourceUrl, confidence,
+    contactRef(email, phone), existing.id);
     return false;
   }
-  exec('INSERT INTO intel_contacts (record_id, name, role, email, phone, method, source_url, confidence, note) VALUES (?,?,?,?,?,?,?,?,?)',
-    recordId, name, role, email, phone, method, sourceUrl, confidence, note);
+  exec('INSERT INTO intel_contacts (record_id, name, role, email, phone, method, source_url, confidence, note, subject_ref) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    recordId, name, role, sealSelf(email), sealSelf(phone), method, sourceUrl, confidence, note,
+    contactRef(email, phone));
   return true;
 }
 
@@ -414,21 +475,21 @@ async function applyRulesPass() {
             ? 'name read from the leadership page — confirm the exact title before using it'
             : null;
           if (addContact({ recordId: r.id, name: p.name, role: p.role, email: p.email, phone: p.phone, method: 'web-scrape', sourceUrl: p.sourceUrl, confidence: p.email || p.phone ? 0.8 : 0.5, note })) added += 1;
-          if (p.email) evidence(r.id, 'person-email', `${p.name}: ${p.email}`, 'web-scrape', p.sourceUrl, 0.8);
-          if (p.phone) evidence(r.id, 'person-phone', `${p.name}: ${p.phone}`, 'web-scrape', p.sourceUrl, 0.8);
+          if (p.email) evidence(r.id, 'person-email', `${p.name}: ${p.email}`, 'web-scrape', p.sourceUrl, 0.8, p.email);
+          if (p.phone) evidence(r.id, 'person-phone', `${p.name}: ${p.phone}`, 'web-scrape', p.sourceUrl, 0.8, p.phone);
         }
         logRule(r, `find-people: ${added} people from ${(res.pages || []).length} page(s)`);
         // A manager's direct line becomes the record's phone when it has none.
         const direct = (res.people || []).find((p) => p.phone);
         if (!r.phone && direct) {
-          exec('UPDATE intel_records SET phone = ? WHERE id = ?', direct.phone, r.id);
-          evidence(r.id, 'phone', direct.phone, 'web-scrape', direct.sourceUrl, 0.75);
+          exec('UPDATE intel_records SET phone = ?, subject_ref = COALESCE(subject_ref, ?) WHERE id = ?', sealSelf(direct.phone), contactRef(null, direct.phone), r.id);
+          evidence(r.id, 'phone', direct.phone, 'web-scrape', direct.sourceUrl, 0.75, direct.phone);
           logRule(r, `phone taken from ${direct.name}${direct.role ? ` (${direct.role})` : ''}`);
         }
         const directMail = (res.people || []).find((p) => p.email);
         if (!r.email && directMail) {
-          exec('UPDATE intel_records SET email = ? WHERE id = ?', directMail.email, r.id);
-          evidence(r.id, 'email', directMail.email, 'web-scrape', directMail.sourceUrl, 0.75);
+          exec('UPDATE intel_records SET email = ?, subject_ref = COALESCE(subject_ref, ?) WHERE id = ?', sealSelf(directMail.email), contactRef(directMail.email, null), r.id);
+          evidence(r.id, 'email', directMail.email, 'web-scrape', directMail.sourceUrl, 0.75, directMail.email);
         }
       }
 
@@ -437,12 +498,12 @@ async function applyRulesPass() {
         const res = await deepCrawl(target).catch(() => ({ ok: false }));
         if (res.address && !r.address) {
           exec('UPDATE intel_records SET address = ? WHERE id = ?', res.address.value, r.id);
-          evidence(r.id, 'address', res.address.value, 'web-scrape', res.address.sourceUrl, 0.65);
+          evidence(r.id, 'address', res.address.value, 'web-scrape', res.address.sourceUrl, 0.65, res.address.value);
         }
         const extra = (res.phones || [])[0];
         if (extra && !one('SELECT phone FROM intel_records WHERE id = ? AND phone IS NOT NULL', r.id)) {
-          exec('UPDATE intel_records SET phone = ? WHERE id = ?', extra.value, r.id);
-          evidence(r.id, 'phone', extra.value, 'web-scrape', extra.sourceUrl, extra.confidence);
+          exec('UPDATE intel_records SET phone = ?, subject_ref = COALESCE(subject_ref, ?) WHERE id = ?', sealSelf(extra.value), contactRef(null, extra.value), r.id);
+          evidence(r.id, 'phone', extra.value, 'web-scrape', extra.sourceUrl, extra.confidence, extra.value);
         }
         logRule(r, `deep-crawl: ${(res.pages || []).length} extra page(s)${res.address ? ', address found' : ''}`);
       }
@@ -459,9 +520,10 @@ async function applyRulesPass() {
         for (const c of q('SELECT * FROM intel_contacts WHERE record_id = ? AND name IS NOT NULL AND email IS NULL', r.id)) {
           const guess = applyEmailPattern(c.name, pat.pattern, r.domain);
           if (!guess) continue;
-          exec("UPDATE intel_contacts SET email = ?, method = 'pattern-derived', confidence = 0.35, note = ? WHERE id = ?",
-            guess, `derived from the ${pat.pattern} pattern seen at ${pat.sample} — unverified hypothesis`, c.id);
-          evidence(r.id, 'person-email-derived', `${c.name}: ${guess}`, 'pattern-derived', null, 0.35);
+          exec("UPDATE intel_contacts SET email = ?, method = 'pattern-derived', confidence = 0.35, note = ?, subject_ref = COALESCE(subject_ref, ?) WHERE id = ?",
+            sealSelf(guess), `derived from the ${pat.pattern} pattern seen at ${pat.sample} — unverified hypothesis`,
+            contactRef(guess, null), c.id);
+          evidence(r.id, 'person-email-derived', `${c.name}: ${guess}`, 'pattern-derived', null, 0.35, guess);
           derived += 1;
         }
         if (derived) logRule(r, `derive-emails: ${derived} candidate address(es) from the ${pat.pattern} pattern`);
@@ -602,7 +664,7 @@ export function syncIntel() {
     if (!iq.run_id) { exec("UPDATE intel_queries SET state = 'enriching' WHERE id = ?", iq.id); continue; }
     const run = one('SELECT * FROM runs WHERE id = ?', iq.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
 
     if (iq.state === 'people-ask') {
       for (const org of parsed?.orgs || []) {
@@ -682,8 +744,11 @@ export function verifyContact(contactId, { verification = 'verified', actor }) {
   exec('UPDATE intel_contacts SET verification = ? WHERE id = ?', verification, contactId);
   if (verification === 'verified') {
     const r = one('SELECT * FROM intel_records WHERE id = ?', c.record_id);
-    if (r && !r.phone && c.phone) exec('UPDATE intel_records SET phone = ? WHERE id = ?', c.phone, r.id);
-    if (r && !r.email && c.email) exec('UPDATE intel_records SET email = ? WHERE id = ?', c.email, r.id);
+    // c.* is already sealed on the row it came from, so the ciphertext moves
+    // across as it is. Opening it here only to seal it again would put the
+    // plaintext back in this process's memory for no gain.
+    if (r && !r.phone && c.phone) exec('UPDATE intel_records SET phone = ?, subject_ref = COALESCE(subject_ref, ?) WHERE id = ?', c.phone, c.subject_ref, r.id);
+    if (r && !r.email && c.email) exec('UPDATE intel_records SET email = ?, subject_ref = COALESCE(subject_ref, ?) WHERE id = ?', c.email, c.subject_ref, r.id);
     refreshScore(c.record_id);
   }
   audit({ actorType: 'human', actorId: actor, action: `intel.contact_${verification}`, subjectType: 'intelRecord', subjectId: c.record_id, payload: { contactId, name: c.name } });
@@ -706,7 +771,8 @@ export function editIntelRecord(id, { email = null, phone = null, address = null
         address = COALESCE(?, address), website = COALESCE(?, website), linkedin = COALESCE(?, linkedin) WHERE id = ?`,
     email, phone, address, website, linkedin, id);
   for (const [f, v] of Object.entries({ email, phone, address, website, linkedin, note: notes })) {
-    if (v) evidence(id, f, v, 'human', null, 1);
+    // A person typing a value in by hand is the same data by a better route.
+    if (v) evidence(id, f, v, 'human', null, 1, CONTACT_EVIDENCE.test(f) ? v : null);
   }
   refreshScore(id);
   audit({ actorType: 'human', actorId: actor, action: 'intel.record_edited', subjectType: 'intelRecord', subjectId: id, payload: { fields: Object.entries({ email, phone, address, website, linkedin }).filter(([, v]) => v).map(([k]) => k) } });

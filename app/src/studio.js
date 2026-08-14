@@ -12,6 +12,7 @@ import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { archiveItem } from './data.js';
 import { WS_ROOT } from './artifacts.js';
+import { openPii } from './erasure.js';
 
 const PLATFORMS = ['x', 'linkedin', 'instagram', 'facebook', 'tiktok', 'youtube', 'telegram'];
 
@@ -191,7 +192,7 @@ function pullRun(row, table) {
     return null;
   }
   if (run.state !== 'done' && run.state !== 'awaiting_human') return null;
-  return run.output ? JSON.parse(run.output)?.parsed || null : null;
+  return run.output ? JSON.parse(openPii(run.output))?.parsed || null : null;
 }
 
 export function syncStudioRuns() {

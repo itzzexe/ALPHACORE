@@ -460,6 +460,21 @@ Everything the company keeps secret is sealed under one key: provider keys,
 OAuth tokens, webhook signing secrets, and every person's crypto-shredding key.
 Two questions follow from that, and both now have answers.
 
+Since encryption-at-write, that last item covers considerably more than it used
+to. Personal data classified Tier A — call recordings and transcripts, support
+and contact-centre message bodies, the identifiers an enrichment run collects —
+is sealed under a per-subject key *as it is written*, and each of those keys is
+itself sealed under the master key. So the master key is no longer only the
+door to your credentials. It is the door to the readable form of every personal
+record in the database.
+
+Concretely: with the master key, the database is a company. Without it, the
+database is a shape — names, dates, amounts and structure, with the contents
+unreadable. Which of those an attacker gets is decided entirely by where you put
+this key, and that is the whole of the argument below. What it does not protect
+against is set out plainly in `docs/THREAT-MODEL-PII.md`; read that before
+telling anybody the data is encrypted.
+
 ### Where it lives
 
 By default, `data/master.key` — beside the database, which is honest for one
@@ -529,9 +544,26 @@ The whole company is `app/data/`. Two things live there:
 - `alphacore.db` — every record, including the audit chain.
 - `master.key` — the AES key that decrypts the vault. **It is not in the
   database on purpose.** A backup of the database without this file cannot
-  decrypt a single stored credential.
+  decrypt a single stored credential — nor, now, a single call transcript,
+  support message or collected contact detail. Per-subject keys live in the
+  database, but each one is sealed under this key, so the two are useless apart.
 
 Back up both, together, somewhere else.
+
+That last sentence has an edge worth saying out loud, because it cuts both
+ways. Keeping the master key beside the backup means a stolen backup is a
+readable backup, which is the exact scenario Tier A sealing exists to prevent.
+Keeping them apart means a restore needs both, and a restore that cannot find
+the key gets you a database of ciphertext. Neither is wrong; drifting into one
+by accident is. Decide, write it down, and test a restore before you need one.
+
+If you are upgrading an install that predates encryption-at-write, the rows
+already on disk are still in plaintext until you seal them: Compliance →
+Erasure → *Seal existing records*, or `POST /api/erasure/backfill`. It is a
+queue job — safe to interrupt, safe to start twice, resumes where it stopped —
+and it finishes by vacuuming the database, because SQLite leaves the old
+plaintext on freed pages otherwise. Take a fresh backup **after** it completes;
+every backup taken before it still contains the readable originals.
 
 ### From the console
 

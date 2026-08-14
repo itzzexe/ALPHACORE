@@ -13,6 +13,7 @@ import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { WS_ROOT } from './artifacts.js';
 import { archiveItem } from './data.js';
+import { openPii } from './erasure.js';
 
 const INFRA_DIR = path.join(WS_ROOT, '_infra');
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44) || 'plan';
@@ -114,7 +115,7 @@ export function syncInfraPlans() {
   for (const p of q("SELECT * FROM infra_plans WHERE state = 'drafting' AND run_id IS NOT NULL")) {
     const run = one('SELECT state, output, failure_reason FROM runs WHERE id = ?', p.run_id);
     if (!run || ['queued', 'leased', 'running'].includes(run.state)) continue;
-    const parsed = run.output ? JSON.parse(run.output)?.parsed : null;
+    const parsed = run.output ? JSON.parse(openPii(run.output))?.parsed : null;
     if (parsed?.markdown) {
       const body = `# ${parsed.title || p.name}\n\n${parsed.markdown}${run.state !== 'done' ? `\n\n> **Held for review by the platform:** ${run.failure_reason || run.state}` : ''}`;
       fs.mkdirSync(INFRA_DIR, { recursive: true });

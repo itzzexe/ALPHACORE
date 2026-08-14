@@ -12,14 +12,14 @@ door — while humans hold every gate that matters: approving, publishing, signi
 <img src="https://img.shields.io/badge/departments-140-c0563a?style=flat-square" alt="140 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/relationships-429-8d8477?style=flat-square" alt="429 declared relationships">
-<img src="https://img.shields.io/badge/API-592_routes-4f9cf0?style=flat-square" alt="592 API routes">
+<img src="https://img.shields.io/badge/API-596_routes-4f9cf0?style=flat-square" alt="596 API routes">
 <img src="https://img.shields.io/badge/permissions-242_atomic-e07bd2?style=flat-square" alt="242 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-227-78bf6d?style=flat-square" alt="227 tests">
+<img src="https://img.shields.io/badge/tests-243-78bf6d?style=flat-square" alt="243 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -1016,7 +1016,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**592 routes** — all JSON, all
+**596 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1092,7 +1092,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 227 tests, on their own database files |
+| `npm test` | 243 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1182,7 +1182,7 @@ credential — keep them together.
 
 ```
 app/
-  src/                125 modules, ~31,600 lines
+  src/                126 modules, ~33,800 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
     db.js             190 tables, forward-only migrations
     audit.js          the hash chain
@@ -1230,7 +1230,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               227 tests across twenty files
+  test/               243 tests across twenty-one files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1250,7 +1250,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 227 tests
+npm test                        # 243 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker

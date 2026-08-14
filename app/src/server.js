@@ -8,6 +8,7 @@ import { PORT, ROOT, mockMode } from './env.js';
 import { bootCheck } from './production.js';
 import './db.js';
 import { audit } from './audit.js';
+import { sealPii } from './erasure.js';
 import { seedChart, periodOf } from './ledger.js';
 import { bookkeep } from './bookkeeper.js';
 import { tick as standingTick } from './standing.js';
@@ -366,14 +367,21 @@ const server = http.createServer(async (req, res) => {
       }
       if (url.pathname === '/webhooks/voice/status' || url.pathname === '/webhooks/voice/transcript') {
         const id = Number(url.searchParams.get('call'));
-        if (id) {
+        const call = id ? one('SELECT direction, from_number, to_number FROM calls WHERE id = ?', id) : null;
+        if (call) {
+          // The carrier hands back what somebody said out loud and where the
+          // audio of them saying it lives. Both are sealed here, before the
+          // UPDATE — this is the write path, and there is no later point at
+          // which the plaintext would not already be on the disk.
+          const person = call.direction === 'in' ? call.from_number : call.to_number;
+          const seal = (v) => (v ? sealPii(v, { kind: 'contact', identifier: person }) : null);
           exec(`UPDATE calls SET state = CASE WHEN ? IN ('completed','failed','busy','no-answer') THEN 'completed' ELSE state END,
                 outcome = COALESCE(?, outcome), duration_s = COALESCE(?, duration_s),
                 transcript = COALESCE(?, transcript), recording = COALESCE(?, recording),
                 ended_at = COALESCE(ended_at, datetime('now')) WHERE id = ?`,
           params.CallStatus || null, params.CallStatus === 'completed' ? 'reached' : params.CallStatus || null,
           params.CallDuration ? Number(params.CallDuration) : null,
-          params.TranscriptionText || null, params.RecordingUrl || null, id);
+          seal(params.TranscriptionText), seal(params.RecordingUrl), id);
         }
         return xml('<?xml version="1.0" encoding="UTF-8"?><Response/>');
       }

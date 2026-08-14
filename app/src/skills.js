@@ -13,6 +13,7 @@
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { enqueueRun } from './workflow.js';
+import { openPii } from './erasure.js';
 
 const slugify = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 
@@ -71,7 +72,7 @@ export function syncSkills() {
     if (!run?.output) continue;
     let verdict;
     try {
-      const out = JSON.parse(run.output);
+      const out = JSON.parse(openPii(run.output));
       verdict = out.parsed || out;
       if (typeof verdict === 'string') verdict = JSON.parse(verdict);
     } catch { continue; }
@@ -127,7 +128,7 @@ export function harvestProposals() {
   for (const run of q("SELECT * FROM runs WHERE task_type = 'skill_propose' AND state = 'done' AND output IS NOT NULL ORDER BY id DESC LIMIT 10")) {
     let spec;
     try {
-      const out = JSON.parse(run.output);
+      const out = JSON.parse(openPii(run.output));
       spec = out.parsed || out;
       if (typeof spec === 'string') spec = JSON.parse(spec);
     } catch { continue; }
