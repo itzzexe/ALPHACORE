@@ -13,6 +13,96 @@ The full reasoning for any change is in its commit message; this is the index.
 
 ## Unreleased
 
+### Production hardening
+
+- **The server refuses to start in an unsafe shape.** Turn on production mode
+  and a master key that resolves to `data/master.key` — beside the database it
+  decrypts — stops the boot, as does a `PUBLIC_BASE_URL` that is not https
+  behind a trusted proxy. Before this, both were warnings on a page nobody had
+  open. Either can be accepted with an explicit `I-UNDERSTAND` environment
+  variable, and accepting it is written to the audit chain at startup, so the
+  decision has a time and a name against it instead of being invisible.
+
+- **You can see which integrations actually work.** Trust centre → Connector
+  certification: every connector against read, write, OAuth, failure handling,
+  rate limits and token refresh. Nothing on that page is typed by anybody — it
+  is a view over evidence the egress gate writes on every call, so a
+  certification with no call behind it cannot exist. On a fresh install it
+  reads 50 untested cells out of 54. That is the point: the previous answer to
+  "does the Slack connector handle a 429" was somebody's memory.
+
+- **A cell can go down.** A column that was live-verified in March and failed
+  yesterday still reads live-verified — that is what the evidence says — with
+  the failure and its date on the same line. A matrix that only ever climbs is
+  lying by omission.
+
+- **Personal data is encrypted before it reaches the disk.** Call recordings and
+  transcripts, support and contact-centre message bodies, and the contact
+  details an enrichment run collects are sealed under the subject's own key as
+  they are written. Previously they were plaintext until somebody exercised a
+  right to erasure, which meant the protection covered the one attacker who
+  politely waits to be asked. Read `docs/THREAT-MODEL-PII.md` before describing
+  this to anybody: it does nothing against compromise of the live process, and
+  says so.
+
+- **Upgrading an existing install: Compliance → Erasure → seal existing
+  records.** A queue job, not a script — safe to interrupt, safe to start twice,
+  resumes where it stopped. **Take a fresh backup after it finishes.** Every
+  backup taken before it still contains the readable originals.
+
+- **What was wrong before, and is now right.** Sealing a row is an `UPDATE`, and
+  SQLite does not zero the page the old value was on. A backfilled database
+  still held every plaintext transcript in its free list — invisible to `SELECT`,
+  one `strings` away, and copied verbatim into the next backup. Against the
+  attacker the whole design is aimed at, the encryption would have been
+  decorative. `secure_delete` is on at every connection now, and the backfill
+  vacuums before it reports finished.
+
+- **And another.** The drafting prompt for a support ticket was a verbatim copy
+  of what the customer wrote, sitting in `runs.input` in plaintext. Sealing the
+  ticket would have moved the leak one table to the left. Runs about a person
+  now carry their reference and are sealed under the same key.
+
+### Finding things
+
+- **Eight doors instead of a hundred and forty.** The rail now carries what you
+  are trying to do — Ask, Work, Approvals, Company, Intelligence, Money, People,
+  World — rather than which division owns the answer. Nothing was removed:
+  every department keeps its page, its address and its division, and *All
+  departments* is one click away. The mapping is data checked by the launch
+  audit, which blocks on a department filed under no door — a page that exists,
+  works, and can only be reached by typing its URL.
+
+- **Ask AlphaCore.** One box. It searches the records immediately and for
+  nothing; anything that spends money or opens work comes back as a button with
+  the cost written on it. Routing is regex over the words you typed, not a model
+  call, so it is occasionally wrong and never expensively wrong.
+
+- **The waiting-on-you count is on the bar at every width.** It existed only on
+  the phone, which meant the one number the whole design is about was invisible
+  on the screen most people use.
+
+- **What was wrong before.** Navigating away from a page did not stop the render
+  it had already started. Both finished and wrote into a page that had been
+  replaced — a handler setting `.disabled` on a button that no longer existed,
+  or an error box appearing on whichever department happened to be open when the
+  previous one's fetch came back. It failed on a different page every time,
+  which is why nobody had pinned it down. Found by running twelve hundred
+  navigations in a row.
+
+- **177 form labels were labels in appearance only.** No `for`, no wrapping —
+  so a screen reader announced the field as "edit text, blank". Now connected.
+
+### Checking
+
+- **`npm run sweep`.** Opens every department and every surface in a real
+  browser — both themes, both languages, desktop and phone, twelve hundred
+  renders — and fails on a page that did not draw, a console error, an external
+  request, or a control with no accessible name. Unit tests never open a page,
+  and the launch audit checks that a department *has* a route, not that the
+  route draws anything. Every bug in the two sections above was found here and
+  nowhere else.
+
 ### The repository, as a repository
 
 - **One description instead of two.** The root README called the project

@@ -2,12 +2,17 @@
 
 # ⚙️ ALPHACORE
 
-### The company that runs itself — and proves every move on a hash chain.
+### An AI company operating system where agents can act, but cannot silently exceed their authority.
 
 **An entire AI-native company inside a single Node process.**
 One hundred and forty departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
-researches, sells, supports, **hires its own new employees** — and reaches the real world through one guarded
-door — while humans hold every gate that matters: approving, publishing, signing, and ruling.
+researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
+door, under 242 atomic permissions, with every consequential act written to a hash chain before it happens.
+
+The emphasis is on *silently*. An agent here can send the email, make the commit, place the call. What it
+cannot do is any of that without a scope that permits it, a record that survives it, and — where the act is
+irreversible or costs money — a named person who said yes. The company runs itself; it does not answer to
+itself.
 
 <img src="https://img.shields.io/badge/departments-140-c0563a?style=flat-square" alt="140 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
@@ -1214,7 +1219,7 @@ app/
     …
   public/
     index.html        the shell
-    app.js            the console — 12,000 lines, vanilla, hash routing
+    app.js            the console — 11,400 lines, vanilla, hash routing
     styles.css        2,500 lines: design tokens, light and dark, RTL-aware
     i18n.js           Arabic as a first-class language
     sw.js             network-first service worker

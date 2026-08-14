@@ -1,5 +1,79 @@
 # AlphaCore — where it stands, and what it takes to finish it
 
+> **Read this part; the rest is history.** Sections 1 to 7 are the plan as it
+> was written on 2026-08-08, kept because the reasoning is still worth reading.
+> Every number in them is out of date. What is current is immediately below.
+
+## Now — after the production-hardening pass (2026-08-14)
+
+**Done, and each one has a test that bites rather than a claim that reassures:**
+
+- **Production mode with two boot gates.** A master key that resolves to a file
+  on the same disk as the database, or a console reachable over plain HTTP,
+  refuses to start. Both are overridable with an explicit `I-UNDERSTAND`, and
+  the override is written to the chain at startup so accepting the risk is a
+  recorded act rather than a quiet one.
+- **A browser sweep.** 1200 renders — every department and every surface, both
+  themes, both languages, desktop and phone — asserting each page drew, has no
+  console errors, makes no external request, and leaves no control without an
+  accessible name. It did not exist before; three real bugs below were found
+  by it and by nothing else.
+- **A connector certification matrix that cannot be typed into.** A SQLite view
+  over evidence the egress gate writes on every call. On a fresh install it
+  reads 50 untested cells out of 54, which is the honest number.
+- **Personal data sealed at write.** Sixteen Tier A columns under per-subject
+  keys, wrapped by the master key. `docs/THREAT-MODEL-PII.md` states what this
+  does not protect against, in the same breath as what it does.
+- **Eight surfaces in front of 140 departments.** The mapping is data beside the
+  catalogue, and the launch audit blocks on a department filed under none.
+- **Ask AlphaCore.** One box, routed by regex over the words typed — no model
+  call — defaulting to the read-only answer.
+
+**Deferred, with the reason:**
+
+- **`public/app.js` is still 11,388 lines.** The foundation came out cleanly
+  into six native ES modules (`core/`, `state/`, `services/`, `router/`,
+  `components/`) and the console is green on all of it. The remaining 151 view
+  functions did not: the extraction tool draws module boundaries *between*
+  top-level declarations, so a top-level *statement* travels with whatever
+  declaration precedes it — and `registerRoutes({…})` is a 165-line statement.
+  It ended up inside a department module, which then imported every renderer in
+  the system. The sweep caught it immediately and the work was reverted rather
+  than shipped. **The fix is small and known:** pin the route table in `app.js`
+  before extracting, then move the views one surface at a time with a sweep
+  between each. The grouping is already computed — by the same surface mapping
+  the navigation uses, so a module boundary and a menu boundary agree by
+  construction.
+- **`runs.output` opening is spread across 28 call sites.** Sealing it required
+  adding `openPii(...)` at every place that reads a run's answer. That is
+  mechanical and it is verified by both proof scripts, but a single
+  `readRunOutput(run)` helper would be better than 28 chances to forget.
+- **Tier B is documented, not enforced.** Names, references, amounts and the
+  join keys the controller's reconciliation matches on stay in plaintext by
+  design. Their protection is disk encryption and a master key from outside the
+  disk — guidance, not code.
+- **`sandbox-verified` is unreachable.** Nothing in the platform has a sandbox,
+  so that rung of the certification ladder can never be climbed. It is shown as
+  such rather than hidden, because hiding it would make the ladder look
+  complete.
+- **The offices simulation renders the whole company.** `renderOffices` refers to
+  most other renderers, which is why the people surface was the hardest to
+  extract. Worth a lookup table rather than direct references.
+
+**Found by the sweep, fixed, and worth remembering:**
+
+- A render already in flight kept writing into a page that had been replaced —
+  `clearInterval` stops the next poll, not the one in the air. It failed on a
+  different department each run, which is why it had survived. A generation
+  counter closes it.
+- 177 labels sat next to their control with nothing connecting them: announced
+  as "edit text, blank". Fixed as a pattern.
+- Sealing a row is an `UPDATE`, and SQLite does not zero the freed page. A
+  backfilled database still held every plaintext transcript in its free list.
+  `secure_delete` plus a vacuum the backfill must finish before it reports done.
+
+---
+
 > **Status: built.** This document was the plan, written 2026-08-08. Everything
 > in sections 3, 4 and 5 below was implemented the same day and is running —
 > the vault, the connector layer with ten drivers plus any-HTTP-API, the egress
