@@ -10,18 +10,40 @@
 //
 // Nothing under /api is cached, ever. A stale run count or a cached approval
 // queue is worse than an error message — it looks like the truth.
-const VERSION = 'alphacore-v2';
+const VERSION = 'alphacore-v3';
 
 // Enough to paint the shell and reach the login screen offline.
+//
+// The console is native ES modules with no build step, so the browser fetches
+// each one by name — and a precache list naming only /app.js would cache the
+// entry point and none of what it imports, which is worse than caching nothing:
+// the shell would load offline and then fail on its first import. Everything
+// app.js reaches at start-up is listed.
+//
+// The department modules are *not* here on purpose. They are large, most
+// people open a handful of the hundred and forty, and the fetch handler is
+// network-first with a cache fallback — so a page you have visited is offline
+// anyway, and one you never opened does not cost you the download.
 const SHELL = [
   '/',
   '/index.html',
   '/styles.css',
-  '/app.js',
-  '/i18n.js',
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
+  '/app.js',
+  '/i18n.js',
+  '/core/dom.js',
+  '/core/shell.js',
+  '/state/session.js',
+  '/services/api.js',
+  '/router/registry.js',
+  '/components/tile.js',
+  '/components/common.js',
+  '/components/chrome.js',
+  '/components/bits.js',
+  '/components/widgets.js',
+  '/components/dept-page.js',
 ];
 
 self.addEventListener('install', (e) => {

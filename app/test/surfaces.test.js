@@ -55,10 +55,13 @@ const consoleJs = consoleSource();
 
 /** Every key in the console's `routes` object. */
 function consoleRoutes() {
-  // The table registers itself into router/registry.js rather than being a
-  // bare const: the router has to read it, it names every renderer, and every
-  // renderer needs the router. It is still one object literal in one file.
-  const start = appJs.indexOf('registerRoutes({');
+  // A named declaration, registered into router/registry.js. Named rather than
+  // a bare `registerRoutes({…})` statement for a reason worth keeping: the
+  // module splitter draws boundaries between top-level declarations, so a
+  // 165-line top-level *statement* is carried along by whichever declaration
+  // sits above it. It once ended up inside a department module, which then
+  // imported every renderer in the system. This owns its own span.
+  const start = appJs.indexOf('const ROUTE_TABLE = {');
   assert.ok(start > 0, 'the route table has moved — this test can no longer find it');
   const keys = new Set();
   // Keys are at one level of indentation inside the object literal; anything

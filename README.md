@@ -1219,7 +1219,7 @@ app/
     …
   public/
     index.html        the shell
-    app.js            the console — 11,400 lines, vanilla, hash routing
+    app.js            the console — 900 lines, vanilla, hash routing
     styles.css        2,500 lines: design tokens, light and dark, RTL-aware
     i18n.js           Arabic as a first-class language
     sw.js             network-first service worker
