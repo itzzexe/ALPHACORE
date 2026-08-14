@@ -29,13 +29,36 @@ const { classify, ask, askRules, RULES } = await import('../src/ask.js');
 
 seedAgents();
 
-// The console is read as text. It has no build step, so the route table in the
-// file is the route table that runs.
+// The console is read as text. It has no build step, so what is in the files is
+// what runs — but it is no longer one file, so this reads all of them. Walking
+// the directory rather than listing it means an extraction that creates a new
+// module does not quietly move code out of this test's sight.
+function consoleSource() {
+  const pub = path.join(root, 'public');
+  const parts = [fs.readFileSync(path.join(pub, 'app.js'), 'utf8')];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.js')) parts.push(fs.readFileSync(p, 'utf8'));
+    }
+  };
+  for (const d of ['core', 'state', 'services', 'router', 'views', 'components', 'departments']) {
+    const p = path.join(pub, d);
+    if (fs.existsSync(p)) walk(p);
+  }
+  return parts.join('\n');
+}
+
 const appJs = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
+const consoleJs = consoleSource();
 
 /** Every key in the console's `routes` object. */
 function consoleRoutes() {
-  const start = appJs.indexOf('const routes = {');
+  // The table registers itself into router/registry.js rather than being a
+  // bare const: the router has to read it, it names every renderer, and every
+  // renderer needs the router. It is still one object literal in one file.
+  const start = appJs.indexOf('registerRoutes({');
   assert.ok(start > 0, 'the route table has moved — this test can no longer find it');
   const keys = new Set();
   // Keys are at one level of indentation inside the object literal; anything
@@ -121,25 +144,25 @@ test('a surface route never shadows a department that already owned that name', 
   }
 
   // And the surfaces are reached under their own prefix.
-  assert.ok(appJs.includes("if (seg === 's' && arg) return { key: 'surface', arg };"),
+  assert.ok(consoleJs.includes("if (seg === 's' && arg) return { key: 'surface', arg };"),
     'the #/s/ prefix is gone, so the surface routes are colliding again');
   assert.ok(ROUTE_KEYS.has('surface') && ROUTE_KEYS.has('ask') && ROUTE_KEYS.has('departments'));
 });
 
 test('the full department list and the map are still reachable', () => {
-  assert.ok(appJs.includes("location.hash = '#/departments'"), 'the rail no longer offers the full list');
-  assert.ok(appJs.includes('class="fly-all"'), 'the flyout no longer offers the full list');
+  assert.ok(consoleJs.includes("location.hash = '#/departments'"), 'the rail no longer offers the full list');
+  assert.ok(consoleJs.includes('class="fly-all"'), 'the flyout no longer offers the full list');
   // The relationship map. Linked from every surface page, so it must exist —
   // the first version of that link pointed at #/map, which is not a route.
   assert.ok(ROUTE_KEYS.has('graph'), 'the map page is gone');
-  assert.ok(appJs.includes("href=\"#/graph\""), 'the surface pages no longer link to the map');
+  assert.ok(consoleJs.includes("href=\"#/graph\""), 'the surface pages no longer link to the map');
 });
 
 test('the waiting count is on the bar at every width, not only on the phone', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   assert.ok(html.includes('id="waiting-chip"'), 'the count is not on the top bar');
   assert.ok(html.includes('id="tab-dot"'), 'the phone still needs its own');
-  assert.ok(appJs.includes("$('#waiting-chip')"), 'nothing ever fills the count in');
+  assert.ok(consoleJs.includes("$('#waiting-chip')"), 'nothing ever fills the count in');
 });
 
 // --- Ask routes to the right place ----------------------------------------
