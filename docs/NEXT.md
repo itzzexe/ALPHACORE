@@ -31,19 +31,6 @@
 
 **Deferred, with the reason:**
 
-- **`public/app.js` is still 11,388 lines.** The foundation came out cleanly
-  into six native ES modules (`core/`, `state/`, `services/`, `router/`,
-  `components/`) and the console is green on all of it. The remaining 151 view
-  functions did not: the extraction tool draws module boundaries *between*
-  top-level declarations, so a top-level *statement* travels with whatever
-  declaration precedes it — and `registerRoutes({…})` is a 165-line statement.
-  It ended up inside a department module, which then imported every renderer in
-  the system. The sweep caught it immediately and the work was reverted rather
-  than shipped. **The fix is small and known:** pin the route table in `app.js`
-  before extracting, then move the views one surface at a time with a sweep
-  between each. The grouping is already computed — by the same surface mapping
-  the navigation uses, so a module boundary and a menu boundary agree by
-  construction.
 - **`runs.output` opening is spread across 28 call sites.** Sealing it required
   adding `openPii(...)` at every place that reads a run's answer. That is
   mechanical and it is verified by both proof scripts, but a single
