@@ -9,6 +9,11 @@ One hundred and fifty-six departments across thirteen divisions, staffed by an A
 researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
 door, under 242 atomic permissions, with every consequential act written to a hash chain before it happens.
 
+Two halves, kept apart on purpose. The **AI core** thinks and acts. The
+**enterprise core** records what is true — people, time, payroll, documents,
+what is kept and for how long. Nothing crosses between them except through a
+declared tunnel that passes the same gate as a call to the outside world.
+
 The emphasis is on *silently*. An agent here can send the email, make the commit, place the call. What it
 cannot do is any of that without a scope that permits it, a record that survives it, and — where the act is
 irreversible or costs money — a named person who said yes. The company runs itself; it does not answer to
@@ -16,6 +21,7 @@ itself.
 
 <img src="https://img.shields.io/badge/departments-156-c0563a?style=flat-square" alt="156 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
+<img src="https://img.shields.io/badge/cores-2_(AI_%2B_enterprise)-e07bd2?style=flat-square" alt="two cores: AI and enterprise">
 <img src="https://img.shields.io/badge/relationships-466-8d8477?style=flat-square" alt="466 declared relationships">
 <img src="https://img.shields.io/badge/API-696_routes-4f9cf0?style=flat-square" alt="696 API routes">
 <img src="https://img.shields.io/badge/permissions-260_atomic-e07bd2?style=flat-square" alt="260 atomic permissions">
@@ -30,7 +36,7 @@ itself.
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
 
 *No frameworks. No build step. One process, one SQLite file, and a living map
-where you watch the company work.*
+where you watch both cores work — and every tunnel between them.*
 
 **[Install & run](docs/INSTALL.md)** · [Documentation](docs/) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Licence](LICENSE)
 
@@ -46,6 +52,7 @@ where you watch the company work.*
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
 | [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 156 departments](#the-company--13-divisions-156-departments) | the shape |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
+| [**The two cores**](#two-cores-one-company) · [The enterprise core](#the-enterprise-core) · [The bridges](#the-bridges) | the other galaxy |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
 | [The API](#the-api) · [MCP](#mcp--both-directions) · [Webhooks](#webhooks) · [Command line](#the-command-line) | the surfaces |
@@ -296,10 +303,17 @@ flowchart LR
 
 ## The map
 
-The overview is a **living circuit board**: a dense core of the orchestrator and
-the chain, with a tree for every district growing out of it. Every leaf is a
-department, drawn from the same catalogue the router uses — never a picture that
-can drift from the code.
+The overview is a **living circuit board**, and it draws the *whole* company on
+one screen — both cores and the seam between them. On the left the AI core: a
+dense centre of the orchestrator and the chain, with a tree for every district
+growing out of it. On the right the enterprise core as its own constellation.
+Between them, one dotted line per **tunnel**.
+
+Every leaf is a department and every tunnel is a declared relationship, drawn
+from the same catalogue the router uses and the connectivity audit checks —
+never a picture that can drift from the code. **Nothing is drawn that the data
+does not have**: a diagram able to show a relationship nobody declared is a
+diagram that eventually will.
 
 - **Point** at a district to bring up its colour · **click** to go inside
 - **Right-click** any department for everything it touches
@@ -481,6 +495,166 @@ One door out, and everything that guards it. The browser lives here rather than
 with the tools, because an employee clicking buttons on somebody else's website
 is the company reaching outside, whatever it happens to be clicking.
 </details>
+
+---
+
+## Two cores, one company
+
+Most of this README describes the **AI core**: the workforce, the queue, the
+router, the gate — the half that thinks and acts. There is a second half, and it
+exists because those two jobs want opposite things from a database.
+
+| | **AI core** | **Enterprise core** |
+|---|---|---|
+| Job | thinks and acts | records what is true |
+| Optimised for | throughput, retries, being wrong cheaply | being right, and provable years later |
+| A bad write is | a run to redo | a payslip somebody was paid on |
+| Identity | an agent id, minted freely | a person, and a person is not an agent |
+
+Mixing them is the failure the split exists to prevent. An HR record and a run
+queue under one heading because both involve *people*; a salary in the same
+table as a token cost because both are *money*. So the galaxies are kept apart
+in the data, in the permissions, in the navigation and on the map — and the only
+way across is a declared tunnel.
+
+**The menu is the split, not a description of it.** The console shows one core at
+a time, with a switch above the rail. The AI core keeps its eight surfaces; the
+enterprise core has its own five. Open a payroll screen from a search result and
+the rail follows you across rather than leaving you looking at the other galaxy.
+
+### The enterprise core
+
+Sixteen departments behind five doors, on a schema that is deliberately
+different from Core 1's: **STRICT tables**, so a bad write is refused by the
+storage engine rather than by discipline.
+
+<details open>
+<summary><b>PEOPLE & HR</b> — who works here</summary>
+
+**Employees** · **Organisation** · **People lifecycle**
+
+`hr_person` is the root, and employment and a login are things a person may or
+may not have, in any combination — the contractor with no account, the founder
+with an account and no employment record, the employee who is both. **An AI
+agent is barred from every human slot twice over**: STRICT typing refuses an
+agent's TEXT id in an INTEGER person column at the storage engine, and a trigger
+refuses a person row created as a proxy under an agent's name. Six routes were
+tried and six refused, with a real person as the control.
+
+</details>
+
+<details>
+<summary><b>TIME & ATTENDANCE</b> — who was here, and what was agreed</summary>
+
+**Attendance & leave** · **Shifts & overtime** · **Joining & leaving**
+
+Leave has policies, balances and an approval that is somebody else's. Shifts are
+**dated assignments rather than a property of a person**, so last February is
+still judged against the roster that was in force last February — overwriting
+would quietly rewrite whether somebody was late.
+
+And the line that makes it a feature rather than a clock: **minutes past the end
+of a shift are not overtime**. Somebody who stays an hour because the traffic is
+bad has not earned an hour's pay, and a system that pays it teaches everybody to
+leave late. Extra minutes are recorded, wait for approval, and **nobody signs off
+their own**. Somebody on no roster reports *null* rather than zero — a zero would
+put them in the on-time column of every report.
+
+Joining and leaving are checklists generated from a template, with an owner and
+a due day on each step. Steps that cost money or open a door are marked
+**critical**: skippable when they genuinely do not apply, never silently, always
+with a name and a reason on them.
+
+</details>
+
+<details>
+<summary><b>PAYROLL & SPENDING</b> — what people are paid, and what was bought</summary>
+
+**Finance ops** · **Pay rules** · **Custody** · **Procurement**
+
+Expenses, cost centres, loans, and a payroll run that drafts, waits for a
+signature and closes. **`base_salary` is sealed**, which is why no aggregate over
+salaries can be computed in SQL — payroll totals are summed in the process after
+opening each one, and that is worth knowing before designing around it.
+
+**Pay rules** turn what used to be a named zero into a computation. The slip
+carried `taxes = 0; contributions = 0` with an honest comment saying
+jurisdiction-specific; that was right as a comment and wrong to ship, because a
+zero *looks computed* and somebody eventually pays against it. A company declares
+its own rules — flat or banded, on gross, basic or taxable, paid by employee or
+employer — **each with a stated basis**, because a deduction nobody can cite is
+one the employee may dispute and the company cannot defend. Bands tax only their
+own slice, which is the single most common progressive-tax bug and always
+overcharges the person who just crossed a threshold. With nothing declared, tax
+is reported **unknown, never zero**. End of service is counted in calendar years
+rather than by dividing days by 365.25 — an anniversary is a date, and 7.0011
+years on a slip invites an argument about the decimal.
+
+**Custody** answers the question the asset register never could: not what the
+company owns, but **who is holding it**. One item cannot be in two hands. A
+return is signed by somebody other than the holder, or "I gave it back" and the
+record saying so are the same act. And nobody is recorded as having left while
+still holding things — checked against the register rather than against a tick
+box, because a tick box records that somebody *said* so.
+
+</details>
+
+<details>
+<summary><b>DOCUMENTS & RECORDS</b> — what is written down, and how long it is kept</summary>
+
+**Documents** · **Files** · **Records & retention** · **Meetings**
+
+Documents are versioned, classified, and **sealed per subject** where they are
+about a person: a restricted document about somebody has every version under
+that person's key.
+
+**Files** closed the gap the documents module was deferred over. The reason is
+worth quoting: *"a file path in a sealed column is a pointer to unsealed bytes."*
+Sealing the path protects nothing — the bytes sit on disk in the clear and
+survive the erasure that was meant to destroy them. So **the bytes are sealed**,
+under the same per-subject key as the salary beside them, through the same
+audited path rather than a second AES implementation to get wrong. An executable
+is refused by extension *and* by its first bytes, so renaming it changes nothing.
+A file that could not be sealed is not stored at all.
+
+**Records & retention** is the half of archiving that is not storage: how long
+each kind of record is kept, on whose authority, and what happens at the end. A
+basis is required, because a retention period nobody can cite is a guess with a
+number on it.
+
+And the conflict most systems resolve silently in one of two wrong directions —
+**a legal hold against the right to erasure**. Destroying evidence, or ignoring
+the request and never saying so, are both decisions made by an absence of code.
+Here the erasure is *refused with 409, naming the matter*, saying the request
+stands and will be carried out when the hold lifts — and **the refusal goes on
+the chain**, so a lawful refusal is provable years later by both sides.
+
+</details>
+
+<details>
+<summary><b>THE SEAM</b> — the map of both cores, and everything that crosses</summary>
+
+**The two galaxies** · **The bridges**
+
+</details>
+
+### The bridges
+
+**Every call from Core 1 into Core 2 passes the egress gate.** Being in the same
+process buys no trust: the AI core reaches the enterprise core through a named
+connector with scopes and a quota, exactly as it reaches Gmail.
+
+Six commands are gated **categorically** — a granted scope does not clear them,
+`force: true` does not clear them, and a zero-value change is held exactly as a
+million-dollar one is, so it is demonstrably not the value ceiling doing the
+work. Terminating somebody and approving a payroll run are not things an agent
+does because its budget happened to allow it.
+
+One thing said plainly rather than buried: **`enterprise-core` is armed live,
+not dry.** Every other connector proves itself in dry-run first; a dry-run
+internal connector would execute nothing and make the enterprise core unusable.
+The gate, the scopes and the human gates all still apply — the *convention* does
+not, and it is the connector with access to salaries.
 
 ---
 
@@ -1097,7 +1271,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 360 tests, on their own database files |
+| `npm test` | 360 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |

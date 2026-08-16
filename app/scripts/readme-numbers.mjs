@@ -82,9 +82,15 @@ async function measure() {
   const api = fs.readFileSync(path.join(ROOT, 'src', 'api.js'), 'utf8');
   const routes = [...api.matchAll(/\['(GET|POST|PUT|DELETE|PATCH)',\s*(\/\^[^,]+?\$\/)\s*,/g)].length;
 
-  // Counting the calls rather than running the suite: fourteen files, and the
-  // total matches `npm test` exactly. A checker that has to boot the world to
-  // check a sentence does not get run.
+  // Counting the calls rather than running the suite, because a checker that has
+  // to boot the world to check a sentence does not get run.
+  //
+  // This counts test *declarations*, which is not quite what `npm test` prints.
+  // One `test()` inside a loop — the boot matrix in production.test.js — is a
+  // single declaration that runs eight times, so the suite reports more than
+  // this does. The comment here used to claim the two matched exactly; they did
+  // when it was written and stopped the day the first generated case appeared.
+  // Both numbers are true of different things, and the README says which.
   const testFiles = fs.readdirSync(path.join(ROOT, 'test')).filter((f) => f.endsWith('.test.js'));
   const tests = testFiles.reduce((n, f) => n
     + (fs.readFileSync(path.join(ROOT, 'test', f), 'utf8').match(/^\s*(test|it)\(/gm) || []).length, 0);
