@@ -181,10 +181,42 @@ test('the full department list and the map are still reachable', () => {
   // passes every sweep, so the wiring is asserted at the source.
   const apiJs = fs.readFileSync(path.join(root, 'src', 'api.js'), 'utf8');
   assert.ok(ROUTE_KEYS.has('map2'), 'the two-galaxies page is gone');
-  assert.ok(/\/api\\\/core2\\\/map\$\//.test(apiJs),
-    'the console asks for /api/core2/map but no route answers it — the galaxies page will claim a permission problem');
-  assert.ok(consoleJs.includes("api('/api/core2/map')"), 'the galaxies page no longer asks the API for the map');
+  // The page used to draw its own picture from /api/core2/map. It now opens the
+  // atlas itself — one drawing of one catalogue, which is what the declared
+  // edge between these two pages has always claimed — so it asks /api/map, the
+  // payload that carries the tunnels alongside everything else. The assertion
+  // that matters is unchanged and is the one that caught the original bug: the
+  // page must really ask, and a route must really answer.
+  assert.ok(consoleJs.includes("api('/api/map')"), 'the galaxies page no longer asks the API for the map');
+  assert.ok(/\/api\\\/map\$\//.test(apiJs),
+    'the console asks for /api/map but no route answers it — the galaxies page will claim a permission problem');
+  // /api/core2/map is published in openapi.json, so it outlives the one screen
+  // that used to be its only caller.
+  assert.ok(/\/api\\\/core2\\\/map\$\//.test(apiJs), 'a published endpoint lost its route');
   assert.ok(consoleJs.includes('href="#/map2"'), 'the first map no longer offers the way to the second');
+});
+
+test('a department on the whole-company map can be clicked, not only looked at', () => {
+  // Found by driving the map rather than reading it. Every rich interaction —
+  // the connection tooltip, click for the ledger, right-click to trace — is
+  // keyed on `a[data-node]`, and only the district close-up ever emitted one.
+  // The whole-company view drew bare circles, so all three silently did nothing
+  // out there while the help text under the canvas promised all three. The
+  // failure mode was a map that looked finished and answered nothing, which is
+  // exactly the kind of thing a passing sweep never catches.
+  const mapJs = fs.readFileSync(path.join(root, 'public', 'views', 'map.js'), 'utf8');
+  const far = mapJs.slice(mapJs.indexOf('function buildAtlasFar'), mapJs.indexOf('function buildAtlasNear'));
+  assert.ok(far.length > 500, 'the whole-company view moved — this test is looking at nothing');
+  assert.ok(far.includes('data-node='), 'the whole-company view draws departments nothing can click');
+  // Both galaxies, not just the one that happened to be checked.
+  assert.ok(far.split('data-node=').length - 1 >= 2,
+    'only one of the two cores draws clickable departments');
+  // A three-pixel dot is not a target a person can hit, so each leaf carries an
+  // invisible disc. `transparent`, never `none`: a fill of none takes no
+  // pointer events at all, and the difference is the whole feature.
+  assert.ok(far.includes('at-hit'), 'the leaves have no pointer target');
+  const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
+  assert.match(css, /\.at-hit\s*\{[^}]*fill:\s*transparent/, 'the hit disc cannot receive a click');
 });
 
 test('the waiting count is on the bar at every width, not only on the phone', () => {

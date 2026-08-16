@@ -377,9 +377,21 @@ function buildAtlasFar(map) {
       const live = l.item.count > 0;
       const cx = px(l.a, l.r).toFixed(1), cy = py(l.a, l.r).toFixed(1);
       const title = `<title>${esc(sectionName(l.item.id, l.item.label))} · ${live ? l.item.count : t('empty')}</title>`;
-      return live
-        ? `<circle class="at-leaf" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="3.2">${title}</circle>`
-        : `<circle class="at-leaf-ring" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="2.6">${title}</circle>`;
+      // Wrapped in the same anchor the district close-up uses. The whole-company
+      // view drew bare circles, so every interaction keyed on `a[data-node]` —
+      // the connection tooltip, click for the ledger, right-click to trace —
+      // silently did nothing out here, while the help text underneath promised
+      // all three. One anchor makes the existing handlers serve both views.
+      // A three-pixel dot is also too small to aim at, so an invisible disc
+      // carries the pointer: transparent fill, not `none`, or it takes no hits.
+      return `<a class="at-node" href="${esc(l.item.href || '#/')}" data-node="${esc(l.item.id)}"
+        data-color="${d.color}" data-label="${esc(sectionName(l.item.id, l.item.label))}"
+        data-hint="${esc(l.item.hint || '')}" data-count="${l.item.count}" data-div="${esc(d.id)}">
+        <circle class="at-hit" cx="${cx}" cy="${cy}" r="7"/>
+        ${live
+    ? `<circle class="at-leaf" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="3.2"/>`
+    : `<circle class="at-leaf-ring" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="2.6"/>`}
+        ${title}</a>`;
     }).join('');
 
     const lx = px(angle, ATLAS_R.rim);
@@ -422,9 +434,16 @@ function buildAtlasFar(map) {
     const rows = d.items.map((it, j) => {
       const ix = E_CX + 62, iy = y + j * 19 - ((d.items.length - 1) * 19) / 2;
       ePos.set(it.id, { x: ix, y: iy });
-      return `<circle class="at-leaf" data-dept="${esc(it.id)}" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="${it.count > 0 ? 3.2 : 2.6}"${it.count > 0 ? '' : ' opacity="0.45"'}>
-        <title>${esc(sectionName(it.id, it.label))} · ${it.count > 0 ? it.count : t('empty')}</title></circle>
-      <text class="at-dsub" x="${(ix + 9).toFixed(1)}" y="${(iy + 3.4).toFixed(1)}" text-anchor="start">${esc(short(sectionName(it.id, it.label), 22))}</text>`;
+      // The enterprise leaves answer the same way as the AI core's — same
+      // anchor, same handlers. The label is inside it too, so the name is a
+      // target as well as the dot.
+      return `<a class="at-node" href="${esc(it.href || '#/')}" data-node="${esc(it.id)}"
+        data-color="${d.color}" data-label="${esc(sectionName(it.id, it.label))}"
+        data-hint="${esc(it.hint || '')}" data-count="${it.count}" data-div="${esc(d.id)}">
+        <circle class="at-hit" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="7"/>
+        <circle class="at-leaf" data-dept="${esc(it.id)}" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="${it.count > 0 ? 3.2 : 2.6}"${it.count > 0 ? '' : ' opacity="0.45"'}/>
+        <text class="at-dsub" x="${(ix + 9).toFixed(1)}" y="${(iy + 3.4).toFixed(1)}" text-anchor="start">${esc(short(sectionName(it.id, it.label), 22))}</text>
+        <title>${esc(sectionName(it.id, it.label))} · ${it.count > 0 ? it.count : t('empty')}</title></a>`;
     }).join('');
     return `<g class="at-district" data-district="${esc(d.id)}" style="color:${d.color}">
       <path class="at-branch" d="M ${E_CX} ${E_CY} Q ${E_CX + 26} ${((E_CY + y) / 2).toFixed(1)} ${(E_CX + 62).toFixed(1)} ${y.toFixed(1)}"/>
@@ -549,14 +568,19 @@ function buildAtlasNear(map, divId) {
   </svg>`;
 }
 /** The map, at whichever depth you are standing. */
-export function buildMap(m) {
+export function buildMap(m, { far = false } = {}) {
   const known = m.divisions.some((d) => d.id === atlasZoom);
   if (atlasZoom && !known) atlasZoom = null;
-  if (atlasState.style !== (atlasZoom || 'far')) {
-    atlasState.style = atlasZoom || 'far';
+  // The seam page always wants the whole company: the district close-up draws
+  // no tunnels at all, so opening it while the atlas page happened to be zoomed
+  // into TALENT would show a map with nothing across the seam on it. `far`
+  // overrides for this render without disturbing the other page's zoom.
+  const into = far ? null : atlasZoom;
+  if (atlasState.style !== (into || 'far')) {
+    atlasState.style = into || 'far';
     atlasState.vb = null; atlasState.sel = null; atlasState.traceFrom = null; atlasState.divSel = null;
   }
-  return atlasZoom ? buildAtlasNear(m, atlasZoom) : buildAtlasFar(m);
+  return into ? buildAtlasNear(m, into) : buildAtlasFar(m);
 }
 /** Walking the rim, and going in and out. */
 export function atlasGoTo(divId) {
@@ -614,6 +638,11 @@ function applyLens(svg, state, lens, term) {
       node.parentNode.appendChild(g);
     }
   });
+  // Under the seam lens the tunnels are the subject rather than background, so
+  // they brighten with the departments they join instead of staying hairlines.
+  svg.querySelectorAll('.at-tunnel').forEach((p) => {
+    p.classList.toggle('at-tunnel-lit', lens === 'seam' && !term);
+  });
   // The districts fade with their leaves, so the eye is not pulled to a label
   // whose departments are all dark.
   svg.querySelectorAll('.at-district').forEach((d) => {
@@ -623,7 +652,7 @@ function applyLens(svg, state, lens, term) {
   return lit;
 }
 
-export function initAtlas(map) {
+export function initAtlas(map, { lens: openLens = 'all' } = {}) {
   const svg = view.querySelector('svg.atlas-svg');
   if (!svg) return;
   const panel = svg.closest('.panel');
@@ -631,17 +660,30 @@ export function initAtlas(map) {
   let tip = panel.querySelector('#map-tip');
   if (!tip) { tip = document.createElement('div'); tip.id = 'map-tip'; tip.hidden = true; panel.appendChild(tip); }
   // ---- the lenses ----------------------------------------------------
-  let lensState = null;
-  let lens = 'all';
+  // The seam is a lens like the others, and it is computed here rather than
+  // fetched: it is exactly the endpoints of the declared tunnels, the same
+  // edges the connectivity audit checks and the same ones drawn on the canvas.
+  // A department cannot light up under it without a tunnel actually existing,
+  // which is the whole reason #/map2 can be this map instead of a second one.
+  const seam = {};
+  const tunnels = (map.core2 || {}).tunnels || [];
+  for (const tn of tunnels) {
+    seam[tn.core2End] = (seam[tn.core2End] || 0) + 1;
+    seam[tn.core1End] = (seam[tn.core1End] || 0) + 1;
+  }
+  let lensState = { seam, totals: { seam: tunnels.length } };
+  let lens = openLens;
   let term = '';
   const bar = document.createElement('div');
   bar.className = 'map-lens';
+  const onIf = (k) => (lens === k ? ' class="on"' : '');
   bar.innerHTML = `
     <div class="ml-buttons" role="group" aria-label="${esc(t('Light the map by'))}">
-      <button data-lens="all" class="on">${esc(t('Everything'))}</button>
-      <button data-lens="waiting">${esc(t('Waiting on a person'))} <span class="ml-n" data-n="waiting"></span></button>
-      <button data-lens="failing">${esc(t('Failing'))} <span class="ml-n" data-n="failing"></span></button>
-      <button data-lens="active">${esc(t('Moved today'))} <span class="ml-n" data-n="active"></span></button>
+      <button data-lens="all"${onIf('all')}>${esc(t('Everything'))}</button>
+      <button data-lens="seam"${onIf('seam')}>${esc(t('Across the seam'))} <span class="ml-n" data-n="seam">${tunnels.length || ''}</span></button>
+      <button data-lens="waiting"${onIf('waiting')}>${esc(t('Waiting on a person'))} <span class="ml-n" data-n="waiting"></span></button>
+      <button data-lens="failing"${onIf('failing')}>${esc(t('Failing'))} <span class="ml-n" data-n="failing"></span></button>
+      <button data-lens="active"${onIf('active')}>${esc(t('Moved today'))} <span class="ml-n" data-n="active"></span></button>
     </div>
     <input class="ml-find" type="search" placeholder="${esc(t('find a department'))}" aria-label="${esc(t('Find a department on the map'))}">
     <span class="ml-said"></span>`;
@@ -652,7 +694,13 @@ export function initAtlas(map) {
     const lit = applyLens(svg, lensState, lens, term.trim().toLowerCase());
     if (term) said.textContent = `${lit} ${t('match')}`;
     else if (lens === 'all') said.textContent = '';
-    else {
+    else if (lens === 'seam') {
+      // Tunnels, not items: saying "38 items" about a seam would be a number
+      // that counts nothing anybody can go and look at.
+      said.textContent = lit
+        ? `${lit} ${t('department(s)')} · ${tunnels.length} ${t('tunnel(s)')}`
+        : t('no tunnel is declared across the seam yet');
+    } else {
       const total = lensState?.totals?.[lens] ?? 0;
       said.textContent = lit
         ? `${lit} ${t('department(s)')} · ${total} ${t('item(s)')}`
@@ -670,8 +718,11 @@ export function initAtlas(map) {
     clearTimeout(findTimer);
     findTimer = setTimeout(paint, 160);
   });
+  // The seam is already known from the drawing, so a map opened on it is lit
+  // before this returns — and stays lit if it never does.
+  if (lens !== 'all') paint();
   api('/api/map/state').then((st) => {
-    lensState = st;
+    lensState = { ...st, seam, totals: { ...(st.totals || {}), seam: tunnels.length } };
     for (const k of ['waiting', 'failing', 'active']) {
       const el = bar.querySelector(`[data-n="${k}"]`);
       if (el) el.textContent = st.totals?.[k] ? String(st.totals[k]) : '';

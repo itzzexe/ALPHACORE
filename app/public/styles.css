@@ -2005,11 +2005,26 @@ html[lang="ar"] .atlas-switch button { letter-spacing: var(--track-tight); font-
   opacity: .38; stroke-dasharray: 3 4;
 }
 .at-tunnel:hover { opacity: .85; stroke: var(--ember); }
+/* Under the seam lens the tunnels stop being background and become the point:
+   solid, brighter, and slowly travelling so the direction of the crossing is
+   visible rather than inferred. */
+.at-tunnel-lit {
+  stroke: var(--ember); opacity: .8; stroke-width: 1.5;
+  stroke-dasharray: 5 4; animation: at-tunnel-flow 1.4s linear infinite;
+}
+@keyframes at-tunnel-flow { to { stroke-dashoffset: -18; } }
+@media (prefers-reduced-motion: reduce) {
+  .at-tunnel-lit { animation: none; }
+}
 .at-leaf {
   fill: var(--ink); stroke: none;
   transition: fill var(--t-fast) var(--ease), r var(--t-fast) var(--ease);
 }
 .at-leaf-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 0.9; }
+/* The pointer target for a leaf. `transparent` and not `none`: a fill of none
+   receives no pointer events at all, which is the difference between a dot you
+   can click and a dot you can only look at. */
+.at-hit { fill: transparent; stroke: none; }
 .at-hit { fill: transparent; cursor: pointer; }
 
 /* Colour is the reward for pointing at something: the district you are on

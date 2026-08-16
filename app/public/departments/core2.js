@@ -13,7 +13,8 @@ import { $, esc, view, money } from '../core/dom.js';
 import { api } from '../services/api.js';
 import { hasPermC, actor } from '../state/session.js';
 import { tile } from '../components/tile.js';
-import { t, sectionName, divisionName } from '/i18n.js';
+import { t, sectionName } from '/i18n.js';
+import { buildMap, initAtlas } from '../views/map.js';
 
 const stateChip2 = (s) => {
   const cls = { active: 'chip-ok', pending: 'chip-warn', suspended: 'chip-warn', notice: 'chip-warn', ended: 'chip-dim' }[s] || 'chip-dim';
@@ -524,73 +525,51 @@ export async function renderTalent() {
 
 /** The two galaxies: Core 1 on one side, Core 2 on the other, tunnels between. */
 export async function renderGalaxies() {
-  const d = await api('/api/core2/map').catch(() => null);
+  // This page used to draw its own picture — an arc of thirteen circles and a
+  // stack of pills, static, with every circle linking to the same place. It
+  // said in its own legend that it was "the same catalogue as the first map,
+  // projected so the seam is the subject", and two independent drawings of one
+  // catalogue is precisely the thing the declared edge between these two pages
+  // says must not happen: the maps cannot disagree. So it no longer draws. It
+  // opens the real atlas — pan, zoom, hover to isolate, click for a section's
+  // connection ledger, trace a flow hop by hop — with the seam lit, and keeps
+  // the one thing that was genuinely its own: the tunnel ledger underneath.
+  const d = await api('/api/map').catch(() => null);
   if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see the map.'))}</div>`; return; }
 
-  // Core 1: thirteen divisions on an arc, sized by department count.
-  const W = 1000; const H = 640;
-  const c1 = d.core1.map((div, i) => {
-    const a = (Math.PI * (i + 0.5)) / d.core1.length - Math.PI / 2;
-    return { ...div, x: 210 + Math.cos(a) * -150, y: 320 + Math.sin(a) * 260 };
-  });
-  // Core 2: six enterprise divisions stacked on the right, departments as pills.
-  let y = 46;
-  const c2 = d.divisions.map((div) => {
-    const h = 34 + div.departments.length * 30;
-    const g = { ...div, x: 640, y, h };
-    y += h + 16;
-    return g;
-  });
-  const deptPos = new Map();
-  for (const g of c2) g.departments.forEach((s, i) => deptPos.set(s.id, { x: 660, y: g.y + 40 + i * 30 }));
-  const c1Pos = new Map(c1.map((v) => [v.id, v]));
-
-  const tunnels = d.tunnels.map((t2) => {
-    const a = deptPos.get(t2.core2End); const b = c1Pos.get(t2.core1Division);
-    if (!a || !b) return '';
-    return `<path d="M ${a.x} ${a.y} C ${a.x - 160} ${a.y}, ${b.x + 160} ${b.y}, ${b.x + 14} ${b.y}"
-      fill="none" stroke="${esc(b.color)}" stroke-width="1.3" opacity="0.55">
-      <title>${esc(t2.core2End)} ↔ ${esc(t2.core1End)}: ${esc(t(t2.label))}</title></path>`;
-  }).join('');
+  const tunnels = d.core2?.tunnels || [];
+  const isolated = d.core2?.audit?.isolated || [];
 
   view.innerHTML = `
   <div class="panel">
     <div class="panel-title">${esc(t('Two galaxies, one company'))}</div>
-    <div class="map-legend">${esc(t('The AI core thinks and acts; the enterprise core records what is true. Nothing crosses between them except the tunnels drawn here — and every tunnel is a declared relationship the connectivity audit checks, not a line on a picture. This is the same catalogue as the first map, projected so the seam is the subject.'))}
-      <a href="#/graph">${esc(t('The first map'))} →</a> · <a href="#/bridges">${esc(t('The bridges'))} →</a></div>
+    <div class="map-legend">${esc(t('The AI core thinks and acts; the enterprise core records what is true. Nothing crosses between them except the tunnels lit here — and every tunnel is a declared relationship the connectivity audit checks, not a line on a picture. This is the same map as the atlas, opened on the seam.'))}
+      <a href="#/graph">${esc(t('The matrix'))} →</a> · <a href="#/bridges">${esc(t('The bridges'))} →</a></div>
   </div>
   <div class="panel" style="margin-top:16px">
-    <div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:760px" role="img" aria-label="${esc(t('Two galaxies, one company'))}">
-      <text x="150" y="26" fill="var(--ink-faint)" font-size="12" letter-spacing="2">${esc(t('CORE 1 — THINKS AND ACTS'))}</text>
-      <text x="640" y="26" fill="var(--ink-faint)" font-size="12" letter-spacing="2">${esc(t('CORE 2 — RECORDS THE TRUTH'))}</text>
-      ${tunnels}
-      ${c1.map((v) => `<a href="#/graph" aria-label="${esc(divisionName(v.id, v.label))} — ${v.count} ${esc(t('departments'))}"><g>
-        <circle cx="${v.x}" cy="${v.y}" r="${10 + Math.min(v.count, 30) / 2}" fill="var(--bg-raise)" stroke="${esc(v.color)}" stroke-width="${v.touched ? 2.4 : 1.2}"/>
-        <text x="${v.x}" y="${v.y - 16 - Math.min(v.count, 30) / 2}" text-anchor="middle" fill="${esc(v.color)}" font-size="10">${esc(divisionName(v.id, v.label))}</text>
-        <title>${esc(v.label)} · ${v.count} ${esc(t('departments'))}${v.touched ? ' · ' + esc(t('reached by a tunnel')) : ''}</title>
-      </g></a>`).join('')}
-      ${c2.map((g) => `<g>
-        <rect x="${g.x}" y="${g.y}" width="320" height="${g.h}" rx="8" fill="var(--bg-raise)" stroke="${esc(g.color)}" stroke-opacity="0.6"/>
-        <text x="${g.x + 12}" y="${g.y + 22}" fill="${esc(g.color)}" font-size="11" letter-spacing="1.5">${esc(t(g.label))}</text>
-        ${g.departments.map((s, i) => `<a href="${esc(s.href)}" aria-label="${esc(sectionName(s.id, s.label))}">
-          <text x="${g.x + 22}" y="${g.y + 44 + i * 30}" fill="var(--ink)" font-size="12.5">${esc(sectionName(s.id, s.label))} <tspan fill="var(--ink-faint)" font-size="10.5">${s.count}</tspan></text>
-        </a>`).join('')}
-      </g>`).join('')}
-    </svg></div>
+    ${buildMap(d, { far: true })}
+    <div class="sub" style="margin-top:10px">
+      <b>${esc(t('Click'))}</b> ${esc(t('a department for everything it touches'))} ·
+      <b>${esc(t('right-click'))}</b> ${esc(t('to trace a flow hop by hop'))} ·
+      <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))}.
+      ${isolated.length ? `<b style="color:var(--bad)">${esc(t('No tunnel reaches'))}: ${isolated.map((id) => esc(sectionName(id, id))).join(', ')}</b>` : ''}
+    </div>
   </div>
   <div class="panel" style="margin-top:16px">
-    <div class="panel-title">${esc(t('The tunnels'))} · ${d.tunnels.length}</div>
+    <div class="panel-title">${esc(t('The tunnels'))} · ${tunnels.length}</div>
     <div class="table-wrap"><table class="tbl"><thead><tr>
       <th>${esc(t('Enterprise'))}</th><th>${esc(t('AI core'))}</th><th>${esc(t('Why they are joined'))}</th>
     </tr></thead><tbody>
-      ${d.tunnels.map((t2) => `<tr>
+      ${tunnels.map((t2) => `<tr>
         <td class="mono">${esc(t2.core2End)}</td>
         <td class="mono">${esc(t2.core1End)}</td>
-        <td class="sub">${esc(t(t2.label))}</td>
+        <td class="sub">${esc(t(t2.label || ''))}</td>
       </tr>`).join('')}
     </tbody></table></div>
     <div class="sub" style="margin-top:8px">${esc(t('A tunnel with no declared edge behind it cannot exist on this page — the drawing is derived, never drawn.'))}</div>
   </div>`;
+
+  initAtlas(d, { lens: 'seam' });
 }
 
 // Files — sealed bytes, not a path in a sealed column.
