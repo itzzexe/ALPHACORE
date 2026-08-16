@@ -7,7 +7,7 @@
 **An entire AI-native company inside a single Node process.**
 One hundred and fifty-six departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
-door, under 242 atomic permissions, with every consequential act written to a hash chain before it happens.
+door, under 260 atomic permissions, with every consequential act written to a hash chain before it happens.
 
 Two halves, kept apart on purpose. The **AI core** thinks and acts. The
 **enterprise core** records what is true — people, time, payroll, documents,
@@ -30,7 +30,7 @@ itself.
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-366-78bf6d?style=flat-square" alt="366 tests">
+<img src="https://img.shields.io/badge/tests-367-78bf6d?style=flat-square" alt="367 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -930,6 +930,11 @@ scope → allowlist → quota → constitution → value ceiling → dry-run
   nothing, so you can watch what it *would* do
 - Every verdict, allowed or refused, lands on the egress log with the rule that
   decided it
+- **The browser is on it too.** A click that submits, signs up, buys or sends is
+  the capability `web.commit`, held categorically — a zero-value signup waits
+  exactly as a purchase does, so it is demonstrably not the value ceiling doing
+  the work. The browser classifies the act, because it is the only thing that
+  can read the button; the gate decides whether it happens
 
 ### Connectors
 
@@ -1313,7 +1318,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 366 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
+| `npm test` | 367 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1451,7 +1456,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               366 tests across thirty-two files
+  test/               367 tests across thirty-two files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1471,7 +1476,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 366 tests
+npm test                        # 367 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
@@ -1648,10 +1653,14 @@ Choices that shaped this, and what they cost:
   that monitoring does not page somebody at three in the morning because an
   accountant mistyped an amount. A 500 from that module means the ledger itself
   is broken, which *is* worth waking up for.
-- **The browser gate is not the egress gate.** The connector gate is built
-  around a named service with an allowlist and a quota, and a browser is none of
-  those. Forcing it through would have recorded every held step as *blocked by
-  an unknown connector*, which is a worse record than no record.
+- **The browser goes through the one gate, and did not at first.** The first
+  version kept its own, reasoning that the connector gate wants a named service
+  with an allowlist and a quota and a browser is none of those. That was wrong
+  twice over: it made *"nothing reaches outside except through one gate"* false
+  about the most dangerous outward path in the building, and it left the browser
+  with no allowlist and no quota at all. The objection — that forcing it through
+  would record every step as blocked by an unknown connector — was an argument
+  for **registering the connector**, which is what was missing.
 - **An approval is for one step, not for a session.** A session-wide yes would
   mean the first screenshot authorised every click after it.
 - **The element list is kept, not just the click.** Without the menu it was

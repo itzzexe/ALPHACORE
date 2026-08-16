@@ -195,6 +195,10 @@ function claims(f) {
     { what: 'layout test files', value: spell(f.testFiles), re: /(?<=tests across )([a-z-]+)(?= files)/ },
 
     { what: 'cli tests', value: f.tests, re: /(?<=`npm test` \| )(\d+)(?= tests)/ },
+    // The opening paragraph was not guarded, and drifted to 242 while every
+    // other mention said 260. A checker that watches the badge and not the
+    // first sentence anybody reads is watching the wrong thing.
+    { what: 'lede permissions', value: f.permissions, re: /(?<=under )(\d+)(?= atomic permissions)/ },
     { what: 'verification tests', value: f.tests, re: /(?<=npm test {24}# )(\d+)(?= tests)/ },
 
     { what: 'seeded agents (engine)', value: f.agents, re: /(?<=carried out\. )(\d+)(?= AI employees seeded)/ },

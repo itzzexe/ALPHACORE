@@ -54,6 +54,7 @@ import { seedMarketingTeam, seedMarketingOps, syncMarketing } from './marketing.
 // The outside world: credentials, connectors, the gate, the queue, and the
 // systems that keep all of it honest.
 import { seedConnectors, callConnector } from './connectors/index.js';
+import { seedBrowserConnector } from './browser.js';
 import { seedBridge } from './core2/bridge.js';
 import { contractExpirySweep } from './core2/procure.js';
 import { certificateExpirySweep } from './core2/talent.js';
@@ -126,6 +127,9 @@ seedConnectors();
 // agent is governed from the first request rather than from whenever somebody
 // remembers to run a seed.
 seedBridge();
+// The browser is a service that leaves this machine, so the one gate has to be
+// able to see it. Without this its calls are refused as an unknown connector.
+seedBrowserConnector();
 seedConstitution();
 seedPackages();
 seedSlos();

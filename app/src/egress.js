@@ -63,6 +63,11 @@ const ALWAYS_GATED = new Set([
   // src/core2/bridge.js; what this line does is make the gate hold them
   // whatever the amount and whatever the agent's scopes say.
   'core2.gated',
+  // A click that submits, signs up, buys, sends or deletes on somebody else's
+  // website. The browser classifies the act — it is the only thing that can
+  // read the button — and this decides whether it may happen, which is the same
+  // split every other connector uses.
+  'web.commit',
 ]);
 
 const REDACT = /(?:key|token|secret|password|authorization|cookie|seed|mnemonic|private)/i;

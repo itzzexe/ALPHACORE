@@ -42,12 +42,50 @@ import { mayFetch, isSearchResultsPage, userAgent, botWall } from './robots.js';
 import { getSetting } from './settings.js';
 import { getSecret } from './vault.js';
 import { notify } from './notify.js';
+import { attempt } from './egress.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 
 // ------------------------------------------------------------ the transport --
 
 const PORT = () => Number(getSetting('BROWSER_PORT') || 9333);
+
+/** The browser is a named service like any other, so the one gate can see it. */
+export const CONNECTOR = 'browser';
+
+/**
+ * Register it.
+ *
+ * Armed live rather than dry for the same reason `enterprise-core` is: a
+ * dry-run browser would drive nothing, so switching it off proves nothing about
+ * it. Everything else applies — scopes, the allowlist, the quota, the
+ * constitution, and the human gate on anything that commits.
+ *
+ * The allowlist starts empty, which this gate reads as "no fence yet" rather
+ * than "nothing allowed". Naming the hosts an employee may drive is the single
+ * most useful thing to do to this connector before real use, and the overview
+ * says so rather than leaving it to be discovered.
+ */
+export function seedBrowserConnector({ actor = 'system:browser' } = {}) {
+  const capabilities = ['web.read', 'web.commit'];
+  const existing = one('SELECT id, scopes FROM connectors WHERE id = ?', CONNECTOR);
+  if (existing) {
+    const want = JSON.stringify(capabilities);
+    if (existing.scopes !== want) exec('UPDATE connectors SET scopes = ? WHERE id = ?', want, CONNECTOR);
+    return { already: true };
+  }
+  exec(
+    `INSERT INTO connectors (id, driver, label, config, scopes, allowlist, quota_day, state)
+     VALUES (?, 'http', ?, '{}', ?, '[]', ?, 'live')`,
+    CONNECTOR, 'The browser the employees drive', JSON.stringify(capabilities), 500,
+  );
+  audit({
+    actorType: 'system', actorId: actor, action: 'connector.added',
+    subjectType: 'connector', subjectId: CONNECTOR,
+    payload: { capabilities, why: 'so the browser passes the same gate as everything else that leaves' },
+  });
+  return { ok: true };
+}
 
 /** One CDP connection, wrapped so a caller never sees a message id. */
 async function connect(port) {
@@ -513,19 +551,59 @@ ${listing || '(none — try scrolling, or navigate somewhere)'}`,
 
       // The gate. Reads proceed; anything that commits stops here with the
       // picture of the page attached, so the person deciding can see the button.
-      // The gate does not go through the connector egress gate: that one is
-      // built around a named service with an allowlist and a quota, and a
-      // browser is none of those. The stop is recorded here instead — the step,
-      // the reason, the picture of the page, and a line on the audit chain —
-      // which is the same guarantee arrived at by the shorter route.
+      // Every step goes through the one gate, like everything else that leaves
+      // this machine. This module classifies the act — it is the only thing
+      // that can read the button — and the gate decides whether it may happen.
+      //
+      // The first version kept its own gate and said so in the design notes.
+      // That left the README's "nothing reaches outside except through one
+      // gate" false about the single most dangerous outward path in the
+      // building, and left the browser without an allowlist or a quota at all.
+      // Registering the connector was the missing half, not a reason to have a
+      // second gate.
       const why = needsAPerson(action, el, { formHasPassword });
-      if (why) {
+      let host = null;
+      try { host = new URL(action.url || page.url).hostname; } catch { host = null; }
+      // The action itself is what the gate is given, so the gate is the thing
+      // that performs it rather than a committee it is announced to. Allowed:
+      // it runs and the result is on the egress log. Gated or blocked: it does
+      // not run at all.
+      let performed = null;
+      const verdict = await attempt({
+        connector: CONNECTOR,
+        capability: why ? 'web.commit' : 'web.read',
+        agentId, runId, actor, target: host,
+        reason: (why || `${action.do} — ${goal}`).slice(0, 180),
+        payload: { step, action: action.do, element: el ? el.label : null, url: page.url },
+        call: async () => {
+          performed = await performAction(cdp, action, el, { formHasPassword });
+          return { did: performed };
+        },
+      });
+
+      if (verdict.verdict === 'blocked') {
+        // The fence, the quota or the constitution said no. Recorded as a step
+        // so the session reads as a story rather than stopping without one.
+        exec(
+          `INSERT INTO browser_steps (session_id, step, url, title, action, thought, result, screenshot, elements)
+           VALUES (?,?,?,?,?,?,?,?,?)`,
+          id, step, page.url, page.title, `${action.do}${el ? ` ${el.n}` : ''}`, action.think || null,
+          `refused by the gate: ${verdict.why}`, picture, JSON.stringify(page.elements.slice(0, 60)),
+        );
+        history.push({ step, action: action.do, result: `refused: ${verdict.rule}` });
+        outcome = 'stuck';
+        found = `the gate refused this: ${verdict.why}`;
+        break;
+      }
+
+      if (why || verdict.verdict === 'gated') {
         exec(
           `INSERT INTO browser_steps (session_id, step, url, title, action, thought, result, screenshot, elements, gated, gate_reason, egress_id)
-           VALUES (?,?,?,?,?,?,?,?,?,1,?,NULL)`,
+           VALUES (?,?,?,?,?,?,?,?,?,1,?,?)`,
           id, step, page.url, page.title,
           `${action.do}${el ? ` ${el.n} "${el.label}"` : ''}`, action.think || null,
-          'waiting for a person', picture, JSON.stringify(page.elements.slice(0, 60)), why,
+          'waiting for a person', picture, JSON.stringify(page.elements.slice(0, 60)),
+          why || verdict.why, verdict.id ?? null,
         );
         exec("UPDATE browser_sessions SET state = 'waiting', steps = ?, cost_usd = ? WHERE id = ?", step, spent, id);
         notify({
@@ -546,9 +624,9 @@ ${listing || '(none — try scrolling, or navigate somewhere)'}`,
         };
       }
 
-      let result;
-      try { result = await performAction(cdp, action, el, { formHasPassword }); }
-      catch (e) { result = `failed: ${String(e.message).slice(0, 140)}`; }
+      // Already performed, by the gate. What is left is to write down what
+      // happened — a second call here would do the thing twice.
+      const result = performed || `the gate returned ${verdict.verdict} and nothing was done`;
 
       exec(
         `INSERT INTO browser_steps (session_id, step, url, title, action, thought, result, screenshot, elements)
