@@ -172,3 +172,74 @@ export async function renderBridges() {
     <div class="sub" style="margin-top:8px">${esc(t('Highlighted events are also written to the audit chain. The rest stay in the operational log — a chain of every attendance ping buries the signal it exists to carry.'))}</div>
   </div>`;
 }
+
+/** Documents & knowledge base: the index is open, the contents are governed. */
+export async function renderDocs() {
+  const d = await api('/api/core2/docs').catch(() => null);
+  if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see the documents.'))}</div>`; return; }
+  const o = d.overview;
+  const cls = { public: 'chip-dim', internal: 'chip-ok', confidential: 'chip-warn', restricted: 'chip-ember' };
+
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Documents'), o.total, esc(t('active in the knowledge base')))}
+    ${tile(t('Versions'), o.versions, esc(t('append-only — the next correction is the next version')))}
+    ${tile(t('About people'), o.aboutPeople, esc(t('naming a subject who can erase them')))}
+    ${tile(t('Sealed versions'), o.sealedVersions, esc(t('unreadable on the disk, by design')), o.sealedVersions ? 'tile-ok' : '')}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Classification is an access decision'))}</div>
+    <div class="map-legend">${esc(t(o.note))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('The knowledge base'))}</div>
+    <div style="margin-bottom:10px"><input id="doc-q" class="in" type="search" placeholder="${esc(t('Search titles and internal content'))}" aria-label="${esc(t('Search titles and internal content'))}"></div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Title'))}</th><th>${esc(t('Classification'))}</th><th>${esc(t('About'))}</th><th class="num">${esc(t('Version'))}</th>
+    </tr></thead><tbody id="doc-rows">
+      ${d.documents.map((x) => `<tr>
+        <td><b>${esc(x.title)}</b></td>
+        <td><span class="chip ${cls[x.classification] || 'chip-dim'}">${esc(t(x.classification))}</span></td>
+        <td class="sub">${esc(x.about || '—')}</td>
+        <td class="num mono">v${x.current_version}</td>
+      </tr>`).join('') || `<tr><td colspan="4" class="empty">${esc(t('Nothing written down yet.'))}</td></tr>`}
+    </tbody></table></div>
+  </div>
+
+  ${hasPermC('docs.manage') ? `<div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('New document'))}</div>
+    <form id="doc-new" style="display:grid;gap:8px;max-width:560px">
+      <div><label class="fl" for="doc-title">${esc(t('Title'))}</label><input class="in" id="doc-title" required></div>
+      <div><label class="fl" for="doc-cls">${esc(t('Classification'))}</label>
+        <select class="in" id="doc-cls">
+          ${['public', 'internal', 'confidential'].map((c) => `<option value="${c}">${esc(t(c))}</option>`).join('')}
+        </select></div>
+      <div><label class="fl" for="doc-body">${esc(t('Content'))}</label><textarea class="in" id="doc-body" rows="4"></textarea></div>
+      <button class="btn btn-primary" type="submit">${esc(t('Create'))}</button>
+    </form>
+    <div class="sub" style="margin-top:8px">${esc(t('Restricted documents are created from a person\'s record, because they must name who they are about.'))}</div>
+  </div>` : ''}`;
+
+  $('#doc-q')?.addEventListener('input', async (ev) => {
+    const term = ev.target.value.trim();
+    if (!term) { renderDocs(); return; }
+    const r = await api(`/api/core2/docs/search?q=${encodeURIComponent(term)}`).catch(() => ({ hits: [] }));
+    $('#doc-rows').innerHTML = r.hits.map((x) => `<tr>
+      <td><b>${esc(x.title)}</b></td>
+      <td><span class="chip ${cls[x.classification] || 'chip-dim'}">${esc(t(x.classification))}</span></td>
+      <td class="sub">—</td><td class="num mono">v${x.current_version}</td>
+    </tr>`).join('') || `<tr><td colspan="4" class="empty">${esc(t('Nothing matched. Guarded contents are never searched — that is the design, not a gap.'))}</td></tr>`;
+  });
+
+  $('#doc-new')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try {
+      await api('/api/core2/docs', { method: 'POST', body: {
+        title: $('#doc-title').value, classification: $('#doc-cls').value, body: $('#doc-body').value || null,
+      } });
+      renderDocs();
+    } catch (err) { alert(err.message); }
+  });
+}

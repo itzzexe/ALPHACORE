@@ -32,6 +32,10 @@ export const PERMS = [
   'marketing.view', 'marketing.manage',
   'customers.view', 'customers.manage',
   'people.view', 'people.manage',
+  // Core 2 documents. Three levels because classification is an access decision:
+  // docs.view reads internal, docs.confidential reads the two guarded levels,
+  // docs.manage writes. Public needs only a session.
+  'docs.view', 'docs.manage', 'docs.confidential',
   'legal.view', 'legal.manage',
   'vendors.view', 'vendors.manage',
   'knowledge.view', 'knowledge.manage',

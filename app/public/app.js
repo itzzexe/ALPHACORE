@@ -4,7 +4,7 @@ import { $, esc, linkFor, money, money4, short, toast, view } from '/core/dom.js
 import { TOKEN_KEY, actor, currentUser, hasPermC, navPerm, setCurrentUser } from '/state/session.js';
 import { api, downloadFile, setUnauthorizedHandler } from '/services/api.js';
 import { routes, registerRoutes } from '/router/registry.js';
-import { renderWorkforce2, renderOrgChart, renderBridges } from '/departments/core2.js';
+import { renderWorkforce2, renderOrgChart, renderBridges, renderDocs } from '/departments/core2.js';
 import { CATALOG, SURFACE_LABEL, SURFACE_ORDER, afterRender, currentRoute, holdPoll, initShell, loadCatalog, navGeneration, navigate, pollPaused, routeOf } from '/core/shell.js';
 import { tile } from '/components/tile.js';
 import { CHAT_EMOJI, REQ_STATE_CLS, bubble, chatState, connBtn, renderConnections, wireConnections, wireDownloads } from '/components/common.js';
@@ -238,6 +238,7 @@ const ROUTE_TABLE = {
   workforce2: { title: 'Employees — the system of record', render: renderWorkforce2 },
   orgchart: { title: 'Organization — units, positions and grades', render: renderOrgChart },
   bridges: { title: 'The bridges — what crosses between the two cores', render: renderBridges },
+  docs: { title: 'Documents — the knowledge base, governed', render: renderDocs },
   surface: { title: 'Surface', render: renderSurfaceRoute },
   departments: { title: 'Every department', render: renderDepartments },
   browser: { title: 'Browser', render: renderBrowser },

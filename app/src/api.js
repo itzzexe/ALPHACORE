@@ -23,6 +23,10 @@ import {
 } from './core2/identity.js';
 import { bridgeOverview, seedBridge } from './core2/bridge.js';
 import {
+  createDocument, addVersion, getDocument, listDocuments, archiveDocument,
+  searchDocuments, documentsOverview, READ_PERMISSION,
+} from './core2/documents.js';
+import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
 } from './tax.js';
@@ -661,6 +665,39 @@ const routes = [
   // The bridges, as a page rather than a claim: what crosses, what is gated,
   // and whether the identity bar still holds.
   ['GET', /^\/api\/core2\/bridges$/, () => bridgeOverview()],
+
+  // --- documents & knowledge base ---
+  //
+  // The path permission gets everybody with docs.view through the door; the
+  // classification check happens per-document in the handler, because a route
+  // pattern cannot know whether /docs/7 is an internal runbook or a
+  // disciplinary note. Reading a guarded one without docs.confidential is a
+  // 403 with the reason named, not a silent empty page.
+  ['GET', /^\/api\/core2\/docs$/, (_p, _b, url) => ({
+    documents: listDocuments({ classification: url.searchParams.get('classification') || null }),
+    overview: documentsOverview(),
+  })],
+  ['GET', /^\/api\/core2\/docs\/search$/, (_p, _b, url) => ({ hits: searchDocuments(url.searchParams.get('q') || '') })],
+  ['GET', /^\/api\/core2\/docs\/(\d+)$/, ([id], _b, _u, user) => {
+    const doc = getDocument(Number(id));
+    if (!doc) throw new HttpError(404, 'no such document');
+    const needs = READ_PERMISSION[doc.classification];
+    if (needs && !(user.role === 'superadmin' || user.perms.includes('*') || user.perms.includes(needs))) {
+      throw new HttpError(403, `a ${doc.classification} document needs the ${needs} permission`);
+    }
+    return doc;
+  }],
+  ['POST', /^\/api\/core2\/docs$/, (_p, body, _u, user) => createDocument({
+    title: need(body, 'title'), classification: body.classification || 'internal',
+    subjectPersonId: body.subjectPersonId || null, body: body.body ?? null, note: body.note || null,
+    actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/docs\/(\d+)\/version$/, ([id], body, _u, user) => addVersion(Number(id), {
+    body: need(body, 'body'), note: body.note || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/docs\/(\d+)\/archive$/, ([id], _b, _u, user) => archiveDocument(Number(id), {
+    actor: `human:${user.username}`,
+  })],
 
   // --- Erasure: the right to be forgotten, against a record that cannot forget ---
   ['GET', /^\/api\/erasure$/, () => erasureOverview()],
@@ -1786,6 +1823,7 @@ function permFor(m, path) {
   // people one — the same catalogue Core 1 uses, so a screen and a bridge tool
   // cannot end up guarded differently for the same act.
   if (path.startsWith('/api/core2/org')) return m === 'GET' ? 'org.view' : 'org.manage';
+  if (path.startsWith('/api/core2/docs')) return m === 'GET' ? 'docs.view' : 'docs.manage';
   if (path.startsWith('/api/core2')) return m === 'GET' ? 'people.view' : 'people.manage';
   if (path.startsWith('/api/people')) return m === 'GET' ? 'people.view' : 'people.manage';
   if (path.startsWith('/api/knowledge') || path.startsWith('/api/memory')) return m === 'GET' ? 'knowledge.view' : 'knowledge.manage';

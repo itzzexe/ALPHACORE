@@ -253,6 +253,10 @@ const PII_BY_REF = [
   // contain nothing that equals their email address. Reached by the reference
   // the employment row carried from the moment it was written.
   ['hr_employee', ['bank_account', 'base_salary']],
+  // Restricted document versions — a disciplinary note, a doctor's note held as
+  // an opaque body. Sealed at write under the subject's key; found by the
+  // reference each version carries.
+  ['doc_version', ['body']],
   // A run's prompt is a copy of whatever it was asked to work on, and its
   // output is a copy of what it wrote about them. Sealing a support ticket
   // while the drafting run beside it holds the same message in plaintext moves
@@ -363,6 +367,11 @@ export const TIER_A = [
     subject: [],
     parent: { table: 'hr_person', on: 'person_id', subject: ['personal_email', 'personal_phone'] },
   },
+  // A restricted document's body. Sealed conditionally — only when the document
+  // is classified 'restricted' and is about a person — which the tiering
+  // records the same way it records tickets.draft: the column is sealed at
+  // write wherever there is a person to seal under.
+  { table: 'doc_version', column: 'body', subject: [] },
 ];
 
 const TIER_A_KEYS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));

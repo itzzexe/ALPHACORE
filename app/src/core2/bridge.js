@@ -30,6 +30,7 @@ import { q, one, exec } from '../db.js';
 import { audit } from '../audit.js';
 import { attempt } from '../egress.js';
 import { enqueue, handle } from '../jobs.js';
+import { notify } from '../notify.js';
 import * as identity from './identity.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
@@ -244,6 +245,24 @@ export function emit(event, payload = {}, { idempotency = null } = {}) {
  * that Core 1's rhythm and its agents can react — the same way they already
  * react to queue depth and open incidents.
  */
+/**
+ * Which events reach a person, and how urgently.
+ *
+ * This is the Notifications module the directive asks for, and it is
+ * deliberately not a module: notify() already exists, already dedupes, and
+ * already feeds the Web Push channel a phone subscribes to. Core 2 adds a
+ * mapping, not a mechanism — the same argument as the queue.
+ */
+const NOTIFY = {
+  'leave.requested': { level: 'warn', text: (p) => `Leave request #${p.id ?? ''} is waiting for a manager.` },
+  'employee.created': { level: 'info', text: (p) => `${p.employeeNo ?? 'A new employee'} joined the record.` },
+  'employee.terminated': { level: 'warn', text: (p) => `An employment ended — offboarding checklist applies.` },
+  'task.overdue': { level: 'warn', text: (p) => `Task #${p.id ?? ''} is overdue.` },
+  'contract.expiring': { level: 'warn', text: (p) => `A contract expires soon — renewal needs a decision.` },
+  'payroll.closed': { level: 'info', text: () => 'A payroll period closed.' },
+  'invoice.paid': { level: 'info', text: (p) => `Invoice #${p.id ?? ''} was paid.` },
+};
+
 handle('core2.event', async ({ event, payload }) => {
   if (shouldChain(event)) {
     audit({
@@ -253,7 +272,18 @@ handle('core2.event', async ({ event, payload }) => {
     });
     exec("UPDATE core2_log SET chained = 1 WHERE action = ? AND chained = 0", String(event));
   }
-  return { event, chained: shouldChain(event) };
+  // Reaching a person is part of the event's job, not an afterthought. Note
+  // what the text never carries: a name, a reason, a body — the notification
+  // table is not erasable, so it gets the pointer and not the words, the same
+  // rule the support desk already follows.
+  const n = NOTIFY[event];
+  if (n) {
+    notify({
+      level: n.level, source: 'core2', message: n.text(payload || {}),
+      subjectType: 'core2', subjectId: payload?.id ?? null,
+    });
+  }
+  return { event, chained: shouldChain(event), notified: Boolean(n) };
 });
 
 /** Everything Core 2 can announce. Declared so it can be subscribed to. */

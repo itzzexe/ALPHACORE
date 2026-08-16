@@ -658,6 +658,33 @@ const AR = {
   'Highlighted events are also written to the audit chain. The rest stay in the operational log — a chain of every attendance ping buries the signal it exists to carry.':
     'الأحداث المميّزة تُكتب أيضًا على سلسلة التدقيق. وما عداها يبقى في السجل التشغيلي — فسلسلة تحوي كل نبضة حضور تدفن الإشارة التي وُجدت لتحملها.',
 
+  // الوثائق وقاعدة المعرفة — الفهرس مفتوح والمحتوى محكوم
+  'Documents': 'الوثائق',
+  'Versions': 'الإصدارات',
+  'About people': 'عن أشخاص',
+  'Sealed versions': 'إصدارات مختومة',
+  'active in the knowledge base': 'فاعلة في قاعدة المعرفة',
+  'append-only — the next correction is the next version': 'إلحاق فقط — التصحيح التالي هو الإصدار التالي',
+  'naming a subject who can erase them': 'تسمّي شخصًا يستطيع محوها',
+  'unreadable on the disk, by design': 'غير مقروءة على القرص، عن قصد',
+  'Classification is an access decision': 'التصنيف قرارُ وصولٍ لا مجرد وسم',
+  'The knowledge base': 'قاعدة المعرفة',
+  'Search titles and internal content': 'ابحث في العناوين والمحتوى الداخلي',
+  'Title': 'العنوان',
+  'Classification': 'التصنيف',
+  'About': 'عن',
+  'Version': 'الإصدار',
+  'Content': 'المحتوى',
+  'Create': 'أنشئ',
+  'New document': 'وثيقة جديدة',
+  'Nothing written down yet.': 'لا شيء مدوّن بعد.',
+  'Nothing matched. Guarded contents are never searched — that is the design, not a gap.':
+    'لا نتائج. المحتوى المحروس لا يُبحث فيه أبدًا — هذا هو التصميم، لا ثغرة.',
+  'Restricted documents are created from a person\'s record, because they must name who they are about.':
+    'الوثائق المقيّدة تُنشأ من سجل الشخص نفسه، لأنها يجب أن تسمّي من هي عنه.',
+  'You do not have permission to see the documents.': 'لا تملك صلاحية الاطلاع على الوثائق.',
+  'public': 'عامة', 'internal': 'داخلية', 'confidential': 'سرّية', 'restricted': 'مقيّدة',
+
   // الأبواب الثمانية — ١٤٠ قسمًا عدد صحيح لشركة وخاطئ لقائمة
   'Ask AlphaCore': 'اسأل ألفاكور',
   'Work': 'العمل',

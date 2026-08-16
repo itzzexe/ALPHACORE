@@ -52,6 +52,12 @@
 
 **Deferred from Core 2, with the reason:**
 
+- **Document attachments are text bodies, not files.** A doctor's note today is
+  a sealed text version; a scanned PDF has nowhere to live until the documents
+  module learns file refs (Core 1's workspace storage is the obvious home).
+  Deferred because a file path in a sealed column is a pointer to unsealed
+  bytes — the storage side needs the same sealing thought first.
+
 - **Documents & Knowledge base (Phase 1).** Not built. It is the one Phase 1
   module with a real design question behind it — versioning and access control
   over sealed attachments — and stubbing it would have produced a table with a

@@ -393,6 +393,8 @@ export function sectionCatalog() {
       'The system of record: who is employed, on what terms, reporting to whom'),
     S('orgchart', 'Organization', 'talent', '#/orgchart', n('SELECT COUNT(*) AS n FROM hr_org_unit'),
       'Units, positions and grades — the shape of the company'),
+    S('docs', 'Documents', 'data', '#/docs', n('SELECT COUNT(*) AS n FROM doc_document'),
+      'The knowledge base: versioned, classified, and sealed where it is about a person'),
     S('bridges', 'The bridges', 'govern', '#/bridges', n('SELECT COUNT(*) AS n FROM connectors'),
       'Everything that crosses between the AI core and the enterprise core, and what is gated'),
     S('org', 'Org & personas', 'talent', '#/org', n('SELECT COUNT(*) AS n FROM agents'), 'Who each AI employee is, and which departments they serve'),
@@ -598,7 +600,7 @@ export const SURFACES = [
     id: 'intelligence',
     label: 'Intelligence',
     hint: 'Find something out — about a market, a company, or your own records.',
-    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'insights', 'kgraph', 'embeddings'],
+    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'docs', 'insights', 'kgraph', 'embeddings'],
   },
   {
     id: 'money',
@@ -939,6 +941,8 @@ export function relationshipMatrix() {
     edge('orgchart', 'users', 'a person may hold a login; a login always belongs to a person', n('SELECT COUNT(*) AS n FROM users WHERE person_id IS NOT NULL'), '#/users'),
     edge('bridges', 'egress', 'every call into the enterprise core passes the same gate as an outside one', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core'"), '#/egress'),
     edge('bridges', 'gate', 'a termination or a payroll approval waits for a person, whatever the amount', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core' AND verdict = 'gated'"), '#/gate'),
+    edge('docs', 'workforce2', 'a restricted document names the person it is about', n('SELECT COUNT(*) AS n FROM doc_document WHERE subject_person_id IS NOT NULL'), '#/docs'),
+    edge('docs', 'erasure', 'sealed versions die with their subject`s key', n("SELECT COUNT(*) AS n FROM doc_version WHERE body LIKE 'pii:1:%'"), '#/erasure'),
     edge('bridges', 'audit', 'the consequential subset of enterprise events is written to the chain', n("SELECT COUNT(*) AS n FROM core2_log WHERE chained = 1"), '#/audit'),
     // Expansion wave wiring — every new department joined to the machine.
     edge('security', 'runs', 'sweeps inspect run inputs and outputs', n("SELECT COUNT(*) AS n FROM security_events WHERE subject_type = 'run'"), '#/security'),

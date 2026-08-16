@@ -3013,6 +3013,57 @@ CREATE TABLE IF NOT EXISTS hr_grade (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 ) STRICT;
 
+-- Documents and the knowledge base.
+--
+-- The design question this table answers — the one that kept it out of the
+-- first Phase 1 commit — is: who may read version 3 of a document attached to
+-- a disciplinary record? The answer has two halves and both live here:
+--
+--   The permission half. Classification maps to a permission at the route, so
+--   a confidential document is unreadable to somebody who could not open the
+--   screen. That guards the app.
+--
+--   The sealing half. A document *about a person* with classification
+--   'restricted' has the body of every version sealed under that person's own
+--   key — the doctor's-note case from the directive's data-minimization rule.
+--   That guards the disk, and it means erasing the person takes the document's
+--   contents with them while the fact of its existence survives.
+--
+-- Versions are append-only. A shipped version is never edited, for the same
+-- reason a shipped migration never is: a version history you can rewrite is a
+-- history, not a record.
+CREATE TABLE IF NOT EXISTS doc_document (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  title          TEXT NOT NULL,
+  classification TEXT NOT NULL DEFAULT 'internal'
+                 CHECK (classification IN ('public','internal','confidential','restricted')),
+  -- Who this document is ABOUT, when it is about somebody. Integer, STRICT:
+  -- an agent cannot be the subject of a personnel document either.
+  subject_person_id INTEGER REFERENCES hr_person(id),
+  subject_ref    TEXT,                              -- the erasure join key, carried from the person
+  current_version INTEGER NOT NULL DEFAULT 0,
+  state          TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS doc_document_subject ON doc_document (subject_ref);
+
+CREATE TABLE IF NOT EXISTS doc_version (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id  INTEGER NOT NULL REFERENCES doc_document(id),
+  version      INTEGER NOT NULL,
+  body         TEXT,                                -- sealed when the document is restricted-about-a-person
+  note         TEXT,                                -- why this version exists; never sealed, never personal
+  subject_ref  TEXT,                                -- carried so erasure reaches old versions too
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (document_id, version)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS doc_version_doc ON doc_version (document_id, version);
+CREATE INDEX IF NOT EXISTS doc_version_subject ON doc_version (subject_ref);
+
 -- Core 2's own operational log: every field change, every read of something
 -- sensitive. Deliberately NOT the audit chain — chaining an attendance ping is
 -- noise that makes the real signal harder to audit. The consequential subset is
