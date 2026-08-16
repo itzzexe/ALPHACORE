@@ -1,7 +1,7 @@
 // REST API — thin JSON layer over the modules. Human actions (approvals,
 // evidence verification, decisions, freezes) require an `actor` field naming
 // the human; the audit log records it. No agent path can reach these handlers.
-import { q, one } from './db.js';
+import { q, one, atomically } from './db.js';
 import { verifyChain, audit } from './audit.js';
 import { providersConfig, budgetsConfig } from './env.js';
 import { isProviderAvailable as providerAvailable, isMockMode as mockMode, settingsOverview, setSetting } from './settings.js';
@@ -1291,6 +1291,7 @@ const routes = [
   ['GET', /^\/api\/graph$/, () => relationshipMatrix()],
   // What the map should be lit up about right now, rather than what exists.
   ['GET', /^\/api\/map\/state$/, () => mapState()],
+  ['GET', /^\/api\/atomicity$/, () => atomicity()],
   ['GET', /^\/api\/map$/, () => ({
     divisions: DIVISIONS,
     // The enterprise core's own districts, and the tunnels across the seam.
@@ -2245,6 +2246,37 @@ function permFor(m, path) {
   return 'dashboard.view';
 }
 
+/**
+ * Handlers that cannot be held inside a transaction.
+ *
+ * Decided from the function itself rather than from a list somebody maintains:
+ * an async handler awaits something — a model, a network call — and a
+ * transaction spanning that await would let another request interleave between
+ * the mutation and the commit. Calling that a transaction would be a comment.
+ *
+ * Computed once at load, because doing it per request would be a constructor
+ * lookup on every call for an answer that cannot change.
+ */
+const ASYNC_HANDLERS = new Set(
+  routes.filter(([, , h]) => h?.constructor?.name === 'AsyncFunction').map(([, , h]) => h),
+);
+
+/** How much of the write surface is atomic — a number rather than a claim. */
+export function atomicity() {
+  const writes = routes.filter(([m]) => m !== 'GET');
+  const notAtomic = writes.filter(([, , h]) => ASYNC_HANDLERS.has(h));
+  return {
+    writeRoutes: writes.length,
+    atomic: writes.length - notAtomic.length,
+    notAtomic: notAtomic.length,
+    // Named, so "most of it is atomic" is checkable rather than reassuring.
+    reaching: notAtomic.map(([, p]) => String(p).slice(0, 70)).sort(),
+    says: 'A write and its chain entry are one act where the handler is synchronous. Where it awaits a model or '
+      + 'a network call, a transaction cannot span the await without letting another request interleave — those '
+      + 'are counted here rather than treated as if they were atomic.',
+  };
+}
+
 export async function handleApi(req, res, url, body, user) {
   const perm = permFor(req.method, url.pathname);
   if (perm && !hasPerm(user, perm)) {
@@ -2262,7 +2294,23 @@ export async function handleApi(req, res, url, body, user) {
     const m = url.pathname.match(pattern);
     if (!m) continue;
     try {
-      const result = await handler(m.slice(1), body, url, user);
+      // A write and its chain entry have to be one act or the other.
+      //
+      // The constitution says every consequential act is written to the chain
+      // *before it happens*. That was not quite true: a handler mutated a table
+      // and then wrote the record, so a failed chain write left the act done and
+      // unrecorded — the exact outcome the design exists to prevent. Nothing was
+      // swallowing the error; there was simply nothing holding the two together.
+      //
+      // A transaction cannot be held across an `await` — another request would
+      // interleave between the mutation and the commit, and calling that a
+      // transaction would be a comment rather than a guarantee. So the ones that
+      // can be atomic are, and the ones that cannot are counted rather than
+      // quietly treated as if they were. `GET /api/atomicity` reports both.
+      const atomic = req.method !== 'GET' && !ASYNC_HANDLERS.has(handler);
+      const result = atomic
+        ? atomically(() => handler(m.slice(1), body, url, user))
+        : await handler(m.slice(1), body, url, user);
       if (result?.__raw) {
         res.writeHead(200, {
           'content-type': result.__raw.contentType,

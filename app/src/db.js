@@ -3648,6 +3648,59 @@ for (const sql of [
   'CREATE INDEX IF NOT EXISTS runs_subject ON runs (subject_ref)',
 ]) { try { db.exec(sql); } catch { /* index exists */ } }
 
+/**
+ * Run a piece of work so that all of it happens, or none of it.
+ *
+ * The constitution says every consequential act is written to the chain
+ * *before it happens*. That was not quite true: a handler mutated a table and
+ * then wrote the record, so a failed chain write left the act done and
+ * unrecorded — the one outcome the whole design exists to prevent. Nothing was
+ * swallowing the error; there was simply nothing holding the two together.
+ *
+ * SAVEPOINT rather than BEGIN, because these nest: a route already inside a
+ * transaction that calls something which opens another must not commit the
+ * outer one early. Nested savepoints release into their parent and only the
+ * outermost actually commits.
+ *
+ * Synchronous on purpose. `node:sqlite` is synchronous, and an `await` inside a
+ * transaction would let another request interleave between the mutation and the
+ * commit — which is how a "transaction" becomes a comment.
+ */
+let savepointDepth = 0;
+export function atomically(fn) {
+  const name = `sp${savepointDepth}`;
+  savepointDepth += 1;
+  db.exec(`SAVEPOINT ${name}`);
+  let out;
+  let async = false;
+  try {
+    out = fn();
+    // A promise here means the caller passed an async function, and the
+    // savepoint would release before the work finished. Noted rather than
+    // thrown from inside this block — throwing here would land in the catch
+    // below and roll back a savepoint the handler had already released, which
+    // is how the first version of this reported "no such savepoint".
+    async = Boolean(out && typeof out.then === 'function');
+  } catch (err) {
+    db.exec(`ROLLBACK TO ${name}`);
+    db.exec(`RELEASE ${name}`);
+    savepointDepth -= 1;
+    throw err;
+  }
+  if (async) {
+    db.exec(`ROLLBACK TO ${name}`);
+    db.exec(`RELEASE ${name}`);
+    savepointDepth -= 1;
+    throw new Error('atomically() takes a synchronous function — an await inside a transaction is not one');
+  }
+  db.exec(`RELEASE ${name}`);
+  savepointDepth -= 1;
+  return out;
+}
+
+/** Whether anything is currently holding a transaction open. */
+export const inTransaction = () => savepointDepth > 0;
+
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }
 export function exec(sql, ...params) { return db.prepare(sql).run(...params); }

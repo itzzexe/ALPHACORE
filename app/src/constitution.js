@@ -58,9 +58,17 @@ const FOUNDING = [
     machine: { deny: { payloadMatches: '(sk-[A-Za-z0-9]{16,}|BEGIN (RSA |EC )?PRIVATE KEY|xprv[0-9A-Za-z]{20,})' } },
   },
   {
-    article: 'Record', ruleId: 'everything-on-the-chain', severity: 'warn',
-    text: 'Every consequential act is written to the audit chain before it happens, including the ones that fail.',
-    machine: { warnWhen: { always: false } },
+    // Was `warn`, which was the wrong severity for the promise the whole system
+    // rests on — and the rule was honest about having no machine check, so it
+    // could not have been anything else. It is enforced now, and not by this
+    // gate: a write and its chain entry share one transaction, so a failed
+    // record takes the act with it. The rule says so rather than implying a
+    // check that lives somewhere else.
+    article: 'Record', ruleId: 'everything-on-the-chain', severity: 'deny',
+    text: 'Every consequential act and its audit entry are one transaction: if the record cannot be written, '
+      + 'the act does not happen. Enforced by the storage engine, not by this gate — see GET /api/atomicity '
+      + 'for the write routes where an await makes that impossible.',
+    machine: { note: 'enforced by transaction, not by predicate' },
   },
 ];
 

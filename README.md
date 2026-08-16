@@ -23,14 +23,14 @@ itself.
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/cores-2_(AI_%2B_enterprise)-e07bd2?style=flat-square" alt="two cores: AI and enterprise">
 <img src="https://img.shields.io/badge/relationships-466-8d8477?style=flat-square" alt="466 declared relationships">
-<img src="https://img.shields.io/badge/API-697_routes-4f9cf0?style=flat-square" alt="697 API routes">
+<img src="https://img.shields.io/badge/API-698_routes-4f9cf0?style=flat-square" alt="698 API routes">
 <img src="https://img.shields.io/badge/permissions-260_atomic-e07bd2?style=flat-square" alt="260 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-360-78bf6d?style=flat-square" alt="360 tests">
+<img src="https://img.shields.io/badge/tests-366-78bf6d?style=flat-square" alt="366 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -856,6 +856,31 @@ the attention of whoever wrote it:
 - Three fire per tick, not everything at once. Ten orders each able to start a
   model chain is a way to spend a month's budget in a minute.
 
+### One act, or neither
+
+The constitution says every consequential act is written to the chain *before it
+happens*. That was not quite true, and nothing was hiding it: a handler mutated a
+table and then wrote the record, so a chain write that failed left the act done
+and unrecorded — the single outcome this design exists to prevent. Nothing
+swallowed the error. There was simply **nothing holding the two together**.
+
+Now there is. A write and its chain entry share one transaction, so a record that
+cannot be written takes the act with it. It nests, because a route already inside
+a transaction must not commit it early, and it **refuses an async function**
+rather than silently providing no atomicity — a transaction spanning an `await`
+would let another request interleave between the mutation and the commit, and
+calling that a transaction would be a comment.
+
+Which is the honest limit: a handler that awaits a model or a network call
+cannot be wrapped. So they are **counted and named** rather than treated as if
+they were. `GET /api/atomicity` reports both — currently **403 of 411 write
+routes are atomic**, and the eight that are not are listed by route.
+
+The rule was `severity: warn`, which was the wrong weight for the promise the
+whole system rests on. It is `deny` now, and it says that the enforcement is the
+storage engine rather than a predicate in the gate — because a rule claiming a
+check that lives somewhere else is how the last one came to be wrong.
+
 ### The audit chain
 
 Every consequential act is one row:
@@ -1212,7 +1237,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**697 routes** — all JSON, all
+**698 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1288,7 +1313,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 360 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
+| `npm test` | 366 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1426,7 +1451,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               360 tests across thirty-one files
+  test/               366 tests across thirty-two files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1446,7 +1471,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 360 tests
+npm test                        # 366 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker

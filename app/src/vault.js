@@ -15,7 +15,7 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './env.js';
-import { q, one, exec, db } from './db.js';
+import { q, one, exec, db, atomically } from './db.js';
 import { masterKey, keyId, proposeKey, installKey, keySource, KEY_FILE } from './masterkey.js';
 
 /** Thrown when a ciphertext names a key that is not the one loaded. */
@@ -209,27 +209,28 @@ export function rotateMasterKey({ actor, dryRun = false } = {}) {
 
   const proposed = proposeKey();
 
-  // Steps 2 and 3, inside one transaction.
-  db.exec('BEGIN');
+  // Steps 2 and 3, inside one transaction. The abort record is written after
+  // the rollback rather than inside it — written inside, the account of what
+  // went wrong would be rolled back along with the thing that went wrong.
   try {
-    for (const it of items) {
-      const text = plain.get(`${it.table}:${it.key}`);
-      const resealed = seal(text, proposed.key);
-      const idCol = it.table === 'vault_secrets' ? 'name' : 'ref';
-      exec(`UPDATE ${it.table} SET ${it.column} = ? WHERE ${idCol} = ?`, resealed, it.key);
-    }
-
-    for (const it of items) {
-      const idCol = it.table === 'vault_secrets' ? 'name' : 'ref';
-      const stored = one(`SELECT ${it.column} AS v FROM ${it.table} WHERE ${idCol} = ?`, it.key).v;
-      const back = open(stored, proposed.key);
-      if (back !== plain.get(`${it.table}:${it.key}`)) {
-        throw new Error(`${it.table}.${it.key} did not survive re-sealing`);
+    atomically(() => {
+      for (const it of items) {
+        const text = plain.get(`${it.table}:${it.key}`);
+        const resealed = seal(text, proposed.key);
+        const idCol = it.table === 'vault_secrets' ? 'name' : 'ref';
+        exec(`UPDATE ${it.table} SET ${it.column} = ? WHERE ${idCol} = ?`, resealed, it.key);
       }
-    }
-    db.exec('COMMIT');
+
+      for (const it of items) {
+        const idCol = it.table === 'vault_secrets' ? 'name' : 'ref';
+        const stored = one(`SELECT ${it.column} AS v FROM ${it.table} WHERE ${idCol} = ?`, it.key).v;
+        const back = open(stored, proposed.key);
+        if (back !== plain.get(`${it.table}:${it.key}`)) {
+          throw new Error(`${it.table}.${it.key} did not survive re-sealing`);
+        }
+      }
+    });
   } catch (e) {
-    db.exec('ROLLBACK');
     audit({
       actorType: 'human', actorId: actor, action: 'vault.rotation_aborted',
       subjectType: 'system', subjectId: 'master-key',

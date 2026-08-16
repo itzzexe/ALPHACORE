@@ -29,7 +29,7 @@
 // AI employees keep these books. They propose; the rules refuse what does not
 // balance; and anything above a threshold waits for a person — because a
 // signature that nobody read is worth less than no signature at all.
-import { q, one, exec, db } from './db.js';
+import { q, one, exec, db, atomically } from './db.js';
 import { audit } from './audit.js';
 import { getSetting } from './settings.js';
 
@@ -240,8 +240,11 @@ export function journalEntry({
   }
 
   const ref = nextRef(period);
-  db.exec('BEGIN');
-  try {
+  // The rows and the chain entry are one act. Raw BEGIN was here first and
+  // could not nest — a route already inside a transaction would fail with
+  // "cannot start a transaction within a transaction", which is what happened
+  // the moment the API started wrapping its writes.
+  return atomically(() => {
     exec(
       `INSERT INTO journal (ref, entry_date, period, memo, source, source_id, currency, total, state, created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -254,8 +257,9 @@ export function journalEntry({
         id, l.account, l.side, l.amount, l.memo);
     }
     if (post) exec("UPDATE journal SET posted_by = ?, posted_at = datetime('now') WHERE id = ?", actor, id);
-    db.exec('COMMIT');
 
+    // Inside the same savepoint on purpose: if this write fails, the entry it
+    // describes has to go with it.
     audit({
       actorType: actor.startsWith('human') ? 'human' : 'agent', actorId: actor,
       action: post ? 'journal.posted' : 'journal.drafted',
@@ -263,10 +267,7 @@ export function journalEntry({
       payload: { memo, total: debits, currency: cur, lines: clean.length, source, sourceId },
     });
     return { ok: true, id, ref, period, total: debits, state: post ? 'posted' : 'draft' };
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
+  });
 }
 
 function nextRef(period) {
