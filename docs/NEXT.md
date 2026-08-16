@@ -29,6 +29,69 @@
 - **Ask AlphaCore.** One box, routed by regex over the words typed — no model
   call — defaulting to the read-only answer.
 
+## Core 2 — the enterprise galaxy (started 2026-08-14)
+
+**Done, each with tests that bite:**
+
+- **The PII gate (§0.5)** — verified against the directive's acceptance criteria
+  rather than rebuilt. It already existed.
+- **The identity spine (§4)** — `hr_person` is the root; employment and a login
+  are things a person may or may not have, in any combination. An AI agent is
+  barred from every human slot twice over: STRICT typing refuses an agent's TEXT
+  id in an INTEGER person column at the storage engine, and a trigger refuses a
+  person row created as a proxy under an agent's name. Six routes tried, six
+  refused, with a real person as a control.
+- **The five bridges (§6)** — every call from Core 1 into Core 2 passes the
+  egress gate. Being in the same process buys no trust. Six commands are gated
+  categorically: a granted scope does not clear them, `force: true` does not
+  clear them, and a zero-value change is held exactly as a million-dollar one
+  is — so it is demonstrably not the value ceiling doing the work.
+- **Phase 1** — fourteen routes, three screens in both languages, 143
+  departments all filed under exactly one surface and all carrying at least one
+  real declared relationship.
+
+**Deferred from Core 2, with the reason:**
+
+- **Documents & Knowledge base (Phase 1).** Not built. It is the one Phase 1
+  module with a real design question behind it — versioning and access control
+  over sealed attachments — and stubbing it would have produced a table with a
+  screen and no answer to "who may read version 3 of a document attached to a
+  disciplinary record". Wanted before Phase 5's RAG layer, which is what it
+  exists to feed.
+- **Notifications (Phase 1).** Not built. The directive is explicit that this
+  reuses the existing Web Push channel rather than adding one, so the work is
+  wiring rather than design — deferred because it has no dependents until
+  Phase 3's contract-expiry dates need somewhere to go.
+- **Phases 2 to 5.** Not started. Phase 2's leave flow is the first real test of
+  Bridge 3 doing useful work rather than only refusing things, and it should be
+  built first for that reason.
+- **The `#/bridges` screen shows tools, not calls.** It counts what passed the
+  gate but does not list them. A page that says "7 gated" without saying which
+  seven is one nobody can act on.
+
+**Open risk in what is already built — look at these before real employee data:**
+
+- **`enterprise-core` is armed `live`, not `dry`.** Every other connector proves
+  itself in dry-run first. A dry-run internal connector would execute nothing
+  and make Core 2 unusable, so this one skips that convention — and it is the
+  connector with access to salaries. The gate, the scopes and the human gates
+  all still apply; the *convention* does not.
+- **The agent-name trigger can refuse a real person.** It blocks a display name
+  matching an agent's name, and agent names here are role titles. An employee
+  genuinely called something an agent is called would be refused until one of
+  them is renamed. Deliberate, and the right way round to be wrong, but it will
+  surprise somebody.
+- **STRICT tables are a deviation.** No other table in this codebase uses them.
+  It is what makes §4's guarantee true by construction instead of by discipline,
+  but it means Core 2's schema and Core 1's behave differently under a bad
+  write, and somebody will eventually be confused by that.
+- **`base_salary` is TEXT.** It has to be, because it is sealed. No aggregate
+  can be computed in SQL over sealed salaries — payroll totals will have to be
+  summed in the process after opening each one, which is slower and worth
+  knowing before Phase 3 designs around it.
+
+---
+
 **Deferred, with the reason:**
 
 - **`runs.output` opening is spread across 28 call sites.** Sealing it required
