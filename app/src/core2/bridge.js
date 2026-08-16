@@ -39,6 +39,7 @@ import * as meetings from './meetings.js';
 import * as payops from './payops.js';
 import * as procure from './procure.js';
 import * as talent from './talent.js';
+import * as docs from './documents.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 
@@ -148,6 +149,11 @@ export const TOOLS = {
     run: (a, ctx) => procure.advanceProcurement(a.id, { to: a.to, actor: ctx.actor }),
   },
 
+  search_documents: {
+    write: false, permission: 'docs.view',
+    about: 'Titles and internal bodies only — guarded contents are never searched.',
+    run: ({ q: term, limit = 20 }) => docs.searchDocuments(term, { limit }),
+  },
   get_asset: {
     write: false, permission: 'assets.view',
     about: 'One company asset, for the offboarding return checklist.',
@@ -240,7 +246,16 @@ export const CONNECTOR = 'enterprise-core';
  * still holds nothing until somebody grants it, exactly as with Gmail.
  */
 export function seedBridge({ actor = 'system:bridge' } = {}) {
-  if (one('SELECT id FROM connectors WHERE id = ?', CONNECTOR)) return { already: true };
+  const existing = one('SELECT id, scopes FROM connectors WHERE id = ?', CONNECTOR);
+  if (existing) {
+    // An install that predates a tool would otherwise refuse it forever as a
+    // capability the connector never offered — the same trap core2.gated fell
+    // into on day one. The declared list is derived, so it is synced, not
+    // hand-tended.
+    const current = JSON.stringify([...Object.keys(TOOLS).map((t2) => `core2.${t2}`), 'core2.gated']);
+    if (existing.scopes !== current) exec('UPDATE connectors SET scopes = ? WHERE id = ?', current, CONNECTOR);
+    return { already: true, synced: existing.scopes !== current };
+  }
   // `core2.gated` has to be declared, not just permitted. Left off the list it
   // is refused two checks earlier as a capability the connector never offered —
   // which looks like the gate working and is actually the opposite: a command
@@ -531,6 +546,53 @@ export const CHAINED_EVENTS = new Set([
 export const shouldChain = (event) => CHAINED_EVENTS.has(event);
 
 // ------------------------------------------------------------ overview --
+
+/**
+ * The verb set, per module — measured from what is wired, never typed.
+ *
+ * The directive names eight verbs: Ask, Summarize, Analyze, Recommend, Draft,
+ * Execute (gated), Automate, Monitor. This derives which module has which,
+ * from the tool surface, the event list and the categorical gate — so a verb
+ * shown here has code behind it, and a module missing one says so instead of
+ * getting a tick. Summarize/Analyze/Recommend arrive through Core 1's agents
+ * reading via the tools and answering in a run; they are listed where a read
+ * tool exists to feed them, because an agent cannot summarize what it cannot
+ * read.
+ */
+export function verbCoverage() {
+  const MODULES = {
+    identity: /^(get_employee|search_employees|get_person|get_org_chart|get_reporting_line|create_org_unit|create_position)$/,
+    time: /^(get_leave_balance|get_attendance_today|create_leave_request)$/,
+    meetings: /^(get_meeting|create_meeting|create_action_item)$/,
+    documents: /^(search_documents)$/,
+    payops: /^(get_payroll|create_expense|approve_expense|draft_payroll)$/,
+    procurement: /^(create_procurement|advance_procurement|get_asset)$/,
+    talent: /^(draft_review_evidence|advance_application)$/,
+    contracts: /^(list_expiring_contracts)$/,
+  };
+  const gatedFor = {
+    identity: ['deletePerson'], payops: ['approvePayroll', 'changeSalary'],
+    talent: ['terminateEmployee', 'recordDisciplinary'], contracts: ['signContract'],
+  };
+  return Object.entries(MODULES).map(([module, re]) => {
+    const tools = Object.entries(TOOLS).filter(([n]) => re.test(n));
+    const reads = tools.filter(([, t2]) => !t2.write).map(([n]) => n);
+    const writes = tools.filter(([, t2]) => t2.write).map(([n]) => n);
+    const events = EVENTS.filter((e2) => e2.startsWith(`${module === 'payops' ? 'payroll' : module === 'talent' ? 'employee' : module}.`)
+      || (module === 'time' && e2.startsWith('leave.'))
+      || (module === 'contracts' && e2.startsWith('contract.')));
+    return {
+      module,
+      ask: reads.length > 0,
+      summarize: reads.length > 0, analyze: reads.length > 0, recommend: reads.length > 0,
+      draft: writes.length > 0,
+      executeGated: (gatedFor[module] || []).filter((c) => ALWAYS_HUMAN.has(c)),
+      automate: writes.length > 0,
+      monitor: events.length > 0,
+      tools: [...reads, ...writes],
+    };
+  });
+}
 
 export function bridgeOverview() {
   const conn = one('SELECT id, state, quota_day FROM connectors WHERE id = ?', CONNECTOR);

@@ -56,6 +56,36 @@ export const RULES = [
     test: /\b(?:research|investigate|compare|competitors?|market|industry|find\s+(?:me\s+)?\d+|list\s+\d+|leads?|prospects?|who\s+(?:are|is)\s+the\b|latest\s+news)\b/i,
     why: 'it needs more than one pass and may need the open web, which is what a hunt is for',
   },
+  // --- the enterprise galaxy, in both languages -------------------------
+  //
+  // These answer from Core 2's record directly, and they answer with counts
+  // and pointers rather than personal detail: "who is absent" gets names and
+  // numbers of people — org facts — never a leave type, never a reason,
+  // because the reason does not exist in any schema to begin with.
+  {
+    id: 'attendance',
+    target: 'core2',
+    test: /\b(?:absent|attendance|who\s+is\s+(?:in|out|away)|on\s+leave\s+today)\b|غايب|غائب|الحضور|الغياب|بالدوام|في الدوام/i,
+    why: 'today\'s attendance is a fact the record holds — answered from Core 2, instantly',
+  },
+  {
+    id: 'leave',
+    target: 'core2',
+    test: /\b(?:leave\s+(?:request|balance|pending)|pending\s+leave|vacation\s+balance)\b|إجاز|رصيد الاجاز/i,
+    why: 'leave lives in the record; what waits on a manager is a count, not a search',
+  },
+  {
+    id: 'payroll',
+    target: 'core2',
+    test: /\b(?:payroll|salaries|salary\s+run|payslip)\b|رواتب|الراتب|قسيمة/i,
+    why: 'payroll is pointed at, never quoted — slips are sealed and the screen is permission-checked',
+  },
+  {
+    id: 'contracts',
+    target: 'core2',
+    test: /\b(?:contracts?\s+(?:expiring|expire|renewal)|expiring\s+contracts?)\b|عقود تنتهي|انتهاء العقود|تجديد العقود/i,
+    why: 'the contract watch already knows what lapses soon',
+  },
   {
     id: 'lookup',
     target: 'lookup',
@@ -63,6 +93,53 @@ export const RULES = [
     why: 'anything else is answered from the records first — it is instant, it costs nothing, and it is usually enough',
   },
 ];
+
+/**
+ * The Core 2 answers, computed rather than searched.
+ *
+ * Loaded lazily so ask.js does not import the enterprise modules until an
+ * enterprise question arrives. What each answer contains is deliberate:
+ * attendance gives names and counts (org facts), leave gives counts and a
+ * pointer, payroll gives only a pointer — the slips are sealed, and an answer
+ * box must never become the hole in that seal.
+ */
+async function core2Answer(ruleId) {
+  const { attendanceToday, timeOverview } = await import('./core2/time.js');
+  const { payopsOverview } = await import('./core2/payops.js');
+  const { listExpiring } = await import('./core2/procure.js');
+  switch (ruleId) {
+    case 'attendance': {
+      const a = attendanceToday();
+      return {
+        headline: `${a.present} in, ${a.absent} absent, ${a.onLeave} on leave`,
+        rows: a.people.filter((p) => !p.in && !p.onLeave).map((p) => ({ title: p.display_name, sub: 'absent' })),
+        href: '#/time',
+      };
+    }
+    case 'leave': {
+      const o = timeOverview();
+      return { headline: `${o.pending} request(s) waiting on a manager`, rows: [], href: '#/time' };
+    }
+    case 'payroll': {
+      const o = payopsOverview();
+      const last = o.runs[0];
+      return {
+        headline: last ? `latest run ${last.period} is ${last.state}` : 'no payroll run yet',
+        rows: [], href: '#/finops2',
+        note: 'slips are sealed; the screen behind this link is permission-checked',
+      };
+    }
+    case 'contracts': {
+      const soon = listExpiring({ horizonDays: 90 });
+      return {
+        headline: `${soon.length} contract(s) expire inside ninety days`,
+        rows: soon.slice(0, 8).map((c) => ({ title: c.title, sub: c.expires_at })),
+        href: '#/procure',
+      };
+    }
+    default: return null;
+  }
+}
 
 /**
  * Which department a search hit belongs to.
@@ -82,6 +159,11 @@ const TABLE_DEPARTMENT = {
   posts: 'social', content_items: 'content', designs: 'design', archive_items: 'archive',
   mem_docs: 'memory', chat_messages: 'chat', calls: 'contact', sms_messages: 'contact',
   connectors: 'connectors', jobs: 'jobs', pipelines: 'pipelines', people: 'people',
+  // The enterprise galaxy's tables, so a hit on a person or a purchase names
+  // the Core 2 department it lives in rather than the table it came from.
+  hr_person: 'workforce2', hr_employee: 'workforce2', hr_org_unit: 'orgchart',
+  rec_application: 'talent2', rec_vacancy: 'talent2', mtg_meeting: 'meetings',
+  time_leave_request: 'time', fin_expense: 'finops2', proc_request: 'procure', doc_document: 'docs',
 };
 
 const clean = (s) => String(s || '').trim().slice(0, 600);
@@ -118,7 +200,7 @@ function directedAt(match) {
  * that turns out to be answerable from the records should not need a hunt, and
  * the person can see that for themselves before spending anything.
  */
-export function ask(text, { actor = 'human:unknown' } = {}) {
+export async function ask(text, { actor = 'human:unknown' } = {}) {
   const question = clean(text);
   if (!question) {
     const e = new Error('type something to ask');
@@ -132,6 +214,9 @@ export function ask(text, { actor = 'human:unknown' } = {}) {
   // an employee; it is a search that happened to start with the word "ask".
   const target = rule.target === 'employee' && !directed ? 'lookup' : rule.target;
 
+  // An enterprise question is answered from the record, not searched for.
+  const core2 = target === 'core2' ? await core2Answer(rule.id) : null;
+
   const found = lookup(question, { limit: 12 });
   const hits = found.hits || [];
 
@@ -143,6 +228,7 @@ export function ask(text, { actor = 'human:unknown' } = {}) {
     ...(target === 'request' ? ['requests'] : []),
     ...(target === 'hunt' ? ['hunt'] : []),
     ...(target === 'employee' ? ['chat'] : []),
+    ...(core2 ? [core2.href.replace('#/', '')] : []),
   ])].map((id) => {
     const s = sectionCatalog().find((x) => x.id === id);
     return { id, label: s?.label || id, href: s?.href || `#/${id}`, surface: surfaceOf(id) };
@@ -180,6 +266,7 @@ export function ask(text, { actor = 'human:unknown' } = {}) {
 
   return {
     question,
+    core2,
     route: { rule: rule.id, target, why: rule.why, directedAt: directed },
     answer: {
       total: found.total || 0,

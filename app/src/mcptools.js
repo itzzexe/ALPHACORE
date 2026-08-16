@@ -16,7 +16,20 @@ const must = (user, perm) => {
   if (!hasPerm(user, perm)) throw new Error(`your account does not hold ${perm}`);
 };
 
+import { TOOLS as CORE2_TOOLS } from './core2/bridge.js';
+
+// The EnterpriseCore MCP surface, through the server Core 1 already runs — not
+// a second server. Each tool checks its own declared permission with the same
+// must() everything else here uses, so an MCP client can reach exactly what
+// the person behind it could reach on screen, and nothing more. Agents do not
+// come this way: their path is the command gateway, with the human gate on it.
+const core2Mcp = Object.fromEntries(Object.entries(CORE2_TOOLS).map(([name, tool]) => [
+  `core2_${name}`,
+  (args, user) => { must(user, tool.permission); return tool.run(args || {}, { actor: `human:${user.username}` }); },
+]));
+
 export const mcpTools = {
+  ...core2Mcp,
   company_overview(_args, user) {
     must(user, 'dashboard.view');
     const month = new Date().toISOString().slice(0, 7);

@@ -61,7 +61,12 @@
   Deferred because a file path in a sealed column is a pointer to unsealed
   bytes — the storage side needs the same sealing thought first.
 
-- **Phase 5.** Not started.
+- **Company Feed and channel-scoped agents.** Not built. Core 1s chat floor
+  already holds humans and agents in one room; a per-department feed is a
+  variation on it, deferred until somebody asks for it by name.
+- **Document RAG.** Ask searches titles and internal bodies; retrieval-augmented
+  answers over document content await an embedding pass over doc_version,
+  which must respect the guarded-classification exclusion search already has.
 - **The egress log redaction threshold is 48 characters.** Anything longer
   passed as a tool argument is logged as length + hash. A personal detail
   under 48 characters — a bare phone number as an argument — would still land

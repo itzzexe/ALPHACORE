@@ -21,7 +21,7 @@ import {
   employ, getEmployee, listEmployees, reportingLine, orgChart,
   createOrgUnit, createPosition, createGrade, identityOverview,
 } from './core2/identity.js';
-import { bridgeOverview, seedBridge } from './core2/bridge.js';
+import { bridgeOverview, seedBridge, verbCoverage } from './core2/bridge.js';
 import {
   createDocument, addVersion, getDocument, listDocuments, archiveDocument,
   searchDocuments, documentsOverview, READ_PERMISSION,

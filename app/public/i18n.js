@@ -658,6 +658,11 @@ const AR = {
   'Highlighted events are also written to the audit chain. The rest stay in the operational log — a chain of every attendance ping buries the signal it exists to carry.':
     'الأحداث المميّزة تُكتب أيضًا على سلسلة التدقيق. وما عداها يبقى في السجل التشغيلي — فسلسلة تحوي كل نبضة حضور تدفن الإشارة التي وُجدت لتحملها.',
 
+  // اسأل عبر النواتين
+  'From the record': 'من السجل',
+  'Open the page': 'افتح الصفحة',
+  '1 in, 1 absent': '1 حاضر، 1 غائب',
+
   // دورة حياة الموظف — الدخول والنمو والخروج، والأحكام تبقى بشرية
   'People lifecycle': 'دورة حياة الموظف',
   'Open vacancies': 'شواغر مفتوحة',

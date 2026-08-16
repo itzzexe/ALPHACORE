@@ -188,21 +188,21 @@ test('a fixed set of asks each lands at its intended target', () => {
   }
 });
 
-test('naming a department nobody has heard of is a search, not a message', () => {
+test('naming a department nobody has heard of is a search, not a message', async () => {
   // Failure-closed: "ask hamsandwich about X" must not become a message to an
   // employee who does not exist. It falls back to the read-only answer.
-  const r = ask('ask hamsandwich about the roadmap', { actor: 'human:test' });
+  const r = await ask('ask hamsandwich about the roadmap', { actor: 'human:test' });
   assert.equal(r.route.target, 'lookup');
   assert.equal(r.route.directedAt, null);
   assert.equal(r.next, null, 'a fallback must never propose an action');
 });
 
-test('nothing that spends money happens without a person', () => {
+test('nothing that spends money happens without a person', async () => {
   for (const [text, endpoint] of [
     ['build me a pricing page', 'POST /api/requests'],
     ['research the market for logistics in Iraq', 'POST /api/hunt'],
   ]) {
-    const r = ask(text, { actor: 'human:test' });
+    const r = await ask(text, { actor: 'human:test' });
     assert.equal(r.next.endpoint, endpoint);
     assert.ok(r.next.cost, 'a proposal must say what it costs');
     // The search that already ran is free and read-only; nothing else ran.
@@ -210,8 +210,8 @@ test('nothing that spends money happens without a person', () => {
   }
 });
 
-test('the answer names the departments that produced it', () => {
-  const r = ask('build me a landing page', { actor: 'human:test' });
+test('the answer names the departments that produced it', async () => {
+  const r = await ask('build me a landing page', { actor: 'human:test' });
   assert.ok(r.departments.some((d) => d.id === 'requests'), 'the routed department must be named');
   for (const d of r.departments) {
     assert.ok(d.href, `${d.id} has no link`);
@@ -220,16 +220,14 @@ test('the answer names the departments that produced it', () => {
   }
 });
 
-test('the question itself never reaches the chain', () => {
-  const { q, one } = { q: null, one: null };   // read through the module below
-  return import('../src/db.js').then(({ q: query }) => {
-    const secret = 'PLANTED-ASK-3f2a a very identifiable question';
-    ask(secret, { actor: 'human:test' });
-    const rows = query("SELECT payload FROM audit_log WHERE action = 'ask.routed'");
-    assert.ok(rows.length, 'routing must be recorded');
-    assert.ok(!rows.some((r) => String(r.payload || '').includes('PLANTED-ASK')),
-      'the chain cannot forget, so a question typed by a person must not be written to it');
-  });
+test('the question itself never reaches the chain', async () => {
+  const { q: query } = await import('../src/db.js');
+  const secret = 'PLANTED-ASK-3f2a a very identifiable question';
+  await ask(secret, { actor: 'human:test' });
+  const rows = query("SELECT payload FROM audit_log WHERE action = 'ask.routed'");
+  assert.ok(rows.length, 'routing must be recorded');
+  assert.ok(!rows.some((r) => String(r.payload || '').includes('PLANTED-ASK')),
+    'the chain cannot forget, so a question typed by a person must not be written to it');
 });
 
 test('the routing rules can be read rather than reverse-engineered', () => {
