@@ -203,9 +203,21 @@ else pass('wiring', `all ${divIds.length} divisions are joined to each other`);
 
 // Every section must have a page, and every page a section. A route with no
 // section is unreachable from the map; a section with no route is a dead link.
+// The table used to be `const routes = {` in app.js. When the console was split
+// into modules it became ROUTE_TABLE, handed to a registry — and this check went
+// on reading the old name, found nothing, and reported all 150 departments as
+// pointing at a page that does not exist. A pre-flight audit that cries wolf is
+// worse than one that does not run: it teaches you to skip the output. So the
+// slice is anchored on the table and asserted to be non-empty, which turns the
+// next rename into a loud failure rather than a silent flood.
 const appjs = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
-const routeBlock = appjs.slice(appjs.indexOf('const routes = {'), appjs.indexOf('let pollTimer') > 0 ? appjs.indexOf('};', appjs.indexOf('const routes = {')) : undefined);
-const routeKeys = new Set([...routeBlock.matchAll(/^\s{2}([a-z][\w]*)\s*:\s*\{/gm)].map((m) => m[1]));
+const tableAt = appjs.indexOf('const ROUTE_TABLE');
+const routeBlock = tableAt < 0 ? '' : appjs.slice(tableAt, appjs.indexOf('registerRoutes(ROUTE_TABLE)', tableAt));
+const routeKeys = new Set([...routeBlock.matchAll(/^\s+'?([a-z][\w]*)'?\s*:\s*\{/gm)].map((m) => m[1]));
+if (!routeKeys.size) {
+  note('HIGH', 'wiring', 'the route table could not be read, so no page check happened',
+    'launch-audit.mjs looks for `const ROUTE_TABLE` … `registerRoutes(ROUTE_TABLE)` in public/app.js');
+}
 const missingPages = sections.filter((s) => {
   const key = String(s.href || '').replace('#/', '').split('/')[0];
   return key && !routeKeys.has(key);

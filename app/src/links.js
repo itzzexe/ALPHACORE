@@ -1025,7 +1025,11 @@ export function relationshipMatrix() {
     edge('meetings', 'erasure', 'a transcript is sealed under its organizer and dies with their key', n("SELECT COUNT(*) AS n FROM mtg_meeting WHERE transcript LIKE 'pii:1:%'"), '#/erasure'),
     edge('docs', 'workforce2', 'a restricted document names the person it is about', n('SELECT COUNT(*) AS n FROM doc_document WHERE subject_person_id IS NOT NULL'), '#/docs'),
     edge('docs', 'erasure', 'sealed versions die with their subject`s key', n("SELECT COUNT(*) AS n FROM doc_version WHERE body LIKE 'pii:1:%'"), '#/erasure'),
-    edge('map2', 'graph', 'two projections of one catalogue — the maps cannot disagree', n('SELECT COUNT(*) AS n FROM connectors'), '#/graph'),
+    // `graph` is a surface, not a department, so an edge could not name it and
+    // was silently dropped. The claim is still true and still checkable against
+    // a department: the knowledge graph and this map are drawn from one
+    // catalogue, so they cannot disagree. The link still opens the first map.
+    edge('map2', 'kgraph', 'two projections of one catalogue — the maps cannot disagree', n('SELECT COUNT(*) AS n FROM graph_nodes'), '#/graph'),
     edge('map2', 'bridges', 'every tunnel drawn is a declared edge the audit checks', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core'"), '#/bridges'),
     edge('bridges', 'audit', 'the consequential subset of enterprise events is written to the chain', n("SELECT COUNT(*) AS n FROM core2_log WHERE chained = 1"), '#/audit'),
     // Expansion wave wiring — every new department joined to the machine.

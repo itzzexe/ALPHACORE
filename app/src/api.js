@@ -2136,7 +2136,14 @@ export async function handleApi(req, res, url, body, user) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
-      const status = err.status || (err.name === 'BudgetExceeded' ? 402 : 500);
+      // A constraint the caller tripped is the caller's error, not a fault in
+      // the server. Left as a 500 it pages somebody at three in the morning
+      // because two cost centres were given the same code — and it buries the
+      // real 500s in noise. SQLite reports these with a distinguishable code,
+      // so they are translated once here rather than guarded at every route.
+      const constraint = err.code === 'ERR_SQLITE_ERROR' && /constraint failed/i.test(err.message || '');
+      const status = err.status
+        || (err.name === 'BudgetExceeded' ? 402 : (constraint ? 400 : 500));
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }
