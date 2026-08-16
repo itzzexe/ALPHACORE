@@ -147,6 +147,13 @@ export async function attempt({
   connector: connectorId, capability, call,
   agentId = null, runId = null, actor = null, target = null,
   reason = '', payload = {}, valueUsd = 0, force = false,
+  // The egress log is append-forever and not reachable by erasure. A call
+  // whose *answer* contains opened personal content — a payroll slip, review
+  // evidence, a meeting transcript — must not have that answer copied into
+  // the log, or the log becomes a second, unerasable home for it. The caller
+  // says so explicitly; the verdict, the intent hash and the payload shape
+  // are recorded either way, so the evidence of what happened survives.
+  logResult = true,
 }) {
   const conn = one('SELECT * FROM connectors WHERE id = ?', connectorId);
   const safePayload = redact(payload);
@@ -251,7 +258,8 @@ export async function attempt({
   const id = record('allowed');
   try {
     const result = await call();
-    exec("UPDATE egress_log SET result = ? WHERE id = ?", JSON.stringify(redact(result ?? { ok: true })), id);
+    exec("UPDATE egress_log SET result = ? WHERE id = ?",
+      JSON.stringify(logResult ? redact(result ?? { ok: true }) : { logged: false, why: 'the answer may contain sealed personal content' }), id);
     exec("UPDATE connectors SET last_call = datetime('now'), health = 'ok' WHERE id = ?", connectorId);
     certify({ connectorId, capability, verdict: 'allowed', outcome: 'ok', egressId: id });
     return { verdict: 'allowed', id, result };

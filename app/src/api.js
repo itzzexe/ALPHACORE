@@ -40,6 +40,11 @@ import {
   createProcurement, advanceProcurement, listProcurement, listExpiring, procureOverview,
 } from './core2/procure.js';
 import {
+  openVacancy, apply, advanceApplication, hire, listVacancies, listApplications,
+  tasksFor, completeTask, setObjective, writeReviewEvidence, setRating, getReview,
+  createCourse, grantCertificate, competencyMatrix, terminateEmployee, recordDisciplinary, talentOverview,
+} from './core2/talent.js';
+import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
 } from './tax.js';
@@ -741,6 +746,60 @@ const routes = [
   })],
   ['GET', /^\/api\/core2\/contracts\/expiring$/, (_p, _b, url) => ({
     contracts: listExpiring({ horizonDays: Number(url.searchParams.get('horizonDays')) || 90 }),
+  })],
+
+  // --- people lifecycle: recruitment, performance, training, the way out ---
+  ['GET', /^\/api\/core2\/talent$/, () => ({
+    overview: talentOverview(), vacancies: listVacancies(), applications: listApplications({}),
+    matrix: competencyMatrix(),
+  })],
+  ['POST', /^\/api\/core2\/vacancies$/, (_p, body, _u, user) => openVacancy({
+    title: need(body, 'title'), positionId: body.positionId || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/applications$/, (_p, body, _u, user) => apply({
+    vacancyId: need(body, 'vacancyId'), personId: need(body, 'personId'), docId: body.docId || null,
+    actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/applications\/(\d+)\/advance$/, ([id], body, _u, user) => advanceApplication(Number(id), {
+    to: need(body, 'to'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/applications\/(\d+)\/hire$/, ([id], body, _u, user) => hire(Number(id), {
+    employeeNo: body.employeeNo || null, orgUnitId: body.orgUnitId || null,
+    positionId: body.positionId || null, baseSalary: body.baseSalary ?? null,
+    actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/employees\/(\d+)\/tasks$/, ([id], _b, url) => ({
+    tasks: tasksFor(Number(id), url.searchParams.get('kind') || null),
+  })],
+  ['POST', /^\/api\/core2\/tasks\/(\d+)\/done$/, ([id], _b, _u, user) => completeTask(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/objectives$/, (_p, body, _u, user) => setObjective({
+    employeeId: need(body, 'employeeId'), title: need(body, 'title'), due: body.due || null,
+    actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/reviews\/(\d+)\/([\w-]+)$/, ([id, period]) => getReview(Number(id), period)
+    || (() => { throw new HttpError(404, 'no such review'); })()],
+  ['POST', /^\/api\/core2\/reviews\/evidence$/, (_p, body, _u, user) => writeReviewEvidence({
+    employeeId: need(body, 'employeeId'), period: need(body, 'period'), evidence: need(body, 'evidence'),
+    actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/reviews\/rate$/, (_p, body, _u, user) => setRating({
+    employeeId: need(body, 'employeeId'), period: need(body, 'period'), rating: need(body, 'rating'),
+    actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/courses$/, (_p, body, _u, user) => createCourse({
+    name: need(body, 'name'), expiresMonths: body.expiresMonths || 0, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/certificates$/, (_p, body, _u, user) => grantCertificate({
+    employeeId: need(body, 'employeeId'), courseId: need(body, 'courseId'), earnedAt: body.earnedAt || null,
+    actor: `human:${user.username}`,
+  })],
+  // The way out and the record nobody wants: both human acts, both chained.
+  ['POST', /^\/api\/core2\/employees\/(\d+)\/terminate$/, ([id], _b, _u, user) => terminateEmployee({
+    employeeId: Number(id), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/disciplinary$/, (_p, body, _u, user) => recordDisciplinary({
+    personId: need(body, 'personId'), title: body.title || null, body: need(body, 'body'),
+    actor: `human:${user.username}`,
   })],
 
   // --- meetings ---

@@ -61,7 +61,11 @@
   Deferred because a file path in a sealed column is a pointer to unsealed
   bytes — the storage side needs the same sealing thought first.
 
-- **Phases 4 and 5.** Not started.
+- **Phase 5.** Not started.
+- **The egress log redaction threshold is 48 characters.** Anything longer
+  passed as a tool argument is logged as length + hash. A personal detail
+  under 48 characters — a bare phone number as an argument — would still land
+  in the log readable. Tool arguments should be ids, and mostly are.
 - **Payroll taxes and contributions are named zeros.** The slip carries the
   full formula shape, but tax and contribution rules are jurisdiction-specific
   and nothing computes them yet. End-of-service calculation likewise.

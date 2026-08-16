@@ -259,6 +259,8 @@ const PII_BY_REF = [
   ['doc_version', ['body']],
   // Meeting transcripts, sealed under the organizer and found by their reference.
   ['mtg_meeting', ['transcript']],
+  // Review evidence: a paragraph about a person, sealed under them.
+  ['perf_review', ['evidence']],
   // A run's prompt is a copy of whatever it was asked to work on, and its
   // output is a copy of what it wrote about them. Sealing a support ticket
   // while the drafting run beside it holds the same message in plaintext moves
@@ -377,6 +379,7 @@ export const TIER_A = [
   // A transcript is about everybody in the room; sealing has one subject. The
   // organizer's key holds it, and the limitation is in NEXT.md, not hidden.
   { table: 'mtg_meeting', column: 'transcript', subject: [] },
+  { table: 'perf_review', column: 'evidence', subject: [] },
 ];
 
 const TIER_A_KEYS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));

@@ -466,3 +466,58 @@ export async function renderProcure() {
     catch (err) { alert(err.message); }
   }));
 }
+
+/** People lifecycle: the pipeline in, the growth inside, and the way out. */
+export async function renderTalent() {
+  const d = await api('/api/core2/talent').catch(() => null);
+  if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see the people lifecycle.'))}</div>`; return; }
+  const o = d.overview;
+  const appCls = { applied: 'chip-dim', screening: 'chip-warn', interview: 'chip-warn', offer: 'chip-ok', hired: 'chip-ok', rejected: 'chip-bad' };
+
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Open vacancies'), o.vacancies, esc(t('positions looking for a person')))}
+    ${tile(t('In the pipeline'), o.inPipeline, esc(t('applications not yet decided')), o.inPipeline ? 'tile-warn' : '')}
+    ${tile(t('Unrated reviews'), o.reviewsUnrated, esc(t('evidence written, judgment pending')), o.reviewsUnrated ? 'tile-warn' : '')}
+    ${tile(t('Offboarding open'), o.offboarding, esc(t('assets and access still to recover')), o.offboarding ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Two species, two pipelines'))}</div>
+    <div class="map-legend">${esc(t(o.note))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Applications'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Who'))}</th><th>${esc(t('Vacancy'))}</th><th>${esc(t('State'))}</th><th>${esc(t('Decided by'))}</th>
+    </tr></thead><tbody>
+      ${d.applications.map((a) => `<tr>
+        <td><b>${esc(a.display_name)}</b>${a.doc_id ? ` <span class="chip chip-ember" title="${esc(t('a sealed document is attached'))}">🔒</span>` : ''}</td>
+        <td class="sub">${esc(a.vacancy_title)}</td>
+        <td><span class="chip ${appCls[a.state] || 'chip-dim'}">${esc(t(a.state))}</span></td>
+        <td class="sub">${esc(a.decided_by || '—')}</td>
+      </tr>`).join('') || `<tr><td colspan="4" class="empty">${esc(t('Nobody has applied yet.'))}</td></tr>`}
+    </tbody></table></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Competency matrix'))}</div>
+    ${d.matrix.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Who'))}</th><th>${esc(t('Course'))}</th><th>${esc(t('Earned'))}</th><th>${esc(t('Expires'))}</th><th>${esc(t('Standing'))}</th>
+    </tr></thead><tbody>
+      ${d.matrix.map((m) => `<tr>
+        <td><b>${esc(m.display_name)}</b></td>
+        <td class="sub">${esc(m.course)}</td>
+        <td class="sub mono">${esc(m.earned_at)}</td>
+        <td class="sub mono">${esc(m.expires_at || '—')}</td>
+        <td><span class="chip ${m.standing === 'current' ? 'chip-ok' : 'chip-bad'}">${esc(t(m.standing))}</span></td>
+      </tr>`).join('')}
+    </tbody></table></div>` : `<div class="empty">${esc(t('No certificates yet.'))}</div>`}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('What a machine may and may not do here'))}</div>
+    <div class="map-legend">${esc(t('An AI screens applications, drafts review evidence and computes checklists. It cannot make an offer, hire, reject, rate, or terminate — those refuse a machine inside the record itself, whatever the agent\'s scopes say, and each one is chained when a human does it.'))}</div>
+  </div>`;
+}

@@ -26,6 +26,7 @@
 //
 // That is a deliberate cost. It would be faster to call the function. Faster is
 // how "internal" becomes a synonym for "ungoverned".
+import { createHash } from 'node:crypto';
 import { q, one, exec } from '../db.js';
 import { audit } from '../audit.js';
 import { attempt } from '../egress.js';
@@ -37,6 +38,7 @@ import * as time from './time.js';
 import * as meetings from './meetings.js';
 import * as payops from './payops.js';
 import * as procure from './procure.js';
+import * as talent from './talent.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 
@@ -53,17 +55,17 @@ const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 export const TOOLS = {
   // --- reads ---
   get_employee: {
-    write: false, permission: 'people.view',
+    write: false, permission: 'people.view', pii: true,
     about: 'One employment record, with the person it belongs to.',
     run: ({ id }) => identity.getEmployee(id),
   },
   search_employees: {
-    write: false, permission: 'people.view',
+    write: false, permission: 'people.view', pii: true,
     about: 'Employees, filtered by state or org unit.',
     run: ({ state = null, orgUnitId = null, limit = 50 }) => identity.listEmployees({ state, orgUnitId, limit }),
   },
   get_person: {
-    write: false, permission: 'people.view',
+    write: false, permission: 'people.view', pii: true,
     about: 'One human being, and everything the company knows about them.',
     run: ({ id }) => identity.personDossier(id),
   },
@@ -89,14 +91,14 @@ export const TOOLS = {
     run: () => time.attendanceToday(),
   },
   get_meeting: {
-    write: false, permission: 'people.view',
+    write: false, permission: 'people.view', pii: true,
     about: 'One meeting: participants, decisions and action items.',
     run: ({ id }) => meetings.getMeeting(id),
   },
 
   // --- writes: every one of these goes through the gateway ---
   create_leave_request: {
-    write: true, permission: 'people.manage',
+    write: true, permission: 'people.manage', pii: true,
     about: 'File a leave request on an employee`s behalf. Balance and overlap are checked; approval stays human.',
     run: (a, ctx) => time.requestLeave({ ...a, actor: ctx.actor }),
   },
@@ -111,7 +113,7 @@ export const TOOLS = {
     run: (a, ctx) => meetings.addAction(a.meetingId, { ...a, actor: ctx.actor }),
   },
   get_payroll: {
-    write: false, permission: 'finance.view',
+    write: false, permission: 'finance.view', pii: true,
     about: 'One payroll run with its slips — opened only for a permitted reader.',
     run: ({ id }) => payops.getRun(id),
   },
@@ -146,6 +148,22 @@ export const TOOLS = {
     run: (a, ctx) => procure.advanceProcurement(a.id, { to: a.to, actor: ctx.actor }),
   },
 
+  get_asset: {
+    write: false, permission: 'assets.view',
+    about: 'One company asset, for the offboarding return checklist.',
+    run: ({ id }) => one('SELECT * FROM assets WHERE id = ?', Number(id)),
+  },
+  draft_review_evidence: {
+    write: true, permission: 'people.manage', pii: true,
+    about: 'Write the evidence half of a review. There is no rating parameter: an AI summarizes, a human judges.',
+    run: (a, ctx) => talent.writeReviewEvidence({ ...a, actor: ctx.actor }),
+  },
+  advance_application: {
+    write: true, permission: 'people.manage',
+    about: 'Move an application through screening. Offers, hires and rejections refuse a machine inside Core 2.',
+    run: (a, ctx) => talent.advanceApplication(a.id, { to: a.to, actor: ctx.actor }),
+  },
+
   create_org_unit: {
     write: true, permission: 'org.manage',
     about: 'Add a unit to the organization.',
@@ -157,6 +175,30 @@ export const TOOLS = {
     run: (a, ctx) => identity.createPosition({ ...a, actor: ctx.actor }),
   },
 };
+
+/**
+ * What the egress log is allowed to remember about a Core 2 call.
+ *
+ * The gate records every attempt's payload, and the egress log is not
+ * erasable — so a review summary or a CV passed as a tool argument would be a
+ * plaintext copy of personal text in a log that outlives the person. The test
+ * that planted evidence through the gateway found it there, not in the table
+ * it was aimed at: the same leak-one-table-to-the-left failure runs.input had.
+ *
+ * So long strings are logged as their shape — length and a hash prefix —
+ * which is still evidence of what was attempted (the hash pins the content)
+ * without the log becoming a second, unerasable home for the words. Short
+ * strings pass through; ids, dates and enums are what the log is for.
+ */
+function redactForLog(args) {
+  const out = {};
+  for (const [k, v] of Object.entries(args || {})) {
+    out[k] = typeof v === 'string' && v.length > 48
+      ? `[${v.length} chars, sha256:${createHash('sha256').update(v).digest('hex').slice(0, 12)}]`
+      : v;
+  }
+  return out;
+}
 
 /**
  * Call a Core 2 tool from Core 1.
@@ -179,7 +221,8 @@ export async function callTool(name, args = {}, { agentId = null, runId = null, 
     agentId, runId, actor,
     target: 'enterprise-core',
     reason: reason || `read ${name}`,
-    payload: args,
+    payload: redactForLog(args),
+    logResult: !tool.pii,
     call: async () => tool.run(args, { actor }),
   });
   return res;
@@ -265,10 +308,11 @@ export async function command(name, args = {}, { agentId = null, runId = null, a
     agentId, runId, actor,
     target: 'enterprise-core',
     reason: reason || `command ${name}`,
-    payload: { command: name, ...args },
+    payload: { command: name, ...redactForLog(args) },
     // The value is what makes the ceiling bite for money-shaped commands; the
     // categorical list above is what makes the gate bite regardless.
     valueUsd: Number(args.valueUsd || 0),
+    logResult: !(tool && tool.pii),
     force: gated ? false : force,
     call: async () => {
       if (!tool) refuse(`${name} is gated but has no implementation yet`);
@@ -277,7 +321,7 @@ export async function command(name, args = {}, { agentId = null, runId = null, a
   });
 
   if (res.verdict === 'allowed') {
-    emit(`core2.${name}`, { command: name, agentId, actor, result: res.result ?? null });
+    emit(`core2.${name}`, { command: name, agentId, actor, id: res.result?.id ?? null });
   }
   return res;
 }
@@ -331,6 +375,7 @@ const NOTIFY = {
   'employee.terminated': { level: 'warn', text: (p) => `An employment ended — offboarding checklist applies.` },
   'task.overdue': { level: 'warn', text: (p) => `Task #${p.id ?? ''} is overdue.` },
   'contract.expiring': { level: 'warn', text: (p) => `A contract expires soon — renewal needs a decision.` },
+  'certificate.expiring': { level: 'warn', text: (p) => `A ${p.course || ''} certificate expires soon — renewal or retraining needed.` },
   'payroll.closed': { level: 'info', text: () => 'A payroll period closed.' },
   'invoice.paid': { level: 'info', text: (p) => `Invoice #${p.id ?? ''} was paid.` },
 };
@@ -436,7 +481,7 @@ export const EVENTS = [
   'meeting.started', 'meeting.completed',
   'task.created', 'task.overdue',
   'expense.submitted', 'invoice.created', 'invoice.paid',
-  'payroll.closed', 'contract.signed', 'contract.expiring',
+  'payroll.closed', 'contract.signed', 'contract.expiring', 'certificate.expiring',
 ];
 
 // -------------------------------------------------- Bridge 4 — Identity --

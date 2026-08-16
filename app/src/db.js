@@ -3262,6 +3262,90 @@ CREATE TABLE IF NOT EXISTS proc_request (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 ) STRICT;
 
+-- PEOPLE LIFECYCLE: recruitment, onboarding, performance, training.
+--
+-- An applicant is an hr_person — the candidate-only combination the identity
+-- model was built to hold — never a row in Core 1's candidates table, which
+-- hires AI agents. Two pipelines, two species, one department page. Sharing
+-- the table would have put humans and agents in one identity pool, which is
+-- the exact thing §4 exists to prevent.
+--
+-- There is no evaluation free-text anywhere here. Interview notes and CVs are
+-- sealed restricted documents referenced by id; a rejection is a state with a
+-- name behind it, not a paragraph that outlives the person it judges.
+CREATE TABLE IF NOT EXISTS rec_vacancy (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  position_id INTEGER REFERENCES hr_position(id),
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','frozen','filled','closed')),
+  opened_by   TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS rec_application (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  vacancy_id  INTEGER NOT NULL REFERENCES rec_vacancy(id),
+  person_id   INTEGER NOT NULL REFERENCES hr_person(id),
+  state       TEXT NOT NULL DEFAULT 'applied'
+              CHECK (state IN ('applied','screening','interview','offer','hired','rejected')),
+  doc_id      INTEGER REFERENCES doc_document(id),   -- CV / notes, sealed
+  decided_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (vacancy_id, person_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS rec_task (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  kind        TEXT NOT NULL DEFAULT 'onboard' CHECK (kind IN ('onboard','offboard')),
+  what        TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','done')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- Performance. The evidence is a summary an AI may draft from tasks, meetings
+-- and goals; the RATING is a human judgment, always, and the two live in
+-- different columns so the bar is a column away from the text rather than a
+-- sentence in a policy. Evidence is Tier A — it is a paragraph about a person.
+CREATE TABLE IF NOT EXISTS perf_objective (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  title       TEXT NOT NULL,
+  due         TEXT,
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','met','missed','dropped')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS perf_review (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  period      TEXT NOT NULL,
+  evidence    TEXT,                                  -- Tier A, sealed; AI may draft it
+  rating      INTEGER,                               -- a human wrote this or nobody did
+  rated_by    TEXT,
+  subject_ref TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, period)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS perf_review_subject ON perf_review (subject_ref);
+
+CREATE TABLE IF NOT EXISTS lrn_course (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL UNIQUE,
+  expires_months INTEGER NOT NULL DEFAULT 0,         -- 0: never expires
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS lrn_certificate (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  course_id   INTEGER NOT NULL REFERENCES lrn_course(id),
+  earned_at   TEXT NOT NULL,
+  expires_at  TEXT,
+  UNIQUE (employee_id, course_id, earned_at)
+) STRICT;
+
 -- Core 2's own operational log: every field change, every read of something
 -- sensitive. Deliberately NOT the audit chain — chaining an attendance ping is
 -- noise that makes the real signal harder to audit. The consequential subset is

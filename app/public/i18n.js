@@ -658,6 +658,33 @@ const AR = {
   'Highlighted events are also written to the audit chain. The rest stay in the operational log — a chain of every attendance ping buries the signal it exists to carry.':
     'الأحداث المميّزة تُكتب أيضًا على سلسلة التدقيق. وما عداها يبقى في السجل التشغيلي — فسلسلة تحوي كل نبضة حضور تدفن الإشارة التي وُجدت لتحملها.',
 
+  // دورة حياة الموظف — الدخول والنمو والخروج، والأحكام تبقى بشرية
+  'People lifecycle': 'دورة حياة الموظف',
+  'Open vacancies': 'شواغر مفتوحة',
+  'In the pipeline': 'في المسار',
+  'Unrated reviews': 'تقييمات بلا حكم',
+  'Offboarding open': 'مغادرات جارية',
+  'positions looking for a person': 'مناصب تبحث عن شخص',
+  'applications not yet decided': 'طلبات لم يُبتّ فيها',
+  'evidence written, judgment pending': 'الشواهد مكتوبة والحكم منتظر',
+  'assets and access still to recover': 'عهدة وصلاحيات لم تُستردّ بعد',
+  'Two species, two pipelines': 'جنسان، ومساران',
+  'Applications': 'الطلبات',
+  'Vacancy': 'الشاغر',
+  'Decided by': 'قرّرها',
+  'Nobody has applied yet.': 'لم يتقدّم أحد بعد.',
+  'Competency matrix': 'مصفوفة الكفاءات',
+  'Course': 'الدورة',
+  'Earned': 'نالها',
+  'Standing': 'الوضع',
+  'current': 'سارية', 'expired': 'منتهية',
+  'No certificates yet.': 'لا شهادات بعد.',
+  'What a machine may and may not do here': 'ما يجوز للآلة هنا وما لا يجوز',
+  'An AI screens applications, drafts review evidence and computes checklists. It cannot make an offer, hire, reject, rate, or terminate — those refuse a machine inside the record itself, whatever the agent\'s scopes say, and each one is chained when a human does it.':
+    'الذكاء الاصطناعي يفرز الطلبات ويكتب شواهد التقييم ويحسب قوائم المهام. ولا يستطيع أن يعرض وظيفة أو يوظّف أو يرفض أو يقيّم أو ينهي خدمة — فهذه يرفضها السجل نفسه من أي آلة مهما كانت صلاحيات الوكيل، وكلٌّ منها يُقيَّد على السلسلة حين يفعلها إنسان.',
+  'You do not have permission to see the people lifecycle.': 'لا تملك صلاحية الاطلاع على دورة حياة الموظف.',
+  'applied': 'مقدَّم', 'screening': 'فرز', 'interview': 'مقابلة', 'offer': 'عرض', 'hired': 'موظَّف',
+
   // المال — دفتر واحد، وسيّد واحد
   'Finance ops': 'العمليات المالية',
   'Procurement ops': 'عمليات المشتريات',
