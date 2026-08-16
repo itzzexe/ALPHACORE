@@ -257,6 +257,8 @@ const PII_BY_REF = [
   // an opaque body. Sealed at write under the subject's key; found by the
   // reference each version carries.
   ['doc_version', ['body']],
+  // Meeting transcripts, sealed under the organizer and found by their reference.
+  ['mtg_meeting', ['transcript']],
   // A run's prompt is a copy of whatever it was asked to work on, and its
   // output is a copy of what it wrote about them. Sealing a support ticket
   // while the drafting run beside it holds the same message in plaintext moves
@@ -372,6 +374,9 @@ export const TIER_A = [
   // records the same way it records tickets.draft: the column is sealed at
   // write wherever there is a person to seal under.
   { table: 'doc_version', column: 'body', subject: [] },
+  // A transcript is about everybody in the room; sealing has one subject. The
+  // organizer's key holds it, and the limitation is in NEXT.md, not hidden.
+  { table: 'mtg_meeting', column: 'transcript', subject: [] },
 ];
 
 const TIER_A_KEYS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));

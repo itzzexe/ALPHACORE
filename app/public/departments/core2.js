@@ -243,3 +243,102 @@ export async function renderDocs() {
     } catch (err) { alert(err.message); }
   });
 }
+
+/** Attendance and leave: who is in, who is away, and what waits on a manager. */
+export async function renderTime() {
+  const d = await api('/api/core2/time').catch(() => null);
+  const lv = await api('/api/core2/leave').catch(() => ({ requests: [] }));
+  if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see attendance.'))}</div>`; return; }
+  const a = d.attendance;
+  const lvCls = { pending: 'chip-warn', approved: 'chip-ok', rejected: 'chip-bad', cancelled: 'chip-dim' };
+
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Present'), a.present, esc(t('checked in today')), a.present ? 'tile-ok' : '')}
+    ${tile(t('Absent'), a.absent, esc(t('no mark and not on leave')), a.absent ? 'tile-warn' : '')}
+    ${tile(t('On leave'), a.onLeave, esc(t('approved and away')))}
+    ${tile(t('Waiting on a manager'), d.pending, esc(t('leave requests pending')), d.pending ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Filing can be delegated; deciding cannot'))}</div>
+    <div class="map-legend">${esc(t(d.note))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Today'))} · ${esc(a.day)}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Name'))}</th><th>${esc(t('In'))}</th><th>${esc(t('Out'))}</th><th>${esc(t('State'))}</th>
+    </tr></thead><tbody>
+      ${a.people.map((p) => `<tr>
+        <td><b>${esc(p.display_name)}</b> <span class="sub mono">${esc(p.employee_no)}</span></td>
+        <td class="sub mono">${esc((p.in || '—').slice(11, 16))}</td>
+        <td class="sub mono">${esc((p.out || '—').slice(11, 16))}</td>
+        <td>${p.onLeave ? `<span class="chip">${esc(t('on leave'))}</span>` : p.in ? `<span class="chip chip-ok">${esc(t('present'))}</span>` : `<span class="chip chip-warn">${esc(t('absent'))}</span>`}</td>
+      </tr>`).join('') || `<tr><td colspan="4" class="empty">${esc(t('Nobody is employed yet.'))}</td></tr>`}
+    </tbody></table></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Leave requests'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Who'))}</th><th>${esc(t('Type'))}</th><th>${esc(t('Days'))}</th><th>${esc(t('When'))}</th><th>${esc(t('State'))}</th><th></th>
+    </tr></thead><tbody>
+      ${lv.requests.map((r) => `<tr>
+        <td><b>${esc(r.display_name)}</b></td>
+        <td class="sub">${esc(t(r.leave_type))}${r.doc_id ? ` <span class="chip chip-ember" title="${esc(t('a sealed document is attached'))}">🔒</span>` : ''}</td>
+        <td class="num">${r.days}</td>
+        <td class="sub mono">${esc(r.starts)} → ${esc(r.ends)}</td>
+        <td><span class="chip ${lvCls[r.state] || 'chip-dim'}">${esc(t(r.state))}</span></td>
+        <td>${r.state === 'pending' && hasPermC('people.manage') ? `
+          <button class="btn btn-sm" data-lv="${r.id}" data-ok="1">${esc(t('Approve'))}</button>
+          <button class="btn btn-sm" data-lv="${r.id}" data-ok="0">${esc(t('Reject'))}</button>` : esc(r.decided_by || '')}</td>
+      </tr>`).join('') || `<tr><td colspan="6" class="empty">${esc(t('No leave requests.'))}</td></tr>`}
+    </tbody></table></div>
+    <div class="sub" style="margin-top:8px">${esc(t('There is no reason column in this table, by design. A sick request carries a category and, at most, a sealed document.'))}</div>
+  </div>`;
+
+  view.querySelectorAll('[data-lv]').forEach((b) => b.addEventListener('click', async () => {
+    try {
+      await api(`/api/core2/leave/${b.dataset.lv}/decide`, { method: 'POST', body: { approve: b.dataset.ok === '1' } });
+      renderTime();
+    } catch (err) { alert(err.message); }
+  }));
+}
+
+/** Meetings: who was in the room, what was decided, and by whom. */
+export async function renderMeetings() {
+  const d = await api('/api/core2/meetings').catch(() => null);
+  if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see meetings.'))}</div>`; return; }
+  const o = d.overview;
+
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Planned'), o.planned, esc(t('on the calendar')))}
+    ${tile(t('Decisions'), o.decisions, esc(t('recorded with a meeting behind them')))}
+    ${tile(t('Open actions'), o.openActions, esc(t('assigned to somebody employed')), o.openActions ? 'tile-warn' : '')}
+    ${tile(t('Sealed transcripts'), o.sealedTranscripts, esc(t('unreadable on the disk, by design')))}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Only humans in the room'))}</div>
+    <div class="map-legend">${esc(t(o.note))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Meetings'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Title'))}</th><th>${esc(t('Organizer'))}</th><th>${esc(t('When'))}</th>
+      <th class="num">${esc(t('People'))}</th><th class="num">${esc(t('Decisions'))}</th><th>${esc(t('State'))}</th>
+    </tr></thead><tbody>
+      ${d.meetings.map((m) => `<tr>
+        <td><b>${esc(m.title)}</b></td>
+        <td class="sub">${esc(m.organizer)}</td>
+        <td class="sub mono">${esc(m.scheduled_at)}</td>
+        <td class="num">${m.participants}</td>
+        <td class="num">${m.decisions}</td>
+        <td><span class="chip ${m.state === 'completed' ? 'chip-ok' : m.state === 'cancelled' ? 'chip-dim' : 'chip-warn'}">${esc(t(m.state))}</span></td>
+      </tr>`).join('') || `<tr><td colspan="6" class="empty">${esc(t('No meetings yet.'))}</td></tr>`}
+    </tbody></table></div>
+  </div>`;
+}

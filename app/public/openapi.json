@@ -7489,6 +7489,646 @@
         ]
       }
     },
+    "/api/core2/time": {
+      "get": {
+        "summary": "GET /api/core2/time",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/time/checkin": {
+      "post": {
+        "summary": "POST /api/core2/time/checkin",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/time/checkout": {
+      "post": {
+        "summary": "POST /api/core2/time/checkout",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/leave": {
+      "get": {
+        "summary": "GET /api/core2/leave",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "POST /api/core2/leave",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/leave/{leaveId}/decide": {
+      "post": {
+        "summary": "POST /api/core2/leave/{leaveId}/decide",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "parameters": [
+          {
+            "name": "leaveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/leave/policy": {
+      "post": {
+        "summary": "POST /api/core2/leave/policy",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/meetings": {
+      "get": {
+        "summary": "GET /api/core2/meetings",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "POST /api/core2/meetings",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/meetings/{meetingId}": {
+      "get": {
+        "summary": "GET /api/core2/meetings/{meetingId}",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.view` permission.",
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/meetings/{meetingId}/state": {
+      "post": {
+        "summary": "POST /api/core2/meetings/{meetingId}/state",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/core2/meetings/{meetingId}/action": {
+      "post": {
+        "summary": "POST /api/core2/meetings/{meetingId}/action",
+        "tags": [
+          "core2"
+        ],
+        "description": "Requires the `people.manage` permission.",
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `people.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
     "/api/core2/docs": {
       "get": {
         "summary": "GET /api/core2/docs",

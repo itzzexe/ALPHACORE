@@ -3064,6 +3064,116 @@ CREATE TABLE IF NOT EXISTS doc_version (
 CREATE INDEX IF NOT EXISTS doc_version_doc ON doc_version (document_id, version);
 CREATE INDEX IF NOT EXISTS doc_version_subject ON doc_version (subject_ref);
 
+-- TIME: attendance, shifts, and leave.
+--
+-- Two design rules carried through every table here:
+--
+--   References to humans are INTEGER employee ids in STRICT tables, so the
+--   attendance sheet and the leave calendar cannot contain an agent any more
+--   than the org chart can.
+--
+--   There is no free-text reason column anywhere in leave. A sick request is a
+--   category plus, optionally, a reference to a doctor's note held as a sealed
+--   restricted document. That is the directive's data-minimization rule made
+--   structural: the platform cannot summarize, report on, or reason about
+--   anyone's health, because there is no field in which health details exist.
+CREATE TABLE IF NOT EXISTS time_shift (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  starts     TEXT NOT NULL,                       -- 'HH:MM'
+  ends       TEXT NOT NULL,
+  days       TEXT NOT NULL DEFAULT '[1,2,3,4,5]', -- JSON, 0=Sunday
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS time_attendance (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  day         TEXT NOT NULL,                      -- 'YYYY-MM-DD'
+  in_at       TEXT,
+  out_at      TEXT,
+  minutes     INTEGER,
+  source      TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','import')),
+  UNIQUE (employee_id, day)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS time_leave_policy (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL,
+  leave_type     TEXT NOT NULL CHECK (leave_type IN ('annual','sick','unpaid','unpaid-medical','parental','bereavement')),
+  days_per_year  REAL NOT NULL DEFAULT 0,
+  carry_forward_max REAL NOT NULL DEFAULT 0,
+  needs_document INTEGER NOT NULL DEFAULT 0,      -- a doctor's note, as a sealed doc reference
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS time_leave_balance (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  policy_id   INTEGER NOT NULL REFERENCES time_leave_policy(id),
+  year        INTEGER NOT NULL,
+  entitled    REAL NOT NULL DEFAULT 0,
+  used        REAL NOT NULL DEFAULT 0,
+  UNIQUE (employee_id, policy_id, year)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS time_leave_request (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  policy_id   INTEGER NOT NULL REFERENCES time_leave_policy(id),
+  starts      TEXT NOT NULL,
+  ends        TEXT NOT NULL,
+  days        REAL NOT NULL,
+  -- The only narrative allowed is a pointer to a sealed document. No note, no
+  -- reason, no diagnosis — deliberately unrepresentable.
+  doc_id      INTEGER REFERENCES doc_document(id),
+  state       TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','approved','rejected','cancelled')),
+  decided_by  TEXT,                               -- always a human actor; asserted in code
+  decided_at  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS time_leave_request_emp ON time_leave_request (employee_id, state);
+CREATE INDEX IF NOT EXISTS time_attendance_day ON time_attendance (day);
+
+-- MEETINGS. Participants are employments, by integer id, so an agent cannot be
+-- a participant of record — the same bar as the org chart, enforced the same
+-- way. The transcript is Tier A, sealed under the organizer's key; the
+-- multi-subject limitation that creates is recorded in NEXT.md rather than
+-- hidden.
+CREATE TABLE IF NOT EXISTS mtg_meeting (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  title        TEXT NOT NULL,
+  agenda       TEXT,
+  scheduled_at TEXT NOT NULL,
+  organizer_employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  state        TEXT NOT NULL DEFAULT 'planned' CHECK (state IN ('planned','running','completed','cancelled')),
+  transcript   TEXT,                              -- Tier A when present
+  subject_ref  TEXT,                              -- the organizer's, for erasure
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS mtg_participant (
+  meeting_id  INTEGER NOT NULL REFERENCES mtg_meeting(id),
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  UNIQUE (meeting_id, employee_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS mtg_action (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id  INTEGER NOT NULL REFERENCES mtg_meeting(id),
+  kind        TEXT NOT NULL DEFAULT 'action' CHECK (kind IN ('action','decision')),
+  what        TEXT NOT NULL,
+  owner_employee_id INTEGER REFERENCES hr_employee(id),
+  due         TEXT,
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','done','dropped')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS mtg_meeting_sched ON mtg_meeting (scheduled_at);
+CREATE INDEX IF NOT EXISTS mtg_meeting_subject ON mtg_meeting (subject_ref);
+
 -- Core 2's own operational log: every field change, every read of something
 -- sensitive. Deliberately NOT the audit chain — chaining an attendance ping is
 -- noise that makes the real signal harder to audit. The consequential subset is

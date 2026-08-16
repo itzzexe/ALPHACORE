@@ -27,6 +27,12 @@ import {
   searchDocuments, documentsOverview, READ_PERMISSION,
 } from './core2/documents.js';
 import {
+  checkIn, checkOut, createPolicy, requestLeave, decideLeave, listLeave, timeOverview,
+} from './core2/time.js';
+import {
+  createMeeting, getMeeting, setMeetingState, addAction, listMeetings, meetingsOverview,
+} from './core2/meetings.js';
+import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
 } from './tax.js';
@@ -665,6 +671,50 @@ const routes = [
   // The bridges, as a page rather than a claim: what crosses, what is gated,
   // and whether the identity bar still holds.
   ['GET', /^\/api\/core2\/bridges$/, () => bridgeOverview()],
+
+  // --- time: attendance and leave ---
+  ['GET', /^\/api\/core2\/time$/, () => timeOverview()],
+  ['POST', /^\/api\/core2\/time\/checkin$/, (_p, body, _u, user) => checkIn(need(body, 'employeeId'), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/time\/checkout$/, (_p, body, _u, user) => checkOut(need(body, 'employeeId'), { actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/leave$/, (_p, _b, url) => ({
+    requests: listLeave({ state: url.searchParams.get('state') || null }),
+  })],
+  ['POST', /^\/api\/core2\/leave$/, (_p, body, _u, user) => requestLeave({
+    employeeId: need(body, 'employeeId'), policyId: need(body, 'policyId'),
+    starts: need(body, 'starts'), ends: need(body, 'ends'), docId: body.docId || null,
+    actor: `human:${user.username}`,
+  })],
+  // Deciding is a human act: the actor is the signed-in person, and no gateway
+  // command exists that reaches this function.
+  ['POST', /^\/api\/core2\/leave\/(\d+)\/decide$/, ([id], body, _u, user) => decideLeave(Number(id), {
+    approve: Boolean(body.approve), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/leave\/policy$/, (_p, body, _u, user) => createPolicy({
+    name: need(body, 'name'), leaveType: need(body, 'leaveType'),
+    daysPerYear: body.daysPerYear || 0, carryForwardMax: body.carryForwardMax || 0,
+    needsDocument: Boolean(body.needsDocument), actor: `human:${user.username}`,
+  })],
+
+  // --- meetings ---
+  ['GET', /^\/api\/core2\/meetings$/, (_p, _b, url) => ({
+    meetings: listMeetings({ state: url.searchParams.get('state') || null }),
+    overview: meetingsOverview(),
+  })],
+  ['GET', /^\/api\/core2\/meetings\/(\d+)$/, ([id]) => getMeeting(Number(id))
+    || (() => { throw new HttpError(404, 'no such meeting'); })()],
+  ['POST', /^\/api\/core2\/meetings$/, (_p, body, _u, user) => createMeeting({
+    title: need(body, 'title'), agenda: body.agenda || null, scheduledAt: need(body, 'scheduledAt'),
+    organizerEmployeeId: need(body, 'organizerEmployeeId'), participantIds: body.participantIds || [],
+    actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/meetings\/(\d+)\/state$/, ([id], body, _u, user) => setMeetingState(Number(id), {
+    state: need(body, 'state'), transcript: body.transcript || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/meetings\/(\d+)\/action$/, ([id], body, _u, user) => addAction(Number(id), {
+    kind: body.kind || 'action', what: need(body, 'what'),
+    ownerEmployeeId: body.ownerEmployeeId || null, due: body.due || null,
+    actor: `human:${user.username}`,
+  })],
 
   // --- documents & knowledge base ---
   //

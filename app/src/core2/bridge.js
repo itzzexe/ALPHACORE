@@ -32,6 +32,8 @@ import { attempt } from '../egress.js';
 import { enqueue, handle } from '../jobs.js';
 import { notify } from '../notify.js';
 import * as identity from './identity.js';
+import * as time from './time.js';
+import * as meetings from './meetings.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 
@@ -73,7 +75,38 @@ export const TOOLS = {
     run: ({ employeeId }) => identity.reportingLine(employeeId),
   },
 
+  get_leave_balance: {
+    write: false, permission: 'people.view',
+    about: 'One employee`s remaining days under one policy.',
+    run: ({ employeeId, policyId }) => time.balanceFor(employeeId, policyId),
+  },
+  get_attendance_today: {
+    write: false, permission: 'people.view',
+    about: 'Who is in, who is out, who is on approved leave, today.',
+    run: () => time.attendanceToday(),
+  },
+  get_meeting: {
+    write: false, permission: 'people.view',
+    about: 'One meeting: participants, decisions and action items.',
+    run: ({ id }) => meetings.getMeeting(id),
+  },
+
   // --- writes: every one of these goes through the gateway ---
+  create_leave_request: {
+    write: true, permission: 'people.manage',
+    about: 'File a leave request on an employee`s behalf. Balance and overlap are checked; approval stays human.',
+    run: (a, ctx) => time.requestLeave({ ...a, actor: ctx.actor }),
+  },
+  create_meeting: {
+    write: true, permission: 'people.manage',
+    about: 'Schedule a meeting with an agenda and human participants.',
+    run: (a, ctx) => meetings.createMeeting({ ...a, actor: ctx.actor }),
+  },
+  create_action_item: {
+    write: true, permission: 'people.manage',
+    about: 'Record an action item or a decision against a meeting.',
+    run: (a, ctx) => meetings.addAction(a.meetingId, { ...a, actor: ctx.actor }),
+  },
   create_org_unit: {
     write: true, permission: 'org.manage',
     about: 'Add a unit to the organization.',

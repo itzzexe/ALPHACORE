@@ -61,9 +61,15 @@
   Deferred because a file path in a sealed column is a pointer to unsealed
   bytes — the storage side needs the same sealing thought first.
 
-- **Phases 2 to 5.** Not started. Phase 2's leave flow is the first real test of
-  Bridge 3 doing useful work rather than only refusing things, and it should be
-  built first for that reason.
+- **Phases 3 to 5.** Not started.
+- **Phase 2's tasks & projects.** Core 1's existing projects/tasks tables are
+  declared the system of record rather than duplicated into proj_ twins —
+  building parallels would be the two-masters failure §2 exists to prevent.
+- **Shifts and overtime are a hook, not a feature.** time_shift exists;
+  nothing assigns shifts or computes overtime against them yet.
+- **A meeting transcript has one sealing subject.** It is sealed under the
+  organizer's key: erasing the organizer erases it, erasing a participant does
+  not. Honest compromise for multi-subject data, and worth revisiting.
 - **The `#/bridges` screen shows tools, not calls.** It counts what passed the
   gate but does not list them. A page that says "7 gated" without saying which
   seven is one nobody can act on.

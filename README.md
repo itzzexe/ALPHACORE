@@ -5,7 +5,7 @@
 ### An AI company operating system where agents can act, but cannot silently exceed their authority.
 
 **An entire AI-native company inside a single Node process.**
-One hundred and forty-four departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and forty-six departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
 door, under 242 atomic permissions, with every consequential act written to a hash chain before it happens.
 
@@ -14,17 +14,17 @@ cannot do is any of that without a scope that permits it, a record that survives
 irreversible or costs money — a named person who said yes. The company runs itself; it does not answer to
 itself.
 
-<img src="https://img.shields.io/badge/departments-144-c0563a?style=flat-square" alt="144 departments">
+<img src="https://img.shields.io/badge/departments-146-c0563a?style=flat-square" alt="146 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
-<img src="https://img.shields.io/badge/relationships-438-8d8477?style=flat-square" alt="438 declared relationships">
-<img src="https://img.shields.io/badge/API-619_routes-4f9cf0?style=flat-square" alt="619 API routes">
+<img src="https://img.shields.io/badge/relationships-442-8d8477?style=flat-square" alt="442 declared relationships">
+<img src="https://img.shields.io/badge/API-631_routes-4f9cf0?style=flat-square" alt="631 API routes">
 <img src="https://img.shields.io/badge/permissions-245_atomic-e07bd2?style=flat-square" alt="245 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-290-78bf6d?style=flat-square" alt="290 tests">
+<img src="https://img.shields.io/badge/tests-300-78bf6d?style=flat-square" alt="300 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -44,7 +44,7 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 144 departments](#the-company--13-divisions-144-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 146 departments](#the-company--13-divisions-146-departments) | the shape |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
@@ -230,7 +230,7 @@ flowchart TD
   COMMERCE["COMMERCE · 8<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
   CAPITAL["CAPITAL · 9<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
   OPERATE["OPERATE · 13<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
-  TALENT["TALENT · 13<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
+  TALENT["TALENT · 15<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
   TRUST["TRUST · 8<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
   EXEC["EXECUTIVE · 4<br/>board · investor relations<br/>comms · operating rhythm"] --> CORE
   GOVERN["GOVERN · 18<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
@@ -265,7 +265,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **438 relationships** that the map
+Those declarations are data, not decoration: **442 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -313,7 +313,7 @@ connectivity audit and live flow counts — as JSON.
 
 ---
 
-## The company — 13 divisions, 144 departments
+## The company — 13 divisions, 146 departments
 
 <details open>
 <summary><b>ENGINE · 10</b> — the workforce and the work</summary>
@@ -420,7 +420,7 @@ messages, calls, voicemail and carrier webhooks verified by signature.
 </details>
 
 <details>
-<summary><b>TALENT · 13</b> — the workforce grows itself</summary>
+<summary><b>TALENT · 15</b> — the workforce grows itself</summary>
 
 **People** · **Org & personas** · **The society** · **Disputes** ·
 **Enablement** · **Recruiting** · **Academy** · **Agent memory** ·
@@ -1021,7 +1021,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**619 routes** — all JSON, all
+**631 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1097,7 +1097,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 290 tests, on their own database files |
+| `npm test` | 300 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1187,9 +1187,9 @@ credential — keep them together.
 
 ```
 app/
-  src/                130 modules, ~33,800 lines
+  src/                132 modules, ~36,000 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
-    db.js             198 tables, forward-only migrations
+    db.js             206 tables, forward-only migrations
     audit.js          the hash chain
     auth.js           sessions, 245 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
@@ -1235,7 +1235,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               290 tests across twenty-five files
+  test/               300 tests across twenty-six files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1255,7 +1255,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 290 tests
+npm test                        # 300 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
@@ -1327,8 +1327,8 @@ configured, the public URL set, the licence files present, no test residue).
   form and puts all thirteen perceived elements through the real gate: twelve
   proceed, and "Submit order" stops.
 
-**The browser sweep** opens all 144 departments in both themes and both
-languages, at 1440×900 and again at 390×844 — 576 renders each — and fails on a
+**The browser sweep** opens all 146 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 584 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
 somebody runs once is a state the code leaves within a month.
