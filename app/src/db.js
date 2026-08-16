@@ -3142,6 +3142,72 @@ CREATE INDEX IF NOT EXISTS time_attendance_day ON time_attendance (day);
 -- way. The transcript is Tier A, sealed under the organizer's key; the
 -- multi-subject limitation that creates is recorded in NEXT.md rather than
 -- hidden.
+-- A file, sealed. The row is a manifest; the bytes live under data/files/
+-- encrypted with the subject's own key, so erasing the person destroys the
+-- file rather than orphaning it. Deleting is a tombstone, never a vanishing:
+-- a gap somebody can see beats a gap nobody can.
+CREATE TABLE IF NOT EXISTS doc_file (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename      TEXT NOT NULL,
+  mime          TEXT,
+  bytes         INTEGER NOT NULL,
+  sha256        TEXT NOT NULL,          -- of the plaintext, so duplicates are visible
+  subject_ref   TEXT NOT NULL,          -- whose key seals it
+  stored_as     TEXT NOT NULL UNIQUE,   -- a uuid; never anything a caller chose
+  attach_type   TEXT,
+  attach_id     INTEGER,
+  note          TEXT,
+  uploaded_by   TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at    TEXT,
+  deleted_by    TEXT,
+  delete_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS doc_file_attached ON doc_file(attach_type, attach_id);
+CREATE INDEX IF NOT EXISTS doc_file_subject ON doc_file(subject_ref);
+
+-- How long each kind of record is kept, and on whose authority. A retention
+-- period nobody can cite is a guess with a number on it.
+CREATE TABLE IF NOT EXISTS rec_class (
+  code         TEXT PRIMARY KEY,        -- payroll, contract, medical, tax…
+  label        TEXT NOT NULL,
+  keep_months  INTEGER NOT NULL,
+  disposition  TEXT NOT NULL DEFAULT 'destroy',   -- destroy|anonymise|keep-forever
+  basis        TEXT NOT NULL,           -- the law, contract or policy that says so
+  applies_to   TEXT,                    -- JSON: which tables/attach kinds it covers
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A legal hold freezes disposal. It is deliberately coarse: a hold that is hard
+-- to place is a hold nobody places in time.
+CREATE TABLE IF NOT EXISTS rec_hold (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope_kind   TEXT NOT NULL,           -- person|employee|class|everything
+  scope_id     TEXT,
+  reason       TEXT NOT NULL,           -- required: a hold nobody can explain never lifts
+  matter       TEXT,                    -- the case or investigation it belongs to
+  placed_by    TEXT NOT NULL,
+  placed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  released_by  TEXT,
+  released_at  TEXT,
+  release_note TEXT
+);
+CREATE INDEX IF NOT EXISTS rec_hold_live ON rec_hold(scope_kind, scope_id, released_at);
+
+-- What was actually disposed of, and under which rule. The disposal log is the
+-- only evidence that a retention policy is a policy rather than a document.
+CREATE TABLE IF NOT EXISTS rec_disposal (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  class_code  TEXT NOT NULL,
+  what        TEXT NOT NULL,
+  ref         TEXT,
+  action      TEXT NOT NULL,            -- destroyed|anonymised
+  count       INTEGER NOT NULL DEFAULT 1,
+  decided_by  TEXT NOT NULL,
+  at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS mtg_meeting (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   title        TEXT NOT NULL,

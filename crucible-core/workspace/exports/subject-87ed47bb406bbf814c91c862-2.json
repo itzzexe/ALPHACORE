@@ -1,0 +1,19 @@
+{
+  "generated": "2026-08-10T18:43:21.452Z",
+  "reference": "87ed47bb406bbf814c91c862",
+  "note": "Everything this company holds about you that it can find by the identifier you gave. Entries in the permanent record are listed by reference and date; they do not contain your details.",
+  "records": [],
+  "auditEntries": 2,
+  "auditSample": [
+    {
+      "seq": 8,
+      "action": "privacy.request_logged",
+      "occurred_at": "2026-08-10 18:43:21"
+    },
+    {
+      "seq": 9,
+      "action": "privacy.request_logged",
+      "occurred_at": "2026-08-10 18:43:21"
+    }
+  ]
+}

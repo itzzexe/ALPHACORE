@@ -592,3 +592,153 @@ export async function renderGalaxies() {
     <div class="sub" style="margin-top:8px">${esc(t('A tunnel with no declared edge behind it cannot exist on this page — the drawing is derived, never drawn.'))}</div>
   </div>`;
 }
+
+// Files — sealed bytes, not a path in a sealed column.
+export async function renderFiles() {
+  const f = await api('/api/core2/files');
+  const row = (x) => `<tr>
+      <td class="mono">${x.id}</td>
+      <td>${esc(x.filename)}${x.note ? `<div class="sub">${esc(x.note)}</div>` : ''}</td>
+      <td class="sub">${esc(x.mime || '—')}</td>
+      <td class="num">${(x.bytes / 1024).toFixed(0)} KB</td>
+      <td>${x.attach_type ? `<span class="chip chip-dim">${esc(x.attach_type)} ${x.attach_id}</span>` : '<span class="sub">—</span>'}</td>
+      <td class="mono" style="font-size:11px">${esc(x.uploaded_by)}</td>
+      <td class="sub">${esc(String(x.created_at || '').slice(0, 16))}</td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Files'), f.files, `${f.megabytes} MB ${t('sealed')}`)}
+    ${tile(t('Deleted'), f.deleted, t('tombstoned, not vanished'))}
+    ${tile(t('On disk'), f.blobsOnDisk, f.consistent ? t('matches the record') : `${f.orphans} ${t('unaccounted for')}`, f.consistent ? '' : 'tile-warn')}
+    ${tile(t('Limit'), `${f.limitMb} MB`, t('per file'))}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What this refuses'))}</div>
+    ${f.refuses.map((r) => `<div class="meter-label"><span>${esc(t(r))}</span></div>`).join('')}
+    <div class="map-legend">${esc(t('The bytes are encrypted with the subject\'s own key and written outside the database. Erasing the person destroys the key, and with it the file — a path in a sealed column would have protected nothing.'))}</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>${esc(t('Add a file'))}</span>
+      <span><input type="file" id="f-pick" aria-label="${esc(t('Choose a file'))}"> <button class="btn btn-primary" id="f-up">${esc(t('Upload'))}</button></span>
+    </div>
+    <div id="f-out" class="sub"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('By what they belong to'))}</div>
+    ${f.byKind.length
+    ? `<table class="tbl"><thead><tr><th>${esc(t('Attached to'))}</th><th class="num">${esc(t('Files'))}</th><th class="num">KB</th></tr></thead><tbody>${f.byKind.map((k) => `<tr><td>${esc(k.kind || t('nothing'))}</td><td class="num">${k.n}</td><td class="num">${(k.bytes / 1024).toFixed(0)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty">${esc(t('no files yet'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Recent'))}</div>
+    ${f.recent.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>${esc(t('Name'))}</th><th>${esc(t('Type'))}</th><th class="num">${esc(t('Size'))}</th><th>${esc(t('Attached to'))}</th><th>${esc(t('By'))}</th><th>${esc(t('When'))}</th></tr></thead><tbody>${f.recent.map(row).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('no files yet'))}</div>`}
+  </div>`;
+
+  $('#f-up').addEventListener('click', async () => {
+    const picked = $('#f-pick').files?.[0];
+    if (!picked) { toast(t('choose a file first'), true); return; }
+    const out = $('#f-out');
+    out.textContent = t('sealing…');
+    try {
+      const buf = await picked.arrayBuffer();
+      // Base64 in the body rather than a multipart stream: the bytes are sealed
+      // in the server process, and a separate upload path would be a second
+      // door into the same room.
+      let bin = '';
+      const view8 = new Uint8Array(buf);
+      for (let i = 0; i < view8.length; i += 1) bin += String.fromCharCode(view8[i]);
+      const r = await api('/api/core2/files', {
+        method: 'POST',
+        body: { bytes: btoa(bin), filename: picked.name, mime: picked.type || null },
+      });
+      out.textContent = `${r.filename} — ${r.bytes} ${t('bytes, sealed')}`;
+      render();
+    } catch (e) { out.textContent = e.message; }
+  });
+}
+
+// Records — how long a thing is kept, on whose authority, and what freezes it.
+export async function renderRecords() {
+  const r = await api('/api/core2/records');
+  const cls = (c) => `<tr>
+      <td class="mono">${esc(c.code)}</td>
+      <td>${esc(t(c.label))}<div class="sub">${esc(t(c.basis))}</div></td>
+      <td class="num">${c.keep_months}</td>
+      <td><span class="chip ${c.disposition === 'keep-forever' ? 'chip-steel' : 'chip-dim'}">${esc(t(c.disposition))}</span></td>
+      <td class="num">${c.disposition === 'keep-forever' ? '—' : c.due}</td>
+      <td class="sub">${c.frozen ? `<span class="chip chip-warn">${esc(t('frozen'))}</span> ` : ''}${esc(t(c.say))}</td>
+    </tr>`;
+  const hold = (h) => `<tr>
+      <td class="mono">${h.id}</td>
+      <td>${esc(h.scope_kind)}${h.scope_id ? ` ${esc(h.scope_id)}` : ''}</td>
+      <td>${esc(h.matter || '—')}<div class="sub">${esc(h.reason)}</div></td>
+      <td class="mono" style="font-size:11px">${esc(h.placed_by)}</td>
+      <td class="sub">${esc(String(h.placed_at || '').slice(0, 16))}</td>
+      <td><button class="btn btn-sm" data-release="${h.id}">${esc(t('Release'))}</button></td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Retention classes'), r.classes.length, t('each with a stated basis'))}
+    ${tile(t('Past their date'), r.dueTotal, t('and disposable'), r.dueTotal ? 'tile-warn' : '')}
+    ${tile(t('Frozen'), r.frozenTotal, t('held, not disposable'))}
+    ${tile(t('Legal holds'), r.holds.length, r.everythingFrozen ? t('everything is frozen') : t('live'), r.holds.length ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What this does and does not do'))}</div>
+    <p class="lede">${esc(t(r.says))}</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>${esc(t('Legal holds'))}</span>
+      <button class="btn btn-sm" id="rec-hold">${esc(t('Place a hold'))}</button>
+    </div>
+    ${r.holds.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>${esc(t('Covers'))}</th><th>${esc(t('Matter'))}</th><th>${esc(t('Placed by'))}</th><th>${esc(t('When'))}</th><th></th></tr></thead><tbody>${r.holds.map(hold).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing is held — the schedule applies as written'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('The retention schedule'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Code'))}</th><th>${esc(t('Records'))}</th><th class="num">${esc(t('Months'))}</th>
+      <th>${esc(t('At the end'))}</th><th class="num">${esc(t('Due'))}</th><th>${esc(t('State'))}</th>
+    </tr></thead><tbody>${r.classes.map(cls).join('')}</tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Disposals'))}</div>
+    ${r.disposals.length
+    ? `<table class="tbl"><thead><tr><th>${esc(t('Class'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Action'))}</th><th class="num">${esc(t('Count'))}</th><th>${esc(t('By'))}</th><th>${esc(t('When'))}</th></tr></thead><tbody>
+      ${r.disposals.map((d) => `<tr><td class="mono">${esc(d.class_code)}</td><td>${esc(d.what)}</td><td>${esc(t(d.action))}</td><td class="num">${d.count}</td><td class="mono" style="font-size:11px">${esc(d.decided_by)}</td><td class="sub">${esc(String(d.at || '').slice(0, 16))}</td></tr>`).join('')}
+    </tbody></table>`
+    : `<div class="empty">${esc(t('nothing has been disposed of'))}</div>`}
+  </div>`;
+
+  view.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', async () => {
+    const note = prompt(t('Why is the hold being lifted?'));
+    if (note === null) return;
+    try { await api(`/api/core2/records/hold/${b.dataset.release}/release`, { method: 'POST', body: { note } }); render(); }
+    catch (e) { toast(e.message, true); }
+  }));
+
+  $('#rec-hold').addEventListener('click', async () => {
+    const scopeKind = prompt(`${t('Covering what?')} ${r.scopes.join(' / ')}`);
+    if (!scopeKind) return;
+    const scopeId = scopeKind === 'everything' ? null : prompt(t('Which one? (an id, or a class code)'));
+    if (scopeKind !== 'everything' && !scopeId) return;
+    const matter = prompt(t('Which matter or case?'));
+    const reason = prompt(t('Why? A hold nobody can explain never gets lifted.'));
+    if (!reason) return;
+    try { await api('/api/core2/records/hold', { method: 'POST', body: { scopeKind, scopeId, matter, reason } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}

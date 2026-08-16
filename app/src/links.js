@@ -395,6 +395,10 @@ export function sectionCatalog() {
       'Units, positions and grades — the shape of the company'),
     S('docs', 'Documents', 'data', '#/docs', n('SELECT COUNT(*) AS n FROM doc_document'),
       'The knowledge base: versioned, classified, and sealed where it is about a person'),
+    S('files', 'Files', 'data', '#/files', n('SELECT COUNT(*) AS n FROM doc_file WHERE deleted_at IS NULL'),
+      'Attachments whose bytes are sealed under the subject\'s own key, so erasing the person destroys the file'),
+    S('records', 'Records & retention', 'trust', '#/records', n('SELECT COUNT(*) AS n FROM rec_class'),
+      'How long each kind of record is kept, on whose authority, and the legal hold that outranks both the schedule and a request to be forgotten'),
     S('time', 'Attendance & leave', 'talent', '#/time', n('SELECT COUNT(*) AS n FROM time_leave_request'),
       'Who is in, who is away, and the leave that waits on a manager'),
     S('meetings', 'Meetings', 'talent', '#/meetings', n('SELECT COUNT(*) AS n FROM mtg_meeting'),
@@ -663,7 +667,7 @@ export const SURFACES = [
       'standing', 'harmony', 'autopilot', 'governance', 'oversight', 'scorecard', 'users', 'settings', 'audit',
       'constitution', 'timemachine', 'observe', 'anchors', 'datagov', 'roles', 'observability', 'backups',
       'board', 'ir', 'comms', 'chief', 'bridges', 'map2',
-      'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'privacy', 'trustcentre',
+      'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'records', 'privacy', 'trustcentre',
       'continuity', 'incidents', 'assets', 'legal', 'vendors', 'objectives', 'ip',
     ],
   },
@@ -671,7 +675,7 @@ export const SURFACES = [
     id: 'intelligence',
     label: 'Intelligence',
     hint: 'Find something out — about a market, a company, or your own records.',
-    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'docs', 'insights', 'kgraph', 'embeddings'],
+    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'docs', 'files', 'insights', 'kgraph', 'embeddings'],
   },
   {
     id: 'money',
@@ -1029,6 +1033,13 @@ export function relationshipMatrix() {
     // was silently dropped. The claim is still true and still checkable against
     // a department: the knowledge graph and this map are drawn from one
     // catalogue, so they cannot disagree. The link still opens the first map.
+    edge('files', 'docs', 'the scan behind a document, rather than a retyped summary of it', n("SELECT COUNT(*) AS n FROM doc_file WHERE attach_type = 'document'"), '#/docs'),
+    edge('files', 'erasure', 'erasing a person destroys their files, because the key went with them', n('SELECT COUNT(*) AS n FROM doc_file'), '#/erasure'),
+    edge('files', 'workforce2', 'what is on an employee\'s file', n("SELECT COUNT(*) AS n FROM doc_file WHERE attach_type IN ('person','employee')"), '#/workforce2'),
+    edge('records', 'erasure', 'a legal hold outranks a request to be forgotten, and says so in writing', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'erasure.refused_hold'"), '#/erasure'),
+    edge('records', 'compliance', 'the schedule somebody has to be able to defend', n('SELECT COUNT(*) AS n FROM rec_class'), '#/compliance'),
+    edge('records', 'files', 'files are disposed of under the same schedule as everything else', n('SELECT COUNT(*) AS n FROM rec_disposal'), '#/files'),
+    edge('records', 'audit', 'every hold, release and disposal on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'records.%'"), '#/audit'),
     edge('map2', 'kgraph', 'two projections of one catalogue — the maps cannot disagree', n('SELECT COUNT(*) AS n FROM graph_nodes'), '#/graph'),
     edge('map2', 'bridges', 'every tunnel drawn is a declared edge the audit checks', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core'"), '#/bridges'),
     edge('bridges', 'audit', 'the consequential subset of enterprise events is written to the chain', n("SELECT COUNT(*) AS n FROM core2_log WHERE chained = 1"), '#/audit'),

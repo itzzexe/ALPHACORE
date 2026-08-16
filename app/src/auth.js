@@ -36,6 +36,8 @@ export const PERMS = [
   // docs.view reads internal, docs.confidential reads the two guarded levels,
   // docs.manage writes. Public needs only a session.
   'docs.view', 'docs.manage', 'docs.confidential',
+  'files.view', 'files.upload', 'files.delete',
+  'records.view', 'records.manage', 'records.hold',
   'legal.view', 'legal.manage',
   'vendors.view', 'vendors.manage',
   'knowledge.view', 'knowledge.manage',

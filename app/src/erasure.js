@@ -483,9 +483,59 @@ export function findSubject({ kind = 'contact', identifier }) {
  * key to shred them with, which is the failure mode that makes people believe
  * crypto-shredding does not work.
  */
-export function eraseSubject({ kind = 'contact', identifier, reason = null, actor }) {
+/**
+ * Which live legal holds cover the person behind this reference.
+ *
+ * `rec_hold` scopes are by person or employee id; a PII reference is a hash. The
+ * join is `hr_person.subject_ref`, which is how Core 2 knows whose row is whose.
+ * A hold on "everything" needs no join at all.
+ */
+function holdsBlocking(ref) {
+  let holds = [];
+  try {
+    holds = q("SELECT * FROM rec_hold WHERE released_at IS NULL");
+  } catch { return []; }          // Core 2's schema is not there; nothing to check
+  if (!holds.length) return [];
+  if (holds.some((h) => h.scope_kind === 'everything')) return holds.filter((h) => h.scope_kind === 'everything');
+
+  let person = null;
+  try { person = one('SELECT id FROM hr_person WHERE subject_ref = ?', ref); } catch { person = null; }
+  if (!person) return [];
+  let employeeIds = [];
+  try { employeeIds = q('SELECT id FROM hr_employee WHERE person_id = ?', person.id).map((e) => String(e.id)); } catch { employeeIds = []; }
+
+  return holds.filter((h) => (h.scope_kind === 'person' && String(h.scope_id) === String(person.id))
+    || (h.scope_kind === 'employee' && employeeIds.includes(String(h.scope_id))));
+}
+
+export function eraseSubject({ kind = 'contact', identifier, reason = null, actor, overrideHold = false }) {
   if (!actor) throw new Error('an erasure is a human act and has to be signed');
   const ref = subjectRef(kind, identifier);
+
+  // A legal hold outranks the right to erasure, and the conflict is declared
+  // rather than resolved. Most systems get this wrong in one of two silent
+  // directions — destroying evidence, or ignoring the request and never saying
+  // so — and both are decisions made by an absence of code.
+  //
+  // Checked before anything is sealed or destroyed, because a refusal that
+  // arrives after the first UPDATE has already half-erased somebody.
+  const held = holdsBlocking(ref);
+  if (held.length && !overrideHold) {
+    const e = new Error(
+      `held: this cannot be erased while a legal hold is in force${held[0].matter ? ` for ${held[0].matter}` : ''}. `
+      + 'The request stands and is carried out when the hold is released.',
+    );
+    e.status = 409;
+    e.holds = held;
+    // The refusal goes on the chain too. A request that was received and
+    // lawfully refused has to be provable years later, by both sides.
+    audit({
+      actorType: 'human', actorId: actor, action: 'erasure.refused_hold',
+      subjectType: 'pii', subjectId: ref,
+      payload: { holds: held.map((h) => ({ id: h.id, matter: h.matter })), reason },
+    });
+    throw e;
+  }
   const existing = one('SELECT * FROM pii_subjects WHERE ref = ?', ref);
   if (existing?.erased_at) return { ok: true, alreadyErased: true, ref, at: existing.erased_at };
 

@@ -22,6 +22,11 @@ import {
   createOrgUnit, createPosition, createGrade, identityOverview,
 } from './core2/identity.js';
 import { bridgeOverview, seedBridge, verbCoverage } from './core2/bridge.js';
+import { storeFile, readFile, deleteFile, filesFor, filesOverview } from './core2/files.js';
+import {
+  seedClasses, setClass, placeHold, releaseHold, liveHolds, dueForDisposition,
+  recordDisposal, recordsOverview,
+} from './core2/records.js';
 import {
   createDocument, addVersion, getDocument, listDocuments, archiveDocument,
   searchDocuments, documentsOverview, READ_PERMISSION,
@@ -688,6 +693,48 @@ const routes = [
   // first map — see core2Map() in links.js — so a tunnel drawn here is always a
   // declared relationship, never an illustration.
   ['GET', /^\/api\/core2\/map$/, () => core2Map()],
+
+  // --- Files: sealed bytes, not a path in a sealed column ---
+  ['GET', /^\/api\/core2\/files$/, () => filesOverview()],
+  ['GET', /^\/api\/core2\/files\/for\/([a-z]+)\/(\d+)$/, ([kind, id]) => ({ files: filesFor(kind, Number(id)) })],
+  ['POST', /^\/api\/core2\/files$/, (_p, body, _u, user) => storeFile({
+    bytes: need(body, 'bytes'), filename: need(body, 'filename'), mime: body.mime || null,
+    subjectKind: body.subjectKind || 'company', subjectId: body.subjectId || 'company',
+    attachType: body.attachType || null, attachId: body.attachId ? Number(body.attachId) : null,
+    note: body.note || null, actor: `human:${user.username}`,
+  })],
+  // Returned as base64 rather than a stream: the bytes are decrypted in this
+  // process and a download URL that bypasses the permission check is exactly
+  // the hole this module exists to avoid.
+  ['GET', /^\/api\/core2\/files\/(\d+)$/, ([id], _b, _u, user) => {
+    const f = readFile(Number(id), { actor: `human:${user.username}` });
+    return { ...f, content: f.content ? f.content.toString('base64') : null };
+  }],
+  ['POST', /^\/api\/core2\/files\/(\d+)\/delete$/, ([id], body, _u, user) => deleteFile(Number(id), {
+    actor: `human:${user.username}`, why: body?.why || '',
+  })],
+
+  // --- Records: how long a thing is kept, and what freezes it ---
+  ['GET', /^\/api\/core2\/records$/, () => recordsOverview()],
+  ['GET', /^\/api\/core2\/records\/schedule$/, () => ({ classes: dueForDisposition() })],
+  ['GET', /^\/api\/core2\/records\/holds$/, () => ({ holds: liveHolds() })],
+  ['POST', /^\/api\/core2\/records\/seed$/, (_p, _b, _u, user) => ({ seeded: seedClasses({ actor: `human:${user.username}` }) })],
+  ['POST', /^\/api\/core2\/records\/class$/, (_p, body, _u, user) => setClass({
+    code: need(body, 'code'), label: need(body, 'label'), keepMonths: need(body, 'keepMonths'),
+    disposition: body.disposition || 'destroy', basis: need(body, 'basis'),
+    appliesTo: body.appliesTo || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/records\/hold$/, (_p, body, _u, user) => placeHold({
+    scopeKind: need(body, 'scopeKind'), scopeId: body.scopeId ?? null,
+    reason: need(body, 'reason'), matter: body.matter || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/records\/hold\/(\d+)\/release$/, ([id], body, _u, user) => releaseHold({
+    id: Number(id), actor: `human:${user.username}`, note: body?.note || '',
+  })],
+  ['POST', /^\/api\/core2\/records\/disposal$/, (_p, body, _u, user) => recordDisposal({
+    classCode: need(body, 'classCode'), what: need(body, 'what'), ref: body.ref || null,
+    action: body.action || 'destroyed', count: body.count || 1, actor: `human:${user.username}`,
+  })],
 
   // --- time: attendance and leave ---
   ['GET', /^\/api\/core2\/time$/, () => timeOverview()],
@@ -1987,6 +2034,14 @@ function permFor(m, path) {
   if (path.startsWith('/api/core2/org')) return m === 'GET' ? 'org.view' : 'org.manage';
   if (path === '/api/core2/map') return 'dashboard.view';
   if (path.startsWith('/api/core2/docs')) return m === 'GET' ? 'docs.view' : 'docs.manage';
+  // Reading a file, putting one there, and destroying one are three different
+  // amounts of authority over somebody else's data.
+  if (/^\/api\/core2\/files\/\d+\/delete$/.test(path)) return 'files.delete';
+  if (path.startsWith('/api/core2/files')) return m === 'GET' ? 'files.view' : 'files.upload';
+  // A legal hold is the one act here that overrides a person's right to
+  // erasure, so it is not the same permission as editing the schedule.
+  if (/^\/api\/core2\/records\/hold/.test(path)) return 'records.hold';
+  if (path.startsWith('/api/core2/records')) return m === 'GET' ? 'records.view' : 'records.manage';
   if (/^\/api\/core2\/(finops|expenses|costcenter|loans|payroll|procurement)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
   if (path.startsWith('/api/core2/contracts')) return 'legal.view';
   if (path.startsWith('/api/core2')) return m === 'GET' ? 'people.view' : 'people.manage';
