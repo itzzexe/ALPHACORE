@@ -54,6 +54,7 @@ import { seedMarketingTeam, seedMarketingOps, syncMarketing } from './marketing.
 // The outside world: credentials, connectors, the gate, the queue, and the
 // systems that keep all of it honest.
 import { seedConnectors, callConnector } from './connectors/index.js';
+import { seedBridge } from './core2/bridge.js';
 import { verifyState, exchangeCode, refreshExpiring } from './connectors/oauth.js';
 import { handle as handleJob, enqueue as enqueueJob, jobsTick, reclaimStuck } from './jobs.js';
 import { seedConstitution } from './constitution.js';
@@ -119,6 +120,10 @@ ensureChannels();
 seedMarketingTeam();
 seedMarketingOps();
 seedConnectors();
+// Core 2 registers itself with the egress gate at boot, so a tool call from an
+// agent is governed from the first request rather than from whenever somebody
+// remembers to run a seed.
+seedBridge();
 seedConstitution();
 seedPackages();
 seedSlos();

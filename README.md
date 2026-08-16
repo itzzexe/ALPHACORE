@@ -17,7 +17,7 @@ itself.
 <img src="https://img.shields.io/badge/departments-140-c0563a?style=flat-square" alt="140 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/relationships-429-8d8477?style=flat-square" alt="429 declared relationships">
-<img src="https://img.shields.io/badge/API-599_routes-4f9cf0?style=flat-square" alt="599 API routes">
+<img src="https://img.shields.io/badge/API-613_routes-4f9cf0?style=flat-square" alt="613 API routes">
 <img src="https://img.shields.io/badge/permissions-242_atomic-e07bd2?style=flat-square" alt="242 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
@@ -1021,7 +1021,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**599 routes** — all JSON, all
+**613 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash

@@ -13,6 +13,15 @@ import { anchorNow, anchorsOverview, verifyAnchors, anchorEvidence } from './anc
 import { isProduction } from './production.js';
 import { openPii, erasureOverview, findSubject, eraseSubject, verifyErasure } from './erasure.js';
 import { startBackfill, backfillOverview } from './backfill.js';
+// Aliased: Core 1s corporate module already exports createPerson and
+// listPeople for its own founder roster. Two galaxies, two meanings, one
+// import list — so the Core 2 ones say which core they belong to.
+import {
+  createPerson as c2CreatePerson, listPeople as c2ListPeople, personDossier, linkUser,
+  employ, getEmployee, listEmployees, reportingLine, orgChart,
+  createOrgUnit, createPosition, createGrade, identityOverview,
+} from './core2/identity.js';
+import { bridgeOverview, seedBridge } from './core2/bridge.js';
 import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
@@ -594,6 +603,64 @@ const routes = [
   // Rotation itself is not here: it belongs at a terminal, because the
   // authority it needs is the key file, not a browser session.
   ['GET', /^\/api\/vault\/key$/, () => keyHealth()],
+
+  // --- Core 2: the enterprise galaxy ---
+  //
+  // Everything below reads or writes the system of record. Note what is absent:
+  // no route here lets an agent through. An agent reaching Core 2 goes via the
+  // command gateway in src/core2/bridge.js, which is a different code path with
+  // a human gate on it — these are the routes a *person* uses.
+  ['GET', /^\/api\/core2$/, () => ({ identity: identityOverview(), bridges: bridgeOverview() })],
+  ['GET', /^\/api\/core2\/people$/, (_p, _b, url) => ({
+    people: c2ListPeople({ limit: Number(url.searchParams.get('limit')) || 200 }),
+    overview: identityOverview(),
+  })],
+  ['GET', /^\/api\/core2\/people\/(\d+)$/, ([id]) => personDossier(Number(id))
+    || (() => { throw new HttpError(404, 'no such person'); })()],
+  ['POST', /^\/api\/core2\/people$/, (_p, body, _u, user) => c2CreatePerson({
+    displayName: need(body, 'displayName'),
+    personalEmail: body.personalEmail || null, personalPhone: body.personalPhone || null,
+    nationalId: body.nationalId || null, emergencyContact: body.emergencyContact || null,
+    actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/people\/(\d+)\/link-user$/, ([id], body, _u, user) => linkUser(
+    Number(id), need(body, 'userId'), { actor: `human:${user.username}` },
+  )],
+
+  ['GET', /^\/api\/core2\/employees$/, (_p, _b, url) => ({
+    employees: listEmployees({
+      state: url.searchParams.get('state'), orgUnitId: url.searchParams.get('orgUnitId'), limit: 500,
+    }),
+  })],
+  ['GET', /^\/api\/core2\/employees\/(\d+)$/, ([id]) => getEmployee(Number(id))
+    || (() => { throw new HttpError(404, 'no such employee'); })()],
+  ['GET', /^\/api\/core2\/employees\/(\d+)\/line$/, ([id]) => reportingLine(Number(id))],
+  ['POST', /^\/api\/core2\/employees$/, (_p, body, _u, user) => employ({
+    personId: need(body, 'personId'), employeeNo: body.employeeNo,
+    orgUnitId: body.orgUnitId || null, positionId: body.positionId || null, gradeId: body.gradeId || null,
+    managerId: body.managerId || null, employment: body.employment || 'full-time',
+    baseSalary: body.baseSalary ?? null, bankAccount: body.bankAccount || null,
+    currency: body.currency || 'USD', hiredAt: body.hiredAt || null,
+    actor: `human:${user.username}`,
+  })],
+
+  ['GET', /^\/api\/core2\/org$/, () => orgChart()],
+  ['POST', /^\/api\/core2\/org\/unit$/, (_p, body, _u, user) => createOrgUnit({
+    name: need(body, 'name'), code: body.code || null, parentId: body.parentId || null,
+    core1Section: body.core1Section || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/org\/position$/, (_p, body, _u, user) => createPosition({
+    title: need(body, 'title'), orgUnitId: body.orgUnitId || null, gradeId: body.gradeId || null,
+    headcount: body.headcount || 1, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/org\/grade$/, (_p, body, _u, user) => createGrade({
+    name: need(body, 'name'), rank: body.rank || 1, bandMin: body.bandMin ?? null,
+    bandMax: body.bandMax ?? null, currency: body.currency || 'USD', actor: `human:${user.username}`,
+  })],
+
+  // The bridges, as a page rather than a claim: what crosses, what is gated,
+  // and whether the identity bar still holds.
+  ['GET', /^\/api\/core2\/bridges$/, () => bridgeOverview()],
 
   // --- Erasure: the right to be forgotten, against a record that cannot forget ---
   ['GET', /^\/api\/erasure$/, () => erasureOverview()],
@@ -1715,6 +1782,11 @@ function permFor(m, path) {
   if (path.startsWith('/api/customers')) return m === 'GET' ? 'customers.view' : 'customers.manage';
   if (path.startsWith('/api/contracts')) return m === 'GET' ? 'legal.view' : 'legal.manage';
   if (path.startsWith('/api/vendors')) return m === 'GET' ? 'vendors.view' : 'vendors.manage';
+  // Core 2. The org routes need the org permission and the people routes the
+  // people one — the same catalogue Core 1 uses, so a screen and a bridge tool
+  // cannot end up guarded differently for the same act.
+  if (path.startsWith('/api/core2/org')) return m === 'GET' ? 'org.view' : 'org.manage';
+  if (path.startsWith('/api/core2')) return m === 'GET' ? 'people.view' : 'people.manage';
   if (path.startsWith('/api/people')) return m === 'GET' ? 'people.view' : 'people.manage';
   if (path.startsWith('/api/knowledge') || path.startsWith('/api/memory')) return m === 'GET' ? 'knowledge.view' : 'knowledge.manage';
   if (path.startsWith('/api/objectives')) return m === 'GET' ? 'objectives.view' : 'objectives.manage';
