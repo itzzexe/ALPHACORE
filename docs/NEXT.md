@@ -46,9 +46,12 @@
   categorically: a granted scope does not clear them, `force: true` does not
   clear them, and a zero-value change is held exactly as a million-dollar one
   is — so it is demonstrably not the value ceiling doing the work.
-- **Phase 1** — fourteen routes, three screens in both languages, 143
-  departments all filed under exactly one surface and all carrying at least one
-  real declared relationship.
+- **Phase 1, complete** — identity, org, documents & knowledge base, and
+  notifications. Twenty routes, four screens in both languages, three new
+  permissions (docs.view/manage/confidential). 144 departments, all filed, all
+  connected. A restricted document about a person has every version sealed
+  under that person's key; notifications reuse notify() and Web Push rather
+  than adding a channel.
 
 **Deferred from Core 2, with the reason:**
 
@@ -58,16 +61,6 @@
   Deferred because a file path in a sealed column is a pointer to unsealed
   bytes — the storage side needs the same sealing thought first.
 
-- **Documents & Knowledge base (Phase 1).** Not built. It is the one Phase 1
-  module with a real design question behind it — versioning and access control
-  over sealed attachments — and stubbing it would have produced a table with a
-  screen and no answer to "who may read version 3 of a document attached to a
-  disciplinary record". Wanted before Phase 5's RAG layer, which is what it
-  exists to feed.
-- **Notifications (Phase 1).** Not built. The directive is explicit that this
-  reuses the existing Web Push channel rather than adding one, so the work is
-  wiring rather than design — deferred because it has no dependents until
-  Phase 3's contract-expiry dates need somewhere to go.
 - **Phases 2 to 5.** Not started. Phase 2's leave flow is the first real test of
   Bridge 3 doing useful work rather than only refusing things, and it should be
   built first for that reason.
