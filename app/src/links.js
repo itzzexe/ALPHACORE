@@ -554,7 +554,8 @@ export const CORE2_DIVISIONS = [
   { id: 'e-time', label: 'TIME', color: '#78bf6d', departments: ['time'] },
   { id: 'e-finance', label: 'FINANCE OPS', color: '#e8c547', departments: ['finops2'] },
   { id: 'e-procure', label: 'PROCUREMENT & ASSETS', color: '#e5533d', departments: ['procure'] },
-  { id: 'e-collab', label: 'COLLABORATION', color: '#b78bff', departments: ['meetings', 'docs'] },
+  { id: 'e-collab', label: 'COLLABORATION', color: '#b78bff', departments: ['meetings', 'docs', 'files'] },
+  { id: 'e-records', label: 'RECORDS', color: '#e07bd2', departments: ['records'] },
   { id: 'e-bridge', label: 'THE BRIDGES', color: '#2fd6a8', departments: ['bridges'] },
 ];
 
@@ -634,9 +635,28 @@ export const DIVISIONS = [
  * to exactly one surface, so a new department that nobody filed shows up as a
  * blocker rather than as a page you can only reach by typing its URL.
  */
+/**
+ * The two cores, as navigation.
+ *
+ * §2 of the Core 2 directive keeps the galaxies apart in the data: the AI core
+ * thinks and acts, the enterprise core records what is true, and nothing
+ * crosses but the declared tunnels. The menu was the last place they were still
+ * mixed — an HR record and a run queue sitting under one heading because both
+ * happened to involve people.
+ *
+ * So a surface belongs to exactly one core, and the rail shows one core at a
+ * time. Not a cosmetic split: it is the same boundary the bridges enforce, made
+ * visible to the person using it.
+ */
+export const CORES = [
+  { id: 'core1', label: 'AI core', hint: 'Thinks and acts — the workforce, the work, and everything it reaches.' },
+  { id: 'core2', label: 'Enterprise core', hint: 'Records what is true — people, time, money paid, and what is kept.' },
+];
+
 export const SURFACES = [
   {
     id: 'ask',
+    core: 'core1',
     label: 'Ask AlphaCore',
     hint: 'Say what you need. The company works out which departments are involved.',
     // The three things an open-ended question can become. Ask routes to these
@@ -645,55 +665,62 @@ export const SURFACES = [
   },
   {
     id: 'work',
+    core: 'core1',
     label: 'Work',
     hint: 'Make something: the workforce, the queue, and everything being built.',
     departments: [
       'agents', 'workforce', 'runs', 'pipelines', 'providers', 'artifacts', 'capacity', 'workstreams', 'tiers',
-      'systems', 'infra', 'products', 'journeys', 'projects', 'tasks', 'meetings', 'lab', 'releases', 'sprints', 'packages',
+      'systems', 'infra', 'products', 'journeys', 'projects', 'tasks', 'lab', 'releases', 'sprints', 'packages',
       'jobs', 'deadletter',
     ],
   },
   {
     id: 'approvals',
+    core: 'core1',
     label: 'Approvals',
     hint: 'Everything stopped, waiting for a person to decide.',
     departments: ['gate', 'decisions', 'budgets', 'risks', 'quality', 'evals', 'pmo', 'auditor', 'simulation', 'approvals'],
   },
   {
     id: 'company',
+    core: 'core1',
     label: 'Company',
     hint: 'The company\'s own record: how it governs itself, and what it owes.',
     departments: [
       'standing', 'harmony', 'autopilot', 'governance', 'oversight', 'scorecard', 'users', 'settings', 'audit',
       'constitution', 'timemachine', 'observe', 'anchors', 'datagov', 'roles', 'observability', 'backups',
-      'board', 'ir', 'comms', 'chief', 'bridges', 'map2',
-      'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'records', 'privacy', 'trustcentre',
+      'board', 'ir', 'comms', 'chief',
+      'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'privacy', 'trustcentre',
       'continuity', 'incidents', 'assets', 'legal', 'vendors', 'objectives', 'ip',
     ],
   },
   {
     id: 'intelligence',
+    core: 'core1',
     label: 'Intelligence',
     hint: 'Find something out — about a market, a company, or your own records.',
-    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'docs', 'files', 'insights', 'kgraph', 'embeddings'],
+    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'insights', 'kgraph', 'embeddings'],
   },
   {
     id: 'money',
+    core: 'core1',
     label: 'Money',
     hint: 'Money in, money out, and what everything cost.',
     departments: [
-      'finance', 'finops2', 'finreports', 'ledger', 'bookkeeper', 'economics', 'finops', 'treasury', 'money', 'tax',
-      'pricing', 'success', 'sales', 'customers', 'relations', 'procurement', 'procure', 'revenue', 'partnerships',
+      'finance', 'finreports', 'ledger', 'bookkeeper', 'economics', 'finops', 'treasury', 'money', 'tax',
+      'pricing', 'success', 'sales', 'customers', 'relations', 'procurement', 'revenue', 'partnerships',
     ],
   },
   {
     id: 'people',
+    core: 'core1',
     label: 'People',
     hint: 'The workforce, human and synthetic — and how it gets better.',
-    departments: ['people', 'workforce2', 'orgchart', 'time', 'talent2', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
+    departments: ['people', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
   },
   {
     id: 'world',
+    core: 'core1',
     label: 'World',
     hint: 'Anything that reaches a person outside this company.',
     departments: [
@@ -706,7 +733,56 @@ export const SURFACES = [
   },
 ];
 
-const SURFACE_OF = new Map(SURFACES.flatMap((s) => s.departments.map((d) => [d, s.id])));
+/**
+ * The enterprise core's surfaces.
+ *
+ * Grouped by what somebody is trying to do rather than by which module owns the
+ * table: "who works here" is one errand whether it lands in the org chart or in
+ * the talent pipeline. The bridges get their own heading because the seam is the
+ * one thing about Core 2 that is worth looking at on purpose.
+ */
+export const CORE2_SURFACES = [
+  {
+    id: 'e-people',
+    core: 'core2',
+    label: 'People & HR',
+    hint: 'Who works here, where they sit, and who is joining.',
+    departments: ['workforce2', 'orgchart', 'talent2'],
+  },
+  {
+    id: 'e-time',
+    core: 'core2',
+    label: 'Time & attendance',
+    hint: 'Who was here, who is on leave, and what was agreed.',
+    departments: ['time'],
+  },
+  {
+    id: 'e-money',
+    core: 'core2',
+    label: 'Payroll & spending',
+    hint: 'What people are paid, what they claimed, and what was bought.',
+    departments: ['finops2', 'procure'],
+  },
+  {
+    id: 'e-records',
+    core: 'core2',
+    label: 'Documents & records',
+    hint: 'What is written down, what is attached to it, and how long it is kept.',
+    departments: ['docs', 'files', 'records', 'meetings'],
+  },
+  {
+    id: 'e-seam',
+    core: 'core2',
+    label: 'The seam',
+    hint: 'The map of both cores, and everything that crosses between them.',
+    departments: ['map2', 'bridges'],
+  },
+];
+
+/** One catalogue. Two cores is a property of the rows, not two lists. */
+export const ALL_SURFACES = [...SURFACES, ...CORE2_SURFACES];
+
+const SURFACE_OF = new Map(ALL_SURFACES.flatMap((s) => s.departments.map((d) => [d, s.id])));
 
 /** Which door does this department sit behind? */
 export const surfaceOf = (deptId) => SURFACE_OF.get(deptId) || null;
@@ -722,14 +798,14 @@ export const surfaceOf = (deptId) => SURFACE_OF.get(deptId) || null;
  */
 export function surfaceAudit() {
   const sections = sectionCatalog();
-  const listed = SURFACES.flatMap((s) => s.departments);
+  const listed = ALL_SURFACES.flatMap((s) => s.departments);
   const counts = new Map();
   for (const d of listed) counts.set(d, (counts.get(d) || 0) + 1);
 
   const known = new Set(sections.map((s) => s.id));
   return {
     departments: sections.length,
-    surfaces: SURFACES.length,
+    surfaces: ALL_SURFACES.length,
     // Filed nowhere: reachable only by URL.
     unfiled: sections.filter((s) => !SURFACE_OF.has(s.id)).map((s) => s.id),
     // Filed twice: the menu disagrees with itself.
@@ -743,8 +819,11 @@ export function surfaceAudit() {
 export function surfaceCatalog() {
   const sections = sectionCatalog();
   const by = new Map(sections.map((s) => [s.id, s]));
-  return SURFACES.map((s) => ({
+  return ALL_SURFACES.map((s) => ({
     id: s.id,
+    // Which core it belongs to. The console shows one at a time, and a surface
+    // that did not say would land in whichever came first.
+    core: s.core || 'core1',
     label: s.label,
     hint: s.hint,
     departments: s.departments.map((d) => by.get(d)).filter(Boolean),

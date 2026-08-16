@@ -23,7 +23,7 @@ for (const suffix of ['', '-wal', '-shm']) {
   try { fs.rmSync(path.join(root, 'data', `test-surfaces.db${suffix}`)); } catch { /* first run */ }
 }
 
-const { sectionCatalog, SURFACES, surfaceOf, surfaceCatalog, surfaceAudit } = await import('../src/links.js');
+const { sectionCatalog, SURFACES, CORE2_SURFACES, surfaceOf, surfaceCatalog, surfaceAudit } = await import('../src/links.js');
 const { seedAgents } = await import('../src/workflow.js');
 const { classify, ask, askRules, RULES } = await import('../src/ask.js');
 
@@ -103,7 +103,10 @@ test('every department sits behind exactly one of the eight doors', () => {
   assert.deepEqual(a.unfiled, [], 'a department nobody filed can only be reached by typing its URL');
   assert.deepEqual(a.duplicated, [], 'a department behind two doors is a menu that disagrees with itself');
   assert.deepEqual(a.dangling, [], 'a door pointing at a department that does not exist');
-  assert.equal(a.surfaces, 8);
+  // Eight in the AI core, five in the enterprise core. Asserted as a total so
+  // adding a door without deciding which core it belongs to fails here rather
+  // than showing up in the menu.
+  assert.equal(a.surfaces, 13);
   assert.equal(a.departments, sectionCatalog().length);
 
   // And the resolved view agrees with the raw declaration, so the navigation
@@ -112,11 +115,22 @@ test('every department sits behind exactly one of the eight doors', () => {
   assert.equal(resolved, a.departments);
 });
 
-test('the eight doors are exactly the eight the design names', () => {
+test('the doors are exactly the ones the design names, in each core', () => {
   assert.deepEqual(
     SURFACES.map((s) => s.id),
     ['ask', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'],
   );
+  // The enterprise core keeps its own five. Same boundary the bridges enforce
+  // in the data — a surface claiming both cores, or neither, would put an HR
+  // record back under a run-queue heading.
+  assert.deepEqual(
+    CORE2_SURFACES.map((s) => s.id),
+    ['e-people', 'e-time', 'e-money', 'e-records', 'e-seam'],
+  );
+  for (const x of SURFACES) assert.equal(x.core, 'core1', `${x.id} says which core it is in`);
+  for (const x of CORE2_SURFACES) assert.equal(x.core, 'core2', `${x.id} says which core it is in`);
+  const declared = new Set(SURFACES.map((x) => x.id));
+  for (const x of CORE2_SURFACES) assert.ok(!declared.has(x.id), `${x.id} is declared twice`);
   for (const s of SURFACES) {
     assert.ok(s.label && s.hint, `${s.id} has no label or no hint`);
     assert.ok(s.departments.length, `${s.id} has nothing behind it`);

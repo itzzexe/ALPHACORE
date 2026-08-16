@@ -905,6 +905,26 @@ pre.json {
   padding: var(--s3) 0 var(--s2);
   gap: var(--s1);
 }
+/* Which galaxy the rail is showing.
+
+   Two words stacked in the width of the rail, because the rail is 44px wide and
+   an icon for "AI core" versus "enterprise core" would be a rebus. Reads as a
+   pair of tabs, and disappears when only one core has anything in it. */
+.rail-cores {
+  display: flex; flex-direction: column; gap: 2px; width: 46px;
+  margin-bottom: var(--s2); padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--seam);
+}
+.core-btn {
+  border: none; background: transparent; cursor: pointer;
+  font: inherit; font-size: 8.5px; line-height: 1.15; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-faint);
+  padding: 5px 2px; border-radius: var(--r-sm); text-align: center;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.core-btn:hover { background: var(--seam-soft); color: var(--ink); }
+.core-btn.on { background: var(--accent-wash); color: var(--ember); font-weight: 600; }
+
 .rail-brand {
   width: 38px; height: 38px; border-radius: var(--r-md);
   display: grid; place-items: center; margin-bottom: var(--s2);
@@ -1937,6 +1957,15 @@ html[lang="ar"] .atlas-switch button { letter-spacing: var(--track-tight); font-
   fill: none; stroke: var(--ink-faint); stroke-width: 0.7; opacity: 0.5;
   transition: stroke var(--t-mid) var(--ease), opacity var(--t-mid) var(--ease);
 }
+
+/* A tunnel across the seam. Drawn behind everything and deliberately faint:
+   there are a dozen of them and they cross the whole width, so at full strength
+   they would read as the subject rather than as the joins. */
+.at-tunnel {
+  fill: none; stroke: var(--ink-faint); stroke-width: 1.1;
+  opacity: .38; stroke-dasharray: 3 4;
+}
+.at-tunnel:hover { opacity: .85; stroke: var(--ember); }
 .at-leaf {
   fill: var(--ink); stroke: none;
   transition: fill var(--t-fast) var(--ease), r var(--t-fast) var(--ease);

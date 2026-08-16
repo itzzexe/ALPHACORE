@@ -324,9 +324,17 @@ function districtTree(items, angle, slice) {
 /** The whole company: districts radiating from the core. */
 function buildAtlasFar(map) {
   const { divisions, sections, harmony, audit: connAudit, flow } = map;
+
+  // The enterprise core's departments are lifted out of the AI core's trees.
+  // They were never really leaves of those districts — an HR record sat under
+  // "talent" because both involve people, which is the confusion the two-galaxy
+  // split exists to end. Drawn as their own constellation and joined by the
+  // declared tunnels, one screen now shows the whole company *and* the seam.
+  const enterprise = new Set((map.core2Divisions || []).flatMap((d) => d.departments));
+
   const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
   for (const s of sections) {
-    if (s.id === 'harmony') continue;
+    if (s.id === 'harmony' || enterprise.has(s.id)) continue;
     (byDiv[s.division] || byDiv.govern).items.push(s);
   }
   const divs = divisions.filter((d) => byDiv[d.id].items.length);
@@ -394,16 +402,66 @@ function buildAtlasFar(map) {
     return `<circle class="at-core-dot" cx="${(CX + Math.cos(a) * r).toFixed(1)}" cy="${(CY + Math.sin(a) * r).toFixed(1)}" r="${(1.6 - i / 52).toFixed(2)}"/>`;
   }).join('');
 
+  // ---- the enterprise core, and the seam ----------------------------------
+  // Placed to the right of the AI core rather than interleaved: the distance is
+  // the point. Its own small core, its own districts, and one line per declared
+  // tunnel — so the crossings are countable rather than implied.
+  const byId2 = Object.fromEntries(sections.map((x) => [x.id, x]));
+  const e2 = (map.core2Divisions || []).map((d) => ({
+    ...d, items: d.departments.map((id) => byId2[id]).filter(Boolean),
+  })).filter((d) => d.items.length);
+
+  // Clear of the AI core's rim, not near it. Its outermost label sits at
+  // CX + rim * XS = 1635 and is centred, so anything before ~1760 collides —
+  // which it did, and "RECORDS" printed on top of "MARKETING".
+  const E_CX = 2010, E_CY = 640;
+  const eSpan = 620;
+  const ePos = new Map();
+  const eDistricts = e2.map((d, i) => {
+    const y = E_CY - eSpan / 2 + (eSpan / Math.max(1, e2.length - 1)) * i;
+    const rows = d.items.map((it, j) => {
+      const ix = E_CX + 62, iy = y + j * 19 - ((d.items.length - 1) * 19) / 2;
+      ePos.set(it.id, { x: ix, y: iy });
+      return `<circle class="at-leaf" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="${it.count > 0 ? 3.2 : 2.6}"${it.count > 0 ? '' : ' opacity="0.45"'}>
+        <title>${esc(sectionName(it.id, it.label))} · ${it.count > 0 ? it.count : t('empty')}</title></circle>
+      <text class="at-dsub" x="${(ix + 9).toFixed(1)}" y="${(iy + 3.4).toFixed(1)}" text-anchor="start">${esc(short(sectionName(it.id, it.label), 22))}</text>`;
+    }).join('');
+    return `<g class="at-district" data-district="${esc(d.id)}" style="color:${d.color}">
+      <path class="at-branch" d="M ${E_CX} ${E_CY} Q ${E_CX + 26} ${((E_CY + y) / 2).toFixed(1)} ${(E_CX + 62).toFixed(1)} ${y.toFixed(1)}"/>
+      <text class="at-dname" x="${(E_CX + 52).toFixed(1)}" y="${(y - ((d.items.length - 1) * 19) / 2 - 13).toFixed(1)}" text-anchor="start">${esc(t(d.label))}</text>
+      ${rows}
+    </g>`;
+  }).join('');
+
+  // One line per declared tunnel. Nothing is drawn that is not an edge the
+  // connectivity audit already checks — a picture that can show a relationship
+  // the data does not have is a picture that will.
+  const c1Angle = new Map(divs.map((d, i) => [d.id, i * slice - Math.PI / 2]));
+  const tunnels = ((map.core2 || {}).tunnels || []).map((tn) => {
+    const a = ePos.get(tn.core2End);
+    const ang = c1Angle.get(tn.core1Division);
+    if (!a || ang === undefined) return '';
+    const bx = px(ang, ATLAS_R.rim * 0.92), by = py(ang, ATLAS_R.rim * 0.92);
+    return `<path class="at-tunnel" d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} C ${(a.x - 260).toFixed(1)} ${a.y.toFixed(1)}, ${(bx + 240).toFixed(1)} ${by.toFixed(1)}, ${bx.toFixed(1)} ${by.toFixed(1)}">
+      <title>${esc(tn.core2End)} ↔ ${esc(tn.core1End)}: ${esc(t(tn.label || ''))}</title></path>`;
+  }).join('');
+
   const hs = harmony?.score ?? 0;
-  return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="150 92 1590 1108" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="The company as a constellation — every district a tree growing from the core">
+  return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="150 92 2280 1108" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="The whole company on one map — the AI core, the enterprise core, and the declared tunnels between them">
+    ${tunnels}
     ${districts}
+    ${eDistricts}
+    <g class="at-core">
+      <circle class="at-core-ring" cx="${E_CX}" cy="${E_CY}" r="26"/>
+      <text class="at-core-label" x="${E_CX}" y="${E_CY + 44}">${esc(t('ENTERPRISE'))}</text>
+    </g>
     <g class="at-core">
       <circle class="at-core-ring" cx="${CX}" cy="${CY}" r="${ATLAS_R.core}"/>
       ${dots}
       <text class="at-core-label" x="${CX}" y="${CY + ATLAS_R.core + 18}">${esc(t('HARMONY'))} ${hs}%</text>
     </g>
-    <text class="at-foot" x="166" y="1186">${sections.length} ${esc(t('DEPARTMENTS'))} · ${divs.length} ${esc(t('DISTRICTS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
+    <text class="at-foot" x="166" y="1186">${sections.length} ${esc(t('DEPARTMENTS'))} · ${divs.length + e2.length} ${esc(t('DISTRICTS'))} · ${((map.core2 || {}).tunnels || []).length} ${esc(t('TUNNELS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
   </svg>`;
 }
 function buildAtlasNear(map, divId) {

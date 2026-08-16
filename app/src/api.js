@@ -226,7 +226,7 @@ import {
 } from './data.js';
 import {
   connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats,
-  SURFACES, surfaceCatalog, surfaceAudit, core2Map,
+  SURFACES, surfaceCatalog, surfaceAudit, core2Map, CORE2_DIVISIONS, CORES,
 } from './links.js';
 import { ask, askRules } from './ask.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
@@ -1223,6 +1223,12 @@ const routes = [
   ['GET', /^\/api\/graph$/, () => relationshipMatrix()],
   ['GET', /^\/api\/map$/, () => ({
     divisions: DIVISIONS,
+    // The enterprise core's own districts, and the tunnels across the seam.
+    // Sent with the same payload so the map is one drawing of one catalogue:
+    // two endpoints would eventually disagree, and a map that disagrees with
+    // itself is worse than no map.
+    core2Divisions: CORE2_DIVISIONS,
+    core2: core2Map(),
     sections: sectionCatalog(),
     // The eight doors, and which departments sit behind each. The console's
     // navigation is drawn from this rather than from a list in the markup, so

@@ -613,14 +613,14 @@ export async function renderOverview() {
         ${here ? `<button class="btn btn-sm" data-atlasout>← ${esc(t('the whole company'))}</button>` : ''}
         ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}</span>` : ''}
         <a class="chip chip-dim" style="text-decoration:none" href="#/graph">${esc(t('relationship table'))} →</a>
-        <a class="chip chip-ember" style="text-decoration:none" href="#/map2">${esc(t('The two galaxies'))} →</a>
+        <a class="chip chip-ember" style="text-decoration:none" href="#/map2">${esc(t('The seam, in detail'))} →</a>
       </span>
     </div>
     <div ${tab === 'map' ? '' : 'hidden'}>
       ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
       <div class="map-legend">${esc(t(here
         ? 'One district, and the departments inside it. Each mark is a department; a filled one holds records, a hollow one is declared and still empty. The arrows walk you round the rim.'
-        : 'The whole company as one drawing: a dense core of the orchestrator and the chain, and a tree for every district growing out of it. Every leaf is a department. Point at a district to bring up its colour; open it to go inside.'))}
+        : 'The whole company on one drawing, both cores. On the left the AI core: a dense centre of the orchestrator and the chain, with a tree for every district growing out of it. On the right the enterprise core, which records what is true. The dotted lines crossing between them are the tunnels — every one a declared relationship the connectivity audit checks, never a line drawn to look joined. Every leaf is a department; a filled one holds records, a hollow one is declared and still empty.'))}
         <b>${esc(t('Click'))}</b> ${esc(t('a district to go inside'))} · <b>${esc(t('right-click'))}</b> ${esc(t('for everything it touches and a hop-by-hop'))} <b>${esc(t('Trace flow'))}</b> · <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))}.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">${esc(t('Unwired'))}: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
       ${flowLegend(mapData?.flow)}
     </div>

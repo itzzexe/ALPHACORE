@@ -46,12 +46,37 @@ const SURFACE_ICON = {
   // The ninth button, and not a surface: the way to the full list and the map,
   // so consolidating the menu never means losing the department you knew by name.
   all: '<path d="M4 5h6v6H4zM14 5h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
+  // The enterprise core's five. Drawn in the same hand as the rest — a second
+  // icon language would say "a different product" when it is one company.
+  'e-people': '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.5a3 3 0 010 5.6M18 20c0-2.4-1-4.2-2.6-5.2"/>',
+  'e-time': '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.4 2"/>',
+  'e-money': '<path d="M3.5 7.5h17v10h-17z"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6.5 12.5h.01M17.5 12.5h.01"/>',
+  'e-records': '<path d="M6 3.5h9l4 4V20a.5.5 0 01-.5.5h-12A.5.5 0 016 20z"/><path d="M14.5 3.5v4.5H19"/><path d="M9 12.5h6M9 16h4"/>',
+  'e-seam': '<circle cx="6.5" cy="12" r="3"/><circle cx="17.5" cy="12" r="3"/><path d="M9.5 12h5"/>',
 };
 export const SURFACE_LABEL = {
   ask: 'Ask AlphaCore', work: 'Work', approvals: 'Approvals', company: 'Company',
   intelligence: 'Intelligence', money: 'Money', people: 'People', world: 'World',
   all: 'All departments',
+  'e-people': 'People & HR', 'e-time': 'Time & attendance', 'e-money': 'Payroll & spending',
+  'e-records': 'Documents & records', 'e-seam': 'The seam',
 };
+
+/* ---------- the two cores ----------
+   §2 of the Core 2 directive keeps the galaxies apart in the data: the AI core
+   thinks and acts, the enterprise core records what is true, and nothing
+   crosses but the declared tunnels. The menu was the last place they were still
+   mixed — an HR record and a run queue under one heading because both happened
+   to involve people.
+
+   So the rail shows one core at a time and a switch sits above it. Which core
+   you are looking at follows the page you are on: opening a payroll screen from
+   a search result switches the rail rather than leaving it pointing at the
+   other galaxy. */
+export const CORE_ORDER = ['core1', 'core2'];
+export const CORE_LABEL = { core1: 'AI core', core2: 'Enterprise core' };
+export const CORE2_SURFACE_ORDER = ['e-people', 'e-time', 'e-money', 'e-records', 'e-seam'];
+let openCore = localStorage.getItem('alphacore-core') || 'core1';
 const DIV_ICON = {
   engine: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
   build: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
@@ -91,14 +116,59 @@ function indexSurfaces() {
   }
 }
 const surfaceOfSection = (id) => SURFACE_OF.get(id) || null;
+/**
+ * Point the rail at the core the current page belongs to.
+ *
+ * Without this, opening a payroll screen from a search result leaves the menu
+ * showing the other galaxy — and the person concludes the page they are looking
+ * at does not exist in the navigation.
+ */
+function followCore(sectionId) {
+  const surface = surfaceOfSection(sectionId);
+  if (!surface) return false;
+  const core = coreOfSurface(surface);
+  if (core === openCore) return false;
+  openCore = core;
+  localStorage.setItem('alphacore-core', core);
+  return true;
+}
 const sectionsIn = (surfaceId) => visibleSections().filter((s) => surfaceOfSection(s.id) === surfaceId);
+/** Which core a surface belongs to, read from the server rather than guessed. */
+const coreOfSurface = (id) => (CATALOG.surfaces || []).find((x) => x.id === id)?.core || 'core1';
+const surfacesOfCore = (core) => (core === 'core2' ? CORE2_SURFACE_ORDER : SURFACE_ORDER);
+
+function buildCoreSwitch() {
+  const host = $('#rail-cores');
+  if (!host) return;
+  // The index has to exist before anything can ask what is behind a surface.
+  // Built here as well as in buildRail because this runs first, and reading an
+  // empty index made every core look empty — so the switch hid itself.
+  indexSurfaces();
+  // Only offered when there is something behind both. A company that has not
+  // switched the enterprise core on should not be asked to choose between two
+  // things when it has one.
+  const live = CORE_ORDER.filter((c) => surfacesOfCore(c).some((id) => sectionsIn(id).length));
+  if (live.length < 2) { host.hidden = true; return; }
+  host.hidden = false;
+  host.innerHTML = live.map((c) => `<button class="core-btn${c === openCore ? ' on' : ''}" type="button"
+      data-core="${c}" aria-pressed="${c === openCore}">${esc(t(CORE_LABEL[c]))}</button>`).join('');
+  host.querySelectorAll('[data-core]').forEach((b) => b.addEventListener('click', () => {
+    openCore = b.dataset.core;
+    localStorage.setItem('alphacore-core', openCore);
+    openDiv = null;
+    buildCoreSwitch();
+    buildRail();
+    renderFlyout();
+  }));
+}
+
 function buildRail() {
   const host = $('#rail-items');
   if (!host) return;
   indexSurfaces();
   // A door with nothing behind it that this person may see is not shown —
   // the permission filter has always worked that way and still does.
-  const shown = SURFACE_ORDER.filter((id) => sectionsIn(id).length);
+  const shown = surfacesOfCore(openCore).filter((id) => sectionsIn(id).length);
   host.innerHTML = shown.map((id) => railBtn(id, t(SURFACE_LABEL[id] || id))).join('')
     + railBtn('all', t(SURFACE_LABEL.all));
   host.querySelectorAll('[data-div]').forEach((b) => b.addEventListener('click', () => {
@@ -203,6 +273,10 @@ function markActiveNav() {
     else a.removeAttribute('aria-current');
   });
   const sec = CATALOG.sections.find((s) => routeOf(s.href) === here);
+  // Standing on a page belonging to the other core moves the rail to it, and
+  // rebuilds it — otherwise the menu shows one galaxy while the page shows the
+  // other, and the department you are reading looks like it does not exist.
+  if (sec && followCore(sec.id)) { buildCoreSwitch(); buildRail(); }
   // The lit door is the one you are standing behind, or the one you opened.
   // On the full-list page it is the ninth button, which is not a surface.
   const litSurface = here === 'departments' ? 'all' : (openDiv || surfaceOfSection(sec?.id));
@@ -222,6 +296,7 @@ export async function loadCatalog() {
     // door rather than vanishing from the rail entirely.
     CATALOG = { sections: flat, divisions: [], surfaces: [{ id: 'company', label: 'Company', departments: flat }] };
   }
+  buildCoreSwitch();
   buildRail();
 }
 // ---------- command palette ----------
