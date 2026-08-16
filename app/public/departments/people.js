@@ -75,7 +75,7 @@ export async function renderDepartments() {
     </tr></thead><tbody id="dept-rows">
       ${mine.map((s) => {
     const surf = surfaceFor.get(s.id);
-    return `${core2}<tr data-name="${esc(`${s.id} ${s.label} ${s.hint || ''}`.toLowerCase())}">
+    return `<tr data-name="${esc(`${s.id} ${s.label} ${s.hint || ''}`.toLowerCase())}">
         <td><a href="${s.href}"><b>${esc(sectionName(s.id, s.label))}</b></a><div class="sub">${esc(t(s.hint || ''))}</div></td>
         <td>${surf ? `<a class="chip" href="#/s/${surf}">${esc(t(SURFACE_LABEL[surf] || bySurface.get(surf)?.label || surf))}</a>` : `<span class="chip chip-bad">${esc(t('unfiled'))}</span>`}</td>
         <td class="sub">${esc(divisionName(s.division, s.division))}</td>
@@ -147,7 +147,7 @@ function renderAskAnswer(r) {
     ${r.core2.note ? `<div class="sub" style="margin-top:8px">${esc(t(r.core2.note))}</div>` : ''}
     <a class="btn btn-sm" style="margin-top:10px" href="${esc(r.core2.href)}">${esc(t('Open the page'))} →</a>
   </div>` : '';
-  return `
+  return `${core2}
   <div class="panel" style="margin-top:16px">
     <div class="panel-title">${esc(t('Answered by'))}</div>
     <div class="map-legend">
@@ -613,6 +613,7 @@ export async function renderOverview() {
         ${here ? `<button class="btn btn-sm" data-atlasout>← ${esc(t('the whole company'))}</button>` : ''}
         ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}</span>` : ''}
         <a class="chip chip-dim" style="text-decoration:none" href="#/graph">${esc(t('relationship table'))} →</a>
+        <a class="chip chip-ember" style="text-decoration:none" href="#/map2">${esc(t('The two galaxies'))} →</a>
       </span>
     </div>
     <div ${tab === 'map' ? '' : 'hidden'}>
