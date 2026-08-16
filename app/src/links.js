@@ -405,6 +405,8 @@ export function sectionCatalog() {
       'Request to payment without a skippable step, and the contract expiry watch'),
     S('talent2', 'People lifecycle', 'talent', '#/talent2', n('SELECT COUNT(*) AS n FROM rec_application'),
       'Recruitment, reviews, training and offboarding — with the judgments kept human'),
+    S('map2', 'The two galaxies', 'govern', '#/map2', n('SELECT COUNT(*) AS n FROM connectors'),
+      'The second map: the enterprise core beside the AI core, joined by the tunnels'),
     S('bridges', 'The bridges', 'govern', '#/bridges', n('SELECT COUNT(*) AS n FROM connectors'),
       'Everything that crosses between the AI core and the enterprise core, and what is gated'),
     S('org', 'Org & personas', 'talent', '#/org', n('SELECT COUNT(*) AS n FROM agents'), 'Who each AI employee is, and which departments they serve'),
@@ -534,6 +536,65 @@ function packageSections() {
   } catch { return []; }
 }
 
+/**
+ * The enterprise galaxy's own division structure — the directive's §2 table,
+ * as data the second map draws from.
+ *
+ * This is a second PROJECTION, not a second diagram: the departments are the
+ * same catalogue rows and the tunnels are the same declared edges the first
+ * map draws and the connectivity audit checks. Two views of one truth cannot
+ * disagree; two diagrams always eventually do.
+ */
+export const CORE2_DIVISIONS = [
+  { id: 'e-people', label: 'PEOPLE', color: '#4f9cf0', departments: ['workforce2', 'orgchart', 'talent2'] },
+  { id: 'e-time', label: 'TIME', color: '#78bf6d', departments: ['time'] },
+  { id: 'e-finance', label: 'FINANCE OPS', color: '#e8c547', departments: ['finops2'] },
+  { id: 'e-procure', label: 'PROCUREMENT & ASSETS', color: '#e5533d', departments: ['procure'] },
+  { id: 'e-collab', label: 'COLLABORATION', color: '#b78bff', departments: ['meetings', 'docs'] },
+  { id: 'e-bridge', label: 'THE BRIDGES', color: '#2fd6a8', departments: ['bridges'] },
+];
+
+/**
+ * The two galaxies and the tunnels between them, derived.
+ *
+ * Internal edges have both ends in Core 2; tunnels have exactly one, and the
+ * far end keeps its Core 1 division so the drawing can say which part of the
+ * thinking galaxy each tunnel lands in. Nothing here is typed by hand — a
+ * tunnel with no declared edge behind it cannot exist, which is the point.
+ */
+export function core2Map() {
+  const mine = new Set(CORE2_DIVISIONS.flatMap((d) => d.departments));
+  const sections = sectionCatalog();
+  const byId = new Map(sections.map((s) => [s.id, s]));
+  const edges = relationshipMatrix().filter((e) => mine.has(e.from) || mine.has(e.to));
+
+  const internal = edges.filter((e) => mine.has(e.from) && mine.has(e.to));
+  const tunnels = edges.filter((e) => mine.has(e.from) !== mine.has(e.to)).map((e) => {
+    const core2End = mine.has(e.from) ? e.from : e.to;
+    const core1End = mine.has(e.from) ? e.to : e.from;
+    return { ...e, core2End, core1End, core1Division: byId.get(core1End)?.division || 'govern' };
+  });
+
+  return {
+    divisions: CORE2_DIVISIONS.map((d) => ({
+      ...d,
+      departments: d.departments.map((id) => byId.get(id)).filter(Boolean),
+    })),
+    internal,
+    tunnels,
+    core1: DIVISIONS.map((d) => ({
+      ...d,
+      count: sections.filter((s) => s.division === d.id && !mine.has(s.id)).length,
+      touched: tunnels.some((t) => t.core1Division === d.id),
+    })),
+    audit: {
+      // Every Core 2 department must be reachable across the seam: an
+      // enterprise module with no tunnel is an island wearing a map.
+      isolated: [...mine].filter((id) => byId.has(id) && !tunnels.some((t) => t.core2End === id) && !internal.some((e) => e.from === id || e.to === id)),
+    },
+  };
+}
+
 export const DIVISIONS = [
   { id: 'engine', label: 'ENGINE', color: '#ff6b2c' },
   { id: 'build', label: 'BUILD', color: '#b78bff' },
@@ -601,7 +662,7 @@ export const SURFACES = [
     departments: [
       'standing', 'harmony', 'autopilot', 'governance', 'oversight', 'scorecard', 'users', 'settings', 'audit',
       'constitution', 'timemachine', 'observe', 'anchors', 'datagov', 'roles', 'observability', 'backups',
-      'board', 'ir', 'comms', 'chief', 'bridges',
+      'board', 'ir', 'comms', 'chief', 'bridges', 'map2',
       'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'privacy', 'trustcentre',
       'continuity', 'incidents', 'assets', 'legal', 'vendors', 'objectives', 'ip',
     ],
@@ -964,6 +1025,8 @@ export function relationshipMatrix() {
     edge('meetings', 'erasure', 'a transcript is sealed under its organizer and dies with their key', n("SELECT COUNT(*) AS n FROM mtg_meeting WHERE transcript LIKE 'pii:1:%'"), '#/erasure'),
     edge('docs', 'workforce2', 'a restricted document names the person it is about', n('SELECT COUNT(*) AS n FROM doc_document WHERE subject_person_id IS NOT NULL'), '#/docs'),
     edge('docs', 'erasure', 'sealed versions die with their subject`s key', n("SELECT COUNT(*) AS n FROM doc_version WHERE body LIKE 'pii:1:%'"), '#/erasure'),
+    edge('map2', 'graph', 'two projections of one catalogue — the maps cannot disagree', n('SELECT COUNT(*) AS n FROM connectors'), '#/graph'),
+    edge('map2', 'bridges', 'every tunnel drawn is a declared edge the audit checks', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core'"), '#/bridges'),
     edge('bridges', 'audit', 'the consequential subset of enterprise events is written to the chain', n("SELECT COUNT(*) AS n FROM core2_log WHERE chained = 1"), '#/audit'),
     // Expansion wave wiring — every new department joined to the machine.
     edge('security', 'runs', 'sweeps inspect run inputs and outputs', n("SELECT COUNT(*) AS n FROM security_events WHERE subject_type = 'run'"), '#/security'),

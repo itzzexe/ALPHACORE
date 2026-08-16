@@ -5,7 +5,7 @@
 ### An AI company operating system where agents can act, but cannot silently exceed their authority.
 
 **An entire AI-native company inside a single Node process.**
-One hundred and forty-nine departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and fifty departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
 door, under 242 atomic permissions, with every consequential act written to a hash chain before it happens.
 
@@ -14,9 +14,9 @@ cannot do is any of that without a scope that permits it, a record that survives
 irreversible or costs money — a named person who said yes. The company runs itself; it does not answer to
 itself.
 
-<img src="https://img.shields.io/badge/departments-149-c0563a?style=flat-square" alt="149 departments">
+<img src="https://img.shields.io/badge/departments-150-c0563a?style=flat-square" alt="150 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
-<img src="https://img.shields.io/badge/relationships-449-8d8477?style=flat-square" alt="449 declared relationships">
+<img src="https://img.shields.io/badge/relationships-451-8d8477?style=flat-square" alt="451 declared relationships">
 <img src="https://img.shields.io/badge/API-661_routes-4f9cf0?style=flat-square" alt="661 API routes">
 <img src="https://img.shields.io/badge/permissions-245_atomic-e07bd2?style=flat-square" alt="245 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
@@ -44,7 +44,7 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 149 departments](#the-company--13-divisions-149-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 150 departments](#the-company--13-divisions-150-departments) | the shape |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
@@ -233,7 +233,7 @@ flowchart TD
   TALENT["TALENT · 16<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
   TRUST["TRUST · 8<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
   EXEC["EXECUTIVE · 4<br/>board · investor relations<br/>comms · operating rhythm"] --> CORE
-  GOVERN["GOVERN · 18<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
+  GOVERN["GOVERN · 19<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
   classDef c1 fill:#c0563a,color:#f2f0ea,stroke:none
   classDef c2 fill:#b78bff,color:#14100c,stroke:none
   classDef c3 fill:#5ec3c9,color:#14100c,stroke:none
@@ -265,7 +265,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **449 relationships** that the map
+Those declarations are data, not decoration: **451 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -313,7 +313,7 @@ connectivity audit and live flow counts — as JSON.
 
 ---
 
-## The company — 13 divisions, 149 departments
+## The company — 13 divisions, 150 departments
 
 <details open>
 <summary><b>ENGINE · 10</b> — the workforce and the work</summary>
@@ -457,7 +457,7 @@ facts, internal announcements, and the rhythm that runs the day.
 </details>
 
 <details>
-<summary><b>GOVERN · 18</b> — the rules and the record</summary>
+<summary><b>GOVERN · 19</b> — the rules and the record</summary>
 
 **Harmony** · **Autopilot** · **Governance** · **Oversight** · **Scorecard** ·
 **Standing orders** · **Users & roles** · **Roles** · **Settings** ·
@@ -1327,8 +1327,8 @@ configured, the public URL set, the licence files present, no test residue).
   form and puts all thirteen perceived elements through the real gate: twelve
   proceed, and "Submit order" stops.
 
-**The browser sweep** opens all 149 departments in both themes and both
-languages, at 1440×900 and again at 390×844 — 596 renders each — and fails on a
+**The browser sweep** opens all 150 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 600 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
 somebody runs once is a state the code leaves within a month.

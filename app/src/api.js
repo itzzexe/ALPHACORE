@@ -221,7 +221,7 @@ import {
 } from './data.js';
 import {
   connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats,
-  SURFACES, surfaceCatalog, surfaceAudit,
+  SURFACES, surfaceCatalog, surfaceAudit, core2Map,
 } from './links.js';
 import { ask, askRules } from './ask.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
@@ -1980,6 +1980,7 @@ function permFor(m, path) {
   // people one — the same catalogue Core 1 uses, so a screen and a bridge tool
   // cannot end up guarded differently for the same act.
   if (path.startsWith('/api/core2/org')) return m === 'GET' ? 'org.view' : 'org.manage';
+  if (path === '/api/core2/map') return 'dashboard.view';
   if (path.startsWith('/api/core2/docs')) return m === 'GET' ? 'docs.view' : 'docs.manage';
   if (/^\/api\/core2\/(finops|expenses|costcenter|loans|payroll|procurement)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
   if (path.startsWith('/api/core2/contracts')) return 'legal.view';

@@ -4,7 +4,7 @@ import { $, esc, linkFor, money, money4, short, toast, view } from '/core/dom.js
 import { TOKEN_KEY, actor, currentUser, hasPermC, navPerm, setCurrentUser } from '/state/session.js';
 import { api, downloadFile, setUnauthorizedHandler } from '/services/api.js';
 import { routes, registerRoutes } from '/router/registry.js';
-import { renderWorkforce2, renderOrgChart, renderBridges, renderDocs, renderTime, renderMeetings, renderFinOps, renderProcure, renderTalent } from '/departments/core2.js';
+import { renderWorkforce2, renderOrgChart, renderBridges, renderDocs, renderTime, renderMeetings, renderFinOps, renderProcure, renderTalent, renderGalaxies } from '/departments/core2.js';
 import { CATALOG, SURFACE_LABEL, SURFACE_ORDER, afterRender, currentRoute, holdPoll, initShell, loadCatalog, navGeneration, navigate, pollPaused, routeOf } from '/core/shell.js';
 import { tile } from '/components/tile.js';
 import { CHAT_EMOJI, REQ_STATE_CLS, bubble, chatState, connBtn, renderConnections, wireConnections, wireDownloads } from '/components/common.js';
@@ -244,6 +244,7 @@ const ROUTE_TABLE = {
   finops2: { title: 'Finance ops — expenses, payroll, cost centers', render: renderFinOps },
   procure: { title: 'Procurement — the chain that refuses to skip', render: renderProcure },
   talent2: { title: 'People lifecycle — in, up, and out', render: renderTalent },
+  map2: { title: 'Two galaxies — the AI core, the enterprise core, and the tunnels', render: renderGalaxies },
   surface: { title: 'Surface', render: renderSurfaceRoute },
   departments: { title: 'Every department', render: renderDepartments },
   browser: { title: 'Browser', render: renderBrowser },

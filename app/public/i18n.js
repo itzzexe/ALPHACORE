@@ -658,6 +658,22 @@ const AR = {
   'Highlighted events are also written to the audit chain. The rest stay in the operational log — a chain of every attendance ping buries the signal it exists to carry.':
     'الأحداث المميّزة تُكتب أيضًا على سلسلة التدقيق. وما عداها يبقى في السجل التشغيلي — فسلسلة تحوي كل نبضة حضور تدفن الإشارة التي وُجدت لتحملها.',
 
+  // الخريطة الثانية — مجرّتان وشركة واحدة
+  'The two galaxies': 'المجرّتان',
+  'Two galaxies, one company': 'مجرّتان، وشركة واحدة',
+  'CORE 1 — THINKS AND ACTS': 'النواة ١ — تفكّر وتتصرّف',
+  'CORE 2 — RECORDS THE TRUTH': 'النواة ٢ — تسجّل الحقيقة',
+  'The tunnels': 'الأنفاق',
+  'Enterprise': 'المؤسسة',
+  'AI core': 'نواة الذكاء',
+  'Why they are joined': 'لماذا هما موصولان',
+  'The first map': 'الخريطة الأولى',
+  'reached by a tunnel': 'يصلها نفق',
+  'departments': 'قسمًا',
+  'The AI core thinks and acts; the enterprise core records what is true. Nothing crosses between them except the tunnels drawn here — and every tunnel is a declared relationship the connectivity audit checks, not a line on a picture. This is the same catalogue as the first map, projected so the seam is the subject.': 'نواة الذكاء تفكّر وتتصرّف؛ ونواة المؤسسة تسجّل ما هو حقيقي. لا شيء يعبر بينهما إلا الأنفاق المرسومة هنا — وكل نفق علاقة معلنة يفحصها تدقيق الترابط، لا خطًا على صورة. هذه الكتالوج نفسه الذي ترسمه الخريطة الأولى، مُسقطًا بحيث يصبح خطّ الالتحام هو الموضوع.',
+  'A tunnel with no declared edge behind it cannot exist on this page — the drawing is derived, never drawn.': 'نفقٌ بلا علاقة معلنة خلفه لا يمكن أن يوجد في هذه الصفحة — فالرسم مُشتق، لا مرسوم باليد.',
+  'You do not have permission to see the map.': 'لا تملك صلاحية الاطلاع على الخريطة.',
+
   // اسأل عبر النواتين
   'From the record': 'من السجل',
   'Open the page': 'افتح الصفحة',
