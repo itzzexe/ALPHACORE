@@ -159,6 +159,18 @@ test('the full department list and the map are still reachable', () => {
   // the first version of that link pointed at #/map, which is not a route.
   assert.ok(ROUTE_KEYS.has('graph'), 'the map page is gone');
   assert.ok(consoleJs.includes("href=\"#/graph\""), 'the surface pages no longer link to the map');
+
+  // The second map. This one earned its place here the hard way: the screen
+  // existed, the renderer existed, the permission mapping existed — and the
+  // route itself did not, so the page politely reported a permission problem
+  // that was actually a 404. A page whose failure mode is a calm empty state
+  // passes every sweep, so the wiring is asserted at the source.
+  const apiJs = fs.readFileSync(path.join(root, 'src', 'api.js'), 'utf8');
+  assert.ok(ROUTE_KEYS.has('map2'), 'the two-galaxies page is gone');
+  assert.ok(/\/api\\\/core2\\\/map\$\//.test(apiJs),
+    'the console asks for /api/core2/map but no route answers it — the galaxies page will claim a permission problem');
+  assert.ok(consoleJs.includes("api('/api/core2/map')"), 'the galaxies page no longer asks the API for the map');
+  assert.ok(consoleJs.includes('href="#/map2"'), 'the first map no longer offers the way to the second');
 });
 
 test('the waiting count is on the bar at every width, not only on the phone', () => {

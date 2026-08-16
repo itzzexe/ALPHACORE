@@ -683,6 +683,11 @@ const routes = [
   // The bridges, as a page rather than a claim: what crosses, what is gated,
   // and whether the identity bar still holds.
   ['GET', /^\/api\/core2\/bridges$/, () => bridgeOverview()],
+  ['GET', /^\/api\/core2\/verbs$/, () => ({ modules: verbCoverage() })],
+  // The two-galaxies map. Derived from the same catalogue and edge list as the
+  // first map — see core2Map() in links.js — so a tunnel drawn here is always a
+  // declared relationship, never an illustration.
+  ['GET', /^\/api\/core2\/map$/, () => core2Map()],
 
   // --- time: attendance and leave ---
   ['GET', /^\/api\/core2\/time$/, () => timeOverview()],
