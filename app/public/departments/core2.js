@@ -742,3 +742,264 @@ export async function renderRecords() {
     catch (e) { toast(e.message, true); }
   });
 }
+
+// Rosters, and the extra minutes that are not overtime until somebody says so.
+export async function renderShifts() {
+  const s = await api('/api/core2/shifts');
+  const shift = (x) => `<tr>
+      <td>${esc(x.name)}</td>
+      <td class="mono">${esc(x.starts)} – ${esc(x.ends)}</td>
+      <td class="sub">${x.days.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).map((d) => esc(t(d))).join(' ')}</td>
+      <td class="num">${x.assigned}</td>
+    </tr>`;
+  const claim = (c) => `<tr>
+      <td>${esc(c.display_name)}</td>
+      <td class="mono">${esc(c.day)}</td>
+      <td class="num">${Math.floor(c.minutes / 60)}h ${c.minutes % 60}m</td>
+      <td>${esc(c.reason)}</td>
+      <td class="mono" style="font-size:11px">${esc(c.claimed_by)}</td>
+      <td>
+        <button class="btn btn-sm" data-ot-yes="${c.id}">${esc(t('Approve'))}</button>
+        <button class="btn btn-sm btn-bad" data-ot-no="${c.id}">${esc(t('Refuse'))}</button>
+      </td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Shifts'), s.shifts.length, t('rosters defined'))}
+    ${tile(t('On no roster'), s.unrostered, t('cannot be late, cannot claim'), s.unrostered ? 'tile-warn' : '')}
+    ${tile(t('Waiting on you'), s.pending.length, t('overtime claims'), s.pending.length ? 'tile-warn' : '')}
+    ${tile(t('Approved'), `${Math.floor((s.approvedThisPeriod.m || 0) / 60)}h`, `${s.approvedThisPeriod.n} ${esc(t('claims this period'))}`)}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What counts, and what does not'))}</div>
+    <p class="lede">${esc(t(s.says))}</p>
+    <div class="map-legend">${esc(t('Arriving late is forgiven for the first'))} ${s.graceMinutes} ${esc(t('minutes — a company that counts one minute as late spends its mornings arguing about clocks.'))}</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Overtime waiting for a decision'))}</span></div>
+    ${s.pending.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('Day'))}</th><th class="num">${esc(t('Extra'))}</th><th>${esc(t('What for'))}</th><th>${esc(t('Claimed by'))}</th><th></th></tr></thead><tbody>${s.pending.map(claim).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing waiting'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Rosters'))}</span><button class="btn btn-sm" id="sh-add">${esc(t('Add a shift'))}</button></div>
+    ${s.shifts.length
+    ? `<table class="tbl"><thead><tr><th>${esc(t('Name'))}</th><th>${esc(t('Hours'))}</th><th>${esc(t('Days'))}</th><th class="num">${esc(t('On it'))}</th></tr></thead><tbody>${s.shifts.map(shift).join('')}</tbody></table>`
+    : `<div class="empty">${esc(t('no shifts yet'))}</div>`}
+  </div>`;
+
+  const decide = async (id, approve) => {
+    try { await api(`/api/core2/overtime/${id}/decide`, { method: 'POST', body: { approve } }); render(); }
+    catch (e) { toast(e.message, true); }
+  };
+  view.querySelectorAll('[data-ot-yes]').forEach((b) => b.addEventListener('click', () => decide(b.dataset.otYes, true)));
+  view.querySelectorAll('[data-ot-no]').forEach((b) => b.addEventListener('click', () => decide(b.dataset.otNo, false)));
+  $('#sh-add').addEventListener('click', async () => {
+    const name = prompt(t('What is this shift called?')); if (!name) return;
+    const starts = prompt(t('Starts at (HH:MM)'), '09:00'); if (!starts) return;
+    const ends = prompt(t('Ends at (HH:MM)'), '17:00'); if (!ends) return;
+    try { await api('/api/core2/shifts', { method: 'POST', body: { name, starts, ends } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// What the company deducts, and on whose authority.
+export async function renderPayRules() {
+  const p = await api('/api/core2/payrules');
+  const rule = (r) => `<tr>
+      <td class="mono">${esc(r.code)}</td>
+      <td>${esc(t(r.label))}<div class="sub">${esc(r.basis)}</div></td>
+      <td><span class="chip chip-dim">${esc(t(r.kind))}</span></td>
+      <td class="sub">${esc(t(r.base))} · ${esc(t(r.paid_by))}</td>
+      <td class="mono">${r.percent !== null ? `${r.percent}%` : `${(r.bands || []).length} ${esc(t('bands'))}`}</td>
+      <td class="mono">${r.cap_amount ? esc(money(r.cap_amount)) : '—'}</td>
+      <td>${r.active ? `<span class="chip chip-ok">${esc(t('live'))}</span>` : `<span class="chip chip-dim">${esc(t('off'))}</span>`}</td>
+    </tr>`;
+  const eos = p.endOfService;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Rules'), p.active, t('live, each with a stated basis'), p.configured ? '' : 'tile-warn')}
+    ${tile(t('Tax'), p.rules.filter((r) => r.kind === 'tax').length, t('declared'))}
+    ${tile(t('Contributions'), p.rules.filter((r) => r.kind === 'contribution').length, t('declared'))}
+    ${tile(t('End of service'), eos.configured ? `${eos.perYearFirst}/${eos.perYearAfter}` : t('not set'), eos.configured ? t('days per year, before and after the threshold') : t('reported as unknown, never as zero'), eos.configured ? '' : 'tile-warn')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Why this is not a set of zeros'))}</div>
+    <p class="lede">${esc(t(p.says))}</p>
+  </div>
+
+  ${p.example ? `<div class="panel">
+    <div class="panel-title">${esc(t('Worked through, on a salary of 5,000'))}</div>
+    <table class="tbl"><thead><tr><th>${esc(t('Line'))}</th><th>${esc(t('On'))}</th><th class="num">${esc(t('Amount'))}</th><th>${esc(t('Paid by'))}</th></tr></thead><tbody>
+      ${p.example.lines.map((l) => `<tr><td>${esc(t(l.label))}</td><td class="mono">${esc(money(l.on))} (${esc(t(l.base))})</td><td class="num">${esc(money(l.amount))}</td><td>${esc(t(l.paidBy))}</td></tr>`).join('')}
+      <tr><td><strong>${esc(t('Deducted from the employee'))}</strong></td><td></td><td class="num"><strong>${esc(money(p.example.employeeTotal))}</strong></td><td></td></tr>
+      <tr><td><strong>${esc(t('Cost to the company'))}</strong></td><td></td><td class="num"><strong>${esc(money(p.example.employerTotal))}</strong></td><td></td></tr>
+    </tbody></table>
+    <div class="map-legend">${esc(t('An employer contribution is a company cost, never a deduction from the person — adding them together understates somebody\'s net pay.'))}</div>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('The rules'))}</span><button class="btn btn-sm" id="pr-add">${esc(t('Add a rule'))}</button></div>
+    ${p.rules.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Code'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Kind'))}</th><th>${esc(t('Applied to'))}</th><th>${esc(t('Rate'))}</th><th>${esc(t('Cap'))}</th><th>${esc(t('State'))}</th></tr></thead><tbody>${p.rules.map(rule).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing declared — tax and contributions are reported as unknown'))}</div>`}
+  </div>`;
+
+  $('#pr-add').addEventListener('click', async () => {
+    const code = prompt(t('A short code (income, social, pension)')); if (!code) return;
+    const label = prompt(t('What is it called on a slip?')); if (!label) return;
+    const percent = prompt(t('A flat percentage, or leave blank to add bands by API'));
+    const basis = prompt(t('What says so? The law, the contract, or the policy.'));
+    if (!basis) { toast(t('a deduction nobody can cite is one nobody can defend'), true); return; }
+    try {
+      await api('/api/core2/payrules', { method: 'POST', body: { code, label, percent: percent ? Number(percent) : null, basis } });
+      render();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// Who is holding what.
+export async function renderCustody() {
+  const c = await api('/api/core2/custody');
+  const item = (x) => `<tr>
+      <td>${esc(x.display_name)}</td>
+      <td>${esc(x.asset_name || x.description)}${x.serial ? `<div class="sub mono">${esc(x.serial)}</div>` : ''}</td>
+      <td><span class="chip chip-dim">${esc(t(x.asset_kind || 'unlisted'))}</span></td>
+      <td class="sub">${esc(t(x.condition_out))}</td>
+      <td class="sub">${esc(String(x.issued_at || '').slice(0, 10))}</td>
+      <td><button class="btn btn-sm" data-back="${x.id}">${esc(t('Take it back'))}</button></td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Out now'), c.out, t('in somebody\'s hands'))}
+    ${tile(t('With leavers'), c.withLeavers.reduce((n, w) => n + w.items, 0), t('held by people who have gone'), c.withLeavers.length ? 'tile-warn' : '')}
+    ${tile(t('Returned'), c.returned, t('handed back'))}
+    ${tile(t('Damaged'), c.damaged, t('came back worse than it went'), c.damaged ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What this is, and what it refuses'))}</div>
+    <p class="lede">${esc(t(c.says))}</p>
+  </div>
+
+  ${c.withLeavers.length ? `<div class="panel" style="border-color:var(--warn)">
+    <div class="panel-title">${esc(t('Held by people who have left'))}</div>
+    <table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('State'))}</th><th class="num">${esc(t('Items'))}</th></tr></thead><tbody>
+      ${c.withLeavers.map((w) => `<tr><td>${esc(w.display_name)}</td><td><span class="chip chip-warn">${esc(t(w.state))}</span></td><td class="num">${w.items}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Out now'))}</span><button class="btn btn-sm" id="cu-issue">${esc(t('Hand something over'))}</button></div>
+    ${c.items.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Kind'))}</th><th>${esc(t('Condition'))}</th><th>${esc(t('Since'))}</th><th></th></tr></thead><tbody>${c.items.map(item).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing is out'))}</div>`}
+  </div>`;
+
+  view.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', async () => {
+    const condition = prompt(`${t('What condition is it in?')} ${c.conditions.join(' / ')}`, 'good');
+    if (!condition) return;
+    try { await api(`/api/core2/custody/${b.dataset.back}/return`, { method: 'POST', body: { condition } }); render(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  $('#cu-issue').addEventListener('click', async () => {
+    const employeeId = prompt(t('Which employee? (id)')); if (!employeeId) return;
+    const description = prompt(t('What is it? (or leave blank and give an asset id)'));
+    const assetId = description ? null : prompt(t('Asset id from the register'));
+    try { await api('/api/core2/custody', { method: 'POST', body: { employeeId: Number(employeeId), description, assetId: assetId ? Number(assetId) : null } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// A first day and a last day, as a checklist rather than as somebody's memory.
+export async function renderJoining() {
+  const j = await api('/api/core2/joining');
+  const row = (l) => `<tr>
+      <td>${esc(l.display_name)}</td>
+      <td><span class="chip ${l.kind === 'leaving' ? 'chip-warn' : 'chip-ok'}">${esc(t(l.kind))}</span></td>
+      <td class="mono">${esc(l.on_day)}</td>
+      <td class="num">${l.done}/${l.steps}</td>
+      <td>${l.critical_open ? `<span class="chip chip-bad">${l.critical_open} ${esc(t('critical open'))}</span>` : `<span class="chip chip-ok">${esc(t('clear'))}</span>`}</td>
+      <td><span class="chip ${l.state === 'open' ? 'chip-steel' : 'chip-dim'}">${esc(t(l.state))}</span></td>
+      <td><button class="btn btn-sm" data-open="${l.id}">${esc(t('Open'))}</button></td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Open checklists'), j.open, `${j.joining} ${esc(t('joining'))} · ${j.leaving} ${esc(t('leaving'))}`)}
+    ${tile(t('Overdue steps'), j.overdue.length, t('past their day and not done'), j.overdue.length ? 'tile-warn' : '')}
+    ${tile(t('Joining template'), j.templates.joining.length, t('steps'))}
+    ${tile(t('Leaving template'), j.templates.leaving.length, t('steps'))}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('How this closes'))}</div>
+    <p class="lede">${esc(t(j.says))}</p>
+  </div>
+
+  ${j.overdue.length ? `<div class="panel" style="border-color:var(--warn)">
+    <div class="panel-title">${esc(t('Overdue'))}</div>
+    <table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('Step'))}</th><th>${esc(t('Owner'))}</th><th>${esc(t('Due'))}</th></tr></thead><tbody>
+      ${j.overdue.map((s) => `<tr><td>${esc(s.display_name)}</td><td>${esc(t(s.label))}${s.critical ? ` <span class="chip chip-bad">${esc(t('critical'))}</span>` : ''}</td><td class="sub">${esc(t(s.owner_role || ''))}</td><td class="mono">${esc(s.due_on)}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Checklists'))}</span><button class="btn btn-sm" id="jn-new">${esc(t('Start one'))}</button></div>
+    ${j.lists.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('Kind'))}</th><th>${esc(t('Day'))}</th><th class="num">${esc(t('Done'))}</th><th>${esc(t('Blocking'))}</th><th>${esc(t('State'))}</th><th></th></tr></thead><tbody>${j.lists.map(row).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('none yet'))}</div>`}
+  </div>
+
+  <div id="jn-detail"></div>`;
+
+  const showList = async (id) => {
+    const d = await api(`/api/core2/joining/${id}`);
+    const step = (s) => `<tr>
+        <td>${s.done_at ? '✓' : '·'}</td>
+        <td>${esc(t(s.label))}${s.critical ? ` <span class="chip chip-bad">${esc(t('critical'))}</span>` : ''}${s.skipped ? ` <span class="chip chip-warn">${esc(t('skipped'))}</span>` : ''}</td>
+        <td class="sub">${esc(t(s.owner_role || ''))}</td>
+        <td class="mono">${esc(s.due_on)}</td>
+        <td class="sub">${esc(s.done_by || '')}${s.note ? ` — ${esc(s.note)}` : ''}</td>
+        <td>${s.done_at ? '' : `<button class="btn btn-sm" data-tick="${s.id}">${esc(t('Done'))}</button> <button class="btn btn-sm" data-skip="${s.id}">${esc(t('Skip'))}</button>`}</td>
+      </tr>`;
+    $('#jn-detail').innerHTML = `<div class="panel">
+      <div class="panel-title">
+        <span>${esc(d.display_name)} — ${esc(t(d.kind))} ${esc(d.on_day)}</span>
+        <span>${d.state === 'open' ? `<button class="btn btn-sm btn-primary" id="jn-close">${esc(t('Close it'))}</button>` : `<span class="chip chip-dim">${esc(t('closed'))}</span>`}</span>
+      </div>
+      ${d.criticalOpen.length ? `<div class="map-legend" style="color:var(--warn)">${esc(t('Still blocking'))}: ${d.criticalOpen.map((x) => esc(t(x))).join(' · ')}</div>` : ''}
+      <div class="table-wrap"><table class="tbl"><thead><tr><th></th><th>${esc(t('Step'))}</th><th>${esc(t('Owner'))}</th><th>${esc(t('Due'))}</th><th>${esc(t('By'))}</th><th></th></tr></thead><tbody>${d.steps.map(step).join('')}</tbody></table></div>
+    </div>`;
+
+    $('#jn-detail').querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', async () => {
+      try { await api(`/api/core2/joining/step/${b.dataset.tick}`, { method: 'POST', body: {} }); showList(id); }
+      catch (e) { toast(e.message, true); }
+    }));
+    $('#jn-detail').querySelectorAll('[data-skip]').forEach((b) => b.addEventListener('click', async () => {
+      const why = prompt(t('Why is this being skipped?'));
+      if (why === null) return;
+      try { await api(`/api/core2/joining/step/${b.dataset.skip}`, { method: 'POST', body: { skip: true, why } }); showList(id); }
+      catch (e) { toast(e.message, true); }
+    }));
+    const close = $('#jn-close');
+    if (close) {
+      close.addEventListener('click', async () => {
+        try { await api(`/api/core2/joining/${id}/close`, { method: 'POST', body: {} }); toast(t('closed')); render(); }
+        catch (e) { toast(e.message, true); }
+      });
+    }
+  };
+
+  view.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => showList(b.dataset.open)));
+  $('#jn-new').addEventListener('click', async () => {
+    const employeeId = prompt(t('Which employee? (id)')); if (!employeeId) return;
+    const kind = prompt(t('joining or leaving?'), 'joining'); if (!kind) return;
+    try { await api('/api/core2/joining', { method: 'POST', body: { employeeId: Number(employeeId), kind } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+  if (j.lists.length) showList(j.lists[0].id);
+}

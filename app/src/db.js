@@ -3142,6 +3142,104 @@ CREATE INDEX IF NOT EXISTS time_attendance_day ON time_attendance (day);
 -- way. The transcript is Tier A, sealed under the organizer's key; the
 -- multi-subject limitation that creates is recorded in NEXT.md rather than
 -- hidden.
+-- Who is on which shift, and since when. Dated rather than replaced, so
+-- last month's attendance is still judged against the roster that was actually
+-- in force then — overwriting would rewrite whether somebody was late in March.
+CREATE TABLE IF NOT EXISTS time_shift_assignment (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  shift_id    INTEGER NOT NULL REFERENCES time_shift(id),
+  since       TEXT NOT NULL,
+  until       TEXT,
+  assigned_by TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS shift_assignment_live ON time_shift_assignment(employee_id, since, until);
+
+-- Extra minutes are not overtime until somebody approves them. Paying every
+-- late departure teaches everybody to leave late.
+CREATE TABLE IF NOT EXISTS time_overtime (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  day         TEXT NOT NULL,
+  minutes     INTEGER NOT NULL,
+  reason      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'claimed',    -- claimed|approved|refused
+  claimed_by  TEXT NOT NULL,
+  decided_by  TEXT,
+  decided_at  TEXT,
+  note        TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, day)
+);
+
+-- What a company deducts, and on whose authority. Either a flat percentage or
+-- a set of bands; the basis is required because a deduction nobody can cite is
+-- one the employee may dispute and the company cannot defend.
+CREATE TABLE IF NOT EXISTS pay_rule (
+  code         TEXT PRIMARY KEY,
+  label        TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'tax',        -- tax|contribution
+  base         TEXT NOT NULL DEFAULT 'gross',      -- gross|basic|taxable
+  paid_by      TEXT NOT NULL DEFAULT 'employee',   -- employee|employer
+  percent      REAL,                               -- flat rules
+  bands        TEXT,                               -- JSON, progressive rules
+  cap_amount   REAL,
+  floor_amount REAL,
+  basis        TEXT NOT NULL,
+  active       INTEGER NOT NULL DEFAULT 1,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Custody: who is holding what. The asset itself stays in Core 1's register —
+-- one master — and this is the handover.
+CREATE TABLE IF NOT EXISTS cust_item (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id   INTEGER NOT NULL REFERENCES hr_employee(id),
+  asset_id      INTEGER,                           -- Core 1 assets.id, when listed
+  description   TEXT,                              -- when it is not: keys, a card
+  serial        TEXT,
+  condition_out TEXT NOT NULL DEFAULT 'good',
+  condition_in  TEXT,
+  note          TEXT,
+  return_note   TEXT,
+  issued_by     TEXT NOT NULL,
+  issued_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  returned_to   TEXT,
+  returned_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS cust_out ON cust_item(employee_id, returned_at);
+CREATE INDEX IF NOT EXISTS cust_asset ON cust_item(asset_id, returned_at);
+
+-- A first day and a last day, as a checklist rather than as somebody's memory.
+CREATE TABLE IF NOT EXISTS join_list (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  kind        TEXT NOT NULL,                       -- joining|leaving
+  on_day      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'open',        -- open|closed
+  started_by  TEXT NOT NULL,
+  closed_by   TEXT,
+  closed_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS join_step (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id    INTEGER NOT NULL REFERENCES join_list(id),
+  code       TEXT NOT NULL,
+  label      TEXT NOT NULL,
+  owner_role TEXT,
+  due_on     TEXT,
+  -- A step that costs money or opens a door. Skippable, but never silently.
+  critical   INTEGER NOT NULL DEFAULT 0,
+  done_at    TEXT,
+  done_by    TEXT,
+  skipped    INTEGER NOT NULL DEFAULT 0,
+  note       TEXT
+);
+CREATE INDEX IF NOT EXISTS join_step_by_list ON join_step(list_id, due_on);
+
 -- A file, sealed. The row is a manifest; the bytes live under data/files/
 -- encrypted with the subject's own key, so erasing the person destroys the
 -- file rather than orphaning it. Deleting is a tombstone, never a vanishing:

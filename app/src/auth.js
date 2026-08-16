@@ -37,6 +37,10 @@ export const PERMS = [
   // docs.manage writes. Public needs only a session.
   'docs.view', 'docs.manage', 'docs.confidential',
   'files.view', 'files.upload', 'files.delete',
+  'shifts.view', 'shifts.manage', 'overtime.approve',
+  'payrules.view', 'payrules.manage',
+  'custody.view', 'custody.manage',
+  'joining.view', 'joining.manage',
   'records.view', 'records.manage', 'records.hold',
   'legal.view', 'legal.manage',
   'vendors.view', 'vendors.manage',

@@ -24,6 +24,12 @@ import {
 import { bridgeOverview, seedBridge, verbCoverage } from './core2/bridge.js';
 import { storeFile, readFile, deleteFile, filesFor, filesOverview } from './core2/files.js';
 import {
+  createShift, assignShift, shiftOn, judgeDay, claimOvertime, decideOvertime, shiftsOverview,
+} from './core2/shifts.js';
+import { setRule, rules, computeDeductions, endOfService, payRulesOverview } from './core2/payrules.js';
+import { issue, takeBack, heldBy, clearedToLeave, custodyOverview } from './core2/custody.js';
+import { start as startList, tick as tickStep, close as closeList, listDetail, joiningOverview } from './core2/joining.js';
+import {
   seedClasses, setClass, placeHold, releaseHold, liveHolds, dueForDisposition,
   recordDisposal, recordsOverview,
 } from './core2/records.js';
@@ -713,6 +719,68 @@ const routes = [
   ['POST', /^\/api\/core2\/files\/(\d+)\/delete$/, ([id], body, _u, user) => deleteFile(Number(id), {
     actor: `human:${user.username}`, why: body?.why || '',
   })],
+
+  // --- Shifts, and the extra minutes that are not overtime until signed ---
+  ['GET', /^\/api\/core2\/shifts$/, (_p, _b, url) => shiftsOverview({ period: url.searchParams.get('period') })],
+  ['POST', /^\/api\/core2\/shifts$/, (_p, body, _u, user) => createShift({
+    name: need(body, 'name'), starts: need(body, 'starts'), ends: need(body, 'ends'),
+    days: body.days || undefined, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/shifts\/assign$/, (_p, body, _u, user) => assignShift({
+    employeeId: Number(need(body, 'employeeId')), shiftId: Number(need(body, 'shiftId')),
+    from: need(body, 'from'), to: body.to || null, actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/shifts\/day\/(\d+)\/([\d-]+)$/, ([id, day]) => judgeDay(Number(id), day)],
+  ['GET', /^\/api\/core2\/shifts\/on\/(\d+)\/([\d-]+)$/, ([id, day]) => shiftOn(Number(id), day) || {}],
+  ['POST', /^\/api\/core2\/overtime$/, (_p, body, _u, user) => claimOvertime({
+    employeeId: Number(need(body, 'employeeId')), day: need(body, 'day'),
+    minutes: need(body, 'minutes'), reason: need(body, 'reason'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/overtime\/(\d+)\/decide$/, ([id], body, _u, user) => decideOvertime(Number(id), {
+    approve: body?.approve === true, note: body?.note || '', actor: `human:${user.username}`,
+  })],
+
+  // --- What a company deducts, and what it owes when somebody leaves ---
+  ['GET', /^\/api\/core2\/payrules$/, () => payRulesOverview()],
+  ['POST', /^\/api\/core2\/payrules$/, (_p, body, _u, user) => setRule({
+    code: need(body, 'code'), label: need(body, 'label'), kind: body.kind || 'tax',
+    base: body.base || 'gross', paidBy: body.paidBy || 'employee',
+    percent: body.percent ?? null, bands: body.bands || null,
+    capAmount: body.capAmount ?? null, floorAmount: body.floorAmount ?? null,
+    basis: need(body, 'basis'), active: body.active !== false, actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/payrules\/preview$/, (_p, _b, url) => computeDeductions({
+    gross: Number(url.searchParams.get('gross') || 0),
+    basic: Number(url.searchParams.get('basic') || 0),
+    deductions: Number(url.searchParams.get('deductions') || 0),
+  })],
+  ['GET', /^\/api\/core2\/endofservice\/(\d+)$/, ([id], _b, url) => endOfService({
+    employeeId: Number(id), lastDay: url.searchParams.get('lastDay'), reason: url.searchParams.get('reason') || 'resigned',
+  })],
+
+  // --- Who is holding what ---
+  ['GET', /^\/api\/core2\/custody$/, () => custodyOverview()],
+  ['GET', /^\/api\/core2\/custody\/(\d+)$/, ([id]) => ({ held: heldBy(Number(id)), cleared: clearedToLeave(Number(id)) })],
+  ['POST', /^\/api\/core2\/custody$/, (_p, body, _u, user) => issue({
+    employeeId: Number(need(body, 'employeeId')), assetId: body.assetId ? Number(body.assetId) : null,
+    description: body.description || null, serial: body.serial || null,
+    condition: body.condition || 'good', note: body.note || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/custody\/(\d+)\/return$/, ([id], body, _u, user) => takeBack(Number(id), {
+    condition: body?.condition || 'good', note: body?.note || null, actor: `human:${user.username}`,
+  })],
+
+  // --- A first day and a last day, as a checklist ---
+  ['GET', /^\/api\/core2\/joining$/, () => joiningOverview()],
+  ['GET', /^\/api\/core2\/joining\/(\d+)$/, ([id]) => listDetail(Number(id))],
+  ['POST', /^\/api\/core2\/joining$/, (_p, body, _u, user) => startList({
+    employeeId: Number(need(body, 'employeeId')), kind: need(body, 'kind'),
+    on: body.on || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/joining\/step\/(\d+)$/, ([id], body, _u, user) => tickStep(Number(id), {
+    note: body?.note || null, skip: body?.skip === true, why: body?.why || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/joining\/(\d+)\/close$/, ([id], _b, _u, user) => closeList(Number(id), { actor: `human:${user.username}` })],
 
   // --- Records: how long a thing is kept, and what freezes it ---
   ['GET', /^\/api\/core2\/records$/, () => recordsOverview()],
@@ -2046,6 +2114,13 @@ function permFor(m, path) {
   if (path.startsWith('/api/core2/files')) return m === 'GET' ? 'files.view' : 'files.upload';
   // A legal hold is the one act here that overrides a person's right to
   // erasure, so it is not the same permission as editing the schedule.
+  // Approving overtime is money, so it is not the same permission as editing a
+  // roster. Same reasoning as the legal hold sitting apart from the schedule.
+  if (/^\/api\/core2\/overtime\/\d+\/decide$/.test(path)) return 'overtime.approve';
+  if (path.startsWith('/api/core2/shifts') || path.startsWith('/api/core2/overtime')) return m === 'GET' ? 'shifts.view' : 'shifts.manage';
+  if (path.startsWith('/api/core2/payrules') || path.startsWith('/api/core2/endofservice')) return m === 'GET' ? 'payrules.view' : 'payrules.manage';
+  if (path.startsWith('/api/core2/custody')) return m === 'GET' ? 'custody.view' : 'custody.manage';
+  if (path.startsWith('/api/core2/joining')) return m === 'GET' ? 'joining.view' : 'joining.manage';
   if (/^\/api\/core2\/records\/hold/.test(path)) return 'records.hold';
   if (path.startsWith('/api/core2/records')) return m === 'GET' ? 'records.view' : 'records.manage';
   if (/^\/api\/core2\/(finops|expenses|costcenter|loans|payroll|procurement)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
