@@ -220,6 +220,10 @@ const PII_COLUMNS = [
   ['intel_contacts', ['email', 'phone'], ['name', 'role', 'note']],
   ['suppression_list', ['contact'], []],
   ['tenants', ['owner_email'], []],
+  // Core 2's people. The address or number reaches them; the national id and the
+  // emergency contact are carried because they sit on the same row and could
+  // never be matched against an erasure request naming an email.
+  ['hr_person', ['personal_email', 'personal_phone'], ['national_id', 'emergency_contact']],
   // Support: somebody who wrote in is a person on file, and what they wrote is
   // about them as much as the address they wrote from.
   ['tickets', ['customer'], ['subject', 'body', 'draft', 'sent_body']],
@@ -245,6 +249,10 @@ const PII_COLUMNS = [
  */
 const PII_BY_REF = [
   ['intel_evidence', ['value']],
+  // Employment terms: a salary and a bank account, which are about a person but
+  // contain nothing that equals their email address. Reached by the reference
+  // the employment row carried from the moment it was written.
+  ['hr_employee', ['bank_account', 'base_salary']],
   // A run's prompt is a copy of whatever it was asked to work on, and its
   // output is a copy of what it wrote about them. Sealing a support ticket
   // while the drafting run beside it holds the same message in plaintext moves
@@ -328,6 +336,33 @@ export const TIER_A = [
   // and the row carries the reference from then on.
   { table: 'runs', column: 'input', subject: [] },
   { table: 'runs', column: 'output', subject: [] },
+
+  // ---- Core 2 ----
+  //
+  // The larger PII surface the enterprise galaxy brings with it. A national id
+  // and a bank account are the two values in this whole platform that most
+  // deserve to be unreadable on a stolen disk, and a salary is the one most
+  // likely to be read by somebody with database access and no business reading
+  // it — which is the third threat in the model, not an afterthought.
+  { table: 'hr_person', column: 'personal_email', subject: ['personal_email', 'personal_phone'] },
+  { table: 'hr_person', column: 'personal_phone', subject: ['personal_email', 'personal_phone'] },
+  { table: 'hr_person', column: 'national_id', subject: ['personal_email', 'personal_phone'] },
+  { table: 'hr_person', column: 'emergency_contact', subject: ['personal_email', 'personal_phone'] },
+  // Employment borrows its subject from the person it is about, and is sealed
+  // before them for the same reason the provenance rows are: once the person's
+  // address is sealed there is nothing readable left to derive a key from.
+  {
+    table: 'hr_employee',
+    column: 'bank_account',
+    subject: [],
+    parent: { table: 'hr_person', on: 'person_id', subject: ['personal_email', 'personal_phone'] },
+  },
+  {
+    table: 'hr_employee',
+    column: 'base_salary',
+    subject: [],
+    parent: { table: 'hr_person', on: 'person_id', subject: ['personal_email', 'personal_phone'] },
+  },
 ];
 
 const TIER_A_KEYS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));

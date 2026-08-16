@@ -2899,6 +2899,179 @@ FROM connector_evidence
 GROUP BY connector, capability;
 `);
 
+// ===========================================================================
+// CORE 2 — ENTERPRISE OPERATIONS
+//
+// Core 1 thinks and acts. Core 2 records what is true and undisputed about the
+// company: who is employed and on what terms, who owns what, who is owed what.
+// One database file, two schemas, told apart by a prefix — the same modular
+// monolith argument Core 1 already makes for itself.
+//
+// Everything below is STRICT. That is not tidiness: it is the whole enforcement
+// of the rule that an AI agent may never occupy a slot meant for a human being.
+// Agents have TEXT ids ('AGT-ARC-001'); people have INTEGER ones. In an ordinary
+// SQLite table those are interchangeable, because SQLite will cheerfully store a
+// string in an INTEGER column. Under STRICT it refuses, at the storage engine,
+// in every code path, including one written next year by somebody who never read
+// this comment. A trigger can be dropped; a column type cannot.
+// ===========================================================================
+db.exec(`
+-- The root identifier for a human being. Everything else about a person hangs
+-- off this: an employee record, a login, a candidate application. A person may
+-- have any combination of those, or none — a former employee kept for record is
+-- a person with no user and no current employment, and that has to be
+-- representable or the model is lying about the world.
+--
+-- Note what is NOT here: names are Tier B and stay readable, because every
+-- screen and every report groups by them. The identifying details that would
+-- let somebody impersonate or locate this person are Tier A and sealed at
+-- write, under this person's own key.
+CREATE TABLE IF NOT EXISTS hr_person (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  display_name  TEXT NOT NULL,                    -- Tier B: every report groups by it
+  subject_ref   TEXT,                             -- one-way, the erasure join key
+  personal_email TEXT,                            -- Tier A
+  personal_phone TEXT,                            -- Tier A
+  national_id   TEXT,                             -- Tier A
+  emergency_contact TEXT,                         -- Tier A
+  -- 'person' is the only kind. The column exists so a future non-human party
+  -- cannot be smuggled in by widening the meaning of this table quietly.
+  kind          TEXT NOT NULL DEFAULT 'person' CHECK (kind = 'person'),
+  status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive','erased')),
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS hr_person_subject ON hr_person (subject_ref);
+
+-- Employment: the terms, not the human. A person can be employed twice over a
+-- career, so this is a record of a relationship with an end date, not a flag on
+-- the person.
+CREATE TABLE IF NOT EXISTS hr_employee (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id     INTEGER NOT NULL REFERENCES hr_person(id),
+  employee_no   TEXT NOT NULL UNIQUE,
+  org_unit_id   INTEGER REFERENCES hr_org_unit(id),
+  position_id   INTEGER REFERENCES hr_position(id),
+  grade_id      INTEGER REFERENCES hr_grade(id),
+  -- A reporting line points at another *employment*, never at a name and never
+  -- at an agent. An org chart with an AI on it is the failure this whole
+  -- identity model exists to make impossible.
+  manager_id    INTEGER REFERENCES hr_employee(id),
+  employment    TEXT NOT NULL DEFAULT 'full-time'
+                CHECK (employment IN ('full-time','part-time','contract','intern','fractional')),
+  state         TEXT NOT NULL DEFAULT 'active'
+                CHECK (state IN ('pending','active','suspended','notice','ended')),
+  bank_account  TEXT,                             -- Tier A
+  base_salary   TEXT,                             -- Tier A, sealed: a number nobody may read from the disk
+  currency      TEXT NOT NULL DEFAULT 'USD',
+  hired_at      TEXT,
+  ended_at      TEXT,
+  -- Employment holds Tier A values but carries no identifier of its own, so the
+  -- erasure walk reaches these rows by reference rather than by comparison —
+  -- the same mechanism the intelligence provenance rows use.
+  subject_ref   TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS hr_employee_person ON hr_employee (person_id);
+CREATE INDEX IF NOT EXISTS hr_employee_manager ON hr_employee (manager_id);
+CREATE INDEX IF NOT EXISTS hr_employee_unit ON hr_employee (org_unit_id);
+
+-- The org chart: units, positions, grades. Separate tables because they change
+-- on different clocks — a company reorganises its units far more often than it
+-- redefines what a grade means.
+CREATE TABLE IF NOT EXISTS hr_org_unit (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  code        TEXT UNIQUE,
+  parent_id   INTEGER REFERENCES hr_org_unit(id),
+  -- Which Core 1 department this unit answers to, when there is one. The map
+  -- reads this, so a unit is joined to the company rather than floating.
+  core1_section TEXT,
+  head_employee_id INTEGER REFERENCES hr_employee(id),
+  state       TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hr_position (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  org_unit_id INTEGER REFERENCES hr_org_unit(id),
+  grade_id    INTEGER REFERENCES hr_grade(id),
+  headcount   INTEGER NOT NULL DEFAULT 1,
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','filled','frozen','closed')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hr_grade (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL UNIQUE,
+  rank        INTEGER NOT NULL,
+  band_min    REAL,
+  band_max    REAL,
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- Core 2's own operational log: every field change, every read of something
+-- sensitive. Deliberately NOT the audit chain — chaining an attendance ping is
+-- noise that makes the real signal harder to audit. The consequential subset is
+-- mirrored onto Core 1's chain by the audit bridge, and only that subset.
+CREATE TABLE IF NOT EXISTS core2_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity      TEXT NOT NULL,
+  entity_id   INTEGER,
+  action      TEXT NOT NULL,
+  actor       TEXT NOT NULL,
+  detail      TEXT,
+  chained     INTEGER NOT NULL DEFAULT 0,        -- did this also go on Core 1's chain
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS core2_log_entity ON core2_log (entity, entity_id, id);
+`);
+
+// The second half of the agent bar.
+//
+// STRICT stops an agent id reaching an INTEGER person column, which covers every
+// structural reference. It cannot cover the TEXT columns that legitimately hold
+// an actor string — Core 1 writes 'human:zaid' and 'AGT-SUP-001' into the same
+// shaped field all over the platform. So where a Core 2 column means *a human
+// did this*, a trigger refuses anything that looks like an employee of the other
+// kind. Belt and braces, because the two failure modes are different: one is a
+// type error, the other is a lie.
+//
+// The name is checked as well as the id, and that is a deliberate choice with a
+// cost. An agent's name in this platform is a role title — "Solution Architect",
+// "Backend Engineer" — so a *person* by that name is not a person, it is
+// somebody creating a proxy row to put an AI on the org chart. Blocking it can
+// in principle refuse a real employee whose name collides with an agent's; that
+// is a rename away, and it is the right way round to be wrong.
+for (const sql of [
+  'DROP TRIGGER IF EXISTS hr_person_never_an_agent',
+  'DROP TRIGGER IF EXISTS hr_person_never_an_agent_upd',
+  `CREATE TRIGGER hr_person_never_an_agent
+   BEFORE INSERT ON hr_person
+   WHEN NEW.display_name GLOB 'AGT-*'
+     OR EXISTS (SELECT 1 FROM agents WHERE id = NEW.display_name OR name = NEW.display_name)
+   BEGIN SELECT RAISE(ABORT, 'an AI agent cannot be recorded as a person'); END`,
+  `CREATE TRIGGER hr_person_never_an_agent_upd
+   BEFORE UPDATE ON hr_person
+   WHEN NEW.display_name GLOB 'AGT-*'
+     OR EXISTS (SELECT 1 FROM agents WHERE id = NEW.display_name OR name = NEW.display_name)
+   BEGIN SELECT RAISE(ABORT, 'an AI agent cannot be recorded as a person'); END`,
+]) { try { db.exec(sql); } catch { /* older SQLite, or nothing to drop */ } }
+
+// Core 1's own roster and login table gain a pointer to the person they are
+// about. Additive on purpose: nothing in Core 1 has to change, and the same
+// human stops being two unrelated rows in two galaxies.
+for (const sql of [
+  'ALTER TABLE users ADD COLUMN person_id INTEGER',
+  'ALTER TABLE people ADD COLUMN person_id INTEGER',
+  'CREATE INDEX IF NOT EXISTS users_person ON users (person_id)',
+  'CREATE INDEX IF NOT EXISTS people_person ON people (person_id)',
+]) { try { db.exec(sql); } catch { /* already applied */ } }
+
 // Where each room sits on the floor. Kept in the database rather than in the
 // page, because a floor plan drawn by the view is a picture that drifts from the
 // building — the same reason the map is generated from the catalogue.
