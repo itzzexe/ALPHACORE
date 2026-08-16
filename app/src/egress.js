@@ -56,6 +56,13 @@ const VALUE_GATE_USD = 50;
 const ALWAYS_GATED = new Set([
   'money.send', 'money.payout', 'contract.sign', 'repo.merge',
   'mail.bulk', 'post.publish.paid',
+  // Core 2's categorical list arrives here as one capability. A termination, a
+  // payroll approval or a salary change is not a large expense that the ceiling
+  // happens to catch — it is a different kind of act, and the ceiling is the
+  // wrong instrument for it. The commands themselves are named in
+  // src/core2/bridge.js; what this line does is make the gate hold them
+  // whatever the amount and whatever the agent's scopes say.
+  'core2.gated',
 ]);
 
 const REDACT = /(?:key|token|secret|password|authorization|cookie|seed|mnemonic|private)/i;

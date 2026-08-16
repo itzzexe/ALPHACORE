@@ -24,7 +24,7 @@ itself.
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-267-78bf6d?style=flat-square" alt="267 tests">
+<img src="https://img.shields.io/badge/tests-279-78bf6d?style=flat-square" alt="279 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -1097,7 +1097,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 267 tests, on their own database files |
+| `npm test` | 279 tests, on their own database files |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1187,7 +1187,7 @@ credential — keep them together.
 
 ```
 app/
-  src/                128 modules, ~33,800 lines
+  src/                129 modules, ~33,800 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
     db.js             196 tables, forward-only migrations
     audit.js          the hash chain
@@ -1235,7 +1235,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               267 tests across twenty-three files
+  test/               279 tests across twenty-four files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1255,7 +1255,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 267 tests
+npm test                        # 279 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
