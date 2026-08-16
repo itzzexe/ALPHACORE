@@ -4,6 +4,7 @@ import { $, esc, linkFor, money, money4, short, toast, view } from '/core/dom.js
 import { TOKEN_KEY, actor, currentUser, hasPermC, navPerm, setCurrentUser } from '/state/session.js';
 import { api, downloadFile, setUnauthorizedHandler } from '/services/api.js';
 import { routes, registerRoutes } from '/router/registry.js';
+import { renderWorkforce2, renderOrgChart, renderBridges } from '/departments/core2.js';
 import { CATALOG, SURFACE_LABEL, SURFACE_ORDER, afterRender, currentRoute, holdPoll, initShell, loadCatalog, navGeneration, navigate, pollPaused, routeOf } from '/core/shell.js';
 import { tile } from '/components/tile.js';
 import { CHAT_EMOJI, REQ_STATE_CLS, bubble, chatState, connBtn, renderConnections, wireConnections, wireDownloads } from '/components/common.js';
@@ -231,6 +232,12 @@ const ROUTE_TABLE = {
   // 404; it would quietly open the wrong page, which is worse, and no test that
   // only checks for 404s would ever catch it.
   ask: { title: 'Ask AlphaCore — say what you need', render: renderAsk },
+
+  // Core 2 — the enterprise galaxy. Same rail, same sweep, same catalogue as
+  // the hundred and forty; the seam is invisible here and disciplined in src/.
+  workforce2: { title: 'Employees — the system of record', render: renderWorkforce2 },
+  orgchart: { title: 'Organization — units, positions and grades', render: renderOrgChart },
+  bridges: { title: 'The bridges — what crosses between the two cores', render: renderBridges },
   surface: { title: 'Surface', render: renderSurfaceRoute },
   departments: { title: 'Every department', render: renderDepartments },
   browser: { title: 'Browser', render: renderBrowser },

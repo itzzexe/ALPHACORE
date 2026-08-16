@@ -587,6 +587,77 @@ const AR = {
   'Experience moving in and out of storage: finished work leaves an episode behind, and future work retrieves what is relevant before it starts — so the same mistake is not made twice.':
     'الخبرة تدخل وتخرج من المخزن: العمل المنتهي يترك أثرًا، والعمل القادم يسترجع ما يخصّه قبل أن يبدأ — كي لا يتكرر الخطأ ذاته مرتين.',
 
+  // النواة الثانية — سجلّ الشركة الحقيقي، بجوار نواة الذكاء لا تابعًا لها
+  'Employees': 'الموظفون',
+  'Organization': 'الهيكل التنظيمي',
+  'The bridges': 'الجسور',
+  'People on file': 'الأشخاص المسجّلون',
+  'Employed': 'على رأس العمل',
+  'With a login': 'لديهم حساب دخول',
+  'Unsealed': 'غير مختوم',
+  'every human the company knows': 'كل إنسان تعرفه الشركة',
+  'with terms and a reporting line': 'بشروط عمل وخط تبعية',
+  'a person is not automatically a user': 'الشخص ليس مستخدمًا تلقائيًا',
+  'no contact detail, so nothing to seal under': 'لا وسيلة اتصال، فلا مفتاح يُختم تحته',
+  'One human, one row': 'إنسان واحد، صف واحد',
+  'Number': 'الرقم',
+  'Name': 'الاسم',
+  'Employment': 'نوع التعاقد',
+  'State': 'الحالة',
+  'Since': 'منذ',
+  'Contact': 'وسيلة الاتصال',
+  'Reference': 'المرجع',
+  'none on file': 'لا شيء مسجّل',
+  'Nobody on file yet.': 'لا أحد مسجّل بعد.',
+  'Nobody is employed yet. A person comes first, then their terms.':
+    'لا أحد على رأس العمل بعد. الشخص أولًا، ثم شروط تعاقده.',
+  'Record a person': 'تسجيل شخص',
+  'Record': 'سجّل',
+  'Full name': 'الاسم الكامل',
+  'Personal email': 'البريد الشخصي',
+  'Personal phone': 'الهاتف الشخصي',
+  'The contact details are sealed under this person\'s own key before the row exists. The name stays readable, because every screen and every report groups by it.':
+    'تُختم تفاصيل الاتصال تحت مفتاح هذا الشخص نفسه قبل أن يوجد الصف. ويبقى الاسم مقروءًا، لأن كل شاشة وكل تقرير يجمع به.',
+  'You do not have permission to see the employee record.': 'لا تملك صلاحية الاطلاع على سجل الموظفين.',
+  'You do not have permission to see the organization.': 'لا تملك صلاحية الاطلاع على الهيكل التنظيمي.',
+  'You do not have permission to see the bridges.': 'لا تملك صلاحية الاطلاع على الجسور.',
+  'full-time': 'دوام كامل', 'part-time': 'دوام جزئي', 'contract': 'عقد',
+  'intern': 'متدرّب', 'fractional': 'بدوام موزّع',
+  'pending': 'قيد الانتظار', 'suspended': 'موقوف', 'notice': 'في مهلة الإنهاء', 'ended': 'منتهٍ',
+
+  // الهيكل
+  'Units': 'الوحدات',
+  'People placed': 'موزّعون على وحدات',
+  'Top level': 'المستوى الأعلى',
+  'active parts of the company': 'أجزاء الشركة الفاعلة',
+  'employed and assigned to a unit': 'على رأس العمل ومسنَدون إلى وحدة',
+  'units reporting to nobody': 'وحدات لا تتبع أحدًا',
+  'The shape of the company': 'شكل الشركة',
+  'No units yet.': 'لا وحدات بعد.',
+  'answers to': 'تتبع',
+  'A reporting line points at another employment, by number. It is not a name and it cannot be an AI employee — the column is an integer in a STRICT table, so an org chart with an agent on it is not something this schema can express.':
+    'خط التبعية يشير إلى تعاقد آخر برقمه. ليس اسمًا، ولا يمكن أن يكون موظفًا اصطناعيًا — فالعمود عدد صحيح في جدول STRICT، وهيكلٌ فيه وكيل ذكاء ليس شيئًا يستطيع هذا المخطط التعبير عنه أصلًا.',
+
+  // الجسور
+  'Tools': 'الأدوات',
+  'Calls through the gate': 'نداءات عبر البوابة',
+  'Held for a person': 'محجوزة بانتظار إنسان',
+  'Identity bar': 'حاجز الهوية',
+  'holds': 'صامد', 'BROKEN': 'مكسور',
+  'one action each, no catch-all': 'فعل واحد لكل أداة، بلا أداة جامعة',
+  'every one checked like an outside call': 'كل نداء يُفحص كأنه نداء إلى الخارج',
+  'gated, waiting on a human': 'موقوفة بانتظار إنسان',
+  'an agent cannot occupy a human slot': 'لا يمكن لوكيل أن يشغل موضع إنسان',
+  'Nothing crosses except through these': 'لا شيء يعبر إلا من خلالها',
+  'Commands a machine may never complete alone': 'أوامر لا يجوز لآلة أن تُتمّها وحدها',
+  'Gated whatever the amount and whatever the agent\'s scopes say. A termination is not a large expense; it is a different kind of act.':
+    'موقوفة مهما كان المبلغ ومهما قالت صلاحيات الوكيل. إنهاء خدمة موظف ليس نفقة كبيرة، بل فعل من نوع آخر.',
+  'The tool surface': 'سطح الأدوات',
+  'Tool': 'الأداة', 'Writes': 'يكتب', 'Permission': 'الصلاحية', 'What for': 'لماذا',
+  'Events, and which reach the chain': 'الأحداث، وأيّها يبلغ السلسلة',
+  'Highlighted events are also written to the audit chain. The rest stay in the operational log — a chain of every attendance ping buries the signal it exists to carry.':
+    'الأحداث المميّزة تُكتب أيضًا على سلسلة التدقيق. وما عداها يبقى في السجل التشغيلي — فسلسلة تحوي كل نبضة حضور تدفن الإشارة التي وُجدت لتحملها.',
+
   // الأبواب الثمانية — ١٤٠ قسمًا عدد صحيح لشركة وخاطئ لقائمة
   'Ask AlphaCore': 'اسأل ألفاكور',
   'Work': 'العمل',

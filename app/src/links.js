@@ -386,6 +386,15 @@ export function sectionCatalog() {
     S('incidents', 'Incidents', 'operate', '#/incidents', n('SELECT COUNT(*) AS n FROM incidents'), 'SEV lifecycle with postmortems'),
     S('support', 'Support', 'operate', '#/support', n('SELECT COUNT(*) AS n FROM tickets'), 'Tickets, AI drafts, human sends'),
     S('people', 'People', 'talent', '#/people', n('SELECT COUNT(*) AS n FROM people'), 'The human layer'),
+    // Core 2 — the enterprise galaxy. These sit in Core 1's catalogue on
+    // purpose: one map, one connectivity audit, one sweep. A second diagram for
+    // the second core would be exactly the island the design refuses.
+    S('workforce2', 'Employees', 'talent', '#/workforce2', n('SELECT COUNT(*) AS n FROM hr_person'),
+      'The system of record: who is employed, on what terms, reporting to whom'),
+    S('orgchart', 'Organization', 'talent', '#/orgchart', n('SELECT COUNT(*) AS n FROM hr_org_unit'),
+      'Units, positions and grades — the shape of the company'),
+    S('bridges', 'The bridges', 'govern', '#/bridges', n('SELECT COUNT(*) AS n FROM connectors'),
+      'Everything that crosses between the AI core and the enterprise core, and what is gated'),
     S('org', 'Org & personas', 'talent', '#/org', n('SELECT COUNT(*) AS n FROM agents'), 'Who each AI employee is, and which departments they serve'),
     S('society', 'The society', 'talent', '#/society', n('SELECT COUNT(*) AS n FROM agent_messages'), 'How colleagues actually get on — conversations, handovers, friendships and friction'),
     S('disputes', 'Disputes', 'talent', '#/disputes', n('SELECT COUNT(*) AS n FROM disputes'), 'HR arbitrates, the owner rules'),
@@ -580,7 +589,7 @@ export const SURFACES = [
     departments: [
       'standing', 'harmony', 'autopilot', 'governance', 'oversight', 'scorecard', 'users', 'settings', 'audit',
       'constitution', 'timemachine', 'observe', 'anchors', 'datagov', 'roles', 'observability', 'backups',
-      'board', 'ir', 'comms', 'chief',
+      'board', 'ir', 'comms', 'chief', 'bridges',
       'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'privacy', 'trustcentre',
       'continuity', 'incidents', 'assets', 'legal', 'vendors', 'objectives', 'ip',
     ],
@@ -604,7 +613,7 @@ export const SURFACES = [
     id: 'people',
     label: 'People',
     hint: 'The workforce, human and synthetic — and how it gets better.',
-    departments: ['people', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
+    departments: ['people', 'workforce2', 'orgchart', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
   },
   {
     id: 'world',
@@ -919,6 +928,18 @@ export function relationshipMatrix() {
     // Engine + Operate stragglers.
     edge('runs', 'artifacts', 'files written to disk by gated runs', n('SELECT COUNT(*) AS n FROM archive_items WHERE file_ref IS NOT NULL'), '#/artifacts'),
     edge('people', 'agents', 'every agent answers to a human owner', n('SELECT COUNT(*) AS n FROM agents'), '#/people'),
+
+    // Core 2, joined to the company rather than floating beside it. Each of
+    // these is a relationship the code actually carries out — a declared edge
+    // with nothing behind it is the failure this audit exists to catch, and it
+    // caught these three the first time they were added without them.
+    edge('workforce2', 'people', 'the same human, once in the record and once on the roster', n('SELECT COUNT(*) AS n FROM hr_person'), '#/workforce2'),
+    edge('workforce2', 'orgchart', 'every employment sits in a unit and under a reporting line', n('SELECT COUNT(*) AS n FROM hr_employee'), '#/orgchart'),
+    edge('workforce2', 'erasure', 'a salary and a national id are sealed under the person\'s own key', n('SELECT COUNT(*) AS n FROM hr_person WHERE subject_ref IS NOT NULL'), '#/erasure'),
+    edge('orgchart', 'users', 'a person may hold a login; a login always belongs to a person', n('SELECT COUNT(*) AS n FROM users WHERE person_id IS NOT NULL'), '#/users'),
+    edge('bridges', 'egress', 'every call into the enterprise core passes the same gate as an outside one', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core'"), '#/egress'),
+    edge('bridges', 'gate', 'a termination or a payroll approval waits for a person, whatever the amount', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core' AND verdict = 'gated'"), '#/gate'),
+    edge('bridges', 'audit', 'the consequential subset of enterprise events is written to the chain', n("SELECT COUNT(*) AS n FROM core2_log WHERE chained = 1"), '#/audit'),
     // Expansion wave wiring — every new department joined to the machine.
     edge('security', 'runs', 'sweeps inspect run inputs and outputs', n("SELECT COUNT(*) AS n FROM security_events WHERE subject_type = 'run'"), '#/security'),
     edge('security', 'risks', 'high findings belong on the register', n("SELECT COUNT(*) AS n FROM security_events WHERE severity = 'high'"), '#/risks'),
