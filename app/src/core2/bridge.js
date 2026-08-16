@@ -31,9 +31,12 @@ import { audit } from '../audit.js';
 import { attempt } from '../egress.js';
 import { enqueue, handle } from '../jobs.js';
 import { notify } from '../notify.js';
+import { journalEntry, addAccount } from '../ledger.js';
 import * as identity from './identity.js';
 import * as time from './time.js';
 import * as meetings from './meetings.js';
+import * as payops from './payops.js';
+import * as procure from './procure.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 
@@ -107,6 +110,42 @@ export const TOOLS = {
     about: 'Record an action item or a decision against a meeting.',
     run: (a, ctx) => meetings.addAction(a.meetingId, { ...a, actor: ctx.actor }),
   },
+  get_payroll: {
+    write: false, permission: 'finance.view',
+    about: 'One payroll run with its slips — opened only for a permitted reader.',
+    run: ({ id }) => payops.getRun(id),
+  },
+  list_expiring_contracts: {
+    write: false, permission: 'legal.view',
+    about: 'Contracts lapsing inside a horizon, soonest first.',
+    run: ({ horizonDays = 90 }) => procure.listExpiring({ horizonDays }),
+  },
+  create_expense: {
+    write: true, permission: 'finance.view',
+    about: 'Submit an expense or advance on an employee`s behalf.',
+    run: (a, ctx) => payops.submitExpense({ ...a, actor: ctx.actor }),
+  },
+  approve_expense: {
+    write: true, permission: 'finance.view',
+    about: 'Approve a routine expense. The ordinary value ceiling applies: small clears on scope, large waits for a person.',
+    run: (a, ctx) => payops.decideExpense(a.id, { approve: true, actor: ctx.actor }),
+  },
+  draft_payroll: {
+    write: true, permission: 'finance.view',
+    about: 'Compute a period`s payroll as a draft. Drafting is arithmetic; approving is human, always, and no tool for it exists.',
+    run: (a, ctx) => payops.draftPayroll({ ...a, actor: ctx.actor }),
+  },
+  create_procurement: {
+    write: true, permission: 'finance.view',
+    about: 'Open a purchase request at the start of the chain.',
+    run: (a, ctx) => procure.createProcurement({ ...a, actor: ctx.actor }),
+  },
+  advance_procurement: {
+    write: true, permission: 'finance.view',
+    about: 'Move a purchase one legal step. Goods, not money: approval and payment refuse a non-human actor inside Core 2.',
+    run: (a, ctx) => procure.advanceProcurement(a.id, { to: a.to, actor: ctx.actor }),
+  },
+
   create_org_unit: {
     write: true, permission: 'org.manage',
     about: 'Add a unit to the organization.',
@@ -296,6 +335,56 @@ const NOTIFY = {
   'invoice.paid': { level: 'info', text: (p) => `Invoice #${p.id ?? ''} was paid.` },
 };
 
+/**
+ * The ledger glue — the one place enterprise money becomes accounting.
+ *
+ * This sits on the Core 1 side of the bridge on purpose: Core 2 emits
+ * `payroll.closed` and knows nothing about debits. The entry is posted through
+ * the same journalEntry() an accountant uses, so it is balanced or refused,
+ * lands in an open period or refuses, exactly like anything typed by hand.
+ * If Core 2 ever imports ledger.js directly, that is the second ledger the
+ * directive forbids, wearing a disguise.
+ */
+function ensureSalariesAccount() {
+  if (!one("SELECT code FROM accounts WHERE code = '5250'")) {
+    try {
+      addAccount({ code: '5250', name: 'Salaries and wages', type: 'expense', note: 'Payroll, posted by the bridge on close', actor: 'system:core2-bridge' });
+    } catch { /* raced another tick; the account exists */ }
+  }
+}
+
+const LEDGER_GLUE = {
+  // Gross is the company's cost; net leaves the bank; the difference is
+  // withheld and owed onward. Splitting it this way is what makes tax payable
+  // visible as a liability instead of vanishing into "salaries".
+  'payroll.closed': (p) => {
+    ensureSalariesAccount();
+    const withheld = Math.round((p.totalGross - p.totalNet) * 100) / 100;
+    const lines = [
+      { account: '5250', debit: p.totalGross },
+      { account: '1000', credit: p.totalNet },
+    ];
+    if (withheld > 0) lines.push({ account: '2200', credit: withheld });
+    return { memo: `Payroll ${p.period}`, lines, sourceId: `payroll-${p.id}` };
+  },
+  'expense.paid': (p) => ({
+    memo: `Expense #${p.id} (${p.category || 'other'})`,
+    lines: [{ account: '5900', debit: p.amount }, { account: '1000', credit: p.amount }],
+    sourceId: `expense-${p.id}`,
+  }),
+  // Invoice received: we owe. Paid: the debt clears.
+  'invoice.created': (p) => ({
+    memo: `Procurement #${p.id} invoiced`,
+    lines: [{ account: '5100', debit: p.amount }, { account: '2000', credit: p.amount }],
+    sourceId: `proc-inv-${p.id}`,
+  }),
+  'invoice.paid': (p) => ({
+    memo: `Procurement #${p.id} paid`,
+    lines: [{ account: '2000', debit: p.amount }, { account: '1000', credit: p.amount }],
+    sourceId: `proc-pay-${p.id}`,
+  }),
+};
+
 handle('core2.event', async ({ event, payload }) => {
   if (shouldChain(event)) {
     audit({
@@ -313,10 +402,30 @@ handle('core2.event', async ({ event, payload }) => {
   if (n) {
     notify({
       level: n.level, source: 'core2', message: n.text(payload || {}),
-      subjectType: 'core2', subjectId: payload?.id ?? null,
+      // The dedupe key carries the event name: two different events about
+      // entity #1 are two messages, not one — an unread 'invoice paid' must
+      // never swallow a 'contract expiring' that happens to share an id.
+      subjectType: 'core2', subjectId: payload?.id != null ? `${event}#${payload.id}` : null,
     });
   }
-  return { event, chained: shouldChain(event), notified: Boolean(n) };
+  // Money becomes accounting, through Core 1's ledger and nowhere else. The
+  // idempotent sourceId means a retried event cannot post twice.
+  const glue = LEDGER_GLUE[event];
+  let posted = false;
+  if (glue && payload) {
+    const entry = glue(payload);
+    if (entry.lines.every((l) => (l.debit || l.credit) > 0)) {
+      const dup = one("SELECT id FROM journal WHERE source = 'core2' AND source_id = ?", entry.sourceId);
+      if (!dup) {
+        const j = journalEntry({
+          memo: entry.memo, lines: entry.lines, source: 'core2', sourceId: entry.sourceId,
+          actor: 'system:core2-bridge', post: true,
+        });
+        posted = Boolean(j);
+      }
+    }
+  }
+  return { event, chained: shouldChain(event), notified: Boolean(n), posted };
 });
 
 /** Everything Core 2 can announce. Declared so it can be subscribed to. */

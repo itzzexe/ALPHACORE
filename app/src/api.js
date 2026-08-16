@@ -33,6 +33,13 @@ import {
   createMeeting, getMeeting, setMeetingState, addAction, listMeetings, meetingsOverview,
 } from './core2/meetings.js';
 import {
+  createCostCenter, submitExpense, decideExpense, payExpense, listExpenses, createLoan,
+  draftPayroll, approvePayrollRun, closePayrollRun, getRun, payopsOverview,
+} from './core2/payops.js';
+import {
+  createProcurement, advanceProcurement, listProcurement, listExpiring, procureOverview,
+} from './core2/procure.js';
+import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
 } from './tax.js';
@@ -693,6 +700,47 @@ const routes = [
     name: need(body, 'name'), leaveType: need(body, 'leaveType'),
     daysPerYear: body.daysPerYear || 0, carryForwardMax: body.carryForwardMax || 0,
     needsDocument: Boolean(body.needsDocument), actor: `human:${user.username}`,
+  })],
+
+  // --- finance ops: expenses, loans, cost centers, payroll ---
+  ['GET', /^\/api\/core2\/finops$/, () => payopsOverview()],
+  ['GET', /^\/api\/core2\/expenses$/, (_p, _b, url) => ({ expenses: listExpenses({ state: url.searchParams.get('state') || null }) })],
+  ['POST', /^\/api\/core2\/expenses$/, (_p, body, _u, user) => submitExpense({
+    employeeId: need(body, 'employeeId'), kind: body.kind || 'expense', category: body.category || 'other',
+    amount: need(body, 'amount'), costCenterId: body.costCenterId || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/expenses\/(\d+)\/decide$/, ([id], body, _u, user) => decideExpense(Number(id), {
+    approve: Boolean(body.approve), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/expenses\/(\d+)\/pay$/, ([id], _b, _u, user) => payExpense(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/costcenter$/, (_p, body, _u, user) => createCostCenter({
+    name: need(body, 'name'), code: need(body, 'code'), budgetUsd: body.budgetUsd || 0, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/loans$/, (_p, body, _u, user) => createLoan({
+    employeeId: need(body, 'employeeId'), principal: need(body, 'principal'), monthly: need(body, 'monthly'),
+    actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/payroll\/(\d+)$/, ([id]) => getRun(Number(id))
+    || (() => { throw new HttpError(404, 'no such run'); })()],
+  ['POST', /^\/api\/core2\/payroll\/draft$/, (_p, body, _u, user) => draftPayroll({
+    period: need(body, 'period'), actor: `human:${user.username}`,
+  })],
+  // Approving and closing payroll are human acts: the actor is the signed-in
+  // person, and the gateway's categorical list means no agent path exists.
+  ['POST', /^\/api\/core2\/payroll\/(\d+)\/approve$/, ([id], _b, _u, user) => approvePayrollRun(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/payroll\/(\d+)\/close$/, ([id], _b, _u, user) => closePayrollRun(Number(id), { actor: `human:${user.username}` })],
+
+  // --- procurement & the contract watch ---
+  ['GET', /^\/api\/core2\/procurement$/, () => ({ requests: listProcurement({}), overview: procureOverview() })],
+  ['POST', /^\/api\/core2\/procurement$/, (_p, body, _u, user) => createProcurement({
+    title: need(body, 'title'), amount: body.amount || 0, vendorId: body.vendorId || null,
+    costCenterId: body.costCenterId || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/procurement\/(\d+)\/advance$/, ([id], body, _u, user) => advanceProcurement(Number(id), {
+    to: need(body, 'to'), actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/contracts\/expiring$/, (_p, _b, url) => ({
+    contracts: listExpiring({ horizonDays: Number(url.searchParams.get('horizonDays')) || 90 }),
   })],
 
   // --- meetings ---
@@ -1874,6 +1922,8 @@ function permFor(m, path) {
   // cannot end up guarded differently for the same act.
   if (path.startsWith('/api/core2/org')) return m === 'GET' ? 'org.view' : 'org.manage';
   if (path.startsWith('/api/core2/docs')) return m === 'GET' ? 'docs.view' : 'docs.manage';
+  if (/^\/api\/core2\/(finops|expenses|costcenter|loans|payroll|procurement)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
+  if (path.startsWith('/api/core2/contracts')) return 'legal.view';
   if (path.startsWith('/api/core2')) return m === 'GET' ? 'people.view' : 'people.manage';
   if (path.startsWith('/api/people')) return m === 'GET' ? 'people.view' : 'people.manage';
   if (path.startsWith('/api/knowledge') || path.startsWith('/api/memory')) return m === 'GET' ? 'knowledge.view' : 'knowledge.manage';

@@ -3174,6 +3174,94 @@ CREATE TABLE IF NOT EXISTS mtg_action (
 CREATE INDEX IF NOT EXISTS mtg_meeting_sched ON mtg_meeting (scheduled_at);
 CREATE INDEX IF NOT EXISTS mtg_meeting_subject ON mtg_meeting (subject_ref);
 
+-- FINANCE OPS: cost centers, expenses, loans, payroll.
+--
+-- What is deliberately NOT here: a journal entry. Core 2 never posts to the
+-- ledger — it emits an event, and the bridge hands it to Core 1's ledger with
+-- the same journalEntry() call an accountant uses. One ledger, one master.
+--
+-- Money classifications, decided and recorded rather than felt:
+--   Expense amounts are Tier B — company transactions the ledger will carry in
+--   plaintext anyway, and cost-center reports must sum them in SQL.
+--   Payroll SLIPS are Tier A — an individual's pay is theirs, sealed under
+--   their key. Run TOTALS are Tier B, because the ledger entry that the close
+--   posts shows the aggregate regardless; sealing a number the ledger prints
+--   would be theatre.
+CREATE TABLE IF NOT EXISTS fin_cost_center (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  code       TEXT NOT NULL UNIQUE,
+  budget_usd REAL NOT NULL DEFAULT 0,
+  state      TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_expense (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id    INTEGER NOT NULL REFERENCES hr_employee(id),
+  cost_center_id INTEGER REFERENCES fin_cost_center(id),
+  kind           TEXT NOT NULL DEFAULT 'expense' CHECK (kind IN ('expense','advance')),
+  category       TEXT NOT NULL DEFAULT 'other',
+  amount         REAL NOT NULL,
+  currency       TEXT NOT NULL DEFAULT 'USD',
+  state          TEXT NOT NULL DEFAULT 'submitted' CHECK (state IN ('submitted','approved','rejected','paid')),
+  submitted_by   TEXT NOT NULL,
+  decided_by     TEXT,
+  decided_at     TEXT,
+  paid_at        TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS pay_loan (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  principal   REAL NOT NULL,
+  monthly     REAL NOT NULL,
+  balance     REAL NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','settled')),
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS pay_run (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  period      TEXT NOT NULL UNIQUE,             -- 'YYYY-MM'
+  state       TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','approved','closed')),
+  total_gross REAL NOT NULL DEFAULT 0,
+  total_net   REAL NOT NULL DEFAULT 0,
+  approved_by TEXT,                             -- a human, always; asserted in code
+  closed_at   TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS pay_slip (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id      INTEGER NOT NULL REFERENCES pay_run(id),
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  detail      TEXT NOT NULL,                    -- Tier A: sealed JSON of the whole computation
+  subject_ref TEXT,
+  UNIQUE (run_id, employee_id)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS pay_slip_subject ON pay_slip (subject_ref);
+
+-- PROCUREMENT: request → approval → PO → delivery → invoice → payment.
+-- Vendors stay in Core 1's existing table — one vendor record, one master.
+CREATE TABLE IF NOT EXISTS proc_request (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  title          TEXT NOT NULL,
+  vendor_id      TEXT,                          -- Core 1 vendors.id (slug), when chosen
+  cost_center_id INTEGER REFERENCES fin_cost_center(id),
+  amount         REAL NOT NULL DEFAULT 0,
+  state          TEXT NOT NULL DEFAULT 'requested'
+                 CHECK (state IN ('requested','approved','po','delivered','invoiced','paid','rejected')),
+  po_no          TEXT,
+  requested_by   TEXT NOT NULL,
+  decided_by     TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
 -- Core 2's own operational log: every field change, every read of something
 -- sensitive. Deliberately NOT the audit chain — chaining an attendance ping is
 -- noise that makes the real signal harder to audit. The consequential subset is
@@ -3292,6 +3380,11 @@ for (const sql of [
   // A run about a person carries their reference, so its prompt and its answer
   // are sealed under the same key as the row that caused it.
   'ALTER TABLE runs ADD COLUMN subject_ref TEXT',
+  // Contracts gain a hard expiry so renewals can be watched the way the IP
+  // department already watches its own renewal dates. The table stays Core 1s;
+  // one contract record, one master.
+  'ALTER TABLE contracts ADD COLUMN expires_at TEXT',
+  'ALTER TABLE contracts ADD COLUMN obligations TEXT',
 ]) { try { db.exec(sql); } catch { /* column exists */ } }
 
 // Finding everything held about one person is a scan today. These make it a

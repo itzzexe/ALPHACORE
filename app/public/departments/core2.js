@@ -342,3 +342,127 @@ export async function renderMeetings() {
     </tbody></table></div>
   </div>`;
 }
+
+/** Finance ops: expenses, payroll runs, cost centers — and who approved what. */
+export async function renderFinOps() {
+  const d = await api('/api/core2/finops').catch(() => null);
+  const ex = await api('/api/core2/expenses').catch(() => ({ expenses: [] }));
+  if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see finance operations.'))}</div>`; return; }
+  const exCls = { submitted: 'chip-warn', approved: 'chip-ok', rejected: 'chip-bad', paid: 'chip-dim' };
+  const runCls = { draft: 'chip-warn', approved: 'chip-ok', closed: 'chip-dim' };
+
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Expenses waiting'), d.expensesPending, esc(t('submitted, not yet decided')), d.expensesPending ? 'tile-warn' : '')}
+    ${tile(t('Active loans'), d.activeLoans, esc(t('repaid through payroll')))}
+    ${tile(t('Payroll runs'), d.runs.length, esc(t('drafted by arithmetic, approved by people')))}
+    ${tile(t('Cost centers'), d.costCenters.length, esc(t('budgets with spend counted against them')))}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('One ledger, one master'))}</div>
+    <div class="map-legend">${esc(t(d.note))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Payroll runs'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Period'))}</th><th class="num">${esc(t('Gross'))}</th><th class="num">${esc(t('Net'))}</th>
+      <th>${esc(t('State'))}</th><th>${esc(t('Approved by'))}</th>
+    </tr></thead><tbody>
+      ${d.runs.map((r) => `<tr>
+        <td class="mono">${esc(r.period)}</td>
+        <td class="num">${money(r.total_gross)}</td>
+        <td class="num">${money(r.total_net)}</td>
+        <td><span class="chip ${runCls[r.state] || 'chip-dim'}">${esc(t(r.state))}</span></td>
+        <td class="sub">${esc(r.approved_by || '—')}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="empty">${esc(t('No payroll yet.'))}</td></tr>`}
+    </tbody></table></div>
+    <div class="sub" style="margin-top:8px">${esc(t('Individual slips are sealed under each employee\'s own key. The totals stay readable because the ledger entry the close posts shows the aggregate regardless.'))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Expenses'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Who'))}</th><th>${esc(t('Category'))}</th><th class="num">${esc(t('Amount'))}</th><th>${esc(t('State'))}</th><th></th>
+    </tr></thead><tbody>
+      ${ex.expenses.map((e) => `<tr>
+        <td><b>${esc(e.display_name)}</b></td>
+        <td class="sub">${esc(e.category)}${e.kind === 'advance' ? ` <span class="chip chip-dim">${esc(t('advance'))}</span>` : ''}</td>
+        <td class="num">${money(e.amount)}</td>
+        <td><span class="chip ${exCls[e.state] || 'chip-dim'}">${esc(t(e.state))}</span></td>
+        <td>${e.state === 'submitted' && hasPermC('finance.export') ? `
+          <button class="btn btn-sm" data-ex="${e.id}" data-ok="1">${esc(t('Approve'))}</button>
+          <button class="btn btn-sm" data-ex="${e.id}" data-ok="0">${esc(t('Reject'))}</button>`
+    : e.state === 'approved' && hasPermC('finance.export') ? `<button class="btn btn-sm" data-pay="${e.id}">${esc(t('Pay'))}</button>` : ''}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="empty">${esc(t('No expenses.'))}</td></tr>`}
+    </tbody></table></div>
+  </div>`;
+
+  view.querySelectorAll('[data-ex]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/core2/expenses/${b.dataset.ex}/decide`, { method: 'POST', body: { approve: b.dataset.ok === '1' } }); renderFinOps(); }
+    catch (err) { alert(err.message); }
+  }));
+  view.querySelectorAll('[data-pay]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/core2/expenses/${b.dataset.pay}/pay`, { method: 'POST', body: {} }); renderFinOps(); }
+    catch (err) { alert(err.message); }
+  }));
+}
+
+/** Procurement and the contract watch: the chain, and what lapses soon. */
+export async function renderProcure() {
+  const d = await api('/api/core2/procurement').catch(() => null);
+  if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see procurement.'))}</div>`; return; }
+  const o = d.overview;
+  const stCls = { requested: 'chip-warn', approved: 'chip-ok', po: 'chip-ok', delivered: 'chip-ok', invoiced: 'chip-warn', paid: 'chip-dim', rejected: 'chip-bad' };
+
+  view.innerHTML = `
+  <div class="grid grid-3">
+    ${tile(t('Open purchases'), o.open, esc(t('somewhere along the chain')))}
+    ${tile(t('Awaiting approval'), o.awaitingApproval, esc(t('a human decision, not a ceiling')), o.awaitingApproval ? 'tile-warn' : '')}
+    ${tile(t('Contracts expiring'), o.expiring.length, esc(t('inside ninety days')), o.expiring.length ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('The chain refuses to skip'))}</div>
+    <div class="map-legend">${esc(t(o.note))}</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Purchases'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Title'))}</th><th>${esc(t('Vendor'))}</th><th class="num">${esc(t('Amount'))}</th>
+      <th>${esc(t('PO'))}</th><th>${esc(t('State'))}</th><th></th>
+    </tr></thead><tbody>
+      ${d.requests.map((p) => {
+    const next = { requested: 'approved', approved: 'po', po: 'delivered', delivered: 'invoiced', invoiced: 'paid' }[p.state];
+    return `<tr>
+        <td><b>${esc(p.title)}</b></td>
+        <td class="sub">${esc(p.vendor_name || '—')}</td>
+        <td class="num">${money(p.amount)}</td>
+        <td class="mono sub">${esc(p.po_no || '—')}</td>
+        <td><span class="chip ${stCls[p.state] || 'chip-dim'}">${esc(t(p.state))}</span></td>
+        <td>${next && hasPermC('finance.export') ? `<button class="btn btn-sm" data-adv="${p.id}" data-to="${next}">${esc(t('to'))} ${esc(t(next))}</button>` : ''}</td>
+      </tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">${esc(t('Nothing being purchased.'))}</td></tr>`}
+    </tbody></table></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">${esc(t('Contracts expiring soon'))}</div>
+    ${o.expiring.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Title'))}</th><th>${esc(t('Counterparty'))}</th><th>${esc(t('Expires'))}</th>
+    </tr></thead><tbody>
+      ${o.expiring.map((c) => `<tr>
+        <td><b>${esc(c.title)}</b></td><td class="sub">${esc(c.counterparty)}</td>
+        <td class="mono">${esc(c.expires_at)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>` : `<div class="empty">${esc(t('Nothing lapses inside ninety days.'))}</div>`}
+    <div class="sub" style="margin-top:8px"><a href="#/legal">${esc(t('The contract record itself lives in Legal'))} →</a></div>
+  </div>`;
+
+  view.querySelectorAll('[data-adv]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/core2/procurement/${b.dataset.adv}/advance`, { method: 'POST', body: { to: b.dataset.to } }); renderProcure(); }
+    catch (err) { alert(err.message); }
+  }));
+}

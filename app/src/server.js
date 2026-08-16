@@ -55,6 +55,7 @@ import { seedMarketingTeam, seedMarketingOps, syncMarketing } from './marketing.
 // systems that keep all of it honest.
 import { seedConnectors, callConnector } from './connectors/index.js';
 import { seedBridge } from './core2/bridge.js';
+import { contractExpirySweep } from './core2/procure.js';
 import { verifyState, exchangeCode, refreshExpiring } from './connectors/oauth.js';
 import { handle as handleJob, enqueue as enqueueJob, jobsTick, reclaimStuck } from './jobs.js';
 import { seedConstitution } from './constitution.js';
@@ -307,6 +308,9 @@ setInterval(() => { try { advanceJourneys(); } catch { /* next tick retries */ }
 setInterval(() => { try { ruleStaleRelations(); } catch { /* next tick retries */ } }, 6 * 3600 * 1000).unref?.();
 setInterval(() => { try { immuneTick(); } catch { /* next tick retries */ } }, 60_000).unref?.();
 setInterval(() => { try { expirySweep(); } catch { /* logged via audit on success */ } }, 60 * 60 * 1000).unref?.();
+// The contract watch, on the same hourly cadence as the registry sweep and
+// idempotent by queue key, so running it often costs nothing.
+setInterval(() => { try { contractExpirySweep(); } catch { /* best effort */ } }, 60 * 60 * 1000).unref?.();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

@@ -61,7 +61,12 @@
   Deferred because a file path in a sealed column is a pointer to unsealed
   bytes — the storage side needs the same sealing thought first.
 
-- **Phases 3 to 5.** Not started.
+- **Phases 4 and 5.** Not started.
+- **Payroll taxes and contributions are named zeros.** The slip carries the
+  full formula shape, but tax and contribution rules are jurisdiction-specific
+  and nothing computes them yet. End-of-service calculation likewise.
+- **Customers & Sales:** Core 1's customers/deals/invoices tables are declared
+  the system of record — same one-master reasoning as tasks and vendors.
 - **Phase 2's tasks & projects.** Core 1's existing projects/tasks tables are
   declared the system of record rather than duplicated into proj_ twins —
   building parallels would be the two-masters failure §2 exists to prevent.
