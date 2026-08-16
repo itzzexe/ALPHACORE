@@ -378,8 +378,8 @@ function buildAtlasFar(map) {
       const cx = px(l.a, l.r).toFixed(1), cy = py(l.a, l.r).toFixed(1);
       const title = `<title>${esc(sectionName(l.item.id, l.item.label))} · ${live ? l.item.count : t('empty')}</title>`;
       return live
-        ? `<circle class="at-leaf" cx="${cx}" cy="${cy}" r="3.2">${title}</circle>`
-        : `<circle class="at-leaf-ring" cx="${cx}" cy="${cy}" r="2.6">${title}</circle>`;
+        ? `<circle class="at-leaf" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="3.2">${title}</circle>`
+        : `<circle class="at-leaf-ring" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="2.6">${title}</circle>`;
     }).join('');
 
     const lx = px(angle, ATLAS_R.rim);
@@ -422,7 +422,7 @@ function buildAtlasFar(map) {
     const rows = d.items.map((it, j) => {
       const ix = E_CX + 62, iy = y + j * 19 - ((d.items.length - 1) * 19) / 2;
       ePos.set(it.id, { x: ix, y: iy });
-      return `<circle class="at-leaf" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="${it.count > 0 ? 3.2 : 2.6}"${it.count > 0 ? '' : ' opacity="0.45"'}>
+      return `<circle class="at-leaf" data-dept="${esc(it.id)}" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="${it.count > 0 ? 3.2 : 2.6}"${it.count > 0 ? '' : ' opacity="0.45"'}>
         <title>${esc(sectionName(it.id, it.label))} · ${it.count > 0 ? it.count : t('empty')}</title></circle>
       <text class="at-dsub" x="${(ix + 9).toFixed(1)}" y="${(iy + 3.4).toFixed(1)}" text-anchor="start">${esc(short(sectionName(it.id, it.label), 22))}</text>`;
     }).join('');
@@ -573,6 +573,56 @@ export function atlasStep(delta) {
   atlasGoTo(ids[(at + delta + ids.length) % ids.length]);
 }
 /** Pan/zoom, hover isolation, click-to-inspect, hop-by-hop flow tracing. */
+/**
+ * Light the map by what is happening, rather than by what exists.
+ *
+ * The atlas has always drawn the company. Drawing is the right thing for
+ * somebody meeting it for the first time and the wrong thing every morning
+ * afterwards, when the questions are all about today. A lens dims everything
+ * and lights only the departments the answer is in, with the number on them.
+ *
+ * Nothing is invented: each lens is a set of counts the server derived from
+ * real queries, and a department with no counter stays unlit rather than
+ * showing a confident zero.
+ */
+function applyLens(svg, state, lens, term) {
+  const counts = lens === 'all' ? null : (state?.[lens] || {});
+  svg.querySelectorAll('.at-lens-badge').forEach((n) => n.remove());
+  const matches = (id) => {
+    if (term) return id.toLowerCase().includes(term) || (sectionName(id, id) || '').toLowerCase().includes(term);
+    if (!counts) return true;
+    return Boolean(counts[id]);
+  };
+
+  let lit = 0;
+  svg.querySelectorAll('[data-dept]').forEach((node) => {
+    const id = node.dataset.dept;
+    const on = matches(id);
+    if (on) lit += 1;
+    node.classList.toggle('at-dim', !on && (Boolean(term) || Boolean(counts)));
+    node.classList.toggle('at-lit', on && (Boolean(term) || Boolean(counts)));
+
+    const n = counts?.[id];
+    if (n && on) {
+      const cx = Number(node.getAttribute('cx'));
+      const cy = Number(node.getAttribute('cy'));
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      g.setAttribute('class', 'at-lens-badge');
+      g.setAttribute('x', (cx + 6).toFixed(1));
+      g.setAttribute('y', (cy - 5).toFixed(1));
+      g.textContent = n > 99 ? '99+' : String(n);
+      node.parentNode.appendChild(g);
+    }
+  });
+  // The districts fade with their leaves, so the eye is not pulled to a label
+  // whose departments are all dark.
+  svg.querySelectorAll('.at-district').forEach((d) => {
+    const any = [...d.querySelectorAll('[data-dept]')].some((n) => !n.classList.contains('at-dim'));
+    d.classList.toggle('at-district-dim', !any && (Boolean(term) || Boolean(counts)));
+  });
+  return lit;
+}
+
 export function initAtlas(map) {
   const svg = view.querySelector('svg.atlas-svg');
   if (!svg) return;
@@ -580,6 +630,56 @@ export function initAtlas(map) {
   panel.style.position = 'relative';
   let tip = panel.querySelector('#map-tip');
   if (!tip) { tip = document.createElement('div'); tip.id = 'map-tip'; tip.hidden = true; panel.appendChild(tip); }
+  // ---- the lenses ----------------------------------------------------
+  let lensState = null;
+  let lens = 'all';
+  let term = '';
+  const bar = document.createElement('div');
+  bar.className = 'map-lens';
+  bar.innerHTML = `
+    <div class="ml-buttons" role="group" aria-label="${esc(t('Light the map by'))}">
+      <button data-lens="all" class="on">${esc(t('Everything'))}</button>
+      <button data-lens="waiting">${esc(t('Waiting on a person'))} <span class="ml-n" data-n="waiting"></span></button>
+      <button data-lens="failing">${esc(t('Failing'))} <span class="ml-n" data-n="failing"></span></button>
+      <button data-lens="active">${esc(t('Moved today'))} <span class="ml-n" data-n="active"></span></button>
+    </div>
+    <input class="ml-find" type="search" placeholder="${esc(t('find a department'))}" aria-label="${esc(t('Find a department on the map'))}">
+    <span class="ml-said"></span>`;
+  panel.appendChild(bar);
+
+  const said = bar.querySelector('.ml-said');
+  const paint = () => {
+    const lit = applyLens(svg, lensState, lens, term.trim().toLowerCase());
+    if (term) said.textContent = `${lit} ${t('match')}`;
+    else if (lens === 'all') said.textContent = '';
+    else {
+      const total = lensState?.totals?.[lens] ?? 0;
+      said.textContent = lit
+        ? `${lit} ${t('department(s)')} · ${total} ${t('item(s)')}`
+        : t('nothing — and only departments with a declared counter can light up');
+    }
+  };
+  bar.querySelectorAll('[data-lens]').forEach((b) => b.addEventListener('click', () => {
+    lens = b.dataset.lens;
+    bar.querySelectorAll('[data-lens]').forEach((x) => x.classList.toggle('on', x === b));
+    paint();
+  }));
+  let findTimer;
+  bar.querySelector('.ml-find').addEventListener('input', (e) => {
+    term = e.target.value;
+    clearTimeout(findTimer);
+    findTimer = setTimeout(paint, 160);
+  });
+  api('/api/map/state').then((st) => {
+    lensState = st;
+    for (const k of ['waiting', 'failing', 'active']) {
+      const el = bar.querySelector(`[data-n="${k}"]`);
+      if (el) el.textContent = st.totals?.[k] ? String(st.totals[k]) : '';
+    }
+    bar.title = st.note || '';
+    paint();
+  }).catch(() => { bar.querySelector('.ml-said').textContent = ''; });
+
   const ctl = document.createElement('div');
   ctl.className = 'map-ctl';
   ctl.innerHTML = `<button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Fit whole map">⤢</button>`;

@@ -23,7 +23,7 @@ itself.
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/cores-2_(AI_%2B_enterprise)-e07bd2?style=flat-square" alt="two cores: AI and enterprise">
 <img src="https://img.shields.io/badge/relationships-466-8d8477?style=flat-square" alt="466 declared relationships">
-<img src="https://img.shields.io/badge/API-696_routes-4f9cf0?style=flat-square" alt="696 API routes">
+<img src="https://img.shields.io/badge/API-697_routes-4f9cf0?style=flat-square" alt="697 API routes">
 <img src="https://img.shields.io/badge/permissions-260_atomic-e07bd2?style=flat-square" alt="260 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
@@ -322,8 +322,25 @@ diagram that eventually will.
 - Edges are typed and drawn differently: hand-off, sent back to improve,
   independent peer review, audit verdict, stops for a human, memory kept
 
-`GET /api/map` returns the whole thing — divisions, departments, edges,
-connectivity audit and live flow counts — as JSON.
+**Three lenses turn it from a diagram into a console.** The map has always shown
+what *exists*, which is the right thing on the first day and the wrong thing
+every morning afterwards, when the questions are all about today:
+
+| | |
+|---|---|
+| **Waiting on a person** | everything that has stopped and needs a signature — a gated run, an unposted entry, an overtime claim, a held browser step |
+| **Failing** | what went wrong and stayed wrong: dead work, failed runs, open red-team findings |
+| **Moved today** | what actually happened, attributed through the same subject→section map the activity feed uses, so the map and the feed cannot disagree |
+
+Choosing one dims the whole company and lights only the departments the answer
+is in, with the count on each. There is a live search beside them that does the
+same for a name. **Every lens is a declared query against a real table**, and a
+department with no counter stays *unlit rather than shown as zero* — the two look
+identical on a screen and mean opposite things.
+
+`GET /api/map` returns the whole thing — both cores, departments, edges, tunnels,
+connectivity audit and live flow counts — as JSON. `GET /api/map/state` returns
+what the lenses light up.
 
 ---
 
@@ -1195,7 +1212,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**696 routes** — all JSON, all
+**697 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1500,6 +1517,18 @@ configured, the public URL set, the licence files present, no test residue).
   action fails closed. Then it drives a real browser at a real page with a real
   form and puts all thirteen perceived elements through the real gate: twelve
   proceed, and "Submit order" stops.
+
+**The depth probe** (`npm run depth`) answers a harder question than the sweep.
+A page that renders an empty state, with no endpoint behind it and no action
+that does anything, passes a render check — so this opens all 156 departments
+and records what is actually there: how many endpoints each called, how much of
+the page is content, and whether anything errored. It separates the two states
+that look identical on a screen: **empty**, meaning nothing has been created yet
+and the write path works, from **hollow**, meaning nothing is behind the page at
+all. It cannot tell them apart by looking, so it does not guess — a department
+that fetched nothing is reported as hollow and everything else is reported with
+its numbers. The current reading is **156 of 156 backed by a live endpoint, none
+erroring**, with three bare on a fresh database.
 
 **The browser sweep** opens all 156 departments in both themes and both
 languages, at 1440×900 and again at 390×844 — 624 renders each — and fails on a

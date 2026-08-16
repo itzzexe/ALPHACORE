@@ -232,7 +232,7 @@ import {
 } from './data.js';
 import {
   connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats,
-  SURFACES, surfaceCatalog, surfaceAudit, core2Map, CORE2_DIVISIONS, CORES,
+  SURFACES, surfaceCatalog, surfaceAudit, core2Map, CORE2_DIVISIONS, CORES, mapState,
 } from './links.js';
 import { ask, askRules } from './ask.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
@@ -1289,6 +1289,8 @@ const routes = [
   // --- Connections: what links to what, anywhere in the company ---
   ['GET', /^\/api\/links\/([\w-]+)\/([\w.-]+)$/, ([type, id]) => connectionsFor(type, /^\d+$/.test(id) ? Number(id) : id) || (() => { throw new HttpError(404, 'no such entity type'); })()],
   ['GET', /^\/api\/graph$/, () => relationshipMatrix()],
+  // What the map should be lit up about right now, rather than what exists.
+  ['GET', /^\/api\/map\/state$/, () => mapState()],
   ['GET', /^\/api\/map$/, () => ({
     divisions: DIVISIONS,
     // The enterprise core's own districts, and the tunnels across the seam.

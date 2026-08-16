@@ -23,7 +23,8 @@
     "verify": "node --experimental-sqlite scripts/verify-chain.mjs",
     "rotate-key": "node --experimental-sqlite scripts/rotate-key.mjs",
     "sweep": "node scripts/sweep.mjs",
-    "sweep:fast": "node scripts/sweep.mjs --fast"
+    "sweep:fast": "node scripts/sweep.mjs --fast",
+    "depth": "node scripts/depth.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0"

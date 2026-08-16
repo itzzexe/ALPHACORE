@@ -1554,6 +1554,103 @@ export function flowStats() {
 }
 
 /** Everything that happened after `since` (an audit seq), mapped to map sections. */
+/**
+ * What the map should be lit up about right now.
+ *
+ * The atlas has been a map of what *exists*. That is the right thing to show
+ * somebody meeting the company for the first time and the wrong thing to show
+ * them every morning afterwards, when the questions are all about today: what
+ * is waiting on me, what failed, where did the work go.
+ *
+ * So three lenses, each derived from a real query rather than a heuristic:
+ *
+ *   waiting   things that have stopped and need a person. Every entry is a
+ *             specific query against a specific table — not "count of rows in
+ *             a state called pending", which would light up departments that
+ *             merely have a queue.
+ *   failing   things that went wrong and stayed wrong.
+ *   active    what has actually happened today, attributed through the same
+ *             subject→section map the activity feed uses.
+ *
+ * A department with no counter reports nothing rather than zero. The two look
+ * identical on a screen and mean opposite things, and a map that shows a
+ * confident zero for a department nobody wired is worse than one that leaves
+ * it unlit.
+ */
+const WAITING = {
+  gate: "SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'",
+  approvals: "SELECT COUNT(*) AS n FROM approvals WHERE state = 'waiting'",
+  decisions: "SELECT COUNT(*) AS n FROM decisions WHERE status = 'open'",
+  requests: "SELECT COUNT(*) AS n FROM requests WHERE state IN ('new','routing')",
+  egress: "SELECT COUNT(*) AS n FROM egress_log WHERE verdict = 'gated'",
+  browser: "SELECT COUNT(*) AS n FROM browser_sessions WHERE state = 'waiting'",
+  ledger: "SELECT COUNT(*) AS n FROM journal WHERE state = 'draft'",
+  bookkeeper: "SELECT COUNT(*) AS n FROM journal WHERE state = 'draft' AND created_by LIKE 'agent:%'",
+  shifts: "SELECT COUNT(*) AS n FROM time_overtime WHERE state = 'claimed'",
+  time: "SELECT COUNT(*) AS n FROM time_leave_request WHERE state = 'requested'",
+  finops2: "SELECT COUNT(*) AS n FROM fin_expense WHERE state = 'submitted'",
+  procure: "SELECT COUNT(*) AS n FROM proc_request WHERE state = 'requested'",
+  joining: "SELECT COUNT(*) AS n FROM join_step s JOIN join_list l ON l.id = s.list_id WHERE l.state = 'open' AND s.done_at IS NULL AND s.critical = 1",
+  records: 'SELECT COUNT(*) AS n FROM rec_hold WHERE released_at IS NULL',
+  support: "SELECT COUNT(*) AS n FROM tickets WHERE state = 'draft'",
+  incidents: "SELECT COUNT(*) AS n FROM incidents WHERE state != 'closed'",
+  treasury: "SELECT COUNT(*) AS n FROM payouts WHERE state = 'prepared'",
+  standing: "SELECT COUNT(*) AS n FROM standing_orders WHERE state = 'paused'",
+};
+
+const FAILING = {
+  deadletter: "SELECT COUNT(*) AS n FROM dead_letter d JOIN runs r ON r.id = d.run_id WHERE r.state = 'failed'",
+  runs: "SELECT COUNT(*) AS n FROM runs WHERE state = 'failed'",
+  redteam: "SELECT COUNT(*) AS n FROM redteam_findings WHERE state = 'open'",
+  jobs: "SELECT COUNT(*) AS n FROM jobs WHERE state = 'failed'",
+  incidents: "SELECT COUNT(*) AS n FROM incidents WHERE severity IN ('sev1','sev2') AND state != 'closed'",
+  hunt: "SELECT COUNT(*) AS n FROM hunts WHERE state = 'not-found'",
+};
+
+const countOf = (sql) => { try { return one(sql)?.n || 0; } catch { return null; } };
+
+export function mapState() {
+  const waiting = {};
+  const failing = {};
+  for (const [id, sql] of Object.entries(WAITING)) {
+    const n = countOf(sql);
+    if (n) waiting[id] = n;
+  }
+  for (const [id, sql] of Object.entries(FAILING)) {
+    const n = countOf(sql);
+    if (n) failing[id] = n;
+  }
+
+  // What actually happened today, attributed the same way the activity feed
+  // attributes it — so the map and the feed cannot disagree about who did what.
+  const active = {};
+  let rows = [];
+  try {
+    rows = q(`SELECT action, subject_type, COUNT(*) AS n FROM audit_log
+              WHERE occurred_at >= datetime('now','-1 day') GROUP BY action, subject_type`);
+  } catch { rows = []; }
+  for (const r of rows) {
+    const section = SUBJECT_SECTION[r.subject_type] || ACTION_SECTION[String(r.action).split('.')[0]] || null;
+    if (section) active[section] = (active[section] || 0) + r.n;
+  }
+
+  return {
+    waiting,
+    failing,
+    active,
+    totals: {
+      waiting: Object.values(waiting).reduce((a, b) => a + b, 0),
+      failing: Object.values(failing).reduce((a, b) => a + b, 0),
+      active: Object.values(active).reduce((a, b) => a + b, 0),
+    },
+    // Said plainly, because a lens that silently covers two thirds of the map
+    // invites the reader to conclude the rest is fine.
+    counted: { waiting: Object.keys(WAITING).length, failing: Object.keys(FAILING).length },
+    note: 'Only departments with a declared counter can light up. A department with no counter is left unlit '
+      + 'rather than shown as zero — the two look identical and mean opposite things.',
+  };
+}
+
 export function activityFeed(since = 0) {
   const rows = q(`SELECT seq, occurred_at, actor_type, actor_id, action, subject_type, subject_id
     FROM audit_log WHERE seq > ? ORDER BY seq DESC LIMIT 30`, since);
