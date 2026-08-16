@@ -223,7 +223,20 @@ const PII_COLUMNS = [
   // Core 2's people. The address or number reaches them; the national id and the
   // emergency contact are carried because they sit on the same row and could
   // never be matched against an erasure request naming an email.
-  ['hr_person', ['personal_email', 'personal_phone'], ['national_id', 'emergency_contact']],
+  // `display_name` is carried, not matched. A review put the omission plainly:
+  // "the customer's name is not an identifier" is not true in general, and
+  // erasing somebody while leaving their name in plaintext is not erasing them.
+  ['hr_person', ['personal_email', 'personal_phone'], ['national_id', 'emergency_contact', 'display_name']],
+  // Customers were reachable by no route at all, which meant a person who
+  // bought something could not be forgotten. The name is matched as well as
+  // carried, because for a sole trader it is the only identifier on the row —
+  // and `notes` goes with it, since a note about somebody is about them.
+  //
+  // Matched, not sealed at write: this column is a join key half the reports
+  // group by, and it is a company name as often as a person's. That is the Tier
+  // A / Tier B split doing its job — reachable when somebody asks, readable
+  // until they do.
+  ['customers', ['name'], ['company', 'notes']],
   // Support: somebody who wrote in is a person on file, and what they wrote is
   // about them as much as the address they wrote from.
   ['tickets', ['customer'], ['subject', 'body', 'draft', 'sent_body']],

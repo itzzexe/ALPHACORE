@@ -30,7 +30,7 @@ itself.
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-367-78bf6d?style=flat-square" alt="367 tests">
+<img src="https://img.shields.io/badge/tests-370-78bf6d?style=flat-square" alt="370 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -856,6 +856,46 @@ the attention of whoever wrote it:
 - Three fire per tick, not everything at once. Ten orders each able to start a
   model chain is a way to spend a month's budget in a minute.
 
+### Who can actually be forgotten
+
+A review made a point worth keeping in the document: *"the customer's name is
+not an identifier" is not accurate* — a name on its own identifies somebody often
+enough that every serious data-protection regime treats it as personal. Two
+things were wrong here, and both are measurable rather than arguable.
+
+**Customers were reachable by no route at all.** A person who bought something
+could not be forgotten, because the erasure walk did not look at that table.
+It does now — matched on the name, carrying the company and the notes, because
+a note about somebody is about them. Matched rather than sealed at write: that
+column is a join key half the reports group by, and it is a company name as
+often as a person's. That is the Tier A / Tier B split doing its job, not an
+exception to it.
+
+**Erasing somebody left their name behind.** `hr_person.display_name` was not
+carried, so a person could be erased and still be named on their own row. It goes
+with them now.
+
+**And the sweep would not have caught either**, because the column-name matcher
+deliberately omitted names — for a good reason that produced a bad result. There
+are 101 name-shaped columns in this schema and most of them are products and
+assets, so calling them all personal would give a hundred false positives and an
+inventory nobody reads. The way out was not a longer hand-maintained list:
+**eighteen tables already carry `subject_ref`**, which is the schema saying *this
+table is about people*. A name-shaped column is personal when the table it sits
+in is, and that is read from the schema.
+
+The honest effect of fixing it was to make the number worse before it got
+better — the gap went from 6 to 10 as names became visible, then to **8** as
+customers and names became reachable. The launch audit reports the remaining
+eight by name, and blocks outright on the one that is never acceptable: a column
+**sealed at write that erasure cannot reach**, which is data encrypted under a
+key nobody will ever destroy.
+
+Three of the eight are IP addresses in the session and login tables. They are
+personal data under most regimes and unreachable by design, because they are how
+a break-in is investigated. That is a decision somebody should make and record
+rather than one made by not looking, which is why they are named.
+
 ### One act, or neither
 
 The constitution says every consequential act is written to the chain *before it
@@ -1318,7 +1358,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 367 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
+| `npm test` | 370 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1456,7 +1496,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               367 tests across thirty-two files
+  test/               370 tests across thirty-two files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1476,7 +1516,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 367 tests
+npm test                        # 370 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
