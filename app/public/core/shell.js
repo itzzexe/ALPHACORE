@@ -214,7 +214,9 @@ function markActiveNav() {
 export async function loadCatalog() {
   try {
     const map = await api('/api/map');
-    CATALOG = { sections: map.sections, divisions: map.divisions, surfaces: map.surfaces || [] };
+    // The edges and the enterprise projection ride along: the band above
+    // every department page and the seam on the atlas are drawn from them.
+    CATALOG = { sections: map.sections, divisions: map.divisions, surfaces: map.surfaces || [], edges: map.edges || [], enterprise: map.enterprise || null };
   } catch {
     // A user without dashboard.view still needs to move around.
     const flat = Object.keys(navPerm).filter((k) => k).map((k) => ({ id: k, label: k, division: 'govern', href: `#/${k}`, count: '' }));
@@ -498,7 +500,44 @@ export async function navigate() {
  * scroll inside its own box instead of pushing the whole document sideways.
  */
 let labelSeq = 0;
+
+/**
+ * The band above every department page: which door, which district, which
+ * core, and what it is joined to. Read from the catalogue and the edge list
+ * the map is drawn from, so a page and the map cannot disagree about where
+ * a department sits. Nothing to say on the overview, on detail pages, or for
+ * a login that never received the catalogue.
+ */
+function paintBand() {
+  const key = currentRoute().key;
+  const sec = key ? CATALOG.sections.find((s) => routeOf(s.href) === key) : null;
+  if (!sec || view.querySelector('.dept-band')) return;
+  const entDivs = CATALOG.enterprise?.divisions || [];
+  const ent = entDivs.find((d) => d.departments.some((x) => x.id === sec.id));
+  const div = ent || CATALOG.divisions.find((d) => d.id === sec.division);
+  const door = surfaceOfSection(sec.id);
+  const byId = new Map(CATALOG.sections.map((s) => [s.id, s]));
+  const seen = new Set();
+  const joined = (CATALOG.edges || [])
+    .filter((e) => (e.from === sec.id || e.to === sec.id) && e.from !== 'all' && e.to !== 'all')
+    .map((e) => ({ id: e.from === sec.id ? e.to : e.from, count: e.count }))
+    .filter((x) => byId.has(x.id) && !seen.has(x.id) && seen.add(x.id))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+  const band = document.createElement('div');
+  band.className = 'dept-band';
+  band.innerHTML = `
+    <span class="band-dot" style="background:${esc(div?.color || 'var(--ink-faint)')}"></span>
+    ${door ? `<a class="crumb" href="#/s/${esc(door)}">${esc(t(SURFACE_LABEL[door] || door))}</a><span class="crumb-sep">›</span>` : ''}
+    <span class="crumb">${esc(ent ? t(ent.label) : divisionName(sec.division, div?.label || sec.division))}</span>
+    <span class="core-tag ${ent ? 'enterprise' : ''}">${esc(t(ent ? 'Enterprise core' : 'AI core'))}</span>
+    ${sec.hint ? `<span class="band-hint">${esc(t(sec.hint))}</span>` : ''}
+    ${joined.length ? `<span class="band-links"><span class="lk">${esc(t('joined to'))}</span>${joined.map((x) => `<a href="${esc(byId.get(x.id).href)}">${esc(sectionName(x.id, byId.get(x.id).label))}<span class="n">${x.count}</span></a>`).join('')}</span>` : ''}`;
+  view.prepend(band);
+}
+
 export function afterRender() {
+  try { paintBand(); } catch { /* the band is a courtesy; the page is the point */ }
   translateDom(view);
 
   // Ninety renderers write `<label class="fl" for="x">Name</label><input id="x">`:

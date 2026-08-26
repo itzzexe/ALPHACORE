@@ -321,36 +321,59 @@ function districtTree(items, angle, slice) {
   }
   return branches;
 }
-/** The whole company: districts radiating from the core. */
+/**
+ * The whole company: two galaxies on one sheet.
+ *
+ * The AI core's districts grow from the core on the left; the enterprise
+ * core's divisions grow from the same core on the right; a dotted seam runs
+ * between them, and every tunnel the catalogue declares is drawn as a faint
+ * arc through the core from an enterprise department to the district it
+ * reaches. Nothing here is typed: the districts are the catalogue, the
+ * tunnels are the edge list, and a department that belonged to neither side
+ * could not be drawn at all.
+ *
+ * Without an enterprise projection (an older server) the districts take the
+ * full circle, as they always did.
+ */
 function buildAtlasFar(map) {
   const { divisions, sections, harmony, audit: connAudit, flow } = map;
+  const ent = map.enterprise && map.enterprise.divisions?.length ? map.enterprise : null;
+  const mine = new Set(ent ? ent.divisions.flatMap((d) => d.departments.map((x) => x.id)) : []);
+
   const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
   for (const s of sections) {
-    if (s.id === 'harmony') continue;
+    if (s.id === 'harmony' || mine.has(s.id)) continue;
     (byDiv[s.division] || byDiv.govern).items.push(s);
   }
-  const divs = divisions.filter((d) => byDiv[d.id].items.length);
+  const core1 = divisions.filter((d) => byDiv[d.id].items.length).map((d) => ({ ...d, items: byDiv[d.id].items, core: 1 }));
+  const core2 = ent ? ent.divisions.filter((d) => d.departments.length).map((d) => ({ ...d, items: d.departments, core: 2 })) : [];
 
   // The one deliberate distortion: everything is stretched sideways, because a
   // circle in a widescreen panel wastes half the page. The core stays round so
   // the eye still reads a centre.
   const XS = 1.46;
   const CX = 940, CY = 640;
-  const slice = (Math.PI * 2) / divs.length;
   const px = (a, r) => CX + Math.cos(a) * r * XS;
   const py = (a, r) => CY + Math.sin(a) * r;
 
-  const districts = divs.map((d, i) => {
-    // Start at the top and go clockwise, so the first district is where the eye
-    // lands rather than where the maths happens to begin.
-    const angle = i * slice - Math.PI / 2;
-    const items = byDiv[d.id].items;
-    const branches = districtTree(items, angle, slice);
+  // Which arc each side takes. One core: the whole circle, from the top,
+  // clockwise. Two cores: the AI core on the left half (bottom to top through
+  // the left), the enterprise core on the right (top to bottom through the right).
+  const arcs = core2.length
+    ? [{ divs: core1, start: Math.PI / 2, span: Math.PI }, { divs: core2, start: -Math.PI / 2, span: Math.PI }]
+    : [{ divs: core1, start: -Math.PI / 2, span: Math.PI * 2, fromTop: true }];
 
+  const trunkOf = {};      // division id -> trunk point (for tunnels)
+  const leafOf = {};       // section id -> leaf point (for tunnels)
+
+  const drawDistrict = (d, angle, slice) => {
+    const items = d.items;
+    const branches = districtTree(items, angle, slice);
     const trunk = { x: px(angle, ATLAS_R.trunk), y: py(angle, ATLAS_R.trunk) };
+    trunkOf[d.id] = trunk;
     // Every district has its own trunk node, joined to the core by a single
     // thin line. Without it the stems all converge on one point and the drawing
-    // reads as a starburst rather than as thirteen trees.
+    // reads as a starburst rather than as a row of trees.
     const root = `M ${px(angle, ATLAS_R.core + 6).toFixed(1)} ${py(angle, ATLAS_R.core + 6).toFixed(1)} L ${trunk.x.toFixed(1)} ${trunk.y.toFixed(1)}`;
 
     const lines = `<path class="at-branch" d="${root}"/>` + branches.map((b) => {
@@ -365,10 +388,20 @@ function buildAtlasFar(map) {
       + `<circle class="at-leaf" cx="${trunk.x.toFixed(1)}" cy="${trunk.y.toFixed(1)}" r="2.6" opacity="0.5"/>`;
 
     const leaves = branches.flatMap((b) => b.leaves).map((l) => {
-      // A department with nothing in it yet is drawn hollow — present, not busy.
+      // A department with nothing in it yet is drawn hollow: present, not busy.
       const live = l.item.count > 0;
-      const cx = px(l.a, l.r).toFixed(1), cy = py(l.a, l.r).toFixed(1);
+      const x = px(l.a, l.r), y = py(l.a, l.r);
+      leafOf[l.item.id] = { x, y };
+      const cx = x.toFixed(1), cy = y.toFixed(1);
       const title = `<title>${esc(sectionName(l.item.id, l.item.label))} · ${live ? l.item.count : t('empty')}</title>`;
+      // The enterprise core's departments are squares: the same size, a
+      // different species, so the eye can tell which side of the seam a
+      // department belongs to even when the seam is off screen.
+      if (d.core === 2) {
+        return live
+          ? `<rect class="at-leaf" x="${(x - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" width="6" height="6">${title}</rect>`
+          : `<rect class="at-leaf-ring" x="${(x - 2.6).toFixed(1)}" y="${(y - 2.6).toFixed(1)}" width="5.2" height="5.2">${title}</rect>`;
+      }
       return live
         ? `<circle class="at-leaf" cx="${cx}" cy="${cy}" r="3.2">${title}</circle>`
         : `<circle class="at-leaf-ring" cx="${cx}" cy="${cy}" r="2.6">${title}</circle>`;
@@ -377,14 +410,39 @@ function buildAtlasFar(map) {
     const lx = px(angle, ATLAS_R.rim);
     const ly = py(angle, ATLAS_R.rim);
     const sample = items.slice(0, 3).map((x) => sectionName(x.id, x.label).toLowerCase()).join(' · ');
+    const name = d.core === 2 ? t(d.label) : divisionName(d.id, d.label);
 
-    return `<g class="at-district" data-district="${esc(d.id)}" style="color:${d.color}">
+    return `<g class="at-district${d.core === 2 ? ' enterprise' : ''}" data-district="${esc(d.id)}" style="color:${d.color}">
       ${lines}${leaves}
-      <text class="at-dname" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}">${esc(divisionName(d.id, d.label))}</text>
+      <text class="at-dname" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}">${esc(name)}</text>
       <text class="at-dsub" x="${lx.toFixed(1)}" y="${(ly + 15).toFixed(1)}">${esc(short(sample, 36))}</text>
       <ellipse class="at-hit" cx="${lx.toFixed(1)}" cy="${(ly - 2).toFixed(1)}" rx="96" ry="34"/>
     </g>`;
+  };
+
+  const districts = arcs.flatMap(({ divs, start, span, fromTop }) => {
+    const slice = span / Math.max(1, divs.length);
+    // A full circle starts its first district on the centreline at the top,
+    // as the old drawing did; a half circle centres each district in its slot.
+    return divs.map((d, i) => drawDistrict(d, fromTop ? start + i * slice : start + (i + 0.5) * slice, slice));
   }).join('');
+
+  // The tunnels: every declared crossing, from the enterprise department to
+  // the trunk of the district it reaches, bent through the core. Drawn first
+  // so they sit beneath the trees.
+  const tunnels = ent ? ent.tunnels.map((tn) => {
+    const a = leafOf[tn.core2End]; const b = trunkOf[tn.core1Division];
+    if (!a || !b) return '';
+    return `<path class="at-tunnel" data-tunnel-from="${esc(tn.core2End)}" data-tunnel-to="${esc(tn.core1Division)}"
+      d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${CX} ${CY} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"><title>${esc(tn.core2End)} ↔ ${esc(tn.core1End)}: ${esc(t(tn.label))}</title></path>`;
+  }).join('') : '';
+
+  // The seam: a dotted line the tunnels cross, and a name for each side.
+  const seam = ent ? `
+    <line class="at-seam" x1="${CX}" y1="130" x2="${CX}" y2="${CY - ATLAS_R.core - 10}"/>
+    <line class="at-seam" x1="${CX}" y1="${CY + ATLAS_R.core + 30}" x2="${CX}" y2="1150"/>
+    <text class="at-core-tag" x="${CX - 330}" y="118" text-anchor="middle">${esc(t('CORE 1 — THINKS AND ACTS'))}</text>
+    <text class="at-core-tag" x="${CX + 330}" y="118" text-anchor="middle">${esc(t('CORE 2 — RECORDS THE TRUTH'))}</text>` : '';
 
   // The core: a small cloud for the orchestrator and the chain beneath it.
   // Deterministic scatter, so it is the same cloud every time.
@@ -395,21 +453,24 @@ function buildAtlasFar(map) {
   }).join('');
 
   const hs = harmony?.score ?? 0;
+  const districtsN = core1.length + core2.length;
   return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="150 92 1590 1108" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="The company as a constellation — every district a tree growing from the core">
+    aria-label="The company as a constellation — every district a tree growing from the core, the enterprise core across the seam">
+    ${seam}${tunnels}
     ${districts}
     <g class="at-core">
       <circle class="at-core-ring" cx="${CX}" cy="${CY}" r="${ATLAS_R.core}"/>
       ${dots}
       <text class="at-core-label" x="${CX}" y="${CY + ATLAS_R.core + 18}">${esc(t('HARMONY'))} ${hs}%</text>
     </g>
-    <text class="at-foot" x="166" y="1186">${sections.length} ${esc(t('DEPARTMENTS'))} · ${divs.length} ${esc(t('DISTRICTS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
+    <text class="at-foot" x="166" y="1186">${sections.length} ${esc(t('DEPARTMENTS'))} · ${districtsN} ${esc(t('DISTRICTS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${ent ? ` · ${ent.tunnels.length} ${esc(t('TUNNELS'))}` : ''}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
   </svg>`;
 }
 function buildAtlasNear(map, divId) {
   const { divisions, sections, edges } = map;
-  const div = divisions.find((d) => d.id === divId) || divisions[0];
-  const items = sections.filter((s) => s.division === div.id && s.id !== 'harmony');
+  const ent = (map.enterprise?.divisions || []).find((d) => d.id === divId);
+  const div = ent || divisions.find((d) => d.id === divId) || divisions[0];
+  const items = ent ? ent.departments : sections.filter((s) => s.division === div.id && s.id !== 'harmony');
   const W = 1600, H = 1020;
   const rootX = W / 2, rootY = H - 118;
 
@@ -471,15 +532,15 @@ function buildAtlasNear(map, divId) {
   const related = edges.filter((e) => items.some((x) => x.id === e.from) || items.some((x) => x.id === e.to)).length;
 
   return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="${esc(divisionName(div.id, div.label))} — its departments and how they connect"
+    aria-label="${esc(ent ? t(div.label) : divisionName(div.id, div.label))} — its departments and how they connect"
     style="color:${div.color}">
-    <text class="at-ghost" x="${rootX}" y="${(rootY - 430).toFixed(0)}" style="font-size:196px">${esc(divisionName(div.id, div.label))}</text>
+    <text class="at-ghost" x="${rootX}" y="${(rootY - 430).toFixed(0)}" style="font-size:${ent ? 120 : 196}px">${esc(ent ? t(div.label) : divisionName(div.id, div.label))}</text>
     ${drawn}
     <g class="at-node">
       <circle class="at-chip-ring" cx="${rootX}" cy="${rootY}" r="21" style="stroke:${div.color}"/>
       <g class="at-chip-glyph" style="fill:${div.color}" transform="translate(${rootX - 9}, ${rootY - 9})">${NODE_GLYPH.flow}</g>
     </g>
-    <text class="at-dname" x="${rootX}" y="${rootY + 50}" style="fill:${div.color}">${esc(divisionName(div.id, div.label))}</text>
+    <text class="at-dname" x="${rootX}" y="${rootY + 50}" style="fill:${div.color}">${esc(ent ? t(div.label) : divisionName(div.id, div.label))}</text>
     <text class="at-dsub" x="${rootX}" y="${rootY + 68}">${items.length} ${esc(t('sections'))} · ${total} ${esc(t('records'))} · ${related} ${esc(t('relationships'))}</text>
 
     <g class="at-stepper">
@@ -492,7 +553,7 @@ function buildAtlasNear(map, divId) {
 }
 /** The map, at whichever depth you are standing. */
 export function buildMap(m) {
-  const known = m.divisions.some((d) => d.id === atlasZoom);
+  const known = m.divisions.some((d) => d.id === atlasZoom) || (m.enterprise?.divisions || []).some((d) => d.id === atlasZoom);
   if (atlasZoom && !known) atlasZoom = null;
   if (atlasState.style !== (atlasZoom || 'far')) {
     atlasState.style = atlasZoom || 'far';
@@ -509,7 +570,7 @@ export function atlasGoTo(divId) {
   if (r) r.render(currentRoute().arg).then(afterRender).catch(() => {});
 }
 export function atlasStep(delta) {
-  const ids = (CATALOG.divisions || []).map((d) => d.id);
+  const ids = [...(CATALOG.divisions || []), ...(CATALOG.enterprise?.divisions || [])].map((d) => d.id);
   if (!ids.length) return;
   const at = ids.indexOf(atlasZoom);
   atlasGoTo(ids[(at + delta + ids.length) % ids.length]);
@@ -548,7 +609,7 @@ export function initAtlas(map) {
   };
 
   const sec = Object.fromEntries(map.sections.map((s) => [s.id, s]));
-  const divColor = Object.fromEntries(map.divisions.map((d) => [d.id, d.color]));
+  const divColor = Object.fromEntries([...map.divisions, ...(map.enterprise?.divisions || [])].map((d) => [d.id, d.color]));
   const idxEdges = map.edges.map((e, i) => ({ ...e, i }));
   const edgesFor = (id) => idxEdges.filter((e) => e.from === id || e.to === id);
 

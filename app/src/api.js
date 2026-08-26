@@ -1302,19 +1302,26 @@ const routes = [
   // --- Connections: what links to what, anywhere in the company ---
   ['GET', /^\/api\/links\/([\w-]+)\/([\w.-]+)$/, ([type, id]) => connectionsFor(type, /^\d+$/.test(id) ? Number(id) : id) || (() => { throw new HttpError(404, 'no such entity type'); })()],
   ['GET', /^\/api\/graph$/, () => relationshipMatrix()],
-  ['GET', /^\/api\/map$/, () => ({
-    divisions: DIVISIONS,
-    sections: sectionCatalog(),
-    // The eight doors, and which departments sit behind each. The console's
-    // navigation is drawn from this rather than from a list in the markup, so
-    // a department that nobody filed cannot quietly become unreachable.
-    surfaces: surfaceCatalog(),
-    surfaceAudit: surfaceAudit(),
-    edges: relationshipMatrix(),
-    audit: connectivityAudit(),
-    flow: flowStats(),
-    harmony: harmonyScore(),
-  })],
+  ['GET', /^\/api\/map$/, () => {
+    const sections = sectionCatalog();
+    const edges = relationshipMatrix();
+    return {
+      divisions: DIVISIONS,
+      sections,
+      // The eight doors, and which departments sit behind each. The console's
+      // navigation is drawn from this rather than from a list in the markup, so
+      // a department that nobody filed cannot quietly become unreachable.
+      surfaces: surfaceCatalog(),
+      surfaceAudit: surfaceAudit(),
+      edges,
+      audit: connectivityAudit(),
+      flow: flowStats(),
+      harmony: harmonyScore(),
+      // The enterprise core, projected from the same catalogue and the same
+      // matrix, so the one map can draw both galaxies and the seam between.
+      enterprise: core2Map({ sections, edges }),
+    };
+  }],
   ['GET', /^\/api\/surfaces$/, () => ({ surfaces: surfaceCatalog(), audit: surfaceAudit(), declared: SURFACES.length })],
 
   // --- Ask AlphaCore: one input in front of a hundred and forty departments ---

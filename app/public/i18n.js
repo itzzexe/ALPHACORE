@@ -952,6 +952,14 @@ const AR = {
   'the call failed and was handled rather than crashing': 'أخفق النداء فعُولج بدل أن ينهار',
   'a limit was hit — theirs or ours — and respected': 'بُلغ حدّ — حدّهم أو حدّنا — واحتُرم',
 
+  // الخريطة الموحّدة — النواتان على صفحة واحدة، والشريط فوق كل قسم
+  'AI core': 'النواة الذكية', 'Enterprise core': 'نواة المؤسسة', 'joined to': 'مرتبط بـ', 'TUNNELS': 'الأنفاق',
+  'CORE 1 — THINKS AND ACTS': 'النواة ١ — تفكّر وتتصرّف', 'CORE 2 — RECORDS THE TRUTH': 'النواة ٢ — تسجّل الحقيقة',
+  'PEOPLE': 'الأشخاص', 'TIME': 'الوقت', 'FINANCE': 'المالية', 'THE BANK': 'المصرف', 'PROCUREMENT & STOCK': 'المشتريات والمخزون',
+  'OPERATIONS': 'التشغيل', 'ADMINISTRATION': 'الإدارة', 'COLLABORATION': 'التعاون', 'THE BRIDGES': 'الجسور',
+  'The whole company as one drawing: a dense core of the orchestrator and the chain, and a tree for every district growing out of it. The AI core grows to the left of the seam and the enterprise core to the right; every dotted arc through the core is a declared tunnel between them. Circles are AI-core departments, squares enterprise ones. Point at a district to bring up its colour and its tunnels; open it to go inside.':
+    'الشركة كلها في رسم واحد: نواة كثيفة للمنسّق والسلسلة، وشجرة لكل حيّ تنبت منها. النواة الذكية تنمو يسار الخطّ الفاصل ونواة المؤسسة يمينه؛ وكل قوس منقّط يمرّ عبر النواة هو نفق معلَن بينهما. الدوائر أقسام النواة الذكية والمربّعات أقسام المؤسسة. أشر إلى حيّ لتظهر ألوانه وأنفاقه؛ وافتحه لتدخل.',
+
   // بقية المؤسسة — قواعد الوقت، التعويضات، الدفاتر الفرعية، المصرف، التشغيل، الإدارة
   'Done.': 'تمّ.',
   'Approve': 'موافقة', 'Reject': 'رفض', 'Review': 'مراجعة', 'Resolve': 'حلّ', 'Dismiss': 'صرف النظر',

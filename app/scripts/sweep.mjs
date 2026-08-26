@@ -192,6 +192,9 @@ let departments = (map.sections || []).map((s) => ({ id: s.id, route: String(s.h
 // covered every department and none of the surfaces — which is the wrong way
 // round if you are checking that the console still draws.
 const surfaces = [
+  // The overview is where everybody lands and where the atlas is drawn; it
+  // was the one page the sweep never opened.
+  { id: 'overview', route: '' },
   { id: 'ask', route: 'ask' },
   { id: 'departments', route: 'departments' },
   ...(map.surfaces || []).map((s) => ({ id: `surface:${s.id}`, route: `s/${s.id}` })),

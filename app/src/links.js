@@ -595,11 +595,13 @@ export const CORE2_DIVISIONS = [
  * thinking galaxy each tunnel lands in. Nothing here is typed by hand — a
  * tunnel with no declared edge behind it cannot exist, which is the point.
  */
-export function core2Map() {
+export function core2Map({ sections: given = null, edges: givenEdges = null } = {}) {
   const mine = new Set(CORE2_DIVISIONS.flatMap((d) => d.departments));
-  const sections = sectionCatalog();
+  // The overview computes the catalogue and the matrix once for the whole
+  // map; it hands them in so the seam is drawn from the same reading.
+  const sections = given || sectionCatalog();
   const byId = new Map(sections.map((s) => [s.id, s]));
-  const edges = relationshipMatrix().filter((e) => mine.has(e.from) || mine.has(e.to));
+  const edges = (givenEdges || relationshipMatrix()).filter((e) => mine.has(e.from) || mine.has(e.to));
 
   const internal = edges.filter((e) => mine.has(e.from) && mine.has(e.to));
   const tunnels = edges.filter((e) => mine.has(e.from) !== mine.has(e.to)).map((e) => {

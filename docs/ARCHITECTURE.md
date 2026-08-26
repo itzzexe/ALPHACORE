@@ -138,6 +138,39 @@ example, no edge from Legal to the revenue loop — a contract review before a d
 is agreed is a reasonable thing to want, and nothing enforces it, so the map does
 not claim it does.
 
+### The enterprise core — `src/core2/`
+
+The second core is the company's system of record: people and their terms,
+time, money, stock, the bank, the desk, the registry. It lives in the same
+process and the same database file as the AI core and is held apart by three
+rules rather than by a network boundary.
+
+**One fact, one master.** The ledger, the audit chain, customers, vendors,
+contracts, projects and the device register are Core 1's. Core 2 holds facts —
+a bill, a receipt, a transfer, a month of depreciation — and emits an event;
+the bridge posts the entry through the same `journalEntry()` a bookkeeper uses,
+with a source id so a retried event cannot post twice. `finance.js` and
+`bank.js` never import `ledger.js`; the tests read the source to make sure.
+
+**An agent never occupies a human slot.** Every reference to a person is an
+INTEGER employment id in a STRICT table, and an agent's id is TEXT; the storage
+engine refuses the cross-typing. There is no column anywhere for a reason, a
+note or a diagnosis — a grievance, a sick note, an HR ticket's words are
+documents sealed under the person they are about.
+
+**Money leaves, and facts about people are decided, only by a person.**
+Seventeen commands — `approvePayroll`, `changeSalary`, `payBill`,
+`executeTransfer`, `releasePayments`, `disposeAsset`, `adoptResolution`,
+`concludeCase` and the rest — are gated categorically at the bridge: a
+granted scope does not clear them, `force` does not, a zero amount does not.
+Each module refuses a non-human actor again as the second lock.
+
+Five bridges and nothing else cross the seam: the MCP tool surface (one action
+each, no `run_sql`), events on the durable queue, the command gateway, shared
+identity, and the consequential subset of events onto the chain. The overview
+atlas draws both cores on one sheet and every declared tunnel between them,
+from the same catalogue and edge list the connectivity audit checks.
+
 ---
 
 ## Where the code lives
@@ -161,7 +194,16 @@ app/src/
   erasure.js        crypto-shredding, so a person can be forgotten
   vault.js          AES-256-GCM secrets
   masterkey.js      where that key comes from: a file, the environment, a KMS
-  links.js          the catalogue: departments, divisions, relationships
+  links.js          the catalogue: departments, divisions, relationships, the seam
+  core2/            the enterprise core, held apart by three rules
+    bridge.js       the five bridges: tools, events, gateway, identity, audit — and the ledger glue
+    identity.js     hr_person is the root; employment and login are optional, in any combination
+    hrplus.js       time rules, compensation, movements, end of service, grievances
+    payops.js       expenses, loans, cost centers, the payroll formula
+    finance.js      budgets, payables, receivables, fixed assets, FX — the sub-ledgers
+    bank.js         accounts as children of 1000, reconciliation, transfers, cheques, batches
+    ops.js          stock as a sum of moves, work orders, fleet, rooms, the help desk
+    admin.js        correspondence, committees, cases, the regulatory calendar, my workspace
   offices.js        the workforce in a building — rooms, encounters, learning
   …                 and one module per department
 app/public/         the console: vanilla JS, no build step, no external requests

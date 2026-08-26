@@ -53,6 +53,32 @@
   under that person's key; notifications reuse notify() and Web Push rather
   than adding a channel.
 
+- **The rest of the company (2026-08-26)** — fourteen departments beside the
+  ten: time rules (shifts, holidays, overtime, corrections, lateness and
+  absence measured against a shift), compensation (allowances, benefit plans
+  and enrollment, salary history, movements, end of service, grievances,
+  asset custody, employment certificates), budgets against the posted
+  journal, payables, fiat receivables, fixed assets with monthly straight-line
+  depreciation, FX rates, the bank (each account its own child of 1000,
+  statements reconciled line by line, transfers, cheques, payment batches
+  with four eyes), inventory as a sum of moves, work orders, fleet, rooms,
+  an internal help desk with an SLA clock, workplace incidents, the
+  correspondence register, committees and resolutions, legal cases, the
+  regulatory calendar, licences, policy acknowledgements, and the page about
+  you. 58 tools, 17 categorically human commands, 45 events, every money
+  event one balanced entry with a source id. The payroll formula now has
+  real allowances, overtime, tax from a bracket table and contributions from
+  plans. 164 departments, 48 tunnels, 0 orphans; 366 tests; 1,400 renders
+  swept green.
+- **One map, two cores** — the overview atlas now draws both galaxies on one
+  sheet: the AI core's districts to the left of a dotted seam, the
+  enterprise core's to the right, every declared tunnel as an arc bent
+  through the core, squares for enterprise departments and circles for the
+  AI core's. Pointing at a district lights its tunnels. The projection comes
+  from the same catalogue and the same edge list as the second map, so the
+  two cannot disagree. Every department page opens with a band — door,
+  district, core, and what it is joined to — read from the same data.
+
 **Deferred from Core 2, with the reason:**
 
 - **Document attachments are text bodies, not files.** A doctor's note today is
@@ -71,9 +97,31 @@
   passed as a tool argument is logged as length + hash. A personal detail
   under 48 characters — a bare phone number as an argument — would still land
   in the log readable. Tool arguments should be ids, and mostly are.
-- **Payroll taxes and contributions are named zeros.** The slip carries the
-  full formula shape, but tax and contribution rules are jurisdiction-specific
-  and nothing computes them yet. End-of-service calculation likewise.
+- **Payroll tax is a bracket table, seeded with placeholders.** The formula
+  now reads tax from `pay_tax_bracket` per jurisdiction and contributions from
+  the plans an employee is enrolled in, and end of service is computed at
+  termination from `EOS_DAYS_PER_YEAR`. The seeded IQ brackets are
+  placeholders that say so on screen; somebody who knows the law replaces
+  them. Bonuses, commissions, other deductions and penalties are still named
+  zeros.
+- **Bank statements are typed or pasted, not imported from a file.** The
+  reconciliation matches lines to journal lines and shows the remainder, but
+  the lines arrive as `day, amount, ref` text. A CSV/MT940 importer is the
+  obvious next step and waits for a real bank format to test against.
+- **Depreciation is straight-line only, and nobody runs it on a timer.** The
+  method column admits nothing else, and `run_depreciation` is a tool and a
+  button rather than a monthly job — deliberately, until the month-end close
+  has an owner.
+- **Multi-currency is a rate table, not a ledger feature.** `fin_fx_rate`
+  converts for display; the journal stays in the functional currency. A
+  bill in IQD is posted at its USD figure by whoever records it.
+- **The help desk has no notifications to the requester.** A breached SLA
+  reaches the oversight feed; the person who raised the ticket learns of a
+  state change only by looking. Web Push per employee needs the login →
+  person link to be the norm rather than the exception first.
+- **Room bookings and meetings are joined by an optional id**, not by the
+  meeting form. Creating a meeting does not book a room; booking a room can
+  name a meeting.
 - **Customers & Sales:** Core 1's customers/deals/invoices tables are declared
   the system of record — same one-master reasoning as tasks and vendors.
 - **Phase 2's tasks & projects.** Core 1's existing projects/tasks tables are
@@ -89,6 +137,27 @@
   seven is one nobody can act on.
 
 **Open risk in what is already built — look at these before real employee data:**
+
+- **A bank account's IBAN is stored in the clear.** It is the company's own
+  account, not a person's, so it is Tier B by the same reasoning as a
+  vendor's name — but a company IBAN in a leaked database is still a
+  useful thing to a fraudster. It is masked on every screen; the row is not.
+- **`payments.released` reclassifies cash for payroll and end-of-service
+  batches only.** An AP batch posts nothing on release because each bill
+  posted as it was paid; an `other` batch posts nothing at all. A batch of
+  kind `other` is therefore a memo, not an accounting fact, and the screen
+  does not say so loudly.
+- **The reconciliation's auto-match is by exact amount alone.** Two open
+  journal lines of the same amount leave the statement line unmatched for a
+  person — correct, but a busy account with many identical charges will need
+  a lot of hands. Matching by date window and reference is the next step.
+- **New permissions default to nobody.** `bank.*`, `ops.*` and `admin.*`
+  were added to the catalogue; only the superadmin holds them until somebody
+  grants them, so every non-owner sees "you do not have permission" on
+  fourteen new pages until roles are updated.
+- **The overview draws 48 tunnels as arcs through the core.** At the far
+  view they read as a faint red haze rather than as lines until a district is
+  pointed at. Intended, and worth a second look on a real monitor.
 
 - **`enterprise-core` is armed `live`, not `dry`.** Every other connector proves
   itself in dry-run first. A dry-run internal connector would execute nothing

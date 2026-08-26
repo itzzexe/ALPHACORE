@@ -2471,3 +2471,86 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
   .of-tick-room { min-width: 0; }
   .of-key .of-k-do { display: none; }
 }
+
+
+/* ==========================================================================
+   THE SEAM — the two cores on one sheet, and the band above every page.
+
+   Added when the enterprise core arrived. The atlas now draws both galaxies:
+   the AI core's districts on the left of a dotted seam, the enterprise core's
+   on the right, and every declared tunnel as a faint arc bent through the
+   core. Enterprise departments are squares where the AI core's are circles,
+   so the species reads at a glance.
+
+   The band is the one line every department page now opens with: which
+   door, which district, which core, and what it is joined to — read from the
+   same catalogue and edge list the map draws, so it cannot disagree.
+   ========================================================================== */
+.at-tunnel {
+  fill: none; stroke: var(--accent); stroke-width: 0.8; opacity: 0.22;
+  stroke-dasharray: 3 5; stroke-linecap: round;
+  transition: opacity var(--t-mid) var(--ease), stroke-width var(--t-mid) var(--ease);
+}
+.atlas-svg.focused .at-tunnel { opacity: 0.06; }
+.atlas-svg.focused .at-tunnel.lit { opacity: 0.85; stroke-width: 1.3; stroke-dasharray: none; }
+.at-seam { stroke: var(--ink-faint); stroke-width: 0.8; stroke-dasharray: 1.5 7; stroke-linecap: round; opacity: 0.7; }
+.at-core-tag {
+  font-family: var(--font-display); font-size: 11px; letter-spacing: var(--track-wide);
+  text-transform: uppercase; fill: var(--ink-faint);
+}
+html[lang="ar"] .at-core-tag { letter-spacing: 0; font-size: 14px; }
+/* The enterprise side keeps a little of its own colour at rest, so the seam
+   is visible even before anything is pointed at. */
+.at-district.enterprise .at-dname { fill: color-mix(in srgb, currentColor 55%, var(--ink-mute)); }
+.at-district.enterprise .at-leaf { fill: color-mix(in srgb, currentColor 70%, var(--ink)); }
+.atlas-svg.focused .at-district.enterprise .at-leaf { fill: var(--ink-ghost); }
+.atlas-svg .at-district.enterprise.lit .at-leaf { fill: currentColor; }
+
+/* ---------- the band above every department page ---------- */
+.dept-band {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3);
+  padding: 0 0 var(--s3); margin: -6px 0 -6px;
+  border-bottom: 1px solid var(--seam-soft);
+  font-size: 11.5px; color: var(--ink-faint);
+  min-width: 0;
+}
+.dept-band .band-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dept-band .crumb { color: var(--ink-mute); text-decoration: none; letter-spacing: var(--track-tight); text-transform: uppercase; font-size: 10.5px; }
+.dept-band .crumb:hover { color: var(--ink); }
+.dept-band .crumb-sep { color: var(--ink-ghost); }
+.dept-band .core-tag {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: var(--track-mid); text-transform: uppercase;
+  border: 1px solid var(--seam); border-radius: var(--r-pill); padding: 2px 9px; color: var(--ink-mute);
+}
+.dept-band .core-tag.enterprise { border-color: color-mix(in srgb, var(--accent) 45%, var(--seam)); color: var(--accent); }
+.dept-band .band-hint { flex: 1 1 260px; min-width: 0; color: var(--ink-faint); line-height: 1.5; }
+.dept-band .band-links { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.dept-band .band-links .lk { font-size: 10px; letter-spacing: var(--track-tight); text-transform: uppercase; color: var(--ink-faint); margin-inline-end: 2px; }
+.dept-band .band-links a {
+  text-decoration: none; font-size: 11px; color: var(--ink-mute);
+  border: 1px solid var(--seam); border-radius: var(--r-pill); padding: 1px 8px;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.dept-band .band-links a:hover { color: var(--ink); border-color: var(--ink); }
+.dept-band .band-links a .n { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-faint); margin-inline-start: 4px; }
+html[lang="ar"] .dept-band .crumb, html[lang="ar"] .dept-band .core-tag, html[lang="ar"] .dept-band .band-links .lk { letter-spacing: 0; text-transform: none; font-size: 12px; }
+
+/* ---------- a firmer hand on the chrome ---------- */
+#page-title { font-size: 20px; }
+.panel-title { color: var(--ink-mute); }
+.panel.tile { position: relative; }
+.panel.tile::before {
+  content: ""; position: absolute; top: -1px; inset-inline-start: 0; width: 28px; height: 1px;
+  background: var(--accent); opacity: 0.55;
+}
+.tile .big { font-size: 38px; }
+th { color: var(--ink-mute); }
+.map-legend a { color: var(--accent); text-decoration: none; }
+.map-legend a:hover { text-decoration: underline; }
+.form-inline { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); align-items: end; }
+.form-inline > div { min-width: 0; }
+.form-inline input, .form-inline select { max-width: 100%; }
+@media (max-width: 720px) {
+  .dept-band .band-hint { display: none; }
+  .dept-band { margin: 0; }
+}

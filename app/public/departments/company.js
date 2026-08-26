@@ -944,6 +944,9 @@ export async function renderSettings() {
       : t('off for this device');
     chip.className = 'chip ' + (st.subscribed ? 'chip-ok' : st.supported ? 'chip-warn' : 'chip-dim');
     if (!st.supported) chip.title = st.why;
+    // The subscription check is slow on a phone; if the person has already
+    // left this page by the time it answers, there is nothing to update.
+    if (!$('#push-on') || !$('#push-off') || !$('#push-test')) return;
     $('#push-on').disabled = !st.supported || st.subscribed;
     $('#push-off').disabled = !st.subscribed;
     $('#push-test').disabled = !st.subscribed;
