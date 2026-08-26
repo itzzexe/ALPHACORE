@@ -600,7 +600,7 @@ export async function renderOverview() {
   // views rather than one long scroll. Both are rendered; the switch decides
   // which one is on screen, which keeps the toggle instant.
   const tab = localStorage.getItem('alphacore-overview-tab') === 'dashboards' ? 'dashboards' : 'map';
-  const here = atlasZoom && mapData ? mapData.divisions.find((d) => d.id === atlasZoom) : null;
+  const here = atlasZoom && mapData ? [...mapData.divisions, ...(mapData.core2Divisions || [])].find((d) => d.id === atlasZoom) : null;
 
   view.innerHTML = `
   <div class="panel" style="border-top:none;padding-top:0">
@@ -620,7 +620,7 @@ export async function renderOverview() {
       ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
       <div class="map-legend">${esc(t(here
         ? 'One district, and the departments inside it. Each mark is a department; a filled one holds records, a hollow one is declared and still empty. The arrows walk you round the rim.'
-        : 'The whole company on one drawing, both cores. On the left the AI core: a dense centre of the orchestrator and the chain, with a tree for every district growing out of it. On the right the enterprise core, which records what is true. The dotted lines crossing between them are the tunnels — every one a declared relationship the connectivity audit checks, never a line drawn to look joined. Every leaf is a department; a filled one holds records, a hollow one is declared and still empty.'))}
+        : 'The whole company as two rings around one core. The inner ring is the AI core — one sector per district, its width the district\'s share of the departments; the outer ring is the enterprise core, which records what is true, each division placed where its tunnels land. Every cell is a department: filled when it holds records, hollow when declared and still empty. The chords between the rings are the tunnels — every one a declared relationship the connectivity audit checks, never a line drawn to look joined. Point at a sector and its departments name themselves and its tunnels light.'))}
         <b>${esc(t('Click'))}</b> ${esc(t('a district to go inside'))} · <b>${esc(t('right-click'))}</b> ${esc(t('for everything it touches and a hop-by-hop'))} <b>${esc(t('Trace flow'))}</b> · <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))}.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">${esc(t('Unwired'))}: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
       ${flowLegend(mapData?.flow)}
     </div>
@@ -708,13 +708,21 @@ export async function renderOverview() {
   view.querySelectorAll('[data-district]').forEach((g) => {
     g.querySelector('.at-hit')?.addEventListener('click', () => atlasGoTo(g.dataset.district));
     g.querySelector('.at-dname')?.addEventListener('click', () => atlasGoTo(g.dataset.district));
+    // The tunnels that touch this district come up with it: every crossing
+    // that lands here, or leaves from one of its own cells.
+    const id = g.dataset.district;
+    const mineIds = new Set(((mapData?.core2Divisions || []).find((d) => d.id === id)?.departments) || []);
+    const tunnelsOf = () => [...(view.querySelector('.atlas-svg')?.querySelectorAll('.at-tunnel') || [])]
+      .filter((p) => p.dataset.tunnelTo === id || mineIds.has(p.dataset.tunnelFrom));
     g.addEventListener('mouseenter', () => {
       view.querySelector('.atlas-svg')?.classList.add('focused');
       g.classList.add('lit');
+      tunnelsOf().forEach((p) => p.classList.add('lit'));
     });
     g.addEventListener('mouseleave', () => {
       view.querySelector('.atlas-svg')?.classList.remove('focused');
       g.classList.remove('lit');
+      tunnelsOf().forEach((p) => p.classList.remove('lit'));
     });
   });
   view.querySelectorAll('[data-step]').forEach((r) => r.addEventListener('click', () => atlasStep(Number(r.dataset.step))));

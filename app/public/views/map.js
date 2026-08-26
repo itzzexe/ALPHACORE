@@ -321,268 +321,266 @@ function districtTree(items, angle, slice) {
   }
   return branches;
 }
-/** The whole company: districts radiating from the core. */
+/**
+ * The wheel — the whole company as two rings around one core.
+ *
+ * The core in the middle: the orchestrator and the chain. The inner ring is
+ * the AI core, one sector per district, its width the district's share of
+ * the departments. The outer ring is the enterprise core, one sector per
+ * division, each placed where its tunnels land so the crossings are short.
+ * Every department is a cell on its ring; every declared tunnel is a chord
+ * from an enterprise cell to the district it reaches.
+ *
+ * Nothing here is typed: sectors are the catalogue, tunnels are the edge
+ * list the connectivity audit checks. Point at a sector and its cells name
+ * themselves and its tunnels light; open a cell for everything it touches;
+ * open a sector to go inside.
+ */
+const WHEEL = { cx: 900, cy: 600, core: 72, r1: [150, 318], r2: [442, 560], gap: 2.6 };
+const TAU = Math.PI * 2;
+const polar2 = (a, r) => ({ x: WHEEL.cx + Math.cos(a) * r, y: WHEEL.cy + Math.sin(a) * r });
+/** An annular sector, drawn as a path. Angles in radians, clockwise from 3 o'clock. */
+function sectorPath(a0, a1, r0, r1) {
+  const big = a1 - a0 > Math.PI ? 1 : 0;
+  const p0 = polar2(a0, r1), p1 = polar2(a1, r1), p2 = polar2(a1, r0), p3 = polar2(a0, r0);
+  return `M ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} A ${r1} ${r1} 0 ${big} 1 ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} `
+    + `L ${p2.x.toFixed(1)} ${p2.y.toFixed(1)} A ${r0} ${r0} 0 ${big} 0 ${p3.x.toFixed(1)} ${p3.y.toFixed(1)} Z`;
+}
+/** Sector widths: proportional to department count, with a floor so a small district stays legible. */
+function sectors(list, { start = -Math.PI / 2, span = TAU, minDeg = 9 } = {}) {
+  const gap = (WHEEL.gap * Math.PI) / 180;
+  const usable = span - gap * list.length;
+  const total = list.reduce((n, d) => n + d.items.length, 0) || 1;
+  const min = (minDeg * Math.PI) / 180;
+  let widths = list.map((d) => Math.max(min, (usable * d.items.length) / total));
+  const scale = usable / widths.reduce((n, w) => n + w, 0);
+  widths = widths.map((w) => w * scale);
+  let a = start;
+  return list.map((d, i) => {
+    const a0 = a + gap / 2, a1 = a + gap / 2 + widths[i];
+    a += widths[i] + gap;
+    return { ...d, a0, a1, mid: (a0 + a1) / 2 };
+  });
+}
+/** Cells inside a sector: dealt onto sub-rings, spread across the angle. */
+function cellsIn(sec, r0, r1, rings) {
+  const items = sec.items;
+  const per = Math.ceil(items.length / rings);
+  const pad = (1.2 * Math.PI) / 180;
+  return items.map((item, i) => {
+    const ring = i % rings;
+    const slot = Math.floor(i / rings);
+    const slots = Math.ceil(items.length / rings);
+    const t2 = slots === 1 ? 0.5 : (slot + 0.5) / slots;
+    const a = sec.a0 + pad + (sec.a1 - sec.a0 - pad * 2) * t2;
+    const r = rings === 1 ? (r0 + r1) / 2 : r0 + ((r1 - r0) * (ring + 0.5)) / rings;
+    return { item, a, r, ...polar2(a, r) };
+  }).concat([]).slice(0, items.length);
+}
+/** Where a horizontal label sits for a point on the wheel: outside, anchored by side. */
+/** In a right-to-left page 'start' is the right edge, so the sides swap. */
+const sideAnchor = (c) => {
+  const rtl = typeof document !== 'undefined' && document.documentElement.dir === 'rtl';
+  const a = c > 0.25 ? 'start' : c < -0.25 ? 'end' : 'middle';
+  return rtl && a !== 'middle' ? (a === 'start' ? 'end' : 'start') : a;
+};
+const labelAt = (a, r) => {
+  const p = polar2(a, r);
+  return { x: p.x, y: p.y, anchor: sideAnchor(Math.cos(a)) };
+};
+
 function buildAtlasFar(map) {
   const { divisions, sections, harmony, audit: connAudit, flow } = map;
-
-  // The enterprise core's departments are lifted out of the AI core's trees.
-  // They were never really leaves of those districts — an HR record sat under
-  // "talent" because both involve people, which is the confusion the two-galaxy
-  // split exists to end. Drawn as their own constellation and joined by the
-  // declared tunnels, one screen now shows the whole company *and* the seam.
-  const enterprise = new Set((map.core2Divisions || []).flatMap((d) => d.departments));
+  const byId = Object.fromEntries(sections.map((s) => [s.id, s]));
+  const ent = (map.core2Divisions || []).map((d) => ({ ...d, items: d.departments.map((id) => byId[id]).filter(Boolean) })).filter((d) => d.items.length);
+  const mine = new Set(ent.flatMap((d) => d.items.map((x) => x.id)));
 
   const byDiv = Object.fromEntries(divisions.map((d) => [d.id, { ...d, items: [] }]));
   for (const s of sections) {
-    if (s.id === 'harmony' || enterprise.has(s.id)) continue;
+    if (s.id === 'harmony' || mine.has(s.id)) continue;
     (byDiv[s.division] || byDiv.govern).items.push(s);
   }
-  const divs = divisions.filter((d) => byDiv[d.id].items.length);
+  const core1 = sectors(divisions.filter((d) => byDiv[d.id].items.length).map((d) => byDiv[d.id]));
+  const angleOf = Object.fromEntries(core1.map((s) => [s.id, s.mid]));
 
-  // The one deliberate distortion: everything is stretched sideways, because a
-  // circle in a widescreen panel wastes half the page. The core stays round so
-  // the eye still reads a centre.
-  const XS = 1.46;
-  const CX = 940, CY = 640;
-  const slice = (Math.PI * 2) / divs.length;
-  const px = (a, r) => CX + Math.cos(a) * r * XS;
-  const py = (a, r) => CY + Math.sin(a) * r;
+  // The enterprise ring: each division sits where its tunnels land, so the
+  // chords are short and the seam reads as a set of neighbourhoods rather
+  // than a tangle. Ordered by that preferred angle, then dealt round the ring.
+  const tunnels = (map.core2?.tunnels || []);
+  const prefer = (d) => {
+    const angles = tunnels.filter((tn) => d.items.some((x) => x.id === tn.core2End)).map((tn) => angleOf[tn.core1Division]).filter((a) => a !== undefined);
+    if (!angles.length) return Math.PI / 2;
+    // circular mean
+    const x = angles.reduce((n, a) => n + Math.cos(a), 0), y = angles.reduce((n, a) => n + Math.sin(a), 0);
+    return Math.atan2(y, x);
+  };
+  const ordered = ent.map((d) => ({ ...d, pref: prefer(d) })).sort((a, b) => a.pref - b.pref);
+  const core2 = ordered.length ? sectors(ordered, { start: ordered[0].pref - (ordered[0].items.length / Math.max(1, ordered.reduce((n, d) => n + d.items.length, 0))) * Math.PI, minDeg: 14 }) : [];
 
-  const districts = divs.map((d, i) => {
-    // Start at the top and go clockwise, so the first district is where the eye
-    // lands rather than where the maths happens to begin.
-    const angle = i * slice - Math.PI / 2;
-    const items = byDiv[d.id].items;
-    const branches = districtTree(items, angle, slice);
-
-    const trunk = { x: px(angle, ATLAS_R.trunk), y: py(angle, ATLAS_R.trunk) };
-    // Every district has its own trunk node, joined to the core by a single
-    // thin line. Without it the stems all converge on one point and the drawing
-    // reads as a starburst rather than as thirteen trees.
-    const root = `M ${px(angle, ATLAS_R.core + 6).toFixed(1)} ${py(angle, ATLAS_R.core + 6).toFixed(1)} L ${trunk.x.toFixed(1)} ${trunk.y.toFixed(1)}`;
-
-    const lines = `<path class="at-branch" d="${root}"/>` + branches.map((b) => {
-      const fx = px(b.at, ATLAS_R.fork), fy = py(b.at, ATLAS_R.fork);
-      const stem = `M ${trunk.x.toFixed(1)} ${trunk.y.toFixed(1)} Q ${((trunk.x + fx) / 2).toFixed(1)} ${((trunk.y + fy) / 2).toFixed(1)} ${fx.toFixed(1)} ${fy.toFixed(1)}`;
-      const twigs = b.leaves.map((l) => {
-        const lx = px(l.a, l.r), ly = py(l.a, l.r);
-        return `<path class="at-branch" d="M ${fx.toFixed(1)} ${fy.toFixed(1)} Q ${(fx * 0.35 + lx * 0.65).toFixed(1)} ${(fy * 0.35 + ly * 0.65).toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)}"/>`;
-      }).join('');
-      return `<path class="at-branch" d="${stem}"/>${twigs}`;
-    }).join('')
-      + `<circle class="at-leaf" cx="${trunk.x.toFixed(1)}" cy="${trunk.y.toFixed(1)}" r="2.6" opacity="0.5"/>`;
-
-    const leaves = branches.flatMap((b) => b.leaves).map((l) => {
-      // A department with nothing in it yet is drawn hollow — present, not busy.
-      const live = l.item.count > 0;
-      const cx = px(l.a, l.r).toFixed(1), cy = py(l.a, l.r).toFixed(1);
-      const title = `<title>${esc(sectionName(l.item.id, l.item.label))} · ${live ? l.item.count : t('empty')}</title>`;
-      // Wrapped in the same anchor the district close-up uses. The whole-company
-      // view drew bare circles, so every interaction keyed on `a[data-node]` —
-      // the connection tooltip, click for the ledger, right-click to trace —
-      // silently did nothing out here, while the help text underneath promised
-      // all three. One anchor makes the existing handlers serve both views.
-      // A three-pixel dot is also too small to aim at, so an invisible disc
-      // carries the pointer: transparent fill, not `none`, or it takes no hits.
-      return `<a class="at-node" href="${esc(l.item.href || '#/')}" data-node="${esc(l.item.id)}" aria-label="${esc(sectionName(l.item.id, l.item.label))}"
-        data-color="${d.color}" data-label="${esc(sectionName(l.item.id, l.item.label))}"
-        data-hint="${esc(l.item.hint || '')}" data-count="${l.item.count}" data-div="${esc(d.id)}">
-        <circle class="at-hit" cx="${cx}" cy="${cy}" r="7"/>
-        ${live
-    ? `<circle class="at-leaf" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="3.2"/>`
-    : `<circle class="at-leaf-ring" data-dept="${esc(l.item.id)}" cx="${cx}" cy="${cy}" r="2.6"/>`}
-        ${title}</a>`;
+  const cellPos = {};
+  const drawRing = (secs, r0, r1, rings, klass, labelR) => secs.map((sec) => {
+    const cells = cellsIn(sec, r0 + 14, r1 - 14, rings);
+    const nodes = cells.map((c) => {
+      cellPos[c.item.id] = { x: c.x, y: c.y, a: c.a };
+      const live = c.item.count > 0;
+      const name = sectionName(c.item.id, c.item.label);
+      const lb = labelAt(c.a, c.r + 11);
+      return `<a class="at-node" href="${esc(c.item.href || '#/')}" data-node="${esc(c.item.id)}" aria-label="${esc(name)}"
+        data-color="${sec.color}" data-label="${esc(name)}" data-hint="${esc(c.item.hint || '')}" data-count="${c.item.count}" data-div="${esc(sec.id)}">
+        <circle class="at-hit" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="10"/>
+        <circle class="at-leaf${live ? '' : ' hollow'}" data-dept="${esc(c.item.id)}" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${live ? 4.6 : 3.8}"/>
+        <text class="at-cell" x="${lb.x.toFixed(1)}" y="${(lb.y + 3).toFixed(1)}" style="text-anchor:${lb.anchor}">${esc(short(name, 20))}</text>
+        <title>${esc(name)} · ${live ? `${c.item.count} ${t('records')}` : t('empty')}</title>
+      </a>`;
     }).join('');
-
-    const lx = px(angle, ATLAS_R.rim);
-    const ly = py(angle, ATLAS_R.rim);
-    const sample = items.slice(0, 3).map((x) => sectionName(x.id, x.label).toLowerCase()).join(' · ');
-
-    return `<g class="at-district" data-district="${esc(d.id)}" style="color:${d.color}">
-      ${lines}${leaves}
-      <text class="at-dname" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}">${esc(divisionName(d.id, d.label))}</text>
-      <text class="at-dsub" x="${lx.toFixed(1)}" y="${(ly + 15).toFixed(1)}">${esc(short(sample, 36))}</text>
-      <ellipse class="at-hit" cx="${lx.toFixed(1)}" cy="${(ly - 2).toFixed(1)}" rx="96" ry="34"/>
+    const nm = labelAt(sec.mid, labelR);
+    const label = klass === 'enterprise' ? t(sec.label) : divisionName(sec.id, sec.label);
+    const total = sec.items.reduce((n, x) => n + (x.count || 0), 0);
+    return `<g class="at-district ${klass}" data-district="${esc(sec.id)}" style="color:${sec.color}">
+      <path class="at-sector" d="${sectorPath(sec.a0, sec.a1, r0, r1)}"/>
+      <path class="at-sector-edge" d="${sectorPath(sec.a0, sec.a1, r1 - 3, r1)}"/>
+      <path class="at-hit" d="${sectorPath(sec.a0, sec.a1, r0, r1)}"/>
+      ${nodes}
+      <text class="at-dname" x="${nm.x.toFixed(1)}" y="${nm.y.toFixed(1)}" style="text-anchor:${nm.anchor}">${esc(label)}</text>
+      <text class="at-dsub" x="${nm.x.toFixed(1)}" y="${(nm.y + 14).toFixed(1)}" style="text-anchor:${nm.anchor}">${sec.items.length} ${esc(t('departments'))} · ${total} ${esc(t('records'))}</text>
     </g>`;
   }).join('');
 
-  // The core: a small cloud for the orchestrator and the chain beneath it.
-  // Deterministic scatter, so it is the same cloud every time.
-  const dots = Array.from({ length: 52 }, (_, i) => {
-    const a = i * 2.399963;                        // golden angle
-    const r = ATLAS_R.core * 0.66 * Math.sqrt(i / 52);
-    return `<circle class="at-core-dot" cx="${(CX + Math.cos(a) * r).toFixed(1)}" cy="${(CY + Math.sin(a) * r).toFixed(1)}" r="${(1.6 - i / 52).toFixed(2)}"/>`;
-  }).join('');
+  const inner = drawRing(core1, WHEEL.r1[0], WHEEL.r1[1], 3, 'ai', WHEEL.r1[1] + 26);
+  const outer = drawRing(core2, WHEEL.r2[0], WHEEL.r2[1], 2, 'enterprise', WHEEL.r2[1] + 26);
 
-  // ---- the enterprise core, and the seam ----------------------------------
-  // Placed to the right of the AI core rather than interleaved: the distance is
-  // the point. Its own small core, its own districts, and one line per declared
-  // tunnel — so the crossings are countable rather than implied.
-  const byId2 = Object.fromEntries(sections.map((x) => [x.id, x]));
-  const e2 = (map.core2Divisions || []).map((d) => ({
-    ...d, items: d.departments.map((id) => byId2[id]).filter(Boolean),
-  })).filter((d) => d.items.length);
-
-  // Clear of the AI core's rim, not near it. Its outermost label sits at
-  // CX + rim * XS = 1635 and is centred, so anything before ~1760 collides —
-  // which it did, and "RECORDS" printed on top of "MARKETING".
-  const E_CX = 2010, E_CY = 640;
-  // The column is laid out by what is in it, not by dividing a fixed span
-  // equally: ten divisions holding thirty departments need the room that
-  // seven holding twelve did not. Each district takes its rows plus a label;
-  // if the whole column outgrows the sheet the row pitch shrinks to fit.
-  const E_TOP = 150, E_BOTTOM = 1140;
-  const pitch = Math.max(13, Math.min(19, ((E_BOTTOM - E_TOP) - e2.length * 36) / Math.max(1, e2.reduce((n, d) => n + d.items.length, 0))));
-  const used = e2.reduce((n, d) => n + d.items.length * pitch + 36, 0);
-  let eCursor = E_TOP + Math.max(0, ((E_BOTTOM - E_TOP) - used) / 2);
-  const ePos = new Map();
-  const eDistricts = e2.map((d) => {
-    const h = d.items.length * pitch;
-    const y = eCursor + 36 + h / 2 - pitch / 2;
-    eCursor += h + 36;
-    const rows = d.items.map((it, j) => {
-      const ix = E_CX + 62, iy = y + j * pitch - ((d.items.length - 1) * pitch) / 2;
-      ePos.set(it.id, { x: ix, y: iy });
-      // The enterprise leaves answer the same way as the AI core's — same
-      // anchor, same handlers. The label is inside it too, so the name is a
-      // target as well as the dot.
-      return `<a class="at-node" href="${esc(it.href || '#/')}" data-node="${esc(it.id)}" aria-label="${esc(sectionName(it.id, it.label))}"
-        data-color="${d.color}" data-label="${esc(sectionName(it.id, it.label))}"
-        data-hint="${esc(it.hint || '')}" data-count="${it.count}" data-div="${esc(d.id)}">
-        <circle class="at-hit" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="7"/>
-        <circle class="at-leaf" data-dept="${esc(it.id)}" cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="${it.count > 0 ? 3.2 : 2.6}"${it.count > 0 ? '' : ' opacity="0.45"'}/>
-        <text class="at-dsub" x="${(ix + 9).toFixed(1)}" y="${(iy + 3.4).toFixed(1)}" text-anchor="start">${esc(short(sectionName(it.id, it.label), 22))}</text>
-        <title>${esc(sectionName(it.id, it.label))} · ${it.count > 0 ? it.count : t('empty')}</title></a>`;
-    }).join('');
-    return `<g class="at-district" data-district="${esc(d.id)}" style="color:${d.color}">
-      <path class="at-branch" d="M ${E_CX} ${E_CY} Q ${E_CX + 26} ${((E_CY + y) / 2).toFixed(1)} ${(E_CX + 62).toFixed(1)} ${y.toFixed(1)}"/>
-      <text class="at-dname" x="${(E_CX + 52).toFixed(1)}" y="${(y - ((d.items.length - 1) * pitch) / 2 - 13).toFixed(1)}" text-anchor="start">${esc(t(d.label))}</text>
-      ${rows}
-    </g>`;
-  }).join('');
-
-  // One line per declared tunnel. Nothing is drawn that is not an edge the
-  // connectivity audit already checks — a picture that can show a relationship
-  // the data does not have is a picture that will.
-  const c1Angle = new Map(divs.map((d, i) => [d.id, i * slice - Math.PI / 2]));
-  const tunnels = ((map.core2 || {}).tunnels || []).map((tn) => {
-    const a = ePos.get(tn.core2End);
-    const ang = c1Angle.get(tn.core1Division);
+  // Tunnels: chords from the enterprise cell to the rim of the district it
+  // reaches, bowed through the gap between the rings.
+  const chords = tunnels.map((tn) => {
+    const a = cellPos[tn.core2End]; const ang = angleOf[tn.core1Division];
     if (!a || ang === undefined) return '';
-    const bx = px(ang, ATLAS_R.rim * 0.92), by = py(ang, ATLAS_R.rim * 0.92);
-    return `<path class="at-tunnel" d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} C ${(a.x - 260).toFixed(1)} ${a.y.toFixed(1)}, ${(bx + 240).toFixed(1)} ${by.toFixed(1)}, ${bx.toFixed(1)} ${by.toFixed(1)}">
+    const b = polar2(ang, WHEEL.r1[1] + 4);
+    const m = polar2((a.a + ang) / 2 + (Math.abs(a.a - ang) > Math.PI ? Math.PI : 0), (WHEEL.r1[1] + WHEEL.r2[0]) / 2 - 20);
+    return `<path class="at-tunnel" data-tunnel-from="${esc(tn.core2End)}" data-tunnel-to="${esc(tn.core1Division)}"
+      d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${m.x.toFixed(1)} ${m.y.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}">
       <title>${esc(tn.core2End)} ↔ ${esc(tn.core1End)}: ${esc(t(tn.label || ''))}</title></path>`;
   }).join('');
 
+  // The core: a deterministic cloud for the orchestrator and the chain.
+  const dots = Array.from({ length: 64 }, (_, i) => {
+    const a = i * 2.399963;
+    const r = WHEEL.core * 0.7 * Math.sqrt(i / 64);
+    return `<circle class="at-core-dot" cx="${(WHEEL.cx + Math.cos(a) * r).toFixed(1)}" cy="${(WHEEL.cy + Math.sin(a) * r).toFixed(1)}" r="${(1.7 - i / 64).toFixed(2)}"/>`;
+  }).join('');
   const hs = harmony?.score ?? 0;
-  return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="150 92 2280 1108" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="The whole company on one map — the AI core, the enterprise core, and the declared tunnels between them">
-    ${tunnels}
-    ${districts}
-    ${eDistricts}
+  const ringCaption = (r, text, id) => `<defs><path id="${id}" d="M ${(WHEEL.cx - r).toFixed(1)} ${WHEEL.cy} A ${r} ${r} 0 1 1 ${(WHEEL.cx + r).toFixed(1)} ${WHEEL.cy}"/></defs>
+    <text class="at-ring-caption"><textPath href="#${id}" startOffset="50%" text-anchor="middle">${esc(text)}</textPath></text>`;
+
+  return `<svg aria-hidden="true" focusable="false" class="atlas-svg wheel" viewBox="40 -34 1720 1250" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="The whole company as two rings around one core — the AI core inside, the enterprise core outside, and every declared tunnel between them">
+    ${ringCaption(WHEEL.r1[0] - 26, t('CORE 1 — THINKS AND ACTS'), 'cap1')}
+    ${ringCaption(WHEEL.r2[0] - 30, t('CORE 2 — RECORDS THE TRUTH'), 'cap2')}
+    <circle class="at-ring-guide" cx="${WHEEL.cx}" cy="${WHEEL.cy}" r="${WHEEL.r1[0] - 8}"/>
+    <circle class="at-ring-guide" cx="${WHEEL.cx}" cy="${WHEEL.cy}" r="${WHEEL.r2[0] - 8}"/>
+    ${chords}
+    ${inner}
+    ${outer}
     <g class="at-core">
-      <circle class="at-core-ring" cx="${E_CX}" cy="${E_CY}" r="26"/>
-      <text class="at-core-label" x="${E_CX}" y="${E_CY + 44}">${esc(t('ENTERPRISE'))}</text>
-    </g>
-    <g class="at-core">
-      <circle class="at-core-ring" cx="${CX}" cy="${CY}" r="${ATLAS_R.core}"/>
+      <circle class="at-core-ring" cx="${WHEEL.cx}" cy="${WHEEL.cy}" r="${WHEEL.core}"/>
       ${dots}
-      <text class="at-core-label" x="${CX}" y="${CY + ATLAS_R.core + 18}">${esc(t('HARMONY'))} ${hs}%</text>
+      <text class="at-core-label" x="${WHEEL.cx}" y="${WHEEL.cy + WHEEL.core + 20}">${esc(t('HARMONY'))} ${hs}%</text>
     </g>
-    <text class="at-foot" x="166" y="1186">${sections.length} ${esc(t('DEPARTMENTS'))} · ${divs.length + e2.length} ${esc(t('DISTRICTS'))} · ${((map.core2 || {}).tunnels || []).length} ${esc(t('TUNNELS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
+    <text class="at-foot" x="56" y="1204">${sections.length} ${esc(t('DEPARTMENTS'))} · ${core1.length + core2.length} ${esc(t('DISTRICTS'))} · ${tunnels.length} ${esc(t('TUNNELS'))} · ${connAudit.wired}/${connAudit.sections} ${esc(t('wired'))}${flow ? ` · ${flow.rounds} ${esc(t('ROUNDS RUN'))}` : ''}</text>
   </svg>`;
 }
+
+/**
+ * One district, as a wheel of its own: the departments round the rim with a
+ * glyph and a name each, every declared relationship between them drawn as a
+ * chord, and the districts it reaches drawn as a ring of doors outside — so
+ * the picture answers "what is in here" and "what does it touch" at once.
+ */
 function buildAtlasNear(map, divId) {
   const { divisions, sections, edges } = map;
-  // An enterprise district is looked up on the other side of the seam: its
-  // departments are the ones it lists, not the ones sharing a Core 1 division.
   const byId = Object.fromEntries(sections.map((s) => [s.id, s]));
   const ent = (map.core2Divisions || []).find((d) => d.id === divId);
   const div = ent || divisions.find((d) => d.id === divId) || divisions[0];
   const items = ent ? ent.departments.map((id) => byId[id]).filter(Boolean) : sections.filter((s) => s.division === div.id && s.id !== 'harmony');
-  const W = 1600, H = 1020;
-  const rootX = W / 2, rootY = H - 118;
-
-  // Clusters of at most four, fanned across almost a half-circle so the tree
-  // occupies the page rather than a corner of it. Each node gets its own angular
-  // slot inside its cluster, which is what stops two chips landing on top of
-  // each other when a district is crowded.
-  const per = 4;
-  const clusters = [];
-  for (let i = 0; i < items.length; i += per) clusters.push(items.slice(i, i + per));
-  const n = clusters.length;
-  const SPAN = Math.PI * 0.74;                 // wide enough to fan, narrow enough to climb
-  const TOP = -Math.PI / 2;
-
-  const placed = clusters.map((group, ci) => {
-    const a = n === 1 ? TOP : TOP - SPAN / 2 + (SPAN * ci) / (n - 1);
-    const fork = { x: rootX + Math.cos(a) * 350, y: rootY + Math.sin(a) * 330 };
-    const inner = Math.min(0.5, SPAN / (n * 2.1));
-    const nodes = group.map((sec, i) => {
-      const slot = group.length === 1 ? 0 : (i / (group.length - 1) - 0.5) * 2;
-      const na = a + slot * inner;
-      // Alternating reach gives the cluster depth instead of an arc of beads.
-      const reach = 235 + (i % 2 ? 132 : 0) + Math.floor(i / 2) * 60;
-      return { sec, x: fork.x + Math.cos(na) * reach, y: fork.y + Math.sin(na) * reach };
-    });
-    return { a, fork, nodes, group };
-  });
-
-  const drawn = placed.map(({ fork, nodes, group }) => {
-    const stem = `<path class="at-edge" d="M ${rootX} ${rootY - 26} Q ${(rootX + (fork.x - rootX) * 0.42).toFixed(1)} ${(rootY + (fork.y - rootY) * 0.72).toFixed(1)} ${fork.x.toFixed(1)} ${fork.y.toFixed(1)}"/>`;
-    const twigs = nodes.map((nd) => `<path class="at-edge" d="M ${fork.x.toFixed(1)} ${fork.y.toFixed(1)} Q ${((fork.x + nd.x) / 2).toFixed(1)} ${((fork.y + nd.y) / 2 - 14).toFixed(1)} ${nd.x.toFixed(1)} ${nd.y.toFixed(1)}"/>`).join('');
-
-    const chips = nodes.map((nd) => {
-      const live = nd.sec.count > 0;
-      const label = sectionName(nd.sec.id, nd.sec.label);
-      return `<a class="at-node ${live ? '' : 'hollow'}" href="${nd.sec.href}" data-node="${esc(nd.sec.id)}" aria-label="${esc(label)}"
-        data-color="${div.color}" data-label="${esc(label)}" data-hint="${esc(nd.sec.hint)}"
-        data-count="${nd.sec.count}" data-div="${esc(div.id)}">
-        ${live
-          ? `<circle class="at-chip" cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="17"/>`
-          : `<circle class="at-chip-ring" cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="17"/>`}
-        <g class="at-chip-glyph" style="color:${live ? 'var(--paper)' : 'var(--ink)'};fill:${live ? 'var(--paper)' : 'var(--ink)'}"
-           transform="translate(${(nd.x - 9).toFixed(1)}, ${(nd.y - 9).toFixed(1)})">${NODE_GLYPH[glyphFor(nd.sec.id)]}</g>
-        <text class="at-nlabel" x="${nd.x.toFixed(1)}" y="${(nd.y + 33).toFixed(1)}">${esc(short(label, 24))}</text>
-        <title>${esc(label)} · ${live ? `${nd.sec.count} ${t('records')}` : t('empty')}</title>
+  const label = ent ? t(div.label) : divisionName(div.id, div.label);
+  const W = 1600, H = 1120;
+  const cx = W / 2, cy = 600;
+  const R = Math.min(300, 140 + items.length * 13);
+  const mine = new Set(items.map((x) => x.id));
+  const pos = {};
+  const nodes = items.map((sec, i) => {
+    const a = -Math.PI / 2 + (TAU * i) / Math.max(1, items.length);
+    const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+    pos[sec.id] = { x, y, a };
+    const live = sec.count > 0;
+    const name = sectionName(sec.id, sec.label);
+    const lb = { x: cx + Math.cos(a) * (R + 34), y: cy + Math.sin(a) * (R + 34) };
+    const anchor = sideAnchor(Math.cos(a));
+    return `<a class="at-node ${live ? '' : 'hollow'}" href="${sec.href}" data-node="${esc(sec.id)}" aria-label="${esc(name)}"
+        data-color="${div.color}" data-label="${esc(name)}" data-hint="${esc(sec.hint || '')}" data-count="${sec.count}" data-div="${esc(div.id)}">
+        <circle class="at-hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="24"/>
+        ${live ? `<circle class="at-chip" data-dept="${esc(sec.id)}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="18"/>` : `<circle class="at-chip-ring" data-dept="${esc(sec.id)}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="18"/>`}
+        <g class="at-chip-glyph" style="color:${live ? 'var(--paper)' : 'var(--ink)'};fill:${live ? 'var(--paper)' : 'var(--ink)'}" transform="translate(${(x - 9).toFixed(1)}, ${(y - 9).toFixed(1)})">${NODE_GLYPH[glyphFor(sec.id)]}</g>
+        <text class="at-nlabel on" x="${lb.x.toFixed(1)}" y="${(lb.y + 4).toFixed(1)}" style="text-anchor:${anchor}">${esc(short(name, 26))}<tspan class="at-nlabel-n" dx="6">${live ? sec.count : ''}</tspan></text>
+        <title>${esc(name)} · ${live ? `${sec.count} ${t('records')}` : t('empty')}</title>
       </a>`;
-    }).join('');
+  }).join('');
 
-    // The cluster is named after the work in it, set above the highest node in
-    // the reference's manner: small, wide-tracked, and out of the way.
-    const top = nodes.reduce((acc, b) => (b.y < acc.y ? b : acc), nodes[0]);
-    return `${stem}${twigs}
-      <text class="at-cluster" x="${top.x.toFixed(1)}" y="${(top.y - 44).toFixed(1)}">${esc(short(sectionName(group[0].id, group[0].label), 20))}
-        <tspan class="at-cluster-n" x="${top.x.toFixed(1)}" dy="12">${group.length} ${esc(t('sections'))}</tspan></text>
-      ${chips}`;
+  // Chords: every declared relationship with both ends in this district.
+  const inside = edges.map((e, i) => ({ ...e, i })).filter((e) => mine.has(e.from) && mine.has(e.to) && e.from !== e.to);
+  const chords = inside.map((e) => {
+    const a = pos[e.from], b = pos[e.to];
+    return `<path class="cx-edge${e.count > 0 ? '' : ' dormant'}" data-a="${esc(e.from)}" data-b="${esc(e.to)}" data-i="${e.i}"
+      d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${cx} ${cy} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"><title>${esc(e.from)} → ${esc(e.to)}: ${esc(t(e.label || ''))} · ${e.count}</title></path>`;
+  }).join('');
+
+  // The doors out: every other district this one is joined to, as a ring of
+  // pills placed at the angle of the department that touches it most.
+  const allDivs = [...divisions.map((d) => ({ ...d, kind: 'ai' })), ...(map.core2Divisions || []).map((d) => ({ ...d, kind: 'enterprise' }))];
+  const divOf = (id) => byId[id] ? ((map.core2Divisions || []).find((d) => d.departments.includes(id))?.id || byId[id].division) : null;
+  const outward = {};
+  for (const e of edges) {
+    if (e.from === 'all' || e.to === 'all') continue;
+    const inA = mine.has(e.from), inB = mine.has(e.to);
+    if (inA === inB) continue;
+    const here = inA ? e.from : e.to; const there = divOf(inA ? e.to : e.from);
+    if (!there || there === div.id) continue;
+    outward[there] = outward[there] || { n: 0, angles: [] };
+    outward[there].n += 1; outward[there].angles.push(pos[here]?.a ?? 0);
+  }
+  const doors = Object.entries(outward).map(([id, o]) => {
+    const d = allDivs.find((x) => x.id === id); if (!d) return '';
+    const x0 = o.angles.reduce((n, a) => n + Math.cos(a), 0), y0 = o.angles.reduce((n, a) => n + Math.sin(a), 0);
+    const a = Math.atan2(y0, x0);
+    const rr = R + 128;
+    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+    const name = d.kind === 'enterprise' ? t(d.label) : divisionName(d.id, d.label);
+    return `<g class="at-door" data-district="${esc(d.id)}" style="color:${d.color}">
+      <rect class="at-hit" x="${(x - 62).toFixed(1)}" y="${(y - 13).toFixed(1)}" width="124" height="26" rx="13"/>
+      <text class="at-dname" x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${esc(short(name, 16))}<tspan class="at-door-n" dx="6">${o.n}</tspan></text>
+    </g>`;
   }).join('');
 
   const total = items.reduce((a, x) => a + x.count, 0);
-  const related = edges.filter((e) => items.some((x) => x.id === e.from) || items.some((x) => x.id === e.to)).length;
-
-  return `<svg aria-hidden="true" focusable="false" class="atlas-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-    aria-label="${esc(divisionName(div.id, div.label))} — its departments and how they connect"
-    style="color:${div.color}">
-    <text class="at-ghost" x="${rootX}" y="${(rootY - 430).toFixed(0)}" style="font-size:196px">${esc(divisionName(div.id, div.label))}</text>
-    ${drawn}
-    <g class="at-node">
-      <circle class="at-chip-ring" cx="${rootX}" cy="${rootY}" r="21" style="stroke:${div.color}"/>
-      <g class="at-chip-glyph" style="fill:${div.color}" transform="translate(${rootX - 9}, ${rootY - 9})">${NODE_GLYPH.flow}</g>
-    </g>
-    <text class="at-dname" x="${rootX}" y="${rootY + 50}" style="fill:${div.color}">${esc(divisionName(div.id, div.label))}</text>
-    <text class="at-dsub" x="${rootX}" y="${rootY + 68}">${items.length} ${esc(t('sections'))} · ${total} ${esc(t('records'))} · ${related} ${esc(t('relationships'))}</text>
-
+  return `<svg aria-hidden="true" focusable="false" class="atlas-svg wheel near" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="${esc(label)} — its departments and how they connect" style="color:${div.color}">
+    <text class="at-ghost" x="${cx}" y="${(cy - R - 158).toFixed(0)}" style="font-size:${ent ? 84 : 118}px">${esc(label)}</text>
+    <circle class="at-ring-guide" cx="${cx}" cy="${cy}" r="${R}"/>
+    ${chords}
+    ${doors}
+    ${nodes}
+    <text class="at-dname" x="${cx}" y="${(cy - 6).toFixed(1)}" style="fill:${div.color}">${esc(label)}</text>
+    <text class="at-dsub" x="${cx}" y="${(cy + 14).toFixed(1)}">${items.length} ${esc(t('sections'))} · ${total} ${esc(t('records'))} · ${inside.length} ${esc(t('relationships'))}</text>
     <g class="at-stepper">
-      <path class="at-step" d="M 56 ${rootY - 40} l -12 10 l 12 10"/>
-      <rect class="at-step-hit" data-step="-1" x="24" y="${rootY - 68}" width="64" height="66"/>
-      <path class="at-step" d="M ${W - 56} ${rootY - 40} l 12 10 l -12 10"/>
-      <rect class="at-step-hit" data-step="1" x="${W - 88}" y="${rootY - 68}" width="64" height="66"/>
+      <path class="at-step" d="M 56 ${cy} l -12 10 l 12 10"/>
+      <rect class="at-step-hit" data-step="-1" x="24" y="${cy - 28}" width="64" height="66"/>
+      <path class="at-step" d="M ${W - 56} ${cy} l 12 10 l -12 10"/>
+      <rect class="at-step-hit" data-step="1" x="${W - 88}" y="${cy - 28}" width="64" height="66"/>
     </g>
   </svg>`;
 }
 /** The map, at whichever depth you are standing. */
 export function buildMap(m, { far = false } = {}) {
-  const known = m.divisions.some((d) => d.id === atlasZoom);
+  const known = m.divisions.some((d) => d.id === atlasZoom) || (m.core2Divisions || []).some((d) => d.id === atlasZoom);
   if (atlasZoom && !known) atlasZoom = null;
   // The seam page always wants the whole company: the district close-up draws
   // no tunnels at all, so opening it while the atlas page happened to be zoomed
@@ -604,7 +602,7 @@ export function atlasGoTo(divId) {
   if (r) r.render(currentRoute().arg).then(afterRender).catch(() => {});
 }
 export function atlasStep(delta) {
-  const ids = (CATALOG.divisions || []).map((d) => d.id);
+  const ids = [...(CATALOG.divisions || []), ...(CATALOG.enterprise?.divisions || [])].map((d) => d.id);
   if (!ids.length) return;
   const at = ids.indexOf(atlasZoom);
   atlasGoTo(ids[(at + delta + ids.length) % ids.length]);

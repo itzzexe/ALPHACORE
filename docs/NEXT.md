@@ -87,6 +87,21 @@
   for stock, facilities and the help desk, and the enterprise column of the
   atlas now lays itself out by what is in it. 170 departments, 22 districts,
   52 tunnels, 0 orphans; 416 tests.
+- **The atlas redrawn as a wheel (2026-08-27)** — two rings around one
+  core. The inner ring is the AI core, one sector per district sized by its
+  share of departments; the outer ring is the enterprise core, each division
+  placed at the circular mean of where its tunnels land, so the chords are
+  short. Every department is a cell (filled with records, hollow without);
+  every tunnel a chord between the rings. Pointing at a sector fills it,
+  names its cells and lights its tunnels; clicking a cell opens the same
+  window as before; clicking a sector opens the district as a wheel of its
+  own — its departments round the rim with a glyph each, every declared
+  relationship between them as a chord (trace and focus work on them), and
+  the districts it reaches as a ring of doors placed by angle. Labels are
+  horizontal and side-anchored, with the anchor flipped under RTL. The old
+  builders' selectors are kept (`[data-node]`, `.at-hit`, `[data-dept]`,
+  `.at-tunnel`, `[data-district]`), so the lens bar, badges, hover, dialog,
+  trace and zoom all work unchanged.
 - **Every department page opens with a band** — door, district, core, hint,
   and what it is joined to — read from the same catalogue and edge list the
   map is drawn from, so a page and the map cannot disagree about where a

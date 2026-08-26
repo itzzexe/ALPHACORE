@@ -1004,6 +1004,13 @@ const AR = {
   'CORE 1 — THINKS AND ACTS': 'النواة ١ — تفكّر وتتصرّف', 'CORE 2 — RECORDS THE TRUTH': 'النواة ٢ — تسجّل الحقيقة',
   'PEOPLE': 'الأشخاص', 'TIME': 'الوقت', 'FINANCE': 'المالية', 'THE BANK': 'المصرف', 'PROCUREMENT & STOCK': 'المشتريات والمخزون',
   'OPERATIONS': 'التشغيل', 'ADMINISTRATION': 'الإدارة', 'COLLABORATION': 'التعاون', 'THE BRIDGES': 'الجسور',
+  'The whole company as two rings around one core. The inner ring is the AI core — one sector per district, its width the district\'s share of the departments; the outer ring is the enterprise core, which records what is true, each division placed where its tunnels land. Every cell is a department: filled when it holds records, hollow when declared and still empty. The chords between the rings are the tunnels — every one a declared relationship the connectivity audit checks, never a line drawn to look joined. Point at a sector and its departments name themselves and its tunnels light.':
+    'الشركة كلها حلقتان حول نواة واحدة. الحلقة الداخلية هي النواة الذكية — قطاع لكل حيّ، عرضه حصّة الحيّ من الأقسام؛ والحلقة الخارجية نواة المؤسسة التي تسجّل ما هو حقيقي، كل وحدة موضوعة حيث تحطّ أنفاقها. كل خلية قسم: ممتلئة حين تحمل سجلات، ومجوّفة حين تكون معلَنة ولا تزال فارغة. الأوتار بين الحلقتين هي الأنفاق — كل منها علاقة معلَنة يفحصها تدقيق الترابط، ولا خطّ يُرسم ليبدو موصولًا. أشر إلى قطاع فتسمّي أقسامه نفسها وتضيء أنفاقه.',
+  'RECORDS': 'السجلات', 'FINANCE OPS': 'العمليات المالية', 'PROCUREMENT & ASSETS': 'المشتريات والأصول', 'ENTERPRISE': 'المؤسسة',
+  'Everything': 'الكل', 'Across the seam': 'عبر الخطّ الفاصل', 'Failing': 'متعثّر', 'Moved today': 'تحرّك اليوم', 'find a department': 'ابحث عن قسم',
+  'The seam, in detail': 'الخطّ الفاصل بالتفصيل', 'the whole company': 'الشركة كاملة',
+  'a department for everything it touches': 'قسمًا لترى كل ما يلمسه', 'to trace a flow hop by hop': 'لتتبّع مسار العمل خطوة خطوة', 'No tunnel reaches': 'لا يصل نفق إلى',
+  'sections': 'أقسام', 'relationships': 'علاقة', 'records': 'سجلًا', 'empty': 'فارغ',
   'The whole company as one drawing: a dense core of the orchestrator and the chain, and a tree for every district growing out of it. The AI core grows to the left of the seam and the enterprise core to the right; every dotted arc through the core is a declared tunnel between them. Circles are AI-core departments, squares enterprise ones. Point at a district to bring up its colour and its tunnels; open it to go inside.':
     'الشركة كلها في رسم واحد: نواة كثيفة للمنسّق والسلسلة، وشجرة لكل حيّ تنبت منها. النواة الذكية تنمو يسار الخطّ الفاصل ونواة المؤسسة يمينه؛ وكل قوس منقّط يمرّ عبر النواة هو نفق معلَن بينهما. الدوائر أقسام النواة الذكية والمربّعات أقسام المؤسسة. أشر إلى حيّ لتظهر ألوانه وأنفاقه؛ وافتحه لتدخل.',
 

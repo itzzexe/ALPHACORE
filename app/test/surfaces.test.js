@@ -209,7 +209,9 @@ test('a department on the whole-company map can be clicked, not only looked at',
   assert.ok(far.length > 500, 'the whole-company view moved — this test is looking at nothing');
   assert.ok(far.includes('data-node='), 'the whole-company view draws departments nothing can click');
   // Both galaxies, not just the one that happened to be checked.
-  assert.ok(far.split('data-node=').length - 1 >= 2,
+  // The wheel draws both rings through one routine, so the anchor appears
+  // once in the source; what must hold is that both cores go through it.
+  assert.ok(far.includes("'ai'") && far.includes("'enterprise'"),
     'only one of the two cores draws clickable departments');
   // A three-pixel dot is not a target a person can hit, so each leaf carries an
   // invisible disc. `transparent`, never `none`: a fill of none takes no

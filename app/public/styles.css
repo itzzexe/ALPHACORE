@@ -2569,26 +2569,6 @@ html[lang="ar"] .login-form .fl { letter-spacing: var(--track-tight); font-size:
    door, which district, which core, and what it is joined to — read from the
    same catalogue and edge list the map draws, so it cannot disagree.
    ========================================================================== */
-.at-tunnel {
-  fill: none; stroke: var(--accent); stroke-width: 0.8; opacity: 0.22;
-  stroke-dasharray: 3 5; stroke-linecap: round;
-  transition: opacity var(--t-mid) var(--ease), stroke-width var(--t-mid) var(--ease);
-}
-.atlas-svg.focused .at-tunnel { opacity: 0.06; }
-.atlas-svg.focused .at-tunnel.lit { opacity: 0.85; stroke-width: 1.3; stroke-dasharray: none; }
-.at-seam { stroke: var(--ink-faint); stroke-width: 0.8; stroke-dasharray: 1.5 7; stroke-linecap: round; opacity: 0.7; }
-.at-core-tag {
-  font-family: var(--font-display); font-size: 11px; letter-spacing: var(--track-wide);
-  text-transform: uppercase; fill: var(--ink-faint);
-}
-html[lang="ar"] .at-core-tag { letter-spacing: 0; font-size: 14px; }
-/* The enterprise side keeps a little of its own colour at rest, so the seam
-   is visible even before anything is pointed at. */
-.at-district.enterprise .at-dname { fill: color-mix(in srgb, currentColor 55%, var(--ink-mute)); }
-.at-district.enterprise .at-leaf { fill: color-mix(in srgb, currentColor 70%, var(--ink)); }
-.atlas-svg.focused .at-district.enterprise .at-leaf { fill: var(--ink-ghost); }
-.atlas-svg .at-district.enterprise.lit .at-leaf { fill: currentColor; }
-
 /* ---------- the band above every department page ---------- */
 .dept-band {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3);
@@ -2637,3 +2617,101 @@ th { color: var(--ink-mute); }
   .dept-band .band-hint { display: none; }
   .dept-band { margin: 0; }
 }
+
+
+/* ==========================================================================
+   THE WHEEL — the atlas redrawn as two rings around one core.
+
+   The inner ring is the AI core, one sector per district; the outer ring is
+   the enterprise core, one sector per division; every department a cell on
+   its ring and every declared tunnel a chord between them. Sectors carry
+   their colour as a wash and take it fully when pointed at; cells name
+   themselves only inside the sector under the pointer, so a hundred and
+   seventy labels never fight for the page at once.
+   ========================================================================== */
+.atlas-svg.wheel { max-height: calc(100vh - 176px); }
+.at-ring-guide { fill: none; stroke: var(--seam); stroke-width: 0.6; stroke-dasharray: 2 6; }
+.at-ring-caption {
+  font-family: var(--font-display); font-size: 10.5px; letter-spacing: var(--track-wide);
+  text-transform: uppercase; fill: var(--ink-faint);
+}
+html[lang="ar"] .at-ring-caption { letter-spacing: 0; font-size: 13px; }
+
+/* sectors: a wash of the district colour, a firmer rim, a hairline edge */
+.at-sector {
+  fill: currentColor; fill-opacity: 0.07; stroke: currentColor; stroke-opacity: 0.28; stroke-width: 0.7;
+  transition: fill-opacity var(--t-mid) var(--ease), stroke-opacity var(--t-mid) var(--ease);
+}
+.at-sector-edge { fill: currentColor; fill-opacity: 0.55; stroke: none; pointer-events: none; transition: fill-opacity var(--t-mid) var(--ease); }
+.at-district.enterprise .at-sector { fill-opacity: 0.05; }
+.at-district path.at-hit { fill: transparent; cursor: pointer; }
+
+/* cells: filled when the department holds records, hollow when declared and empty */
+.wheel .at-leaf {
+  fill: var(--ink); stroke: var(--paper); stroke-width: 1.2;
+  transition: fill var(--t-fast) var(--ease), r var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+.wheel .at-leaf.hollow { fill: var(--paper); stroke: var(--ink-mute); stroke-width: 1; }
+.wheel .at-node:hover .at-leaf { fill: var(--accent); stroke: var(--paper); }
+.wheel .at-node:hover .at-leaf.hollow { fill: var(--paper); stroke: var(--accent); }
+.at-cell {
+  font-family: var(--font-ui); font-size: 8.5px; letter-spacing: 0.02em; fill: var(--ink-mute);
+  pointer-events: none; opacity: 0; transition: opacity var(--t-fast) var(--ease);
+}
+html[lang="ar"] .at-cell { font-size: 10px; }
+.at-district.lit .at-cell, .wheel .at-node:hover .at-cell { opacity: 1; }
+.wheel .at-node:hover .at-cell { fill: var(--ink); font-weight: 600; }
+
+/* the names: horizontal, outside their ring, in the district's colour when lit */
+.wheel .at-dname { font-size: 12.5px; letter-spacing: var(--track-mid); cursor: pointer; }
+.wheel .at-dsub { text-transform: none; letter-spacing: 0.04em; }
+html[lang="ar"] .wheel .at-dname { font-size: 15px; letter-spacing: 0; }
+.wheel .at-district.enterprise .at-dname { fill: color-mix(in srgb, currentColor 60%, var(--ink-mute)); }
+
+/* pointing at a district: its sector fills, its cells take the colour, the rest recedes */
+.atlas-svg.wheel.focused .at-sector { fill-opacity: 0.025; stroke-opacity: 0.12; }
+.atlas-svg.wheel.focused .at-sector-edge { fill-opacity: 0.18; }
+.atlas-svg.wheel.focused .at-leaf { fill: var(--ink-ghost); stroke: var(--paper); }
+.atlas-svg.wheel.focused .at-leaf.hollow { fill: var(--paper); stroke: var(--ink-ghost); }
+.atlas-svg.wheel.focused .at-dname { fill: var(--ink-ghost); }
+.atlas-svg.wheel.focused .at-dsub { fill: var(--ink-ghost); }
+.atlas-svg.wheel .at-district.lit .at-sector { fill-opacity: 0.2; stroke-opacity: 0.9; }
+.atlas-svg.wheel .at-district.lit .at-sector-edge { fill-opacity: 1; }
+.atlas-svg.wheel .at-district.lit .at-leaf { fill: currentColor; }
+.atlas-svg.wheel .at-district.lit .at-leaf.hollow { fill: var(--paper); stroke: currentColor; }
+.atlas-svg.wheel .at-district.lit .at-dname { fill: currentColor; }
+.atlas-svg.wheel .at-district.lit .at-dsub { fill: var(--ink-mute); }
+.atlas-svg.wheel .at-district.lit .at-cell { fill: var(--ink); }
+
+/* tunnels: hairline chords at rest; the district's own come up with it */
+.wheel .at-tunnel {
+  fill: none; stroke: var(--accent); stroke-width: 0.9; opacity: 0.26; stroke-dasharray: none; stroke-linecap: round;
+  transition: opacity var(--t-mid) var(--ease), stroke-width var(--t-mid) var(--ease);
+}
+.wheel .at-tunnel:hover { opacity: 0.9; stroke-width: 1.6; }
+.atlas-svg.wheel.focused .at-tunnel { opacity: 0.05; }
+.atlas-svg.wheel.focused .at-tunnel.lit { opacity: 0.95; stroke-width: 1.7; }
+.wheel .at-tunnel-lit { opacity: 0.85; stroke-width: 1.4; stroke-dasharray: 5 4; animation: at-tunnel-flow 1.4s linear infinite; }
+
+/* the lens on the wheel: dimmed cells fade, lit ones stand */
+.wheel .at-leaf.at-dim { opacity: 0.12; }
+.wheel .at-district-dim .at-sector { fill-opacity: 0.02; stroke-opacity: 0.1; }
+.wheel .at-district-dim .at-dname, .wheel .at-district-dim .at-dsub { fill: var(--ink-ghost); }
+.wheel .at-lens-badge { font-size: 9px; }
+
+/* ---- the near wheel: one district, its chords, and the doors out ---- */
+.wheel.near .at-ring-guide { stroke: currentColor; stroke-opacity: 0.35; stroke-dasharray: 3 7; }
+.wheel.near .cx-edge { fill: none; stroke: currentColor; stroke-width: 1.1; opacity: 0.45; transition: opacity var(--t-fast) var(--ease), stroke-width var(--t-fast) var(--ease); }
+.wheel.near .cx-edge.dormant { stroke: var(--ink-faint); stroke-dasharray: 2 5; opacity: 0.35; }
+.wheel.near .cx-edge.lit, .wheel.near .cx-edge.trace { opacity: 1; stroke-width: 2; stroke: var(--accent); }
+.wheel.near .cx-edge.dimmed { opacity: 0.06; }
+.wheel.near .at-nlabel.on { opacity: 1; font-size: 10.5px; fill: var(--ink); }
+.wheel.near .at-nlabel-n { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; }
+.wheel.near .at-node.dimmed { opacity: 0.18; }
+.wheel.near .at-node.lit .at-chip { fill: var(--accent); }
+.at-door { cursor: pointer; }
+.at-door .at-hit { fill: var(--paper); stroke: currentColor; stroke-opacity: 0.55; stroke-width: 1; transition: stroke-opacity var(--t-fast) var(--ease), fill var(--t-fast) var(--ease); }
+.at-door:hover .at-hit { stroke-opacity: 1; fill: color-mix(in srgb, currentColor 12%, var(--paper)); }
+.at-door .at-dname { font-size: 9.5px; letter-spacing: var(--track-mid); fill: currentColor; pointer-events: none; }
+.at-door-n { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0; }
+html[lang="ar"] .at-door .at-dname { letter-spacing: 0; font-size: 11.5px; }
