@@ -1,7 +1,7 @@
 // REST API — thin JSON layer over the modules. Human actions (approvals,
 // evidence verification, decisions, freezes) require an `actor` field naming
 // the human; the audit log records it. No agent path can reach these handlers.
-import { q, one } from './db.js';
+import { q, one, atomically } from './db.js';
 import { verifyChain, audit } from './audit.js';
 import { providersConfig, budgetsConfig } from './env.js';
 import { isProviderAvailable as providerAvailable, isMockMode as mockMode, settingsOverview, setSetting } from './settings.js';
@@ -22,6 +22,17 @@ import {
   createOrgUnit, createPosition, createGrade, identityOverview,
 } from './core2/identity.js';
 import { bridgeOverview, seedBridge, verbCoverage } from './core2/bridge.js';
+import { storeFile, readFile, deleteFile, filesFor, filesOverview } from './core2/files.js';
+import {
+  createShift, assignShift, shiftOn, judgeDay, claimOvertime, decideOvertime, shiftsOverview,
+} from './core2/shifts.js';
+import { setRule, rules, computeDeductions, endOfService, payRulesOverview } from './core2/payrules.js';
+import { issue, takeBack, heldBy, clearedToLeave, custodyOverview } from './core2/custody.js';
+import { start as startList, tick as tickStep, close as closeList, listDetail, joiningOverview } from './core2/joining.js';
+import {
+  seedClasses, setClass, placeHold, releaseHold, liveHolds, dueForDisposition,
+  recordDisposal, recordsOverview,
+} from './core2/records.js';
 import {
   createDocument, addVersion, getDocument, listDocuments, archiveDocument,
   searchDocuments, documentsOverview, READ_PERMISSION,
@@ -226,7 +237,7 @@ import {
 } from './data.js';
 import {
   connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats,
-  SURFACES, surfaceCatalog, surfaceAudit, core2Map,
+  SURFACES, surfaceCatalog, surfaceAudit, core2Map, CORE2_DIVISIONS, CORES, mapState,
 } from './links.js';
 import { ask, askRules } from './ask.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
@@ -697,16 +708,13 @@ const routes = [
   // --- HR, the rest: time rules, compensation, movements, end of service ---
   ['GET', /^\/api\/core2\/hrops$/, () => hrplus.hrplusOverview()],
   ['POST', /^\/api\/core2\/hrops\/holiday$/, (_p, body, _u, user) => hrplus.addHoliday({ day: need(body, 'day'), name: body.name, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/hrops\/shift$/, (_p, body, _u, user) => hrplus.createShift({ name: need(body, 'name'), starts: need(body, 'starts'), ends: need(body, 'ends'), days: body.days, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/hrops\/shift\/assign$/, (_p, body, _u, user) => hrplus.assignShift({ employeeId: need(body, 'employeeId'), shiftId: need(body, 'shiftId'), starts: body.starts, ends: body.ends, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/hrops\/overtime$/, (_p, body, _u, user) => hrplus.requestOvertime({ employeeId: need(body, 'employeeId'), day: need(body, 'day'), minutes: need(body, 'minutes'), rate: body.rate, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/hrops\/overtime\/(\d+)\/decide$/, ([id], body, _u, user) => hrplus.decideOvertime(Number(id), { approve: Boolean(body.approve), actor: `human:${user.username}` })],
+  // Shifts and overtime are shifts.js's routes (/api/core2/shifts…); these
+  // are the corrections and the calendar that sit beside them.
   ['POST', /^\/api\/core2\/hrops\/correction$/, (_p, body, _u, user) => hrplus.requestCorrection({ employeeId: need(body, 'employeeId'), day: need(body, 'day'), inAt: body.inAt, outAt: body.outAt, actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/hrops\/correction\/(\d+)\/decide$/, ([id], body, _u, user) => hrplus.decideCorrection(Number(id), { approve: Boolean(body.approve), actor: `human:${user.username}` })],
   ['GET', /^\/api\/core2\/hrops\/exceptions$/, (_p, _b, url) => hrplus.attendanceExceptions({ period: url.searchParams.get('period') || undefined })],
   ['GET', /^\/api\/core2\/comp$/, () => ({
-    plans: hrplus.listBenefitPlans(), taxBrackets: hrplus.taxBrackets('IQ'), grievances: hrplus.listGrievances(),
-    eosDaysPerYear: hrplus.hrplusOverview().eosDaysPerYear,
+    plans: hrplus.listBenefitPlans(), grievances: hrplus.listGrievances(),
   })],
   ['POST', /^\/api\/core2\/comp\/allowance$/, (_p, body, _u, user) => hrplus.addAllowance({ employeeId: need(body, 'employeeId'), kind: need(body, 'kind'), amount: need(body, 'amount'), currency: body.currency, starts: body.starts, ends: body.ends, actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/comp\/plan$/, (_p, body, _u, user) => hrplus.createBenefitPlan({ name: need(body, 'name'), kind: body.kind, employerShare: body.employerShare, employeeShare: body.employeeShare, provider: body.provider, actor: `human:${user.username}` })],
@@ -715,15 +723,11 @@ const routes = [
   ['POST', /^\/api\/core2\/comp\/salary$/, (_p, body, _u, user) => hrplus.changeSalary({ employeeId: need(body, 'employeeId'), newSalary: need(body, 'newSalary'), effective: body.effective, actor: `human:${user.username}` })],
   ['GET', /^\/api\/core2\/comp\/salary\/(\d+)$/, ([id]) => ({ history: hrplus.salaryHistory(Number(id)) })],
   ['POST', /^\/api\/core2\/comp\/movement$/, (_p, body, _u, user) => hrplus.recordMovement({ employeeId: need(body, 'employeeId'), kind: need(body, 'kind'), toUnit: body.toUnit, toPosition: body.toPosition, toGrade: body.toGrade, effective: body.effective, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/comp\/tax$/, (_p, body, _u, user) => hrplus.setTaxBrackets({ jurisdiction: need(body, 'jurisdiction'), brackets: need(body, 'brackets'), actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/comp\/eos\/(\d+)$/, ([id], _b, _u, user) => hrplus.computeEos({ employeeId: Number(id), actor: `human:${user.username}` })],
   ['GET', /^\/api\/core2\/comp\/eos\/(\d+)$/, ([id]) => hrplus.eosFor(Number(id))],
   ['POST', /^\/api\/core2\/comp\/eos\/(\d+)\/pay$/, ([id], _b, _u, user) => hrplus.payEos(Number(id), { actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/comp\/grievance$/, (_p, body, _u, user) => hrplus.openGrievance({ employeeId: need(body, 'employeeId'), title: need(body, 'title'), body: need(body, 'body'), actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/comp\/grievance\/(\d+)\/decide$/, ([id], body, _u, user) => hrplus.decideGrievance(Number(id), { state: need(body, 'state'), actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/comp\/asset$/, (_p, body, _u, user) => hrplus.assignAsset({ employeeId: need(body, 'employeeId'), assetId: need(body, 'assetId'), actor: `human:${user.username}` })],
-  ['POST', /^\/api\/core2\/comp\/asset\/(\d+)\/return$/, ([id], _b, _u, user) => hrplus.returnAsset(Number(id), { actor: `human:${user.username}` })],
-  ['GET', /^\/api\/core2\/employees\/(\d+)\/assets$/, ([id]) => ({ assets: hrplus.assetsFor(Number(id)) })],
   ['GET', /^\/api\/core2\/employees\/(\d+)\/movements$/, ([id]) => ({ movements: hrplus.movementsFor(Number(id)) })],
   ['POST', /^\/api\/core2\/employees\/(\d+)\/letter$/, ([id], _b, _u, user) => hrplus.employmentLetter({ employeeId: Number(id), actor: `human:${user.username}` })],
 
@@ -816,6 +820,109 @@ const routes = [
   // The page about you. No permission beyond being signed in: it shows only
   // what is yours, and a login with no person behind it is told so.
   ['GET', /^\/api\/core2\/me$/, (_p, _b, _u, user) => adm.myWorkspace(user)],
+  // --- Files: sealed bytes, not a path in a sealed column ---
+  ['GET', /^\/api\/core2\/files$/, () => filesOverview()],
+  ['GET', /^\/api\/core2\/files\/for\/([a-z]+)\/(\d+)$/, ([kind, id]) => ({ files: filesFor(kind, Number(id)) })],
+  ['POST', /^\/api\/core2\/files$/, (_p, body, _u, user) => storeFile({
+    bytes: need(body, 'bytes'), filename: need(body, 'filename'), mime: body.mime || null,
+    subjectKind: body.subjectKind || 'company', subjectId: body.subjectId || 'company',
+    attachType: body.attachType || null, attachId: body.attachId ? Number(body.attachId) : null,
+    note: body.note || null, actor: `human:${user.username}`,
+  })],
+  // Returned as base64 rather than a stream: the bytes are decrypted in this
+  // process and a download URL that bypasses the permission check is exactly
+  // the hole this module exists to avoid.
+  ['GET', /^\/api\/core2\/files\/(\d+)$/, ([id], _b, _u, user) => {
+    const f = readFile(Number(id), { actor: `human:${user.username}` });
+    return { ...f, content: f.content ? f.content.toString('base64') : null };
+  }],
+  ['POST', /^\/api\/core2\/files\/(\d+)\/delete$/, ([id], body, _u, user) => deleteFile(Number(id), {
+    actor: `human:${user.username}`, why: body?.why || '',
+  })],
+
+  // --- Shifts, and the extra minutes that are not overtime until signed ---
+  ['GET', /^\/api\/core2\/shifts$/, (_p, _b, url) => shiftsOverview({ period: url.searchParams.get('period') })],
+  ['POST', /^\/api\/core2\/shifts$/, (_p, body, _u, user) => createShift({
+    name: need(body, 'name'), starts: need(body, 'starts'), ends: need(body, 'ends'),
+    days: body.days || undefined, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/shifts\/assign$/, (_p, body, _u, user) => assignShift({
+    employeeId: Number(need(body, 'employeeId')), shiftId: Number(need(body, 'shiftId')),
+    from: need(body, 'from'), to: body.to || null, actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/shifts\/day\/(\d+)\/([\d-]+)$/, ([id, day]) => judgeDay(Number(id), day)],
+  ['GET', /^\/api\/core2\/shifts\/on\/(\d+)\/([\d-]+)$/, ([id, day]) => shiftOn(Number(id), day) || {}],
+  ['POST', /^\/api\/core2\/overtime$/, (_p, body, _u, user) => claimOvertime({
+    employeeId: Number(need(body, 'employeeId')), day: need(body, 'day'),
+    minutes: need(body, 'minutes'), reason: need(body, 'reason'), actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/overtime\/(\d+)\/decide$/, ([id], body, _u, user) => decideOvertime(Number(id), {
+    approve: body?.approve === true, note: body?.note || '', actor: `human:${user.username}`,
+  })],
+
+  // --- What a company deducts, and what it owes when somebody leaves ---
+  ['GET', /^\/api\/core2\/payrules$/, () => payRulesOverview()],
+  ['POST', /^\/api\/core2\/payrules$/, (_p, body, _u, user) => setRule({
+    code: need(body, 'code'), label: need(body, 'label'), kind: body.kind || 'tax',
+    base: body.base || 'gross', paidBy: body.paidBy || 'employee',
+    percent: body.percent ?? null, bands: body.bands || null,
+    capAmount: body.capAmount ?? null, floorAmount: body.floorAmount ?? null,
+    basis: need(body, 'basis'), active: body.active !== false, actor: `human:${user.username}`,
+  })],
+  ['GET', /^\/api\/core2\/payrules\/preview$/, (_p, _b, url) => computeDeductions({
+    gross: Number(url.searchParams.get('gross') || 0),
+    basic: Number(url.searchParams.get('basic') || 0),
+    deductions: Number(url.searchParams.get('deductions') || 0),
+  })],
+  ['GET', /^\/api\/core2\/endofservice\/(\d+)$/, ([id], _b, url) => endOfService({
+    employeeId: Number(id), lastDay: url.searchParams.get('lastDay'), reason: url.searchParams.get('reason') || 'resigned',
+  })],
+
+  // --- Who is holding what ---
+  ['GET', /^\/api\/core2\/custody$/, () => custodyOverview()],
+  ['GET', /^\/api\/core2\/custody\/(\d+)$/, ([id]) => ({ held: heldBy(Number(id)), cleared: clearedToLeave(Number(id)) })],
+  ['POST', /^\/api\/core2\/custody$/, (_p, body, _u, user) => issue({
+    employeeId: Number(need(body, 'employeeId')), assetId: body.assetId ? Number(body.assetId) : null,
+    description: body.description || null, serial: body.serial || null,
+    condition: body.condition || 'good', note: body.note || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/custody\/(\d+)\/return$/, ([id], body, _u, user) => takeBack(Number(id), {
+    condition: body?.condition || 'good', note: body?.note || null, actor: `human:${user.username}`,
+  })],
+
+  // --- A first day and a last day, as a checklist ---
+  ['GET', /^\/api\/core2\/joining$/, () => joiningOverview()],
+  ['GET', /^\/api\/core2\/joining\/(\d+)$/, ([id]) => listDetail(Number(id))],
+  ['POST', /^\/api\/core2\/joining$/, (_p, body, _u, user) => startList({
+    employeeId: Number(need(body, 'employeeId')), kind: need(body, 'kind'),
+    on: body.on || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/joining\/step\/(\d+)$/, ([id], body, _u, user) => tickStep(Number(id), {
+    note: body?.note || null, skip: body?.skip === true, why: body?.why || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/joining\/(\d+)\/close$/, ([id], _b, _u, user) => closeList(Number(id), { actor: `human:${user.username}` })],
+
+  // --- Records: how long a thing is kept, and what freezes it ---
+  ['GET', /^\/api\/core2\/records$/, () => recordsOverview()],
+  ['GET', /^\/api\/core2\/records\/schedule$/, () => ({ classes: dueForDisposition() })],
+  ['GET', /^\/api\/core2\/records\/holds$/, () => ({ holds: liveHolds() })],
+  ['POST', /^\/api\/core2\/records\/seed$/, (_p, _b, _u, user) => ({ seeded: seedClasses({ actor: `human:${user.username}` }) })],
+  ['POST', /^\/api\/core2\/records\/class$/, (_p, body, _u, user) => setClass({
+    code: need(body, 'code'), label: need(body, 'label'), keepMonths: need(body, 'keepMonths'),
+    disposition: body.disposition || 'destroy', basis: need(body, 'basis'),
+    appliesTo: body.appliesTo || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/records\/hold$/, (_p, body, _u, user) => placeHold({
+    scopeKind: need(body, 'scopeKind'), scopeId: body.scopeId ?? null,
+    reason: need(body, 'reason'), matter: body.matter || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/core2\/records\/hold\/(\d+)\/release$/, ([id], body, _u, user) => releaseHold({
+    id: Number(id), actor: `human:${user.username}`, note: body?.note || '',
+  })],
+  ['POST', /^\/api\/core2\/records\/disposal$/, (_p, body, _u, user) => recordDisposal({
+    classCode: need(body, 'classCode'), what: need(body, 'what'), ref: body.ref || null,
+    action: body.action || 'destroyed', count: body.count || 1, actor: `human:${user.username}`,
+  })],
 
   // --- time: attendance and leave ---
   ['GET', /^\/api\/core2\/time$/, () => timeOverview()],
@@ -1302,26 +1409,28 @@ const routes = [
   // --- Connections: what links to what, anywhere in the company ---
   ['GET', /^\/api\/links\/([\w-]+)\/([\w.-]+)$/, ([type, id]) => connectionsFor(type, /^\d+$/.test(id) ? Number(id) : id) || (() => { throw new HttpError(404, 'no such entity type'); })()],
   ['GET', /^\/api\/graph$/, () => relationshipMatrix()],
-  ['GET', /^\/api\/map$/, () => {
-    const sections = sectionCatalog();
-    const edges = relationshipMatrix();
-    return {
-      divisions: DIVISIONS,
-      sections,
-      // The eight doors, and which departments sit behind each. The console's
-      // navigation is drawn from this rather than from a list in the markup, so
-      // a department that nobody filed cannot quietly become unreachable.
-      surfaces: surfaceCatalog(),
-      surfaceAudit: surfaceAudit(),
-      edges,
-      audit: connectivityAudit(),
-      flow: flowStats(),
-      harmony: harmonyScore(),
-      // The enterprise core, projected from the same catalogue and the same
-      // matrix, so the one map can draw both galaxies and the seam between.
-      enterprise: core2Map({ sections, edges }),
-    };
-  }],
+  // What the map should be lit up about right now, rather than what exists.
+  ['GET', /^\/api\/map\/state$/, () => mapState()],
+  ['GET', /^\/api\/atomicity$/, () => atomicity()],
+  ['GET', /^\/api\/map$/, () => ({
+    divisions: DIVISIONS,
+    // The enterprise core's own districts, and the tunnels across the seam.
+    // Sent with the same payload so the map is one drawing of one catalogue:
+    // two endpoints would eventually disagree, and a map that disagrees with
+    // itself is worse than no map.
+    core2Divisions: CORE2_DIVISIONS,
+    core2: core2Map(),
+    sections: sectionCatalog(),
+    // The eight doors, and which departments sit behind each. The console's
+    // navigation is drawn from this rather than from a list in the markup, so
+    // a department that nobody filed cannot quietly become unreachable.
+    surfaces: surfaceCatalog(),
+    surfaceAudit: surfaceAudit(),
+    edges: relationshipMatrix(),
+    audit: connectivityAudit(),
+    flow: flowStats(),
+    harmony: harmonyScore(),
+  })],
   ['GET', /^\/api\/surfaces$/, () => ({ surfaces: surfaceCatalog(), audit: surfaceAudit(), declared: SURFACES.length })],
 
   // --- Ask AlphaCore: one input in front of a hundred and forty departments ---
@@ -2135,6 +2244,21 @@ function permFor(m, path) {
   if (path === '/api/core2/admin/policy-ack' && m === 'POST') return null;   // your own acknowledgement; scoped in the handler
   if (path.startsWith('/api/core2/admin')) return m === 'GET' ? 'admin.view' : 'admin.manage';
   if (path.startsWith('/api/core2/docs')) return m === 'GET' ? 'docs.view' : 'docs.manage';
+  // Reading a file, putting one there, and destroying one are three different
+  // amounts of authority over somebody else's data.
+  if (/^\/api\/core2\/files\/\d+\/delete$/.test(path)) return 'files.delete';
+  if (path.startsWith('/api/core2/files')) return m === 'GET' ? 'files.view' : 'files.upload';
+  // A legal hold is the one act here that overrides a person's right to
+  // erasure, so it is not the same permission as editing the schedule.
+  // Approving overtime is money, so it is not the same permission as editing a
+  // roster. Same reasoning as the legal hold sitting apart from the schedule.
+  if (/^\/api\/core2\/overtime\/\d+\/decide$/.test(path)) return 'overtime.approve';
+  if (path.startsWith('/api/core2/shifts') || path.startsWith('/api/core2/overtime')) return m === 'GET' ? 'shifts.view' : 'shifts.manage';
+  if (path.startsWith('/api/core2/payrules') || path.startsWith('/api/core2/endofservice')) return m === 'GET' ? 'payrules.view' : 'payrules.manage';
+  if (path.startsWith('/api/core2/custody')) return m === 'GET' ? 'custody.view' : 'custody.manage';
+  if (path.startsWith('/api/core2/joining')) return m === 'GET' ? 'joining.view' : 'joining.manage';
+  if (/^\/api\/core2\/records\/hold/.test(path)) return 'records.hold';
+  if (path.startsWith('/api/core2/records')) return m === 'GET' ? 'records.view' : 'records.manage';
   if (/^\/api\/core2\/(finops|expenses|costcenter|loans|payroll|procurement)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
   if (path.startsWith('/api/core2/contracts')) return 'legal.view';
   if (path.startsWith('/api/core2')) return m === 'GET' ? 'people.view' : 'people.manage';
@@ -2255,6 +2379,37 @@ function permFor(m, path) {
   return 'dashboard.view';
 }
 
+/**
+ * Handlers that cannot be held inside a transaction.
+ *
+ * Decided from the function itself rather than from a list somebody maintains:
+ * an async handler awaits something — a model, a network call — and a
+ * transaction spanning that await would let another request interleave between
+ * the mutation and the commit. Calling that a transaction would be a comment.
+ *
+ * Computed once at load, because doing it per request would be a constructor
+ * lookup on every call for an answer that cannot change.
+ */
+const ASYNC_HANDLERS = new Set(
+  routes.filter(([, , h]) => h?.constructor?.name === 'AsyncFunction').map(([, , h]) => h),
+);
+
+/** How much of the write surface is atomic — a number rather than a claim. */
+export function atomicity() {
+  const writes = routes.filter(([m]) => m !== 'GET');
+  const notAtomic = writes.filter(([, , h]) => ASYNC_HANDLERS.has(h));
+  return {
+    writeRoutes: writes.length,
+    atomic: writes.length - notAtomic.length,
+    notAtomic: notAtomic.length,
+    // Named, so "most of it is atomic" is checkable rather than reassuring.
+    reaching: notAtomic.map(([, p]) => String(p).slice(0, 70)).sort(),
+    says: 'A write and its chain entry are one act where the handler is synchronous. Where it awaits a model or '
+      + 'a network call, a transaction cannot span the await without letting another request interleave — those '
+      + 'are counted here rather than treated as if they were atomic.',
+  };
+}
+
 export async function handleApi(req, res, url, body, user) {
   const perm = permFor(req.method, url.pathname);
   if (perm && !hasPerm(user, perm)) {
@@ -2272,7 +2427,23 @@ export async function handleApi(req, res, url, body, user) {
     const m = url.pathname.match(pattern);
     if (!m) continue;
     try {
-      const result = await handler(m.slice(1), body, url, user);
+      // A write and its chain entry have to be one act or the other.
+      //
+      // The constitution says every consequential act is written to the chain
+      // *before it happens*. That was not quite true: a handler mutated a table
+      // and then wrote the record, so a failed chain write left the act done and
+      // unrecorded — the exact outcome the design exists to prevent. Nothing was
+      // swallowing the error; there was simply nothing holding the two together.
+      //
+      // A transaction cannot be held across an `await` — another request would
+      // interleave between the mutation and the commit, and calling that a
+      // transaction would be a comment rather than a guarantee. So the ones that
+      // can be atomic are, and the ones that cannot are counted rather than
+      // quietly treated as if they were. `GET /api/atomicity` reports both.
+      const atomic = req.method !== 'GET' && !ASYNC_HANDLERS.has(handler);
+      const result = atomic
+        ? atomically(() => handler(m.slice(1), body, url, user))
+        : await handler(m.slice(1), body, url, user);
       if (result?.__raw) {
         res.writeHead(200, {
           'content-type': result.__raw.contentType,
@@ -2284,7 +2455,14 @@ export async function handleApi(req, res, url, body, user) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
-      const status = err.status || (err.name === 'BudgetExceeded' ? 402 : 500);
+      // A constraint the caller tripped is the caller's error, not a fault in
+      // the server. Left as a 500 it pages somebody at three in the morning
+      // because two cost centres were given the same code — and it buries the
+      // real 500s in noise. SQLite reports these with a distinguishable code,
+      // so they are translated once here rather than guarded at every route.
+      const constraint = err.code === 'ERR_SQLITE_ERROR' && /constraint failed/i.test(err.message || '');
+      const status = err.status
+        || (err.name === 'BudgetExceeded' ? 402 : (constraint ? 400 : 500));
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }

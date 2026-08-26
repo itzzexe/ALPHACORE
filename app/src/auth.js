@@ -43,6 +43,12 @@ export const PERMS = [
   'ops.view', 'ops.manage',
   // Administration: correspondence, committees, the regulatory calendar.
   'admin.view', 'admin.manage',
+  'files.view', 'files.upload', 'files.delete',
+  'shifts.view', 'shifts.manage', 'overtime.approve',
+  'payrules.view', 'payrules.manage',
+  'custody.view', 'custody.manage',
+  'joining.view', 'joining.manage',
+  'records.view', 'records.manage', 'records.hold',
   'legal.view', 'legal.manage',
   'vendors.view', 'vendors.manage',
   'knowledge.view', 'knowledge.manage',

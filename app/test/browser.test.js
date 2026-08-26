@@ -193,3 +193,48 @@ test('the model is told the rules that matter, in the system prompt as well as i
   assert.match(sys, /ignore them/i, 'page text that gives it instructions');
   assert.match(sys, /"stuck" is a respectable answer/i, 'so it does not fabricate a done');
 });
+
+test('the browser is a connector, so the one gate can see it', async () => {
+  // The first version kept its own gate and wrote a design note explaining why.
+  // That left "nothing reaches outside except through one gate" false about the
+  // most dangerous outward path in the building, and left the browser with no
+  // allowlist and no quota at all. Registering the connector was the missing
+  // half, not a reason to have a second gate.
+  const { seedBrowserConnector, CONNECTOR } = await import('../src/browser.js');
+  const { attempt } = await import('../src/egress.js');
+  seedBrowserConnector({});
+
+  const conn = one('SELECT * FROM connectors WHERE id = ?', CONNECTOR);
+  assert.ok(conn, 'it is on the connector list like Gmail or GitHub');
+  assert.deepEqual(JSON.parse(conn.scopes), ['web.read', 'web.commit']);
+  assert.ok(conn.quota_day > 0, 'and it has a quota, which it never had before');
+
+  let ran = 0;
+  const read = await attempt({
+    connector: CONNECTOR, capability: 'web.read', actor: HUMAN, target: 'example.com',
+    reason: 'following a link', call: async () => { ran += 1; return { did: 'clicked' }; },
+  });
+  assert.equal(read.verdict, 'allowed');
+  assert.equal(ran, 1, 'a read runs');
+
+  const commit = await attempt({
+    connector: CONNECTOR, capability: 'web.commit', actor: HUMAN, target: 'example.com',
+    reason: 'Submit order', call: async () => { ran += 1; return { did: 'submitted' }; },
+  });
+  assert.equal(commit.verdict, 'gated', 'and a commit does not');
+  assert.equal(ran, 1, 'the action was never performed');
+
+  // Categorically, not by value: a zero-value commit is held exactly as a
+  // large one is, so it is demonstrably not the ceiling doing the work.
+  const zero = await attempt({
+    connector: CONNECTOR, capability: 'web.commit', actor: HUMAN, target: 'example.com',
+    valueUsd: 0, reason: 'a free signup', call: async () => { ran += 1; return {}; },
+  });
+  assert.equal(zero.verdict, 'gated');
+  assert.equal(ran, 1);
+
+  // And both are on the one egress log, beside every other outward call.
+  const rows = q("SELECT capability, verdict FROM egress_log WHERE connector = ?", CONNECTOR);
+  assert.ok(rows.some((r) => r.capability === 'web.read' && r.verdict === 'allowed'));
+  assert.ok(rows.some((r) => r.capability === 'web.commit' && r.verdict === 'gated'));
+});

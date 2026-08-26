@@ -82,9 +82,15 @@ async function measure() {
   const api = fs.readFileSync(path.join(ROOT, 'src', 'api.js'), 'utf8');
   const routes = [...api.matchAll(/\['(GET|POST|PUT|DELETE|PATCH)',\s*(\/\^[^,]+?\$\/)\s*,/g)].length;
 
-  // Counting the calls rather than running the suite: fourteen files, and the
-  // total matches `npm test` exactly. A checker that has to boot the world to
-  // check a sentence does not get run.
+  // Counting the calls rather than running the suite, because a checker that has
+  // to boot the world to check a sentence does not get run.
+  //
+  // This counts test *declarations*, which is not quite what `npm test` prints.
+  // One `test()` inside a loop — the boot matrix in production.test.js — is a
+  // single declaration that runs eight times, so the suite reports more than
+  // this does. The comment here used to claim the two matched exactly; they did
+  // when it was written and stopped the day the first generated case appeared.
+  // Both numbers are true of different things, and the README says which.
   const testFiles = fs.readdirSync(path.join(ROOT, 'test')).filter((f) => f.endsWith('.test.js'));
   const tests = testFiles.reduce((n, f) => n
     + (fs.readFileSync(path.join(ROOT, 'test', f), 'utf8').match(/^\s*(test|it)\(/gm) || []).length, 0);
@@ -189,6 +195,10 @@ function claims(f) {
     { what: 'layout test files', value: spell(f.testFiles), re: /(?<=tests across )([a-z-]+)(?= files)/ },
 
     { what: 'cli tests', value: f.tests, re: /(?<=`npm test` \| )(\d+)(?= tests)/ },
+    // The opening paragraph was not guarded, and drifted to 242 while every
+    // other mention said 260. A checker that watches the badge and not the
+    // first sentence anybody reads is watching the wrong thing.
+    { what: 'lede permissions', value: f.permissions, re: /(?<=under )(\d+)(?= atomic permissions)/ },
     { what: 'verification tests', value: f.tests, re: /(?<=npm test {24}# )(\d+)(?= tests)/ },
 
     { what: 'seeded agents (engine)', value: f.agents, re: /(?<=carried out\. )(\d+)(?= AI employees seeded)/ },

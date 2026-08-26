@@ -905,6 +905,26 @@ pre.json {
   padding: var(--s3) 0 var(--s2);
   gap: var(--s1);
 }
+/* Which galaxy the rail is showing.
+
+   Two words stacked in the width of the rail, because the rail is 44px wide and
+   an icon for "AI core" versus "enterprise core" would be a rebus. Reads as a
+   pair of tabs, and disappears when only one core has anything in it. */
+.rail-cores {
+  display: flex; flex-direction: column; gap: 2px; width: 46px;
+  margin-bottom: var(--s2); padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--seam);
+}
+.core-btn {
+  border: none; background: transparent; cursor: pointer;
+  font: inherit; font-size: 8.5px; line-height: 1.15; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-faint);
+  padding: 5px 2px; border-radius: var(--r-sm); text-align: center;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.core-btn:hover { background: var(--seam-soft); color: var(--ink); }
+.core-btn.on { background: var(--accent-wash); color: var(--ember); font-weight: 600; }
+
 .rail-brand {
   width: 38px; height: 38px; border-radius: var(--r-md);
   display: grid; place-items: center; margin-bottom: var(--s2);
@@ -1937,11 +1957,74 @@ html[lang="ar"] .atlas-switch button { letter-spacing: var(--track-tight); font-
   fill: none; stroke: var(--ink-faint); stroke-width: 0.7; opacity: 0.5;
   transition: stroke var(--t-mid) var(--ease), opacity var(--t-mid) var(--ease);
 }
+
+/* A tunnel across the seam. Drawn behind everything and deliberately faint:
+   there are a dozen of them and they cross the whole width, so at full strength
+   they would read as the subject rather than as the joins. */
+/* The lens bar: what the map is lit up about.
+
+   Sits over the canvas rather than above it, because the map is the tallest
+   thing on the page and a control that scrolls away is a control nobody uses
+   twice. */
+.map-lens {
+  position: absolute; inset-inline-start: var(--s3); top: var(--s3); z-index: 4;
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+  background: color-mix(in srgb, var(--bg-raise) 92%, transparent);
+  background: var(--bg-raise);
+  border: 1px solid var(--seam); border-radius: var(--r-md);
+  padding: 6px 8px; max-width: calc(100% - var(--s4));
+}
+.ml-buttons { display: flex; gap: 2px; }
+.map-lens button {
+  border: none; background: transparent; cursor: pointer; font: inherit;
+  font-size: 11.5px; color: var(--ink-mute); padding: 5px 9px;
+  border-radius: var(--r-sm); white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.map-lens button:hover { background: var(--seam-soft); color: var(--ink); }
+.map-lens button.on { background: var(--accent-wash); color: var(--ember); font-weight: 600; }
+.ml-n { font-variant-numeric: tabular-nums; opacity: .8; }
+.ml-find {
+  border: 1px solid var(--seam); background: var(--bg); color: var(--ink);
+  border-radius: var(--r-sm); padding: 5px 9px; font: inherit; font-size: 11.5px; width: 150px;
+}
+.ml-said { font-size: 11px; color: var(--ink-faint); }
+
+/* A department the current lens does not answer for. Dimmed rather than
+   hidden: a map that removes things teaches you it is incomplete. */
+.at-dim { opacity: .12; transition: opacity var(--t-fast) var(--ease); }
+.at-lit { opacity: 1; }
+.at-district-dim { opacity: .22; transition: opacity var(--t-fast) var(--ease); }
+.at-lens-badge {
+  font-size: 8.5px; fill: var(--ember); font-weight: 700;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}
+
+.at-tunnel {
+  fill: none; stroke: var(--ink-faint); stroke-width: 1.1;
+  opacity: .38; stroke-dasharray: 3 4;
+}
+.at-tunnel:hover { opacity: .85; stroke: var(--ember); }
+/* Under the seam lens the tunnels stop being background and become the point:
+   solid, brighter, and slowly travelling so the direction of the crossing is
+   visible rather than inferred. */
+.at-tunnel-lit {
+  stroke: var(--ember); opacity: .8; stroke-width: 1.5;
+  stroke-dasharray: 5 4; animation: at-tunnel-flow 1.4s linear infinite;
+}
+@keyframes at-tunnel-flow { to { stroke-dashoffset: -18; } }
+@media (prefers-reduced-motion: reduce) {
+  .at-tunnel-lit { animation: none; }
+}
 .at-leaf {
   fill: var(--ink); stroke: none;
   transition: fill var(--t-fast) var(--ease), r var(--t-fast) var(--ease);
 }
 .at-leaf-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 0.9; }
+/* The pointer target for a leaf. `transparent` and not `none`: a fill of none
+   receives no pointer events at all, which is the difference between a dot you
+   can click and a dot you can only look at. */
+.at-hit { fill: transparent; stroke: none; }
 .at-hit { fill: transparent; cursor: pointer; }
 
 /* Colour is the reward for pointing at something: the district you are on

@@ -3142,6 +3142,170 @@ CREATE INDEX IF NOT EXISTS time_attendance_day ON time_attendance (day);
 -- way. The transcript is Tier A, sealed under the organizer's key; the
 -- multi-subject limitation that creates is recorded in NEXT.md rather than
 -- hidden.
+-- Who is on which shift, and since when. Dated rather than replaced, so
+-- last month's attendance is still judged against the roster that was actually
+-- in force then — overwriting would rewrite whether somebody was late in March.
+CREATE TABLE IF NOT EXISTS time_shift_assignment (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  shift_id    INTEGER NOT NULL REFERENCES time_shift(id),
+  since       TEXT NOT NULL,
+  until       TEXT,
+  assigned_by TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS shift_assignment_live ON time_shift_assignment(employee_id, since, until);
+
+-- Extra minutes are not overtime until somebody approves them. Paying every
+-- late departure teaches everybody to leave late.
+CREATE TABLE IF NOT EXISTS time_overtime (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  day         TEXT NOT NULL,
+  minutes     INTEGER NOT NULL,
+  reason      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'claimed',    -- claimed|approved|refused
+  claimed_by  TEXT NOT NULL,
+  decided_by  TEXT,
+  decided_at  TEXT,
+  note        TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, day)
+);
+
+-- What a company deducts, and on whose authority. Either a flat percentage or
+-- a set of bands; the basis is required because a deduction nobody can cite is
+-- one the employee may dispute and the company cannot defend.
+CREATE TABLE IF NOT EXISTS pay_rule (
+  code         TEXT PRIMARY KEY,
+  label        TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'tax',        -- tax|contribution
+  base         TEXT NOT NULL DEFAULT 'gross',      -- gross|basic|taxable
+  paid_by      TEXT NOT NULL DEFAULT 'employee',   -- employee|employer
+  percent      REAL,                               -- flat rules
+  bands        TEXT,                               -- JSON, progressive rules
+  cap_amount   REAL,
+  floor_amount REAL,
+  basis        TEXT NOT NULL,
+  active       INTEGER NOT NULL DEFAULT 1,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Custody: who is holding what. The asset itself stays in Core 1's register —
+-- one master — and this is the handover.
+CREATE TABLE IF NOT EXISTS cust_item (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id   INTEGER NOT NULL REFERENCES hr_employee(id),
+  asset_id      INTEGER,                           -- Core 1 assets.id, when listed
+  description   TEXT,                              -- when it is not: keys, a card
+  serial        TEXT,
+  condition_out TEXT NOT NULL DEFAULT 'good',
+  condition_in  TEXT,
+  note          TEXT,
+  return_note   TEXT,
+  issued_by     TEXT NOT NULL,
+  issued_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  returned_to   TEXT,
+  returned_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS cust_out ON cust_item(employee_id, returned_at);
+CREATE INDEX IF NOT EXISTS cust_asset ON cust_item(asset_id, returned_at);
+
+-- A first day and a last day, as a checklist rather than as somebody's memory.
+CREATE TABLE IF NOT EXISTS join_list (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  kind        TEXT NOT NULL,                       -- joining|leaving
+  on_day      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'open',        -- open|closed
+  started_by  TEXT NOT NULL,
+  closed_by   TEXT,
+  closed_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS join_step (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id    INTEGER NOT NULL REFERENCES join_list(id),
+  code       TEXT NOT NULL,
+  label      TEXT NOT NULL,
+  owner_role TEXT,
+  due_on     TEXT,
+  -- A step that costs money or opens a door. Skippable, but never silently.
+  critical   INTEGER NOT NULL DEFAULT 0,
+  done_at    TEXT,
+  done_by    TEXT,
+  skipped    INTEGER NOT NULL DEFAULT 0,
+  note       TEXT
+);
+CREATE INDEX IF NOT EXISTS join_step_by_list ON join_step(list_id, due_on);
+
+-- A file, sealed. The row is a manifest; the bytes live under data/files/
+-- encrypted with the subject's own key, so erasing the person destroys the
+-- file rather than orphaning it. Deleting is a tombstone, never a vanishing:
+-- a gap somebody can see beats a gap nobody can.
+CREATE TABLE IF NOT EXISTS doc_file (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename      TEXT NOT NULL,
+  mime          TEXT,
+  bytes         INTEGER NOT NULL,
+  sha256        TEXT NOT NULL,          -- of the plaintext, so duplicates are visible
+  subject_ref   TEXT NOT NULL,          -- whose key seals it
+  stored_as     TEXT NOT NULL UNIQUE,   -- a uuid; never anything a caller chose
+  attach_type   TEXT,
+  attach_id     INTEGER,
+  note          TEXT,
+  uploaded_by   TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at    TEXT,
+  deleted_by    TEXT,
+  delete_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS doc_file_attached ON doc_file(attach_type, attach_id);
+CREATE INDEX IF NOT EXISTS doc_file_subject ON doc_file(subject_ref);
+
+-- How long each kind of record is kept, and on whose authority. A retention
+-- period nobody can cite is a guess with a number on it.
+CREATE TABLE IF NOT EXISTS rec_class (
+  code         TEXT PRIMARY KEY,        -- payroll, contract, medical, tax…
+  label        TEXT NOT NULL,
+  keep_months  INTEGER NOT NULL,
+  disposition  TEXT NOT NULL DEFAULT 'destroy',   -- destroy|anonymise|keep-forever
+  basis        TEXT NOT NULL,           -- the law, contract or policy that says so
+  applies_to   TEXT,                    -- JSON: which tables/attach kinds it covers
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A legal hold freezes disposal. It is deliberately coarse: a hold that is hard
+-- to place is a hold nobody places in time.
+CREATE TABLE IF NOT EXISTS rec_hold (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope_kind   TEXT NOT NULL,           -- person|employee|class|everything
+  scope_id     TEXT,
+  reason       TEXT NOT NULL,           -- required: a hold nobody can explain never lifts
+  matter       TEXT,                    -- the case or investigation it belongs to
+  placed_by    TEXT NOT NULL,
+  placed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  released_by  TEXT,
+  released_at  TEXT,
+  release_note TEXT
+);
+CREATE INDEX IF NOT EXISTS rec_hold_live ON rec_hold(scope_kind, scope_id, released_at);
+
+-- What was actually disposed of, and under which rule. The disposal log is the
+-- only evidence that a retention policy is a policy rather than a document.
+CREATE TABLE IF NOT EXISTS rec_disposal (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  class_code  TEXT NOT NULL,
+  what        TEXT NOT NULL,
+  ref         TEXT,
+  action      TEXT NOT NULL,            -- destroyed|anonymised
+  count       INTEGER NOT NULL DEFAULT 1,
+  decided_by  TEXT NOT NULL,
+  at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS mtg_meeting (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   title        TEXT NOT NULL,
@@ -3507,30 +3671,8 @@ CREATE TABLE IF NOT EXISTS hr_holiday (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 ) STRICT;
 
-CREATE TABLE IF NOT EXISTS time_shift_assignment (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
-  shift_id    INTEGER NOT NULL REFERENCES time_shift(id),
-  starts      TEXT NOT NULL,
-  ends        TEXT,
-  created_by  TEXT NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-) STRICT;
-CREATE INDEX IF NOT EXISTS time_shift_assignment_emp ON time_shift_assignment (employee_id, starts);
-
-CREATE TABLE IF NOT EXISTS time_overtime (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
-  day         TEXT NOT NULL,
-  minutes     INTEGER NOT NULL,
-  rate        REAL NOT NULL DEFAULT 1.5,
-  state       TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','approved','rejected')),
-  decided_by  TEXT,
-  decided_at  TEXT,
-  created_by  TEXT NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-) STRICT;
-CREATE INDEX IF NOT EXISTS time_overtime_emp ON time_overtime (employee_id, day);
+-- Shifts, their assignments and overtime claims are shifts.js's tables,
+-- declared with the earlier Core 2 block; this block adds only what they lack.
 
 -- A correction is a claimed in/out pair waiting on a manager. No reason column:
 -- the manager sees the claim and the day, decides, and their name is recorded.
@@ -3613,15 +3755,7 @@ CREATE TABLE IF NOT EXISTS hr_movement (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 ) STRICT;
 
--- Progressive income tax, as data. Brackets are ordered; up_to NULL is the top.
-CREATE TABLE IF NOT EXISTS pay_tax_bracket (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  jurisdiction TEXT NOT NULL,
-  ordinal      INTEGER NOT NULL,
-  up_to        REAL,                              -- monthly taxable amount ceiling; NULL = no ceiling
-  rate         REAL NOT NULL,
-  UNIQUE (jurisdiction, ordinal)
-) STRICT;
+-- Tax and contribution rules are payrules.js's pay_rule table; the slip reads them.
 
 -- End of service. The amount is about one person and is sealed under them;
 -- the years of service are an org fact and stay readable.
@@ -3649,16 +3783,7 @@ CREATE TABLE IF NOT EXISTS hr_grievance (
   decided_at  TEXT
 ) STRICT;
 
--- Who holds which of the company's things. The asset is Core 1's (one register).
-CREATE TABLE IF NOT EXISTS hr_asset_assignment (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
-  asset_id    INTEGER NOT NULL,                   -- Core 1 assets.id
-  assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
-  returned_at TEXT,
-  assigned_by TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS hr_asset_assignment_emp ON hr_asset_assignment (employee_id);
+-- Who holds which of the company's things is custody.js's cust_item.
 
 -- FINANCE SUB-LEDGERS. Budgets, payables, receivables, fixed assets, FX.
 -- The statements are Core 1's ledger and are not duplicated here.
@@ -4081,6 +4206,58 @@ for (const sql of [
   'ALTER TABLE hr_employee ADD COLUMN probation_ends TEXT',
   'ALTER TABLE hr_employee ADD COLUMN contract_ends TEXT',
 ]) { try { db.exec(sql); } catch { /* column exists */ } }
+/**
+ * Run a piece of work so that all of it happens, or none of it.
+ *
+ * The constitution says every consequential act is written to the chain
+ * *before it happens*. That was not quite true: a handler mutated a table and
+ * then wrote the record, so a failed chain write left the act done and
+ * unrecorded — the one outcome the whole design exists to prevent. Nothing was
+ * swallowing the error; there was simply nothing holding the two together.
+ *
+ * SAVEPOINT rather than BEGIN, because these nest: a route already inside a
+ * transaction that calls something which opens another must not commit the
+ * outer one early. Nested savepoints release into their parent and only the
+ * outermost actually commits.
+ *
+ * Synchronous on purpose. `node:sqlite` is synchronous, and an `await` inside a
+ * transaction would let another request interleave between the mutation and the
+ * commit — which is how a "transaction" becomes a comment.
+ */
+let savepointDepth = 0;
+export function atomically(fn) {
+  const name = `sp${savepointDepth}`;
+  savepointDepth += 1;
+  db.exec(`SAVEPOINT ${name}`);
+  let out;
+  let async = false;
+  try {
+    out = fn();
+    // A promise here means the caller passed an async function, and the
+    // savepoint would release before the work finished. Noted rather than
+    // thrown from inside this block — throwing here would land in the catch
+    // below and roll back a savepoint the handler had already released, which
+    // is how the first version of this reported "no such savepoint".
+    async = Boolean(out && typeof out.then === 'function');
+  } catch (err) {
+    db.exec(`ROLLBACK TO ${name}`);
+    db.exec(`RELEASE ${name}`);
+    savepointDepth -= 1;
+    throw err;
+  }
+  if (async) {
+    db.exec(`ROLLBACK TO ${name}`);
+    db.exec(`RELEASE ${name}`);
+    savepointDepth -= 1;
+    throw new Error('atomically() takes a synchronous function — an await inside a transaction is not one');
+  }
+  db.exec(`RELEASE ${name}`);
+  savepointDepth -= 1;
+  return out;
+}
+
+/** Whether anything is currently holding a transaction open. */
+export const inTransaction = () => savepointDepth > 0;
 
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }

@@ -1,5 +1,11 @@
-// HR, THE REST OF IT — time rules, compensation, movements, end of service,
-// grievances, and who holds which of the company's things.
+// HR, THE REST OF IT — the calendar and corrections, compensation, movements,
+// end of service, grievances, and the letters somebody asks for.
+//
+// This module sits beside three others rather than repeating them: shifts and
+// overtime live in shifts.js, the tax and contribution rules in payrules.js,
+// who is holding which of the company's things in custody.js. What is here is
+// what none of those own — and the payroll formula's reading of all of them,
+// in one place, so a slip is computed from one function and not three.
 //
 // The rules this file keeps, in one place so they can be counted:
 //
@@ -8,20 +14,17 @@
 //   the gateway's categorical list, and this module refuses any non-human actor
 //   as the second lock on that door.
 //
-//   Nothing here holds a reason. An overtime claim is minutes on a day; a
-//   correction is an in/out pair; a grievance is a pointer to a document
-//   sealed under the person who raised it. A manager decides on facts and
-//   their name is written down.
-//
-//   The tax table is data, not code. Brackets live in a table keyed by
-//   jurisdiction so payroll can be right for Baghdad and Erbil without a
-//   deploy — and the seeded figures are placeholders that say so.
+//   Nothing here holds a reason. A correction is an in/out pair; a grievance
+//   is a pointer to a document sealed under the person who raised it. A manager
+//   decides on facts and their name is written down.
 import { q, one, exec } from '../db.js';
 import { sealPii, sealForRef, openPii } from '../erasure.js';
 import { getSetting } from '../settings.js';
 import { log, getEmployee } from './identity.js';
 import { emit } from './bridge.js';
 import { createDocument } from './documents.js';
+import { shiftOn, approvedOvertime } from './shifts.js';
+import { computeDeductions, endOfService } from './payrules.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 const clean = (s, n = 120) => String(s ?? '').trim().slice(0, n);
@@ -60,78 +63,6 @@ export function listHolidays(year = new Date().getFullYear()) {
 
 export const isHoliday = (day) => Boolean(one('SELECT id FROM hr_holiday WHERE day = ?', day));
 
-// ------------------------------------------------------------------ shifts --
-
-export function createShift({ name, starts, ends, days = [1, 2, 3, 4, 5], actor }) {
-  if (!actor) refuse('a shift is defined by somebody');
-  if (!/^\d{2}:\d{2}$/.test(starts) || !/^\d{2}:\d{2}$/.test(ends)) refuse('shift times are HH:MM');
-  const d = (Array.isArray(days) ? days : []).map(Number).filter((n) => n >= 0 && n <= 6);
-  if (!d.length) refuse('a shift needs at least one working day');
-  exec('INSERT INTO time_shift (name, starts, ends, days) VALUES (?,?,?,?)', clean(name) || 'Shift', starts, ends, JSON.stringify(d));
-  const id = one('SELECT last_insert_rowid() AS id').id;
-  log({ entity: 'shift', entityId: id, action: 'shift.created', actor });
-  return one('SELECT * FROM time_shift WHERE id = ?', id);
-}
-
-export const listShifts = () => q('SELECT * FROM time_shift ORDER BY id');
-
-export function assignShift({ employeeId, shiftId, starts = null, ends = null, actor }) {
-  if (!actor) refuse('assigning a shift carries a name');
-  const emp = activeEmployee(employeeId);
-  if (!one('SELECT id FROM time_shift WHERE id = ?', Number(shiftId))) refuse('no such shift');
-  const from = starts || today();
-  // The previous open assignment ends the day before this one starts.
-  exec("UPDATE time_shift_assignment SET ends = date(?, '-1 day') WHERE employee_id = ? AND ends IS NULL", from, emp.id);
-  exec('INSERT INTO time_shift_assignment (employee_id, shift_id, starts, ends, created_by) VALUES (?,?,?,?,?)',
-    emp.id, Number(shiftId), from, ends, String(actor));
-  const id = one('SELECT last_insert_rowid() AS id').id;
-  log({ entity: 'shift_assignment', entityId: id, action: 'shift.assigned', actor, detail: { employeeId: emp.id, shiftId: Number(shiftId) } });
-  return one('SELECT * FROM time_shift_assignment WHERE id = ?', id);
-}
-
-/** The shift an employee is on for a given day, if any. */
-export function shiftFor(employeeId, day = today()) {
-  return one(
-    `SELECT s.* FROM time_shift_assignment a JOIN time_shift s ON s.id = a.shift_id
-      WHERE a.employee_id = ? AND a.starts <= ? AND (a.ends IS NULL OR a.ends >= ?)
-      ORDER BY a.starts DESC LIMIT 1`, Number(employeeId), day, day,
-  );
-}
-
-// ---------------------------------------------------------------- overtime --
-
-export function requestOvertime({ employeeId, day, minutes, rate = 1.5, actor }) {
-  if (!actor) refuse('an overtime claim carries a name');
-  const emp = activeEmployee(employeeId);
-  if (!isDay(day)) refuse('overtime is claimed for a date');
-  const m = Math.round(Number(minutes));
-  if (!(m > 0 && m <= 720)) refuse('overtime is between one minute and twelve hours in a day');
-  const r = Number(rate) || 1.5;
-  if (r < 1 || r > 3) refuse('an overtime rate is between 1× and 3×');
-  exec('INSERT INTO time_overtime (employee_id, day, minutes, rate, created_by) VALUES (?,?,?,?,?)', emp.id, day, m, r, String(actor));
-  const id = one('SELECT last_insert_rowid() AS id').id;
-  log({ entity: 'overtime', entityId: id, action: 'overtime.requested', actor, detail: { employeeId: emp.id, minutes: m } });
-  emit('overtime.requested', { id, employeeId: emp.id });
-  return one('SELECT * FROM time_overtime WHERE id = ?', id);
-}
-
-export function decideOvertime(id, { approve, actor }) {
-  human(actor, 'deciding overtime');
-  const row = one('SELECT * FROM time_overtime WHERE id = ?', Number(id));
-  if (!row) refuse('no such overtime claim');
-  if (row.state !== 'pending') refuse(`this claim is already ${row.state}`);
-  const state = approve ? 'approved' : 'rejected';
-  exec("UPDATE time_overtime SET state = ?, decided_by = ?, decided_at = datetime('now') WHERE id = ?", state, String(actor), row.id);
-  log({ entity: 'overtime', entityId: row.id, action: `overtime.${state}`, actor });
-  return one('SELECT * FROM time_overtime WHERE id = ?', row.id);
-}
-
-/** Approved overtime minutes inside a period, weighted by rate. */
-export function overtimeFor(employeeId, period) {
-  const rows = q("SELECT minutes, rate FROM time_overtime WHERE employee_id = ? AND state = 'approved' AND substr(day, 1, 7) = ?", Number(employeeId), period);
-  return rows.reduce((a, r) => a + (r.minutes / 60) * r.rate, 0);   // weighted hours
-}
-
 // ------------------------------------------------------------- corrections --
 
 export function requestCorrection({ employeeId, day, inAt = null, outAt = null, actor }) {
@@ -157,7 +88,9 @@ export function decideCorrection(id, { approve, actor }) {
     exec(`INSERT INTO time_attendance (employee_id, day, in_at, out_at, source) VALUES (?,?,?,?,'manual')
           ON CONFLICT(employee_id, day) DO UPDATE SET in_at = COALESCE(excluded.in_at, in_at), out_at = COALESCE(excluded.out_at, out_at)`,
       row.employee_id, row.day, row.in_at, row.out_at);
-    exec(`UPDATE time_attendance SET minutes = CAST((julianday(out_at) - julianday(in_at)) * 1440 AS INTEGER)
+    // Rounded, not truncated: julianday arithmetic lands a hair under the
+    // whole minute and CAST would quietly steal one from every day.
+    exec(`UPDATE time_attendance SET minutes = CAST(ROUND((julianday(out_at) - julianday(in_at)) * 1440) AS INTEGER)
           WHERE employee_id = ? AND day = ? AND in_at IS NOT NULL AND out_at IS NOT NULL`, row.employee_id, row.day);
   }
   log({ entity: 'correction', entityId: row.id, action: `attendance.correction_${state}`, actor });
@@ -166,8 +99,9 @@ export function decideCorrection(id, { approve, actor }) {
 
 /**
  * Lateness and absence for a month, measured against the shift each person
- * was on. An absence is a working day with no mark and no approved leave and
- * no holiday; late is minutes after the shift start. Org facts, both.
+ * was on that day (shifts.js). An absence is a working day with no mark, no
+ * approved leave and no holiday; late is minutes after the shift start. Org
+ * facts, both — counts, never reasons.
  */
 export function attendanceExceptions({ period = today().slice(0, 7) } = {}) {
   const first = `${period}-01`;
@@ -180,10 +114,11 @@ export function attendanceExceptions({ period = today().slice(0, 7) } = {}) {
     for (let d = new Date(`${first}T00:00:00Z`); d.toISOString().slice(0, 10) <= stop; d.setUTCDate(d.getUTCDate() + 1)) {
       const day = d.toISOString().slice(0, 10);
       if (e.hired_at && day < e.hired_at) continue;
-      const shift = shiftFor(e.id, day);
-      const days = shift ? JSON.parse(shift.days) : [0, 1, 2, 3, 4];
+      const shift = shiftOn(e.id, day);
+      let days = [0, 1, 2, 3, 4];
+      try { days = shift ? JSON.parse(shift.days) : days; } catch { /* a malformed roster counts as weekdays */ }
       if (!days.includes(d.getUTCDay()) || isHoliday(day)) continue;
-      const leave = one(`SELECT 1 AS x FROM time_leave_request WHERE employee_id = ? AND state = 'approved' AND starts <= ? AND ends >= ?`, e.id, day, day);
+      const leave = one("SELECT 1 AS x FROM time_leave_request WHERE employee_id = ? AND state = 'approved' AND starts <= ? AND ends >= ?", e.id, day, day);
       if (leave) continue;
       const mark = one('SELECT in_at FROM time_attendance WHERE employee_id = ? AND day = ?', e.id, day);
       if (!mark?.in_at) { absent++; continue; }
@@ -262,59 +197,34 @@ export function benefitsFor(employeeId, period) {
   };
 }
 
-// --------------------------------------------------------------------- tax --
+// ---------------------------------------------------- the formula's inputs --
 
 /**
- * Placeholder brackets, seeded once and editable on the screen. They exist so
- * the payroll formula has a real tax line from day one; they are not a claim
- * about any jurisdiction's law, and the screen says so.
+ * Everything the payroll formula reads from the modules around it, for one
+ * employee: allowances from here, approved overtime from shifts.js at the
+ * rate the company set, and — through `deductions(taxable)` — tax and
+ * contributions from the rules in payrules.js plus the plans the person is
+ * enrolled in. When no pay rule has been declared the slip says so with
+ * `rulesConfigured: false`; the tax line is then zero *and labelled*, which is
+ * the honest state payrules.js insists on.
  */
-export function seedTaxBrackets() {
-  if (one('SELECT id FROM pay_tax_bracket LIMIT 1')) return 0;
-  const IQ = [[250, 0.03], [500, 0.05], [1000, 0.10], [null, 0.15]];
-  IQ.forEach(([upTo, rate], i) => exec('INSERT INTO pay_tax_bracket (jurisdiction, ordinal, up_to, rate) VALUES (?,?,?,?)', 'IQ', i, upTo, rate));
-  return IQ.length;
-}
-
-export function setTaxBrackets({ jurisdiction, brackets, actor }) {
-  human(actor, 'changing the tax table');
-  const j = clean(jurisdiction, 8).toUpperCase();
-  if (!j) refuse('a jurisdiction code is needed');
-  if (!Array.isArray(brackets) || !brackets.length) refuse('at least one bracket');
-  exec('DELETE FROM pay_tax_bracket WHERE jurisdiction = ?', j);
-  brackets.forEach((b, i) => exec('INSERT INTO pay_tax_bracket (jurisdiction, ordinal, up_to, rate) VALUES (?,?,?,?)',
-    j, i, b.upTo == null ? null : Number(b.upTo), Number(b.rate) || 0));
-  log({ entity: 'tax_table', action: 'tax.brackets_set', actor, detail: { jurisdiction: j, brackets: brackets.length }, chain: true });
-  return taxBrackets(j);
-}
-
-export const taxBrackets = (jurisdiction = 'IQ') => q('SELECT * FROM pay_tax_bracket WHERE jurisdiction = ? ORDER BY ordinal', jurisdiction);
-
-/** Progressive monthly tax on a taxable amount. */
-export function taxFor(taxable, jurisdiction = 'IQ') {
-  const brackets = taxBrackets(jurisdiction);
-  if (!brackets.length) return 0;
-  let remaining = Math.max(0, Number(taxable) || 0); let floor = 0; let tax = 0;
-  for (const b of brackets) {
-    const span = b.up_to == null ? remaining : Math.max(0, Math.min(remaining, b.up_to - floor));
-    tax += span * b.rate;
-    remaining -= span;
-    floor = b.up_to ?? floor;
-    if (remaining <= 0) break;
-  }
-  return round2(tax);
-}
-
-/** Everything the payroll formula needs from this module, for one employee. */
 export function payrollInputs(employee, period, base) {
   const hourly = base / 30 / 8;
+  const rate = Number(getSetting('OVERTIME_RATE') || 1.5);
   const ben = benefitsFor(employee.id, period);
   return {
     allowances: allowancesFor(employee.id, period),
-    overtime: round2(overtimeFor(employee.id, period) * hourly),
-    contributions: ben.employee,
-    employer: ben.employer,
-    tax: (taxable) => taxFor(taxable, employee.jurisdiction || 'IQ'),
+    overtime: round2((approvedOvertime(employee.id, period) / 60) * hourly * rate),
+    deductions: (gross) => {
+      const ded = computeDeductions({ gross, basic: base });
+      const employeeLines = ded.configured ? ded.lines.filter((l) => l.paidBy === 'employee') : [];
+      return {
+        configured: Boolean(ded.configured),
+        taxes: round2(employeeLines.filter((l) => l.kind === 'tax').reduce((a, l) => a + l.amount, 0)),
+        contributions: round2(employeeLines.filter((l) => l.kind === 'contribution').reduce((a, l) => a + l.amount, 0) + ben.employee),
+        employer: round2((ded.configured ? ded.employerTotal : 0) + ben.employer),
+      };
+    },
   };
 }
 
@@ -374,26 +284,25 @@ export const movementsFor = (employeeId) => q('SELECT * FROM hr_movement WHERE e
 // ---------------------------------------------------------- end of service --
 
 /**
- * Years of service times the days-per-year the policy names times a day's pay.
- * The days-per-year is a setting because it is a matter of law and contract,
- * and the amount is sealed because it is one person's money.
+ * What is owed on the way out, as money. The days come from payrules.js —
+ * the company's own rule, or "not configured", never a guess — and a day's
+ * pay is the sealed salary over thirty. The amount is one person's money and
+ * is sealed under them; the years of service are an org fact and stay readable.
  */
 export function computeEos({ employeeId, actor }) {
   if (!actor) refuse('computing end of service carries a name');
-  const emp = one("SELECT e.*, p.subject_ref, p.personal_email, p.personal_phone FROM hr_employee e JOIN hr_person p ON p.id = e.person_id WHERE e.id = ?", Number(employeeId));
+  const emp = one('SELECT e.*, p.subject_ref FROM hr_employee e JOIN hr_person p ON p.id = e.person_id WHERE e.id = ?', Number(employeeId));
   if (!emp) refuse('no such employee');
-  const start = new Date(`${emp.hired_at || today()}T00:00:00Z`);
-  const end = new Date(`${(emp.ended_at || today()).slice(0, 10)}T00:00:00Z`);
-  const years = Math.max(0, round2((end - start) / (365.25 * 86400000)));
-  const daysPerYear = Number(getSetting('EOS_DAYS_PER_YEAR') || 14);
+  const rule = endOfService({ employeeId: emp.id, lastDay: emp.ended_at ? String(emp.ended_at).slice(0, 10) : null, reason: 'terminated' });
   const base = Number(openPii(emp.base_salary)) || 0;
-  const amount = round2(years * daysPerYear * (base / 30));
+  const days = rule.configured ? Number(rule.days) : 0;
+  const amount = round2(days * (base / 30));
   const sealed = emp.subject_ref ? sealForRef(String(amount), emp.subject_ref) : String(amount);
   exec(`INSERT INTO hr_eos (employee_id, years, days_per_year, amount, subject_ref) VALUES (?,?,?,?,?)
         ON CONFLICT(employee_id) DO UPDATE SET years = excluded.years, days_per_year = excluded.days_per_year, amount = excluded.amount, computed_at = datetime('now')`,
-    emp.id, years, daysPerYear, sealed, emp.subject_ref);
-  log({ entity: 'eos', entityId: emp.id, action: 'eos.computed', actor, detail: { years, daysPerYear } });
-  return { employeeId: emp.id, years, daysPerYear, amount };
+    emp.id, Number(rule.years) || 0, rule.configured ? Number(rule.workingFrom?.perYearFirst || 0) : 0, sealed, emp.subject_ref);
+  log({ entity: 'eos', entityId: emp.id, action: 'eos.computed', actor, detail: { years: rule.years, configured: Boolean(rule.configured), days } });
+  return { employeeId: emp.id, years: rule.years, days, configured: Boolean(rule.configured), amount, says: rule.says };
 }
 
 export function payEos(employeeId, { actor }) {
@@ -401,6 +310,7 @@ export function payEos(employeeId, { actor }) {
   const row = one('SELECT * FROM hr_eos WHERE employee_id = ?', Number(employeeId));
   if (!row) refuse('compute end of service first');
   if (row.paid_at) refuse('already paid');
+  if (!(Number(openPii(row.amount)) > 0)) refuse('nothing is owed — end of service is not configured, or the rule gives zero');
   exec("UPDATE hr_eos SET paid_by = ?, paid_at = datetime('now') WHERE id = ?", String(actor), row.id);
   log({ entity: 'eos', entityId: row.employee_id, action: 'eos.paid', actor, chain: true });
   // The event carries no amount: it is one person's money. The bridge opens
@@ -441,34 +351,6 @@ export function decideGrievance(id, { state, actor }) {
 
 export const listGrievances = () => q(`SELECT g.*, p.display_name FROM hr_grievance g JOIN hr_employee e ON e.id = g.employee_id JOIN hr_person p ON p.id = e.person_id ORDER BY g.id DESC LIMIT 200`);
 
-// ------------------------------------------------------------------ assets --
-
-export function assignAsset({ employeeId, assetId, actor }) {
-  if (!actor) refuse('handing over an asset carries a name');
-  const emp = activeEmployee(employeeId);
-  const asset = one("SELECT id, name FROM assets WHERE id = ? AND state != 'retired'", Number(assetId));
-  if (!asset) refuse('no such asset on the register');
-  if (one('SELECT id FROM hr_asset_assignment WHERE asset_id = ? AND returned_at IS NULL', asset.id)) refuse('this asset is already held by somebody');
-  exec('INSERT INTO hr_asset_assignment (employee_id, asset_id, assigned_by) VALUES (?,?,?)', emp.id, asset.id, String(actor));
-  const id = one('SELECT last_insert_rowid() AS id').id;
-  // Core 1's register names an owner; keep it true. Display name is Tier B.
-  exec('UPDATE assets SET owner = ? WHERE id = ?', emp.display_name, asset.id);
-  log({ entity: 'asset_assignment', entityId: id, action: 'asset.assigned', actor, detail: { employeeId: emp.id, assetId: asset.id } });
-  return one('SELECT * FROM hr_asset_assignment WHERE id = ?', id);
-}
-
-export function returnAsset(id, { actor }) {
-  if (!actor) refuse('returning an asset carries a name');
-  const row = one('SELECT * FROM hr_asset_assignment WHERE id = ? AND returned_at IS NULL', Number(id));
-  if (!row) refuse('no such open assignment');
-  exec("UPDATE hr_asset_assignment SET returned_at = datetime('now') WHERE id = ?", row.id);
-  log({ entity: 'asset_assignment', entityId: row.id, action: 'asset.returned', actor });
-  return one('SELECT * FROM hr_asset_assignment WHERE id = ?', row.id);
-}
-
-export const assetsFor = (employeeId) => q(`SELECT h.*, a.name, a.kind FROM hr_asset_assignment h JOIN assets a ON a.id = h.asset_id
-  WHERE h.employee_id = ? ORDER BY h.returned_at IS NOT NULL, h.id DESC`, Number(employeeId));
-
 // ------------------------------------------------------------------ letters --
 
 /** An employment certificate: org facts only. Never the salary. */
@@ -497,11 +379,8 @@ export function employmentLetter({ employeeId, actor }) {
 export function hrplusOverview() {
   const n = (sql, ...p) => one(sql, ...p).n;
   return {
-    shifts: listShifts(),
     holidays: listHolidays(),
-    overtimePending: n("SELECT COUNT(*) AS n FROM time_overtime WHERE state = 'pending'"),
     correctionsPending: n("SELECT COUNT(*) AS n FROM time_correction WHERE state = 'pending'"),
-    overtime: q(`SELECT o.*, p.display_name FROM time_overtime o JOIN hr_employee e ON e.id = o.employee_id JOIN hr_person p ON p.id = e.person_id ORDER BY o.id DESC LIMIT 50`),
     corrections: q(`SELECT c.*, p.display_name FROM time_correction c JOIN hr_employee e ON e.id = c.employee_id JOIN hr_person p ON p.id = e.person_id ORDER BY c.id DESC LIMIT 50`),
     plans: listBenefitPlans(),
     allowances: n('SELECT COUNT(*) AS n FROM hr_allowance WHERE ends IS NULL'),
@@ -509,13 +388,11 @@ export function hrplusOverview() {
     movements: q(`SELECT m.*, p.display_name FROM hr_movement m JOIN hr_employee e ON e.id = m.employee_id JOIN hr_person p ON p.id = e.person_id ORDER BY m.id DESC LIMIT 30`),
     grievances: listGrievances().map((g) => ({ id: g.id, state: g.state, opened_at: g.opened_at, decided_by: g.decided_by })),
     grievancesOpen: n("SELECT COUNT(*) AS n FROM hr_grievance WHERE state IN ('open','under_review')"),
-    assetsHeld: n('SELECT COUNT(*) AS n FROM hr_asset_assignment WHERE returned_at IS NULL'),
     eosComputed: n('SELECT COUNT(*) AS n FROM hr_eos'),
-    taxBrackets: taxBrackets('IQ'),
-    eosDaysPerYear: Number(getSetting('EOS_DAYS_PER_YEAR') || 14),
+    overtimeRate: Number(getSetting('OVERTIME_RATE') || 1.5),
     exceptions: attendanceExceptions(),
-    note: 'Salaries and their history are sealed under each person. Overtime is minutes on a day; a correction is a time pair; a '
-      + 'grievance is a sealed document — there is no column anywhere here for a reason. The tax brackets are data and the seeded '
-      + 'figures are placeholders until somebody who knows the law replaces them.',
+    note: 'Salaries and their history are sealed under each person. A correction is a time pair and a grievance is a sealed '
+      + 'document — there is no column anywhere here for a reason. Shifts and overtime are judged on the Shifts page, the tax '
+      + 'and contribution rules are declared on Pay rules, and who holds what is on Custody; the payroll formula reads all three.',
   };
 }

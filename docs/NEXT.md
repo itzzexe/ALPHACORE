@@ -70,14 +70,27 @@
   real allowances, overtime, tax from a bracket table and contributions from
   plans. 164 departments, 48 tunnels, 0 orphans; 366 tests; 1,400 renders
   swept green.
-- **One map, two cores** — the overview atlas now draws both galaxies on one
-  sheet: the AI core's districts to the left of a dotted seam, the
-  enterprise core's to the right, every declared tunnel as an arc bent
-  through the core, squares for enterprise departments and circles for the
-  AI core's. Pointing at a district lights its tunnels. The projection comes
-  from the same catalogue and the same edge list as the second map, so the
-  two cannot disagree. Every department page opens with a band — door,
-  district, core, and what it is joined to — read from the same data.
+- **Two sessions, one company (2026-08-27)** — this work landed in parallel
+  with another session's: sealed files, records and retention with legal
+  holds, shifts and overtime, pay rules, custody, joining and leaving, atomic
+  writes, and the two-core menus with the seam drawn on the one atlas. The
+  merge kept one master per fact: shifts, overtime, tax and contribution
+  rules, end-of-service days and custody are theirs (`shifts.js`,
+  `payrules.js`, `custody.js`); this side's duplicates — its own shift and
+  overtime tables, a tax-bracket table, an asset-assignment table — were
+  removed rather than left as twins. The payroll formula now reads all three
+  neighbours from one function (`payrollInputs`) and labels a slip
+  `rulesConfigured: false` when no rule has been declared, so a zero never
+  looks computed. End of service takes its days from the declared rule and
+  seals the money under the person. The fourteen departments from this side
+  are filed behind the enterprise doors, with a sixth door — Operations —
+  for stock, facilities and the help desk, and the enterprise column of the
+  atlas now lays itself out by what is in it. 170 departments, 22 districts,
+  52 tunnels, 0 orphans; 416 tests.
+- **Every department page opens with a band** — door, district, core, hint,
+  and what it is joined to — read from the same catalogue and edge list the
+  map is drawn from, so a page and the map cannot disagree about where a
+  department sits.
 
 **Deferred from Core 2, with the reason:**
 
@@ -155,9 +168,17 @@
   were added to the catalogue; only the superadmin holds them until somebody
   grants them, so every non-owner sees "you do not have permission" on
   fourteen new pages until roles are updated.
-- **The overview draws 48 tunnels as arcs through the core.** At the far
-  view they read as a faint red haze rather than as lines until a district is
-  pointed at. Intended, and worth a second look on a real monitor.
+- **The overview draws 52 tunnels as dotted lines from the enterprise column
+  to the AI core's rim.** At the far view they read as a faint haze until a
+  department is pointed at; the enterprise column now holds ten districts
+  and thirty departments at a row pitch that shrinks to fit. Worth a second
+  look on a real monitor, and the lens bar ("Across the seam") is the
+  intended way to read them.
+- **A database created between 2026-08-26 and this merge carries the wrong
+  shape for `time_shift_assignment`/`time_overtime`.** Only local sweep and
+  test databases were ever created from that branch — the VPS predates it —
+  but such a file will refuse to boot on the index `shift_assignment_live`.
+  Delete and recreate it; there is no migration because nothing real used it.
 
 - **`enterprise-core` is armed `live`, not `dry`.** Every other connector proves
   itself in dry-run first. A dry-run internal connector would execute nothing

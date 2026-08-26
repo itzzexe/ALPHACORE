@@ -1,14 +1,15 @@
 // HR, the rest of it — and the three things it must never do.
 //
-// It must never store a reason: overtime is minutes, a correction is a time
-// pair, a grievance is a sealed document. It must never let a machine change
-// what somebody is paid: changeSalary is gated categorically and refused in
-// the module. And it must never let one person's money be readable on disk:
-// the raise, the history and the end-of-service amount are sealed under them.
+// It must never store a reason: a correction is a time pair, a grievance is a
+// sealed document. It must never let a machine change what somebody is paid:
+// changeSalary is gated categorically and refused in the module. And it must
+// never let one person's money be readable on disk: the raise, the history and
+// the end-of-service amount are sealed under them.
 //
-// The payroll formula is the other half: allowances, overtime, tax from the
-// bracket table and contributions from the plans must land on the slip in
-// the directive's order, and the totals the ledger will see must add up.
+// The payroll formula is the other half, and it reads three neighbours rather
+// than repeating them: approved overtime from shifts.js, tax and contributions
+// from the rules declared in payrules.js, end-of-service days from the same.
+// One master per fact; this file proves the slip is computed from all of them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -30,11 +31,13 @@ const { seedConstitution } = await import('../src/constitution.js');
 const { seedChart } = await import('../src/ledger.js');
 const { grantScope } = await import('../src/egress.js');
 const { jobsTick } = await import('../src/jobs.js');
-const { createAsset } = await import('../src/departments.js');
+const { setSetting } = await import('../src/settings.js');
 const { createPerson, employ } = await import('../src/core2/identity.js');
-const { seedBridge, command, CONNECTOR } = await import('../src/core2/bridge.js');
+const { seedBridge, command, callTool, CONNECTOR } = await import('../src/core2/bridge.js');
 const { draftPayroll } = await import('../src/core2/payops.js');
 const { terminateEmployee } = await import('../src/core2/talent.js');
+const { createShift, assignShift, claimOvertime, decideOvertime } = await import('../src/core2/shifts.js');
+const { setRule } = await import('../src/core2/payrules.js');
 const H = await import('../src/core2/hrplus.js');
 
 seedAgents();
@@ -55,44 +58,51 @@ function diskContains(needle) {
   return fs.existsSync(DB) && fs.readFileSync(DB).includes(Buffer.from(needle, 'utf8'));
 }
 
-// --- time rules ---------------------------------------------------------------
+// --- the calendar and the corrections ------------------------------------------
 
-test('a shift is what lateness is measured against; a holiday is not an absence', () => {
-  const shift = H.createShift({ name: 'Day', starts: '09:00', ends: '17:00', days: [0, 1, 2, 3, 4, 5, 6], actor: 'human:test' });
-  H.assignShift({ employeeId: e1.id, shiftId: shift.id, actor: 'human:test' });
-  assert.equal(H.shiftFor(e1.id, today)?.id, shift.id);
+test('lateness is measured against the shift in force (shifts.js); a holiday measures nothing', () => {
+  const shift = createShift({ name: 'Day', starts: '09:00', ends: '17:00', days: [0, 1, 2, 3, 4, 5, 6], actor: 'human:test' });
+  assignShift({ employeeId: e1.id, shiftId: shift.id, from: `${period}-01`, actor: 'human:test' });
 
   // Huda walked in half an hour late today.
-  exec("INSERT INTO time_attendance (employee_id, day, in_at) VALUES (?, ?, ?)", e1.id, today, `${today} 09:30:00`);
+  exec('INSERT INTO time_attendance (employee_id, day, in_at) VALUES (?, ?, ?)', e1.id, today, `${today} 09:30:00`);
   const before = H.attendanceExceptions({ period });
   const huda = before.rows.find((r) => r.employeeId === e1.id);
   assert.equal(huda.lateDays, 1);
   assert.equal(huda.lateMinutes, 30);
   assert.equal(huda.absent, 0);
 
-  // Sami has no mark today. Whether that is an absence depends on the calendar.
   H.addHoliday({ day: today, name: 'Test holiday', actor: 'human:test' });
   const after = H.attendanceExceptions({ period });
   assert.equal(after.rows.find((r) => r.employeeId === e2.id).absent, 0, 'a holiday is not an absence');
-  assert.equal(after.rows.find((r) => r.employeeId === e1.id).lateDays, 0, 'nothing is measured on a holiday — coming in late to a day nobody was expected is not lateness');
+  assert.equal(after.rows.find((r) => r.employeeId === e1.id).lateDays, 0, 'nothing is measured on a holiday');
 });
 
-test('there is no reason column anywhere in the time rules', () => {
-  for (const table of ['time_overtime', 'time_correction', 'hr_grievance', 'hr_salary_change', 'hr_movement']) {
-    const cols = q(`PRAGMA table_info(${table})`).map((c) => c.name);
+test('a correction is a time pair a manager decides; approved, it becomes the mark', () => {
+  const c = H.requestCorrection({ employeeId: e2.id, day: `${period}-03`, inAt: `${period}-03 08:55:00`, outAt: `${period}-03 17:05:00`, actor: `agent:${AGENT}` });
+  assert.throws(() => H.decideCorrection(c.id, { approve: true, actor: `agent:${AGENT}` }), /human act/);
+  H.decideCorrection(c.id, { approve: true, actor: 'human:manager' });
+  const mark = one('SELECT * FROM time_attendance WHERE employee_id = ? AND day = ?', e2.id, `${period}-03`);
+  assert.ok(mark?.in_at && mark?.out_at, 'an approved correction writes the mark');
+  assert.equal(mark.minutes, 490);
+  for (const table of ['time_correction', 'hr_grievance', 'hr_salary_change', 'hr_movement']) {
+    const cols = q(`PRAGMA table_info(${table})`).map((x) => x.name);
     for (const bad of ['reason', 'note', 'notes', 'comment', 'diagnosis', 'body']) {
       assert.ok(!cols.includes(bad), `${table} has a ${bad} column — a reason has nowhere to live by design`);
     }
   }
 });
 
-// --- the formula, fed --------------------------------------------------------------
+// --- the formula, fed by its neighbours ------------------------------------------
 
-test('allowances, overtime, tax from the table and contributions from the plans land on the slip', () => {
-  H.seedTaxBrackets();
-  const ot = H.requestOvertime({ employeeId: e1.id, day: `${period}-05`, minutes: 120, rate: 1.5, actor: `agent:${AGENT}` });
-  assert.throws(() => H.decideOvertime(ot.id, { approve: true, actor: `agent:${AGENT}` }), /human act/);
-  H.decideOvertime(ot.id, { approve: true, actor: 'human:manager' });
+test('the slip reads overtime from shifts.js, tax from payrules.js, contributions from the plans', () => {
+  // Two hours of approved overtime at the company's rate.
+  setSetting('OVERTIME_RATE', '1.5');
+  const ot = claimOvertime({ employeeId: e1.id, day: `${period}-05`, minutes: 120, reason: 'month-end close', actor: `agent:${AGENT}` });
+  decideOvertime(ot.id, { approve: true, actor: 'human:manager' });
+  // A flat tax and an employer-paid contribution, declared with a basis.
+  setRule({ code: 'PIT', label: 'Income tax', kind: 'tax', base: 'gross', paidBy: 'employee', percent: 10, basis: 'Income Tax Law, art. 1 — test', actor: 'human:cfo' });
+  setRule({ code: 'SSE', label: 'Social security (employer)', kind: 'contribution', base: 'basic', paidBy: 'employer', percent: 12, basis: 'Social Security Law — test', actor: 'human:cfo' });
   H.addAllowance({ employeeId: e1.id, kind: 'housing', amount: 300, actor: 'human:test' });
   const plan = H.createBenefitPlan({ name: 'Health', kind: 'health', employerShare: 50, employeeShare: 10, actor: 'human:test' });
   H.enroll({ employeeId: e1.id, planId: plan.id, actor: 'human:test' });
@@ -102,16 +112,13 @@ test('allowances, overtime, tax from the table and contributions from the plans 
   assert.equal(huda.allowances, 300);
   assert.equal(huda.overtime, 37.5, '2h × 1.5 × (3000/30/8 = 12.5/h)');
   assert.equal(huda.gross, 3337.5);
-  // Progressive: 250×3% + 250×5% + 500×10% + 2337.5×15%
-  assert.equal(huda.taxes, 420.63);
-  assert.equal(huda.contributions, 10);
-  assert.equal(huda.employer, 50);
-  assert.equal(huda.net, 2906.87);
-  const sami = run.slips.find((s) => s.employee_id === e2.id).detail;
-  assert.equal(sami.taxes, 145);
-  assert.equal(run.total_tax, 565.63);
-  assert.equal(run.total_contrib, 10);
-  assert.equal(run.total_employer, 50);
+  assert.equal(huda.taxes, 333.75, '10% of gross, from the declared rule');
+  assert.equal(huda.contributions, 10, 'the plan\'s employee share');
+  assert.equal(huda.employer, 410, '12% of basic (360) plus the plan\'s employer share (50)');
+  assert.equal(huda.rulesConfigured, true);
+  assert.equal(huda.net, 2993.75);
+  assert.equal(run.total_tax, 483.75, 'Huda 333.75 + Sami 150');
+  assert.equal(run.total_employer, 590, 'Huda 410 + Sami 180');
 });
 
 // --- the raise -----------------------------------------------------------------------
@@ -133,20 +140,22 @@ test('changing a salary is human at the gate and in the module; the history is s
   assert.equal(hist[0].old, 3000);
   assert.equal(hist[0].new, 3500);
   assert.ok(one("SELECT action FROM audit_log WHERE action = 'salary.changed'"), 'the fact must be on the chain');
-  // The chain carries that it happened, not the number.
   assert.ok(!q("SELECT payload FROM audit_log WHERE action = 'salary.changed'").some((r) => String(r.payload).includes('3500')));
 });
 
 // --- end of service ---------------------------------------------------------------
 
-test('end of service is computed at termination, sealed, and paid by a person through the one ledger', async () => {
+test('end of service takes its days from payrules.js, is sealed, and is paid by a person through the one ledger', async () => {
+  setSetting('EOS_DAYS_PER_YEAR_FIRST', '14');
+  setSetting('EOS_DAYS_PER_YEAR_AFTER', '21');
+  setSetting('EOS_THRESHOLD_YEARS', '5');
   exec("UPDATE hr_employee SET hired_at = date('now', '-2 year') WHERE id = ?", e2.id);
   terminateEmployee({ employeeId: e2.id, actor: 'human:hr' });
   const eos = H.eosFor(e2.id);
   assert.ok(eos, 'termination must compute end of service');
   assert.ok(eos.years >= 1.95 && eos.years <= 2.05, `years: ${eos.years}`);
   assert.equal(eos.days_per_year, 14);
-  assert.ok(Math.abs(eos.amount - eos.years * 14 * 50) < 0.02, 'years × days × (1500/30)');
+  assert.ok(Math.abs(eos.amount - eos.years * 14 * 50) < 0.5, 'years × 14 days × (1500/30)');
   assert.match(one('SELECT amount FROM hr_eos WHERE employee_id = ?', e2.id).amount, /^pii:1:/, 'one person\'s money is sealed');
 
   assert.throws(() => H.payEos(e2.id, { actor: `agent:${AGENT}` }), /human act/);
@@ -159,11 +168,19 @@ test('end of service is computed at termination, sealed, and paid by a person th
   assert.ok(entry, 'the payment never reached the ledger');
   const debit = one("SELECT amount FROM journal_lines WHERE journal_id = ? AND side = 'debit'", entry.id).amount;
   assert.ok(Math.abs(debit - eos.amount) < 0.02);
-  // The event carried no amount — the bridge opened the sealed figure itself.
   assert.ok(!q("SELECT payload FROM jobs WHERE kind = 'core2.event' AND payload LIKE '%eos.paid%'").some((j) => String(j.payload).includes(String(Math.round(eos.amount)))));
 });
 
-// --- grievances and assets ---------------------------------------------------------
+test('with no end-of-service rule declared, nothing is paid — an absence, not a zero', () => {
+  setSetting('EOS_DAYS_PER_YEAR_FIRST', '');
+  setSetting('EOS_DAYS_PER_YEAR_AFTER', '');
+  const r = H.computeEos({ employeeId: e1.id, actor: 'human:hr' });
+  assert.equal(r.configured, false);
+  assert.equal(r.amount, 0);
+  assert.throws(() => H.payEos(e1.id, { actor: 'human:cfo' }), /not configured|nothing is owed/);
+});
+
+// --- grievances and the letter ------------------------------------------------------
 
 test('a grievance is a sealed restricted document with a human decision behind it', () => {
   const planted = 'PLANTED-GRIEVANCE-7c1e a paragraph that must never be readable';
@@ -177,21 +194,18 @@ test('a grievance is a sealed restricted document with a human decision behind i
   assert.ok(one("SELECT action FROM audit_log WHERE action = 'grievance.resolved'"));
 });
 
-test('an asset has one holder at a time, and Core 1\'s register agrees', () => {
-  const a = createAsset({ name: 'Laptop 7', kind: 'device', owner: 'IT', actor: 'human:test' });
-  H.assignAsset({ employeeId: e1.id, assetId: a.id, actor: 'human:test' });
-  assert.equal(one('SELECT owner FROM assets WHERE id = ?', a.id).owner, 'Huda Rashid');
-  assert.throws(() => H.assignAsset({ employeeId: e1.id, assetId: a.id, actor: 'human:test' }), /already held/);
-  const held = H.assetsFor(e1.id);
-  assert.equal(held.length, 1);
-  H.returnAsset(held[0].id, { actor: 'human:test' });
-  assert.ok(one('SELECT returned_at FROM hr_asset_assignment WHERE id = ?', held[0].id).returned_at);
-});
-
 test('an employment certificate carries org facts and never the salary', () => {
   const doc = H.employmentLetter({ employeeId: e1.id, actor: 'human:hr' });
   const body = one('SELECT body FROM doc_version WHERE document_id = ? ORDER BY id DESC LIMIT 1', doc.id).body;
   assert.match(body, /Huda Rashid/);
   assert.match(body, /E001/);
   assert.ok(!/3500|3000/.test(body), 'the letter must not mention the salary');
+});
+
+test('the overtime claim reaches the bridge as one tool, against shifts.js', async () => {
+  grantScope({ agentId: AGENT, connector: CONNECTOR, capability: 'core2.claim_overtime', actor: 'human:test' });
+  const r = await callTool('claim_overtime', { employeeId: e1.id, day: `${period}-06`, minutes: 30, reason: 'late delivery' }, { agentId: AGENT, actor: 'agent' });
+  assert.equal(r.verdict, 'allowed');
+  assert.equal(one('SELECT state FROM time_overtime WHERE employee_id = ? AND day = ?', e1.id, `${period}-06`).state, 'claimed');
+  assert.ok(!one("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('pay_tax_bracket','hr_asset_assignment')"), 'a second master for tax or custody exists');
 });

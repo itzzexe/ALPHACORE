@@ -23,7 +23,7 @@ for (const suffix of ['', '-wal', '-shm']) {
   try { fs.rmSync(path.join(root, 'data', `test-surfaces.db${suffix}`)); } catch { /* first run */ }
 }
 
-const { sectionCatalog, SURFACES, surfaceOf, surfaceCatalog, surfaceAudit } = await import('../src/links.js');
+const { sectionCatalog, SURFACES, CORE2_SURFACES, surfaceOf, surfaceCatalog, surfaceAudit } = await import('../src/links.js');
 const { seedAgents } = await import('../src/workflow.js');
 const { classify, ask, askRules, RULES } = await import('../src/ask.js');
 
@@ -103,7 +103,10 @@ test('every department sits behind exactly one of the eight doors', () => {
   assert.deepEqual(a.unfiled, [], 'a department nobody filed can only be reached by typing its URL');
   assert.deepEqual(a.duplicated, [], 'a department behind two doors is a menu that disagrees with itself');
   assert.deepEqual(a.dangling, [], 'a door pointing at a department that does not exist');
-  assert.equal(a.surfaces, 8);
+  // Eight in the AI core, five in the enterprise core. Asserted as a total so
+  // adding a door without deciding which core it belongs to fails here rather
+  // than showing up in the menu.
+  assert.equal(a.surfaces, 14);
   assert.equal(a.departments, sectionCatalog().length);
 
   // And the resolved view agrees with the raw declaration, so the navigation
@@ -112,11 +115,22 @@ test('every department sits behind exactly one of the eight doors', () => {
   assert.equal(resolved, a.departments);
 });
 
-test('the eight doors are exactly the eight the design names', () => {
+test('the doors are exactly the ones the design names, in each core', () => {
   assert.deepEqual(
     SURFACES.map((s) => s.id),
     ['ask', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'],
   );
+  // The enterprise core keeps its own five. Same boundary the bridges enforce
+  // in the data — a surface claiming both cores, or neither, would put an HR
+  // record back under a run-queue heading.
+  assert.deepEqual(
+    CORE2_SURFACES.map((s) => s.id),
+    ['e-people', 'e-time', 'e-money', 'e-records', 'e-ops', 'e-seam'],
+  );
+  for (const x of SURFACES) assert.equal(x.core, 'core1', `${x.id} says which core it is in`);
+  for (const x of CORE2_SURFACES) assert.equal(x.core, 'core2', `${x.id} says which core it is in`);
+  const declared = new Set(SURFACES.map((x) => x.id));
+  for (const x of CORE2_SURFACES) assert.ok(!declared.has(x.id), `${x.id} is declared twice`);
   for (const s of SURFACES) {
     assert.ok(s.label && s.hint, `${s.id} has no label or no hint`);
     assert.ok(s.departments.length, `${s.id} has nothing behind it`);
@@ -167,10 +181,42 @@ test('the full department list and the map are still reachable', () => {
   // passes every sweep, so the wiring is asserted at the source.
   const apiJs = fs.readFileSync(path.join(root, 'src', 'api.js'), 'utf8');
   assert.ok(ROUTE_KEYS.has('map2'), 'the two-galaxies page is gone');
-  assert.ok(/\/api\\\/core2\\\/map\$\//.test(apiJs),
-    'the console asks for /api/core2/map but no route answers it — the galaxies page will claim a permission problem');
-  assert.ok(consoleJs.includes("api('/api/core2/map')"), 'the galaxies page no longer asks the API for the map');
+  // The page used to draw its own picture from /api/core2/map. It now opens the
+  // atlas itself — one drawing of one catalogue, which is what the declared
+  // edge between these two pages has always claimed — so it asks /api/map, the
+  // payload that carries the tunnels alongside everything else. The assertion
+  // that matters is unchanged and is the one that caught the original bug: the
+  // page must really ask, and a route must really answer.
+  assert.ok(consoleJs.includes("api('/api/map')"), 'the galaxies page no longer asks the API for the map');
+  assert.ok(/\/api\\\/map\$\//.test(apiJs),
+    'the console asks for /api/map but no route answers it — the galaxies page will claim a permission problem');
+  // /api/core2/map is published in openapi.json, so it outlives the one screen
+  // that used to be its only caller.
+  assert.ok(/\/api\\\/core2\\\/map\$\//.test(apiJs), 'a published endpoint lost its route');
   assert.ok(consoleJs.includes('href="#/map2"'), 'the first map no longer offers the way to the second');
+});
+
+test('a department on the whole-company map can be clicked, not only looked at', () => {
+  // Found by driving the map rather than reading it. Every rich interaction —
+  // the connection tooltip, click for the ledger, right-click to trace — is
+  // keyed on `a[data-node]`, and only the district close-up ever emitted one.
+  // The whole-company view drew bare circles, so all three silently did nothing
+  // out there while the help text under the canvas promised all three. The
+  // failure mode was a map that looked finished and answered nothing, which is
+  // exactly the kind of thing a passing sweep never catches.
+  const mapJs = fs.readFileSync(path.join(root, 'public', 'views', 'map.js'), 'utf8');
+  const far = mapJs.slice(mapJs.indexOf('function buildAtlasFar'), mapJs.indexOf('function buildAtlasNear'));
+  assert.ok(far.length > 500, 'the whole-company view moved — this test is looking at nothing');
+  assert.ok(far.includes('data-node='), 'the whole-company view draws departments nothing can click');
+  // Both galaxies, not just the one that happened to be checked.
+  assert.ok(far.split('data-node=').length - 1 >= 2,
+    'only one of the two cores draws clickable departments');
+  // A three-pixel dot is not a target a person can hit, so each leaf carries an
+  // invisible disc. `transparent`, never `none`: a fill of none takes no
+  // pointer events at all, and the difference is the whole feature.
+  assert.ok(far.includes('at-hit'), 'the leaves have no pointer target');
+  const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
+  assert.match(css, /\.at-hit\s*\{[^}]*fill:\s*transparent/, 'the hit disc cannot receive a click');
 });
 
 test('the waiting count is on the bar at every width, not only on the phone', () => {

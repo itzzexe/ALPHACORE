@@ -122,6 +122,38 @@ const trig = q("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name L
 if (trig.length < 2) note('BLOCKER', 'record', 'the append-only triggers are missing', 'the audit log can be edited');
 else pass('record', 'the audit log refuses UPDATE and DELETE at the database level');
 
+// Can everybody in here actually be forgotten?
+//
+// The inventory proposes a column as personal from its name, and separately
+// knows which columns the erasure walk reaches. Where those disagree there is
+// data about a person that no request can remove — which makes "a person can be
+// forgotten" untrue for whatever is in it.
+//
+// Two severities, because they are two different failures. A column *sealed at
+// write* that erasure cannot reach is data nobody can ever delete, encrypted
+// under a key that will never be destroyed: that blocks. A column merely
+// *proposed* as personal by a name-matching sweep is a question for a person —
+// three of the current eight are IP addresses, which are personal data under
+// most regimes and unreachable by design because they are how a break-in is
+// investigated. That is a decision somebody should make and record, not a
+// blocker, and it is named here so it cannot be made by not looking.
+try {
+  const { rebuild, coverage, unerasablePersonal } = await import('../src/datagov.js');
+  rebuild({ actor: 'system:launch-audit' });
+  const cov = coverage();
+  if (cov.sealedButUnerasable > 0) {
+    note('BLOCKER', 'record', `${cov.sealedButUnerasable} column(s) are sealed at write and cannot be erased`,
+      'data encrypted under a key nobody will ever destroy is data nobody can delete');
+  } else pass('record', 'nothing is sealed under a key the erasure walk cannot reach');
+
+  if (cov.gap > 0) {
+    note('HIGH', 'record', `${cov.gap} column(s) look personal and the erasure walk does not reach them`,
+      `${unerasablePersonal().map((r) => `${r.table_name}.${r.column_name}`).join(', ')} — classify each on the Data governance page, or extend the walk`);
+  } else pass('record', `every column the sweep proposes as personal is reachable by erasure (${cov.personal} of ${cov.columns})`);
+} catch (e) {
+  note('HIGH', 'record', 'the erasure coverage could not be measured', String(e.message).slice(0, 160));
+}
+
 const { lifecycleOverview } = await import('../src/lifecycle.js');
 const life = lifecycleOverview();
 if (!life.offsite.configured) {
@@ -203,9 +235,21 @@ else pass('wiring', `all ${divIds.length} divisions are joined to each other`);
 
 // Every section must have a page, and every page a section. A route with no
 // section is unreachable from the map; a section with no route is a dead link.
+// The table used to be `const routes = {` in app.js. When the console was split
+// into modules it became ROUTE_TABLE, handed to a registry — and this check went
+// on reading the old name, found nothing, and reported all 150 departments as
+// pointing at a page that does not exist. A pre-flight audit that cries wolf is
+// worse than one that does not run: it teaches you to skip the output. So the
+// slice is anchored on the table and asserted to be non-empty, which turns the
+// next rename into a loud failure rather than a silent flood.
 const appjs = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
-const routeBlock = appjs.slice(appjs.indexOf('const routes = {'), appjs.indexOf('let pollTimer') > 0 ? appjs.indexOf('};', appjs.indexOf('const routes = {')) : undefined);
-const routeKeys = new Set([...routeBlock.matchAll(/^\s{2}([a-z][\w]*)\s*:\s*\{/gm)].map((m) => m[1]));
+const tableAt = appjs.indexOf('const ROUTE_TABLE');
+const routeBlock = tableAt < 0 ? '' : appjs.slice(tableAt, appjs.indexOf('registerRoutes(ROUTE_TABLE)', tableAt));
+const routeKeys = new Set([...routeBlock.matchAll(/^\s+'?([a-z][\w]*)'?\s*:\s*\{/gm)].map((m) => m[1]));
+if (!routeKeys.size) {
+  note('HIGH', 'wiring', 'the route table could not be read, so no page check happened',
+    'launch-audit.mjs looks for `const ROUTE_TABLE` … `registerRoutes(ROUTE_TABLE)` in public/app.js');
+}
 const missingPages = sections.filter((s) => {
   const key = String(s.href || '').replace('#/', '').split('/')[0];
   return key && !routeKeys.has(key);

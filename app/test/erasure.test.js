@@ -261,3 +261,53 @@ test('nothing he said is readable anywhere in the database', () => {
   }
   assert.deepEqual(leaks, [], `still readable in: ${leaks.join(', ')}`);
 });
+
+test('a customer is somebody, and can be forgotten', () => {
+  // Customers were reachable by no route at all. A review put the reasoning
+  // behind that plainly enough to fix: "the customer's name is not an
+  // identifier" is not true in general — for a sole trader it is the only
+  // identifier on the row.
+  exec(`INSERT INTO customers (name, company, plan, mrr_usd, state, notes)
+        VALUES ('Layla Haddad','Haddad Consulting','pro',900,'active','prefers a call on Tuesdays')`);
+
+  const found = E.findSubject({ kind: 'contact', identifier: 'Layla Haddad' });
+  assert.ok(found.records.length, 'she is findable at all, which she was not before');
+
+  E.eraseSubject({ kind: 'contact', identifier: 'Layla Haddad', reason: 'she asked', actor: 'human:test' });
+  const row = one("SELECT name, company, notes FROM customers WHERE name IS NOT NULL ORDER BY id DESC LIMIT 1");
+  assert.ok(String(row.name).startsWith('pii:'), 'the name is sealed');
+  // A note about somebody is about them.
+  assert.ok(String(row.notes).startsWith('pii:'), 'and so is the note');
+  assert.ok(verifyChain().ok);
+});
+
+test('erasing somebody takes their name with them', async () => {
+  const { createPerson } = await import('../src/core2/identity.js');
+  const p = createPerson({ displayName: 'Omar Nasser', personalEmail: 'omar-erase@example.com', actor: 'human:test' });
+  assert.equal(one('SELECT display_name FROM hr_person WHERE id = ?', p.id).display_name, 'Omar Nasser');
+
+  E.eraseSubject({ kind: 'contact', identifier: 'omar-erase@example.com', reason: 'he asked', actor: 'human:test' });
+  const after = one('SELECT display_name FROM hr_person WHERE id = ?', p.id).display_name;
+  assert.ok(String(after).startsWith('pii:'), 'erasing somebody while leaving their name readable is not erasing them');
+  assert.equal(E.openPii(after), '[erased]');
+  assert.ok(verifyChain().ok);
+});
+
+test('a name counts as personal on a table about people, and not on one about products', async () => {
+  const { rebuild, coverage } = await import('../src/datagov.js');
+  rebuild({ actor: 'system:test' });
+
+  const personal = (t, c) => one('SELECT personal FROM data_inventory WHERE table_name = ? AND column_name = ?', t, c)?.personal;
+  // `subject_ref` is the schema saying "this table is about people", so the
+  // rule is read from the schema rather than from somebody's list.
+  assert.equal(personal('customers', 'name'), 1, 'a customer may be a person');
+  assert.equal(personal('hr_person', 'display_name'), 1);
+  assert.equal(personal('products', 'name'), 0, 'a product is not');
+  assert.equal(personal('assets', 'name'), 0);
+  // A foreign key points at a name; it is not one.
+  assert.notEqual(personal('customers', 'product_id'), 1);
+
+  const cov = coverage();
+  assert.equal(cov.sealedButUnerasable, 0, 'nothing is sealed under a key erasure cannot reach');
+  assert.ok(cov.gap >= 0 && cov.gap < cov.personal, 'and the gap is a number rather than a claim');
+});

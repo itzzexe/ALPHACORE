@@ -395,6 +395,18 @@ export function sectionCatalog() {
       'Units, positions and grades — the shape of the company'),
     S('docs', 'Documents', 'data', '#/docs', n('SELECT COUNT(*) AS n FROM doc_document'),
       'The knowledge base: versioned, classified, and sealed where it is about a person'),
+    S('files', 'Files', 'data', '#/files', n('SELECT COUNT(*) AS n FROM doc_file WHERE deleted_at IS NULL'),
+      'Attachments whose bytes are sealed under the subject\'s own key, so erasing the person destroys the file'),
+    S('records', 'Records & retention', 'trust', '#/records', n('SELECT COUNT(*) AS n FROM rec_class'),
+      'How long each kind of record is kept, on whose authority, and the legal hold that outranks both the schedule and a request to be forgotten'),
+    S('shifts', 'Shifts & overtime', 'talent', '#/shifts', n('SELECT COUNT(*) AS n FROM time_shift'),
+      'Rosters, lateness measured against the shift in force that day, and extra minutes that are not overtime until somebody approves them'),
+    S('payrules', 'Pay rules', 'capital', '#/payrules', n('SELECT COUNT(*) AS n FROM pay_rule WHERE active = 1'),
+      'What is deducted from a slip and on whose authority — declared rules, never a zero standing in for an answer'),
+    S('custody', 'Custody', 'operate', '#/custody', n('SELECT COUNT(*) AS n FROM cust_item WHERE returned_at IS NULL'),
+      'Who is holding which laptop, key and card — the asset register says what we own, this says where it is'),
+    S('joining', 'Joining & leaving', 'talent', '#/joining', n("SELECT COUNT(*) AS n FROM join_list WHERE state = 'open'"),
+      'A first day and a last day as a checklist, where the steps that cost money cannot be skipped quietly'),
     S('time', 'Attendance & leave', 'talent', '#/time', n('SELECT COUNT(*) AS n FROM time_leave_request'),
       'Who is in, who is away, and the leave that waits on a manager'),
     S('meetings', 'Meetings', 'talent', '#/meetings', n('SELECT COUNT(*) AS n FROM mtg_meeting'),
@@ -576,14 +588,15 @@ function packageSections() {
  * disagree; two diagrams always eventually do.
  */
 export const CORE2_DIVISIONS = [
-  { id: 'e-people', label: 'PEOPLE', color: '#4f9cf0', departments: ['workforce2', 'orgchart', 'talent2', 'comp', 'me'] },
-  { id: 'e-time', label: 'TIME', color: '#78bf6d', departments: ['time', 'hrops'] },
-  { id: 'e-finance', label: 'FINANCE', color: '#e8c547', departments: ['finops2', 'budgets2', 'payables', 'receivables', 'fixedassets'] },
+  { id: 'e-people', label: 'PEOPLE', color: '#4f9cf0', departments: ['workforce2', 'orgchart', 'talent2', 'joining', 'comp', 'me'] },
+  { id: 'e-time', label: 'TIME', color: '#78bf6d', departments: ['time', 'shifts', 'hrops'] },
+  { id: 'e-finance', label: 'FINANCE', color: '#e8c547', departments: ['finops2', 'payrules', 'budgets2', 'payables', 'receivables', 'fixedassets'] },
   { id: 'e-bank', label: 'THE BANK', color: '#d9a441', departments: ['bank'] },
-  { id: 'e-procure', label: 'PROCUREMENT & STOCK', color: '#e5533d', departments: ['procure', 'inventory'] },
+  { id: 'e-procure', label: 'PROCUREMENT & STOCK', color: '#e5533d', departments: ['procure', 'inventory', 'custody'] },
   { id: 'e-ops', label: 'OPERATIONS', color: '#ffb020', departments: ['facilities', 'helpdesk'] },
   { id: 'e-admin', label: 'ADMINISTRATION', color: '#948b7d', departments: ['secretariat', 'legalcases', 'regulatory'] },
-  { id: 'e-collab', label: 'COLLABORATION', color: '#b78bff', departments: ['meetings', 'docs'] },
+  { id: 'e-collab', label: 'COLLABORATION', color: '#b78bff', departments: ['meetings', 'docs', 'files'] },
+  { id: 'e-records', label: 'RECORDS', color: '#e07bd2', departments: ['records'] },
   { id: 'e-bridge', label: 'THE BRIDGES', color: '#2fd6a8', departments: ['bridges'] },
 ];
 
@@ -665,9 +678,28 @@ export const DIVISIONS = [
  * to exactly one surface, so a new department that nobody filed shows up as a
  * blocker rather than as a page you can only reach by typing its URL.
  */
+/**
+ * The two cores, as navigation.
+ *
+ * §2 of the Core 2 directive keeps the galaxies apart in the data: the AI core
+ * thinks and acts, the enterprise core records what is true, and nothing
+ * crosses but the declared tunnels. The menu was the last place they were still
+ * mixed — an HR record and a run queue sitting under one heading because both
+ * happened to involve people.
+ *
+ * So a surface belongs to exactly one core, and the rail shows one core at a
+ * time. Not a cosmetic split: it is the same boundary the bridges enforce, made
+ * visible to the person using it.
+ */
+export const CORES = [
+  { id: 'core1', label: 'AI core', hint: 'Thinks and acts — the workforce, the work, and everything it reaches.' },
+  { id: 'core2', label: 'Enterprise core', hint: 'Records what is true — people, time, money paid, and what is kept.' },
+];
+
 export const SURFACES = [
   {
     id: 'ask',
+    core: 'core1',
     label: 'Ask AlphaCore',
     hint: 'Say what you need. The company works out which departments are involved.',
     // The three things an open-ended question can become. Ask routes to these
@@ -676,57 +708,62 @@ export const SURFACES = [
   },
   {
     id: 'work',
+    core: 'core1',
     label: 'Work',
     hint: 'Make something: the workforce, the queue, and everything being built.',
     departments: [
       'agents', 'workforce', 'runs', 'pipelines', 'providers', 'artifacts', 'capacity', 'workstreams', 'tiers',
-      'systems', 'infra', 'products', 'journeys', 'projects', 'tasks', 'meetings', 'lab', 'releases', 'sprints', 'packages',
+      'systems', 'infra', 'products', 'journeys', 'projects', 'tasks', 'lab', 'releases', 'sprints', 'packages',
       'jobs', 'deadletter',
     ],
   },
   {
     id: 'approvals',
+    core: 'core1',
     label: 'Approvals',
     hint: 'Everything stopped, waiting for a person to decide.',
     departments: ['gate', 'decisions', 'budgets', 'risks', 'quality', 'evals', 'pmo', 'auditor', 'simulation', 'approvals'],
   },
   {
     id: 'company',
+    core: 'core1',
     label: 'Company',
     hint: 'The company\'s own record: how it governs itself, and what it owes.',
     departments: [
       'standing', 'harmony', 'autopilot', 'governance', 'oversight', 'scorecard', 'users', 'settings', 'audit',
       'constitution', 'timemachine', 'observe', 'anchors', 'datagov', 'roles', 'observability', 'backups',
-      'board', 'ir', 'comms', 'chief', 'bridges', 'map2', 'secretariat', 'regulatory', 'legalcases',
+      'board', 'ir', 'comms', 'chief',
       'security', 'compliance', 'sustainability', 'provenance', 'redteam', 'erasure', 'privacy', 'trustcentre',
       'continuity', 'incidents', 'assets', 'legal', 'vendors', 'objectives', 'ip',
-      'inventory', 'facilities', 'helpdesk',
     ],
   },
   {
     id: 'intelligence',
+    core: 'core1',
     label: 'Intelligence',
     hint: 'Find something out — about a market, a company, or your own records.',
-    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'docs', 'insights', 'kgraph', 'embeddings'],
+    departments: ['intel', 'segments', 'data', 'archive', 'knowledge', 'insights', 'kgraph', 'embeddings'],
   },
   {
     id: 'money',
+    core: 'core1',
     label: 'Money',
     hint: 'Money in, money out, and what everything cost.',
     departments: [
-      'finance', 'finops2', 'finreports', 'ledger', 'bookkeeper', 'economics', 'finops', 'treasury', 'money', 'tax',
-      'pricing', 'success', 'sales', 'customers', 'relations', 'procurement', 'procure', 'revenue', 'partnerships',
-      'budgets2', 'payables', 'receivables', 'fixedassets', 'bank',
+      'finance', 'finreports', 'ledger', 'bookkeeper', 'economics', 'finops', 'treasury', 'money', 'tax',
+      'pricing', 'success', 'sales', 'customers', 'relations', 'procurement', 'revenue', 'partnerships',
     ],
   },
   {
     id: 'people',
+    core: 'core1',
     label: 'People',
     hint: 'The workforce, human and synthetic — and how it gets better.',
-    departments: ['people', 'workforce2', 'orgchart', 'time', 'hrops', 'comp', 'me', 'talent2', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
+    departments: ['people', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
   },
   {
     id: 'world',
+    core: 'core1',
     label: 'World',
     hint: 'Anything that reaches a person outside this company.',
     departments: [
@@ -739,7 +776,63 @@ export const SURFACES = [
   },
 ];
 
-const SURFACE_OF = new Map(SURFACES.flatMap((s) => s.departments.map((d) => [d, s.id])));
+/**
+ * The enterprise core's surfaces.
+ *
+ * Grouped by what somebody is trying to do rather than by which module owns the
+ * table: "who works here" is one errand whether it lands in the org chart or in
+ * the talent pipeline. The bridges get their own heading because the seam is the
+ * one thing about Core 2 that is worth looking at on purpose.
+ */
+export const CORE2_SURFACES = [
+  {
+    id: 'e-people',
+    core: 'core2',
+    label: 'People & HR',
+    hint: 'Who works here, where they sit, and who is joining.',
+    departments: ['workforce2', 'orgchart', 'talent2', 'comp', 'me'],
+  },
+  {
+    id: 'e-time',
+    core: 'core2',
+    label: 'Time & attendance',
+    hint: 'Who was here, who is on leave, and what was agreed.',
+    departments: ['time', 'shifts', 'hrops', 'joining'],
+  },
+  {
+    id: 'e-money',
+    core: 'core2',
+    label: 'Payroll & spending',
+    hint: 'What people are paid, what they claimed, and what was bought.',
+    departments: ['finops2', 'payrules', 'budgets2', 'payables', 'receivables', 'fixedassets', 'bank', 'procure', 'custody'],
+  },
+  {
+    id: 'e-records',
+    core: 'core2',
+    label: 'Documents & records',
+    hint: 'What is written down, what is attached to it, and how long it is kept.',
+    departments: ['docs', 'files', 'records', 'meetings', 'secretariat', 'legalcases', 'regulatory'],
+  },
+  {
+    id: 'e-ops',
+    core: 'core2',
+    label: 'Operations',
+    hint: 'Stock, work orders, vehicles, rooms, and the desk you call when something breaks.',
+    departments: ['inventory', 'facilities', 'helpdesk'],
+  },
+  {
+    id: 'e-seam',
+    core: 'core2',
+    label: 'The seam',
+    hint: 'The map of both cores, and everything that crosses between them.',
+    departments: ['map2', 'bridges'],
+  },
+];
+
+/** One catalogue. Two cores is a property of the rows, not two lists. */
+export const ALL_SURFACES = [...SURFACES, ...CORE2_SURFACES];
+
+const SURFACE_OF = new Map(ALL_SURFACES.flatMap((s) => s.departments.map((d) => [d, s.id])));
 
 /** Which door does this department sit behind? */
 export const surfaceOf = (deptId) => SURFACE_OF.get(deptId) || null;
@@ -755,14 +848,14 @@ export const surfaceOf = (deptId) => SURFACE_OF.get(deptId) || null;
  */
 export function surfaceAudit() {
   const sections = sectionCatalog();
-  const listed = SURFACES.flatMap((s) => s.departments);
+  const listed = ALL_SURFACES.flatMap((s) => s.departments);
   const counts = new Map();
   for (const d of listed) counts.set(d, (counts.get(d) || 0) + 1);
 
   const known = new Set(sections.map((s) => s.id));
   return {
     departments: sections.length,
-    surfaces: SURFACES.length,
+    surfaces: ALL_SURFACES.length,
     // Filed nowhere: reachable only by URL.
     unfiled: sections.filter((s) => !SURFACE_OF.has(s.id)).map((s) => s.id),
     // Filed twice: the menu disagrees with itself.
@@ -776,8 +869,11 @@ export function surfaceAudit() {
 export function surfaceCatalog() {
   const sections = sectionCatalog();
   const by = new Map(sections.map((s) => [s.id, s]));
-  return SURFACES.map((s) => ({
+  return ALL_SURFACES.map((s) => ({
     id: s.id,
+    // Which core it belongs to. The console shows one at a time, and a surface
+    // that did not say would land in whichever came first.
+    core: s.core || 'core1',
     label: s.label,
     hint: s.hint,
     departments: s.departments.map((d) => by.get(d)).filter(Boolean),
@@ -1062,9 +1158,26 @@ export function relationshipMatrix() {
     edge('meetings', 'erasure', 'a transcript is sealed under its organizer and dies with their key', n("SELECT COUNT(*) AS n FROM mtg_meeting WHERE transcript LIKE 'pii:1:%'"), '#/erasure'),
     edge('docs', 'workforce2', 'a restricted document names the person it is about', n('SELECT COUNT(*) AS n FROM doc_document WHERE subject_person_id IS NOT NULL'), '#/docs'),
     edge('docs', 'erasure', 'sealed versions die with their subject`s key', n("SELECT COUNT(*) AS n FROM doc_version WHERE body LIKE 'pii:1:%'"), '#/erasure'),
-    // The relationship table (#/graph) is a page over this matrix, not a
-    // department; the catalogue row that owns the map is governance.
-    edge('map2', 'governance', 'two projections of one catalogue — the maps cannot disagree', n('SELECT COUNT(*) AS n FROM connectors'), '#/graph'),
+    // `graph` is a surface, not a department, so an edge could not name it and
+    // was silently dropped. The claim is still true and still checkable against
+    // a department: the knowledge graph and this map are drawn from one
+    // catalogue, so they cannot disagree. The link still opens the first map.
+    edge('files', 'docs', 'the scan behind a document, rather than a retyped summary of it', n("SELECT COUNT(*) AS n FROM doc_file WHERE attach_type = 'document'"), '#/docs'),
+    edge('files', 'erasure', 'erasing a person destroys their files, because the key went with them', n('SELECT COUNT(*) AS n FROM doc_file'), '#/erasure'),
+    edge('files', 'workforce2', 'what is on an employee\'s file', n("SELECT COUNT(*) AS n FROM doc_file WHERE attach_type IN ('person','employee')"), '#/workforce2'),
+    edge('records', 'erasure', 'a legal hold outranks a request to be forgotten, and says so in writing', n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'erasure.refused_hold'"), '#/erasure'),
+    edge('records', 'compliance', 'the schedule somebody has to be able to defend', n('SELECT COUNT(*) AS n FROM rec_class'), '#/compliance'),
+    edge('records', 'files', 'files are disposed of under the same schedule as everything else', n('SELECT COUNT(*) AS n FROM rec_disposal'), '#/files'),
+    edge('shifts', 'time', 'attendance judged against the roster in force that day', n('SELECT COUNT(*) AS n FROM time_shift_assignment'), '#/time'),
+    edge('shifts', 'finops2', 'approved overtime is the only kind payroll sees', n("SELECT COUNT(*) AS n FROM time_overtime WHERE state = 'approved'"), '#/finops2'),
+    edge('payrules', 'finops2', 'every line on a slip comes from a declared rule', n('SELECT COUNT(*) AS n FROM pay_rule WHERE active = 1'), '#/finops2'),
+    edge('payrules', 'workforce2', 'what somebody is owed when they leave', n("SELECT COUNT(*) AS n FROM hr_employee WHERE state != 'active'"), '#/workforce2'),
+    edge('custody', 'assets', 'the register says what we own; this says who has it', n('SELECT COUNT(*) AS n FROM cust_item'), '#/assets'),
+    edge('custody', 'joining', 'a leaving cannot close while anything is still out', n('SELECT COUNT(*) AS n FROM cust_item WHERE returned_at IS NULL'), '#/joining'),
+    edge('joining', 'workforce2', 'a first day and a last day, per employee', n('SELECT COUNT(*) AS n FROM join_list'), '#/workforce2'),
+    edge('joining', 'records', 'what is kept when somebody leaves, and for how long', n('SELECT COUNT(*) AS n FROM rec_class'), '#/records'),
+    edge('records', 'audit', 'every hold, release and disposal on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'records.%'"), '#/audit'),
+    edge('map2', 'kgraph', 'two projections of one catalogue — the maps cannot disagree', n('SELECT COUNT(*) AS n FROM graph_nodes'), '#/graph'),
     edge('map2', 'bridges', 'every tunnel drawn is a declared edge the audit checks', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core'"), '#/bridges'),
     edge('bridges', 'audit', 'the consequential subset of enterprise events is written to the chain', n("SELECT COUNT(*) AS n FROM core2_log WHERE chained = 1"), '#/audit'),
 
@@ -1075,11 +1188,12 @@ export function relationshipMatrix() {
     edge('hrops', 'finops2', 'approved overtime is a line on the slip', n("SELECT COUNT(*) AS n FROM time_overtime WHERE state = 'approved'"), '#/finops2'),
     edge('hrops', 'gate', 'an overtime claim and a correction wait for a manager', n("SELECT COUNT(*) AS n FROM time_overtime WHERE state = 'pending'"), '#/gate', 'gate'),
     edge('comp', 'workforce2', 'a raise, a promotion and an end of service are facts about an employment', n('SELECT COUNT(*) AS n FROM hr_salary_change'), '#/workforce2'),
-    edge('comp', 'finops2', 'allowances, contributions and the tax table are what the payroll formula reads', n('SELECT COUNT(*) AS n FROM pay_tax_bracket'), '#/finops2'),
+    edge('comp', 'finops2', 'allowances and plan contributions are lines the payroll formula reads', n('SELECT COUNT(*) AS n FROM hr_allowance'), '#/finops2'),
+    edge('comp', 'payrules', 'the tax on a slip and the days owed at the end come from the declared rules', n('SELECT COUNT(*) AS n FROM hr_eos'), '#/payrules'),
     edge('comp', 'erasure', 'salary history and end of service are sealed under the person', n('SELECT COUNT(*) AS n FROM hr_salary_change WHERE subject_ref IS NOT NULL'), '#/erasure'),
     edge('comp', 'gate', 'changing a salary is categorically a human act', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'enterprise-core' AND verdict = 'gated'"), '#/gate', 'gate'),
     edge('comp', 'docs', 'a grievance is a sealed document with a state machine', n('SELECT COUNT(*) AS n FROM hr_grievance'), '#/docs'),
-    edge('comp', 'assets', 'who holds which device is recorded against Core 1\'s register', n('SELECT COUNT(*) AS n FROM hr_asset_assignment'), '#/assets'),
+    edge('comp', 'custody', 'who holds which of the company\'s things is custody\'s register; a leaving reads it', n('SELECT COUNT(*) AS n FROM cust_item'), '#/custody'),
     edge('me', 'workforce2', 'the page about you is your employment, read through your login', n('SELECT COUNT(*) AS n FROM users WHERE person_id IS NOT NULL'), '#/workforce2'),
     edge('me', 'users', 'a login that is a person sees their own record and nobody else\'s', n('SELECT COUNT(*) AS n FROM users WHERE person_id IS NOT NULL'), '#/users'),
     edge('me', 'time', 'your day and your leave, from the same tables the manager sees', n('SELECT COUNT(*) AS n FROM time_attendance'), '#/time'),
@@ -1541,6 +1655,103 @@ export function flowStats() {
 }
 
 /** Everything that happened after `since` (an audit seq), mapped to map sections. */
+/**
+ * What the map should be lit up about right now.
+ *
+ * The atlas has been a map of what *exists*. That is the right thing to show
+ * somebody meeting the company for the first time and the wrong thing to show
+ * them every morning afterwards, when the questions are all about today: what
+ * is waiting on me, what failed, where did the work go.
+ *
+ * So three lenses, each derived from a real query rather than a heuristic:
+ *
+ *   waiting   things that have stopped and need a person. Every entry is a
+ *             specific query against a specific table — not "count of rows in
+ *             a state called pending", which would light up departments that
+ *             merely have a queue.
+ *   failing   things that went wrong and stayed wrong.
+ *   active    what has actually happened today, attributed through the same
+ *             subject→section map the activity feed uses.
+ *
+ * A department with no counter reports nothing rather than zero. The two look
+ * identical on a screen and mean opposite things, and a map that shows a
+ * confident zero for a department nobody wired is worse than one that leaves
+ * it unlit.
+ */
+const WAITING = {
+  gate: "SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'",
+  approvals: "SELECT COUNT(*) AS n FROM approvals WHERE state = 'waiting'",
+  decisions: "SELECT COUNT(*) AS n FROM decisions WHERE status = 'open'",
+  requests: "SELECT COUNT(*) AS n FROM requests WHERE state IN ('new','routing')",
+  egress: "SELECT COUNT(*) AS n FROM egress_log WHERE verdict = 'gated'",
+  browser: "SELECT COUNT(*) AS n FROM browser_sessions WHERE state = 'waiting'",
+  ledger: "SELECT COUNT(*) AS n FROM journal WHERE state = 'draft'",
+  bookkeeper: "SELECT COUNT(*) AS n FROM journal WHERE state = 'draft' AND created_by LIKE 'agent:%'",
+  shifts: "SELECT COUNT(*) AS n FROM time_overtime WHERE state = 'claimed'",
+  time: "SELECT COUNT(*) AS n FROM time_leave_request WHERE state = 'requested'",
+  finops2: "SELECT COUNT(*) AS n FROM fin_expense WHERE state = 'submitted'",
+  procure: "SELECT COUNT(*) AS n FROM proc_request WHERE state = 'requested'",
+  joining: "SELECT COUNT(*) AS n FROM join_step s JOIN join_list l ON l.id = s.list_id WHERE l.state = 'open' AND s.done_at IS NULL AND s.critical = 1",
+  records: 'SELECT COUNT(*) AS n FROM rec_hold WHERE released_at IS NULL',
+  support: "SELECT COUNT(*) AS n FROM tickets WHERE state = 'draft'",
+  incidents: "SELECT COUNT(*) AS n FROM incidents WHERE state != 'closed'",
+  treasury: "SELECT COUNT(*) AS n FROM payouts WHERE state = 'prepared'",
+  standing: "SELECT COUNT(*) AS n FROM standing_orders WHERE state = 'paused'",
+};
+
+const FAILING = {
+  deadletter: "SELECT COUNT(*) AS n FROM dead_letter d JOIN runs r ON r.id = d.run_id WHERE r.state = 'failed'",
+  runs: "SELECT COUNT(*) AS n FROM runs WHERE state = 'failed'",
+  redteam: "SELECT COUNT(*) AS n FROM redteam_findings WHERE state = 'open'",
+  jobs: "SELECT COUNT(*) AS n FROM jobs WHERE state = 'failed'",
+  incidents: "SELECT COUNT(*) AS n FROM incidents WHERE severity IN ('sev1','sev2') AND state != 'closed'",
+  hunt: "SELECT COUNT(*) AS n FROM hunts WHERE state = 'not-found'",
+};
+
+const countOf = (sql) => { try { return one(sql)?.n || 0; } catch { return null; } };
+
+export function mapState() {
+  const waiting = {};
+  const failing = {};
+  for (const [id, sql] of Object.entries(WAITING)) {
+    const n = countOf(sql);
+    if (n) waiting[id] = n;
+  }
+  for (const [id, sql] of Object.entries(FAILING)) {
+    const n = countOf(sql);
+    if (n) failing[id] = n;
+  }
+
+  // What actually happened today, attributed the same way the activity feed
+  // attributes it — so the map and the feed cannot disagree about who did what.
+  const active = {};
+  let rows = [];
+  try {
+    rows = q(`SELECT action, subject_type, COUNT(*) AS n FROM audit_log
+              WHERE occurred_at >= datetime('now','-1 day') GROUP BY action, subject_type`);
+  } catch { rows = []; }
+  for (const r of rows) {
+    const section = SUBJECT_SECTION[r.subject_type] || ACTION_SECTION[String(r.action).split('.')[0]] || null;
+    if (section) active[section] = (active[section] || 0) + r.n;
+  }
+
+  return {
+    waiting,
+    failing,
+    active,
+    totals: {
+      waiting: Object.values(waiting).reduce((a, b) => a + b, 0),
+      failing: Object.values(failing).reduce((a, b) => a + b, 0),
+      active: Object.values(active).reduce((a, b) => a + b, 0),
+    },
+    // Said plainly, because a lens that silently covers two thirds of the map
+    // invites the reader to conclude the rest is fine.
+    counted: { waiting: Object.keys(WAITING).length, failing: Object.keys(FAILING).length },
+    note: 'Only departments with a declared counter can light up. A department with no counter is left unlit '
+      + 'rather than shown as zero — the two look identical and mean opposite things.',
+  };
+}
+
 export function activityFeed(since = 0) {
   const rows = q(`SELECT seq, occurred_at, actor_type, actor_id, action, subject_type, subject_id
     FROM audit_log WHERE seq > ? ORDER BY seq DESC LIMIT 30`, since);

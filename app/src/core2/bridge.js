@@ -45,6 +45,7 @@ import * as finance from './finance.js';
 import * as bank from './bank.js';
 import * as ops from './ops.js';
 import * as admin from './admin.js';
+import * as shifts from './shifts.js';
 import { openPii } from '../erasure.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
@@ -260,10 +261,10 @@ export const TOOLS = {
   },
 
   // --- the rest of the company: writes, through the gateway ---
-  request_overtime: {
-    write: true, permission: 'people.manage',
-    about: 'File an overtime claim for somebody. Deciding it is a manager\'s act.',
-    run: (a, ctx) => hrplus.requestOvertime({ ...a, actor: ctx.actor }),
+  claim_overtime: {
+    write: true, permission: 'shifts.manage',
+    about: 'Claim overtime for somebody, against the shift they were on. Approving it is a manager\'s act.',
+    run: (a, ctx) => shifts.claimOvertime({ ...a, actor: ctx.actor }),
   },
   draft_budget: {
     write: true, permission: 'finance.export',
@@ -892,7 +893,7 @@ export function verbCoverage() {
     procurement: /^(create_procurement|advance_procurement|get_asset)$/,
     talent: /^(draft_review_evidence|advance_application)$/,
     contracts: /^(list_expiring_contracts)$/,
-    hrplus: /^(get_attendance_exceptions|request_overtime)$/,
+    hrplus: /^(get_attendance_exceptions|claim_overtime)$/,
     finance: /^(get_budget_variance|get_ap_aging|get_ar_aging|draft_budget|draft_bill|approve_bill|draft_invoice|issue_invoice|run_depreciation|set_fx_rate)$/,
     bank: /^(get_cash_position|get_reconciliation|draft_transfer|import_statement|auto_match)$/,
     ops: /^(get_stock_levels|list_open_tickets|get_room_availability|get_fleet|record_stock_move|create_workorder|book_room|open_ticket|report_incident)$/,

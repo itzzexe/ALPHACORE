@@ -66,48 +66,31 @@ export async function renderHrOps() {
   if (!d) return denied('time rules');
   const canM = hasPermC('people.manage');
   const emps = canM ? await employees() : [];
-  const shifts = d.shifts.map((s) => [String(s.id), `${s.name} ${s.starts}–${s.ends}`]);
 
   view.innerHTML = `
   <div class="grid grid-4">
-    ${tile(t('Overtime waiting'), d.overtimePending, esc(t('claims a manager has not decided')), d.overtimePending ? 'tile-warn' : '')}
     ${tile(t('Corrections waiting'), d.correctionsPending, esc(t('in/out claims awaiting a decision')), d.correctionsPending ? 'tile-warn' : '')}
-    ${tile(t('Shifts'), d.shifts.length, esc(t('what lateness is measured against')))}
     ${tile(t('Holidays this year'), d.holidays.length, esc(t('days nobody is expected in')))}
+    ${tile(t('Overtime rate'), `${d.overtimeRate}×`, esc(t('setting OVERTIME_RATE — claims live on the Shifts page')))}
+    ${tile(t('Shifts & overtime'), esc(t('next door')), `<a href="#/shifts">${esc(t('rosters, lateness and overtime claims'))} →</a>`)}
   </div>
   ${panel('Measured, never explained', `<div class="map-legend">${esc(t(d.note))}</div>`)}
   ${panel(`Lateness and absence — ${d.exceptions.period}`, table(['Employee', '$Absent days', '$Late days', '$Late minutes'],
     d.exceptions.rows.map((r) => `<tr><td><b>${esc(r.display_name)}</b></td><td class="num">${r.absent}</td><td class="num">${r.lateDays}</td><td class="num">${r.lateMinutes}</td></tr>`), 'No active employees.'))}
-  ${panel('Overtime claims', table(['Employee', 'Day', '$Minutes', '$Rate', 'State', ''], d.overtime.map((o) => `<tr>
-      <td><b>${esc(o.display_name)}</b></td><td class="mono">${esc(o.day)}</td><td class="num">${o.minutes}</td><td class="num">${o.rate}×</td><td>${chip(o.state)}</td>
-      <td>${o.state === 'pending' && canM ? actBtn(`/api/core2/hrops/overtime/${o.id}/decide`, { approve: true }, 'Approve') + ' ' + actBtn(`/api/core2/hrops/overtime/${o.id}/decide`, { approve: false }, 'Reject') : ''}</td></tr>`)))}
   ${panel('Attendance corrections', table(['Employee', 'Day', 'In', 'Out', 'State', ''], d.corrections.map((c) => `<tr>
       <td><b>${esc(c.display_name)}</b></td><td class="mono">${esc(c.day)}</td><td class="mono">${esc(c.in_at || '—')}</td><td class="mono">${esc(c.out_at || '—')}</td><td>${chip(c.state)}</td>
       <td>${c.state === 'pending' && canM ? actBtn(`/api/core2/hrops/correction/${c.id}/decide`, { approve: true }, 'Approve') + ' ' + actBtn(`/api/core2/hrops/correction/${c.id}/decide`, { approve: false }, 'Reject') : ''}</td></tr>`)))}
-  <div class="grid grid-2" style="margin-top:16px">
-    ${panel('Shifts', table(['Name', 'Hours', 'Days'], d.shifts.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td class="mono">${esc(s.starts)}–${esc(s.ends)}</td><td class="mono">${esc(s.days)}</td></tr>`)))}
-    ${panel('Holidays', table(['Day', 'Name'], d.holidays.map((h) => `<tr><td class="mono">${esc(h.day)}</td><td>${esc(h.name)}</td></tr>`)))}
-  </div>
+  ${panel('Holidays', table(['Day', 'Name'], d.holidays.map((h) => `<tr><td class="mono">${esc(h.day)}</td><td>${esc(h.name)}</td></tr>`)))}
   ${canM ? `
   <div class="grid grid-2" style="margin-top:16px">
-    ${panel('File an overtime claim', `<div class="form-inline">
-      ${fl('ot-emp', 'Employee', empSel('ot-emp', emps))}${fl('ot-day', 'Day', inp('ot-day', '', 'date'))}${fl('ot-min', 'Minutes', inp('ot-min', '60', 'number'))}
-      ${btn('ot-go', 'File')}</div>`)}
     ${panel('Claim a correction', `<div class="form-inline">
       ${fl('cr-emp', 'Employee', empSel('cr-emp', emps))}${fl('cr-day', 'Day', inp('cr-day', '', 'date'))}${fl('cr-in', 'In (HH:MM)', inp('cr-in', '09:00'))}${fl('cr-out', 'Out (HH:MM)', inp('cr-out', '17:00'))}
       ${btn('cr-go', 'Claim')}</div>`)}
-    ${panel('Define a shift', `<div class="form-inline">
-      ${fl('sh-name', 'Name', inp('sh-name', 'Day shift'))}${fl('sh-start', 'Starts', inp('sh-start', '09:00'))}${fl('sh-end', 'Ends', inp('sh-end', '17:00'))}${fl('sh-days', 'Days (0=Sun)', inp('sh-days', '0,1,2,3,4'))}
-      ${btn('sh-go', 'Create')}</div>
-      <div class="form-inline" style="margin-top:8px">${fl('sa-emp', 'Assign to', empSel('sa-emp', emps))}${fl('sa-shift', 'Shift', sel('sa-shift', shifts.length ? shifts : [['', 'no shifts']]))}${btn('sa-go', 'Assign', '')}</div>`)}
     ${panel('Add a holiday', `<div class="form-inline">${fl('ho-day', 'Day', inp('ho-day', '', 'date'))}${fl('ho-name', 'Name', inp('ho-name', 'Eid'))}${btn('ho-go', 'Add', '')}</div>`)}
   </div>` : ''}`;
 
   wireActs(renderHrOps);
-  on('ot-go', () => act('/api/core2/hrops/overtime', { employeeId: val('ot-emp'), day: val('ot-day'), minutes: numv('ot-min') }, renderHrOps));
   on('cr-go', () => act('/api/core2/hrops/correction', { employeeId: val('cr-emp'), day: val('cr-day'), inAt: val('cr-day') ? `${val('cr-day')} ${val('cr-in')}:00` : null, outAt: val('cr-day') ? `${val('cr-day')} ${val('cr-out')}:00` : null }, renderHrOps));
-  on('sh-go', () => act('/api/core2/hrops/shift', { name: val('sh-name'), starts: val('sh-start'), ends: val('sh-end'), days: val('sh-days').split(',').map(Number) }, renderHrOps));
-  on('sa-go', () => act('/api/core2/hrops/shift/assign', { employeeId: val('sa-emp'), shiftId: val('sa-shift') }, renderHrOps));
   on('ho-go', () => act('/api/core2/hrops/holiday', { day: val('ho-day'), name: val('ho-name') }, renderHrOps));
 }
 
@@ -125,13 +108,10 @@ export async function renderComp() {
     ${tile(t('Salary changes'), d.salaryChanges, esc(t('each sealed under the person — the fact is on the chain')))}
     ${tile(t('Benefit plans'), c.plans.length, esc(t('with employer and employee shares')))}
     ${tile(t('Grievances open'), d.grievancesOpen, esc(t('sealed documents awaiting a decision')), d.grievancesOpen ? 'tile-warn' : '')}
-    ${tile(t('Assets held'), d.assetsHeld, esc(t('devices and things in somebody\'s hands')))}
+    ${tile(t('End of service computed'), d.eosComputed, `<a href="#/payrules">${esc(t('the rule it is computed from'))} →</a>`)}
   </div>
-  ${panel('What is sealed here', `<div class="map-legend">${esc(t('A salary, its history and an end-of-service amount are one person\'s money and are sealed under that person\'s own key. The screen shows that a change happened, when, and who made it. Changing a salary is categorically a human act at the gateway; the module refuses any other actor as the second lock.'))}</div>`)}
-  <div class="grid grid-2" style="margin-top:16px">
-    ${panel('Benefit plans', table(['Plan', 'Kind', '$Employer', '$Employee', '$Enrolled'], c.plans.map((p) => `<tr><td><b>${esc(p.name)}</b><div class="sub">${esc(p.provider || '')}</div></td><td>${chip(p.kind)}</td><td class="num">${money(p.employer_share)}</td><td class="num">${money(p.employee_share)}</td><td class="num">${p.enrolled}</td></tr>`)))}
-    ${panel('Tax brackets — IQ (placeholders until somebody who knows the law replaces them)', table(['$Up to (monthly)', '$Rate'], c.taxBrackets.map((b) => `<tr><td class="num">${b.up_to == null ? '∞' : num(b.up_to)}</td><td class="num">${(b.rate * 100).toFixed(1)}%</td></tr>`)) + `<div class="sub" style="margin-top:6px">${esc(t('End of service'))}: ${c.eosDaysPerYear} ${esc(t('days per year of service (setting EOS_DAYS_PER_YEAR)'))}</div>`)}
-  </div>
+  ${panel('What is sealed here', `<div class="map-legend">${esc(t('A salary, its history and an end-of-service amount are one person\'s money and are sealed under that person\'s own key. The screen shows that a change happened, when, and who made it. Changing a salary is categorically a human act at the gateway; the module refuses any other actor as the second lock. Tax and contribution rules are declared on Pay rules; who holds which of the company\'s things is on Custody.'))} <a href="#/payrules">${esc(t('Pay rules'))} →</a> · <a href="#/custody">${esc(t('Custody'))} →</a> · <a href="#/shifts">${esc(t('Shifts & overtime'))} →</a></div>`)}
+  ${panel('Benefit plans', table(['Plan', 'Kind', '$Employer', '$Employee', '$Enrolled'], c.plans.map((p) => `<tr><td><b>${esc(p.name)}</b><div class="sub">${esc(p.provider || '')}</div></td><td>${chip(p.kind)}</td><td class="num">${money(p.employer_share)}</td><td class="num">${money(p.employee_share)}</td><td class="num">${p.enrolled}</td></tr>`)))}
   ${panel('Movements', table(['Employee', 'Kind', 'Effective', 'By'], d.movements.map((m) => `<tr><td><b>${esc(m.display_name)}</b></td><td>${chip(m.kind)}</td><td class="mono">${esc(m.effective)}</td><td class="sub">${esc(m.created_by)}</td></tr>`)))}
   ${panel('Grievances', table(['#', 'State', 'Opened', 'Decided by', ''], c.grievances.map((g) => `<tr><td class="mono">${g.id}</td><td>${chip(g.state)}</td><td class="mono">${day(g.opened_at)}</td><td class="sub">${esc(g.decided_by || '—')}</td>
     <td>${canM && !['resolved', 'dismissed'].includes(g.state) ? actBtn(`/api/core2/comp/grievance/${g.id}/decide`, { state: 'under_review' }, 'Review', '') + ' ' + actBtn(`/api/core2/comp/grievance/${g.id}/decide`, { state: 'resolved' }, 'Resolve') + ' ' + actBtn(`/api/core2/comp/grievance/${g.id}/decide`, { state: 'dismissed' }, 'Dismiss', '') : ''}</td></tr>`),
@@ -142,12 +122,11 @@ export async function renderComp() {
       <div class="form-inline" style="margin-top:8px">${fl('en-emp', 'Enroll', empSel('en-emp', emps))}${fl('en-plan', 'in plan', sel('en-plan', plans.length ? plans : [['', 'no plans']]))}${btn('en-go', 'Enroll')}</div>`)}
     ${panel('Move somebody', `<div class="form-inline">${fl('mv-emp', 'Employee', empSel('mv-emp', emps))}${fl('mv-kind', 'Kind', sel('mv-kind', [['promotion', 'promotion'], ['transfer', 'transfer'], ['regrade', 'regrade'], ['acting', 'acting'], ['demotion', 'demotion']]))}${fl('mv-unit', 'To unit id', inp('mv-unit', '', 'number'))}${fl('mv-pos', 'To position id', inp('mv-pos', '', 'number'))}${fl('mv-grade', 'To grade id', inp('mv-grade', '', 'number'))}${btn('mv-go', 'Record')}</div>`)}
     ${panel('Raise a grievance', `<div class="form-inline">${fl('gr-emp', 'Employee', empSel('gr-emp', emps))}${fl('gr-title', 'Title', inp('gr-title', 'Grievance'))}</div><textarea id="gr-body" aria-label="${esc(t('Grievance'))}" rows="3" style="width:100%;margin-top:6px" placeholder="${esc(t('Sealed under the person from the first byte.'))}"></textarea><div style="margin-top:6px">${btn('gr-go', 'Raise', '')}</div>`)}
-    ${panel('Hand over an asset', `<div class="form-inline">${fl('as-emp', 'Employee', empSel('as-emp', emps))}${fl('as-id', 'Asset id (Core 1 register)', inp('as-id', '', 'number'))}${btn('as-go', 'Assign', '')} <a class="btn btn-sm" href="#/assets">${esc(t('The register'))} →</a></div>`)}
     ${panel('Employment certificate', `<div class="form-inline">${fl('lt-emp', 'Employee', empSel('lt-emp', emps))}${btn('lt-go', 'Issue letter', '')}</div><div class="sub">${esc(t('Org facts only — never the salary.'))}</div>`)}
   </div>` : ''}
   ${canPay ? panel('Money about one person — finance.export', `<div class="grid grid-2">
     <div><div class="form-inline">${fl('sc-emp', 'Employee', empSel('sc-emp', emps.length ? emps : [['', '—']]))}${fl('sc-amt', 'New monthly salary', inp('sc-amt', '', 'number'))}${fl('sc-eff', 'Effective', inp('sc-eff', '', 'date'))}${btn('sc-go', 'Change salary')}</div><div class="sub">${esc(t('Categorically human. Both figures sealed; the fact chained.'))}</div></div>
-    <div><div class="form-inline">${fl('eos-emp', 'Employee id', inp('eos-emp', '', 'number'))}${btn('eos-calc', 'Compute end of service', '')} ${btn('eos-pay', 'Pay end of service')}</div><div id="eos-out" class="sub"></div></div>
+    <div><div class="form-inline">${fl('eos-emp', 'Employee id', inp('eos-emp', '', 'number'))}${btn('eos-calc', 'Compute end of service', '')} ${btn('eos-pay', 'Pay end of service')}</div><div id="eos-out" class="sub">${esc(t('Days of pay come from the rule declared on Pay rules; a day is the sealed salary over thirty.'))}</div></div>
   </div>`) : ''}`;
 
   wireActs(renderComp);
@@ -156,10 +135,9 @@ export async function renderComp() {
   on('en-go', () => act('/api/core2/comp/enroll', { employeeId: val('en-emp'), planId: val('en-plan') }, renderComp));
   on('mv-go', () => act('/api/core2/comp/movement', { employeeId: val('mv-emp'), kind: val('mv-kind'), toUnit: numv('mv-unit') || null, toPosition: numv('mv-pos') || null, toGrade: numv('mv-grade') || null }, renderComp));
   on('gr-go', () => act('/api/core2/comp/grievance', { employeeId: val('gr-emp'), title: val('gr-title'), body: $('#gr-body').value }, renderComp));
-  on('as-go', () => act('/api/core2/comp/asset', { employeeId: val('as-emp'), assetId: numv('as-id') }, renderComp));
   on('lt-go', () => act(`/api/core2/employees/${val('lt-emp')}/letter`, {}, renderComp));
   on('sc-go', () => { if (window.confirm(t('Change this salary? The act is chained with your name.'))) act('/api/core2/comp/salary', { employeeId: val('sc-emp'), newSalary: numv('sc-amt'), effective: val('sc-eff') || undefined }, renderComp); });
-  on('eos-calc', async () => { try { const r = await api(`/api/core2/comp/eos/${val('eos-emp')}`, { method: 'POST', body: {} }); $('#eos-out').textContent = `${r.years} ${t('years')} × ${r.daysPerYear} ${t('days')} → ${money(r.amount)}`; } catch (e) { toast(e.message, true); } });
+  on('eos-calc', async () => { try { const r = await api(`/api/core2/comp/eos/${val('eos-emp')}`, { method: 'POST', body: {} }); $('#eos-out').textContent = r.configured ? `${r.years} ${t('years')} → ${r.days} ${t('days')} → ${money(r.amount)}` : r.says; } catch (e) { toast(e.message, true); } });
   on('eos-pay', () => { if (window.confirm(t('Pay end of service? This posts to the ledger and is chained.'))) act(`/api/core2/comp/eos/${val('eos-emp')}/pay`, {}, renderComp); });
 }
 

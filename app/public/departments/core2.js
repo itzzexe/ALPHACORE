@@ -13,7 +13,8 @@ import { $, esc, view, money } from '../core/dom.js';
 import { api } from '../services/api.js';
 import { hasPermC, actor } from '../state/session.js';
 import { tile } from '../components/tile.js';
-import { t, sectionName, divisionName } from '/i18n.js';
+import { t, sectionName } from '/i18n.js';
+import { buildMap, initAtlas } from '../views/map.js';
 
 const stateChip2 = (s) => {
   const cls = { active: 'chip-ok', pending: 'chip-warn', suspended: 'chip-warn', notice: 'chip-warn', ended: 'chip-dim' }[s] || 'chip-dim';
@@ -524,72 +525,460 @@ export async function renderTalent() {
 
 /** The two galaxies: Core 1 on one side, Core 2 on the other, tunnels between. */
 export async function renderGalaxies() {
-  const d = await api('/api/core2/map').catch(() => null);
+  // This page used to draw its own picture — an arc of thirteen circles and a
+  // stack of pills, static, with every circle linking to the same place. It
+  // said in its own legend that it was "the same catalogue as the first map,
+  // projected so the seam is the subject", and two independent drawings of one
+  // catalogue is precisely the thing the declared edge between these two pages
+  // says must not happen: the maps cannot disagree. So it no longer draws. It
+  // opens the real atlas — pan, zoom, hover to isolate, click for a section's
+  // connection ledger, trace a flow hop by hop — with the seam lit, and keeps
+  // the one thing that was genuinely its own: the tunnel ledger underneath.
+  const d = await api('/api/map').catch(() => null);
   if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see the map.'))}</div>`; return; }
 
-  // Core 1: thirteen divisions on an arc, sized by department count.
-  // Core 2: the enterprise divisions stacked on the right, departments as
-  // pills. Laid out first, because the drawing is as tall as this stack.
-  let y = 46;
-  const c2 = d.divisions.map((div) => {
-    const h = 34 + div.departments.length * 30;
-    const g = { ...div, x: 640, y, h };
-    y += h + 16;
-    return g;
-  });
-  const W = 1000; const H = Math.max(640, y + 10);
-  const c1 = d.core1.map((div, i) => {
-    const a = (Math.PI * (i + 0.5)) / d.core1.length - Math.PI / 2;
-    return { ...div, x: 210 + Math.cos(a) * -150, y: H / 2 + Math.sin(a) * (H / 2 - 60) };
-  });
-  const deptPos = new Map();
-  for (const g of c2) g.departments.forEach((s, i) => deptPos.set(s.id, { x: 660, y: g.y + 40 + i * 30 }));
-  const c1Pos = new Map(c1.map((v) => [v.id, v]));
-
-  const tunnels = d.tunnels.map((t2) => {
-    const a = deptPos.get(t2.core2End); const b = c1Pos.get(t2.core1Division);
-    if (!a || !b) return '';
-    return `<path d="M ${a.x} ${a.y} C ${a.x - 160} ${a.y}, ${b.x + 160} ${b.y}, ${b.x + 14} ${b.y}"
-      fill="none" stroke="${esc(b.color)}" stroke-width="1.3" opacity="0.55">
-      <title>${esc(t2.core2End)} ↔ ${esc(t2.core1End)}: ${esc(t(t2.label))}</title></path>`;
-  }).join('');
+  const tunnels = d.core2?.tunnels || [];
+  const isolated = d.core2?.audit?.isolated || [];
 
   view.innerHTML = `
   <div class="panel">
     <div class="panel-title">${esc(t('Two galaxies, one company'))}</div>
-    <div class="map-legend">${esc(t('The AI core thinks and acts; the enterprise core records what is true. Nothing crosses between them except the tunnels drawn here — and every tunnel is a declared relationship the connectivity audit checks, not a line on a picture. This is the same catalogue as the first map, projected so the seam is the subject.'))}
-      <a href="#/graph">${esc(t('The first map'))} →</a> · <a href="#/bridges">${esc(t('The bridges'))} →</a></div>
+    <div class="map-legend">${esc(t('The AI core thinks and acts; the enterprise core records what is true. Nothing crosses between them except the tunnels lit here — and every tunnel is a declared relationship the connectivity audit checks, not a line on a picture. This is the same map as the atlas, opened on the seam.'))}
+      <a href="#/graph">${esc(t('The matrix'))} →</a> · <a href="#/bridges">${esc(t('The bridges'))} →</a></div>
   </div>
   <div class="panel" style="margin-top:16px">
-    <div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:760px" role="img" aria-label="${esc(t('Two galaxies, one company'))}">
-      <text x="150" y="26" fill="var(--ink-faint)" font-size="12" letter-spacing="2">${esc(t('CORE 1 — THINKS AND ACTS'))}</text>
-      <text x="640" y="26" fill="var(--ink-faint)" font-size="12" letter-spacing="2">${esc(t('CORE 2 — RECORDS THE TRUTH'))}</text>
-      ${tunnels}
-      ${c1.map((v) => `<a href="#/graph" aria-label="${esc(v.label)}"><g>
-        <circle cx="${v.x}" cy="${v.y}" r="${10 + Math.min(v.count, 30) / 2}" fill="var(--bg-raise)" stroke="${esc(v.color)}" stroke-width="${v.touched ? 2.4 : 1.2}"/>
-        <text x="${v.x}" y="${v.y - 16 - Math.min(v.count, 30) / 2}" text-anchor="middle" fill="${esc(v.color)}" font-size="10">${esc(divisionName(v.id, v.label))}</text>
-        <title>${esc(v.label)} · ${v.count} ${esc(t('departments'))}${v.touched ? ' · ' + esc(t('reached by a tunnel')) : ''}</title>
-      </g></a>`).join('')}
-      ${c2.map((g) => `<g>
-        <rect x="${g.x}" y="${g.y}" width="320" height="${g.h}" rx="8" fill="var(--bg-raise)" stroke="${esc(g.color)}" stroke-opacity="0.6"/>
-        <text x="${g.x + 12}" y="${g.y + 22}" fill="${esc(g.color)}" font-size="11" letter-spacing="1.5">${esc(t(g.label))}</text>
-        ${g.departments.map((s, i) => `<a href="${esc(s.href)}" aria-label="${esc(s.label)}">
-          <text x="${g.x + 22}" y="${g.y + 44 + i * 30}" fill="var(--ink)" font-size="12.5">${esc(sectionName(s.id, s.label))} <tspan fill="var(--ink-faint)" font-size="10.5">${s.count}</tspan></text>
-        </a>`).join('')}
-      </g>`).join('')}
-    </svg></div>
+    ${buildMap(d, { far: true })}
+    <div class="sub" style="margin-top:10px">
+      <b>${esc(t('Click'))}</b> ${esc(t('a department for everything it touches'))} ·
+      <b>${esc(t('right-click'))}</b> ${esc(t('to trace a flow hop by hop'))} ·
+      <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))}.
+      ${isolated.length ? `<b style="color:var(--bad)">${esc(t('No tunnel reaches'))}: ${isolated.map((id) => esc(sectionName(id, id))).join(', ')}</b>` : ''}
+    </div>
   </div>
   <div class="panel" style="margin-top:16px">
-    <div class="panel-title">${esc(t('The tunnels'))} · ${d.tunnels.length}</div>
+    <div class="panel-title">${esc(t('The tunnels'))} · ${tunnels.length}</div>
     <div class="table-wrap"><table class="tbl"><thead><tr>
       <th>${esc(t('Enterprise'))}</th><th>${esc(t('AI core'))}</th><th>${esc(t('Why they are joined'))}</th>
     </tr></thead><tbody>
-      ${d.tunnels.map((t2) => `<tr>
+      ${tunnels.map((t2) => `<tr>
         <td class="mono">${esc(t2.core2End)}</td>
         <td class="mono">${esc(t2.core1End)}</td>
-        <td class="sub">${esc(t(t2.label))}</td>
+        <td class="sub">${esc(t(t2.label || ''))}</td>
       </tr>`).join('')}
     </tbody></table></div>
     <div class="sub" style="margin-top:8px">${esc(t('A tunnel with no declared edge behind it cannot exist on this page — the drawing is derived, never drawn.'))}</div>
   </div>`;
+
+  initAtlas(d, { lens: 'seam' });
+}
+
+// Files — sealed bytes, not a path in a sealed column.
+export async function renderFiles() {
+  const f = await api('/api/core2/files');
+  const row = (x) => `<tr>
+      <td class="mono">${x.id}</td>
+      <td>${esc(x.filename)}${x.note ? `<div class="sub">${esc(x.note)}</div>` : ''}</td>
+      <td class="sub">${esc(x.mime || '—')}</td>
+      <td class="num">${(x.bytes / 1024).toFixed(0)} KB</td>
+      <td>${x.attach_type ? `<span class="chip chip-dim">${esc(x.attach_type)} ${x.attach_id}</span>` : '<span class="sub">—</span>'}</td>
+      <td class="mono" style="font-size:11px">${esc(x.uploaded_by)}</td>
+      <td class="sub">${esc(String(x.created_at || '').slice(0, 16))}</td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Files'), f.files, `${f.megabytes} MB ${t('sealed')}`)}
+    ${tile(t('Deleted'), f.deleted, t('tombstoned, not vanished'))}
+    ${tile(t('On disk'), f.blobsOnDisk, f.consistent ? t('matches the record') : `${f.orphans} ${t('unaccounted for')}`, f.consistent ? '' : 'tile-warn')}
+    ${tile(t('Limit'), `${f.limitMb} MB`, t('per file'))}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What this refuses'))}</div>
+    ${f.refuses.map((r) => `<div class="meter-label"><span>${esc(t(r))}</span></div>`).join('')}
+    <div class="map-legend">${esc(t('The bytes are encrypted with the subject\'s own key and written outside the database. Erasing the person destroys the key, and with it the file — a path in a sealed column would have protected nothing.'))}</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>${esc(t('Add a file'))}</span>
+      <span><input type="file" id="f-pick" aria-label="${esc(t('Choose a file'))}"> <button class="btn btn-primary" id="f-up">${esc(t('Upload'))}</button></span>
+    </div>
+    <div id="f-out" class="sub"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('By what they belong to'))}</div>
+    ${f.byKind.length
+    ? `<table class="tbl"><thead><tr><th>${esc(t('Attached to'))}</th><th class="num">${esc(t('Files'))}</th><th class="num">KB</th></tr></thead><tbody>${f.byKind.map((k) => `<tr><td>${esc(k.kind || t('nothing'))}</td><td class="num">${k.n}</td><td class="num">${(k.bytes / 1024).toFixed(0)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty">${esc(t('no files yet'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Recent'))}</div>
+    ${f.recent.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>${esc(t('Name'))}</th><th>${esc(t('Type'))}</th><th class="num">${esc(t('Size'))}</th><th>${esc(t('Attached to'))}</th><th>${esc(t('By'))}</th><th>${esc(t('When'))}</th></tr></thead><tbody>${f.recent.map(row).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('no files yet'))}</div>`}
+  </div>`;
+
+  $('#f-up').addEventListener('click', async () => {
+    const picked = $('#f-pick').files?.[0];
+    if (!picked) { toast(t('choose a file first'), true); return; }
+    const out = $('#f-out');
+    out.textContent = t('sealing…');
+    try {
+      const buf = await picked.arrayBuffer();
+      // Base64 in the body rather than a multipart stream: the bytes are sealed
+      // in the server process, and a separate upload path would be a second
+      // door into the same room.
+      let bin = '';
+      const view8 = new Uint8Array(buf);
+      for (let i = 0; i < view8.length; i += 1) bin += String.fromCharCode(view8[i]);
+      const r = await api('/api/core2/files', {
+        method: 'POST',
+        body: { bytes: btoa(bin), filename: picked.name, mime: picked.type || null },
+      });
+      out.textContent = `${r.filename} — ${r.bytes} ${t('bytes, sealed')}`;
+      render();
+    } catch (e) { out.textContent = e.message; }
+  });
+}
+
+// Records — how long a thing is kept, on whose authority, and what freezes it.
+export async function renderRecords() {
+  const r = await api('/api/core2/records');
+  const cls = (c) => `<tr>
+      <td class="mono">${esc(c.code)}</td>
+      <td>${esc(t(c.label))}<div class="sub">${esc(t(c.basis))}</div></td>
+      <td class="num">${c.keep_months}</td>
+      <td><span class="chip ${c.disposition === 'keep-forever' ? 'chip-steel' : 'chip-dim'}">${esc(t(c.disposition))}</span></td>
+      <td class="num">${c.disposition === 'keep-forever' ? '—' : c.due}</td>
+      <td class="sub">${c.frozen ? `<span class="chip chip-warn">${esc(t('frozen'))}</span> ` : ''}${esc(t(c.say))}</td>
+    </tr>`;
+  const hold = (h) => `<tr>
+      <td class="mono">${h.id}</td>
+      <td>${esc(h.scope_kind)}${h.scope_id ? ` ${esc(h.scope_id)}` : ''}</td>
+      <td>${esc(h.matter || '—')}<div class="sub">${esc(h.reason)}</div></td>
+      <td class="mono" style="font-size:11px">${esc(h.placed_by)}</td>
+      <td class="sub">${esc(String(h.placed_at || '').slice(0, 16))}</td>
+      <td><button class="btn btn-sm" data-release="${h.id}">${esc(t('Release'))}</button></td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Retention classes'), r.classes.length, t('each with a stated basis'))}
+    ${tile(t('Past their date'), r.dueTotal, t('and disposable'), r.dueTotal ? 'tile-warn' : '')}
+    ${tile(t('Frozen'), r.frozenTotal, t('held, not disposable'))}
+    ${tile(t('Legal holds'), r.holds.length, r.everythingFrozen ? t('everything is frozen') : t('live'), r.holds.length ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What this does and does not do'))}</div>
+    <p class="lede">${esc(t(r.says))}</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>${esc(t('Legal holds'))}</span>
+      <button class="btn btn-sm" id="rec-hold">${esc(t('Place a hold'))}</button>
+    </div>
+    ${r.holds.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>${esc(t('Covers'))}</th><th>${esc(t('Matter'))}</th><th>${esc(t('Placed by'))}</th><th>${esc(t('When'))}</th><th></th></tr></thead><tbody>${r.holds.map(hold).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing is held — the schedule applies as written'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('The retention schedule'))}</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr>
+      <th>${esc(t('Code'))}</th><th>${esc(t('Records'))}</th><th class="num">${esc(t('Months'))}</th>
+      <th>${esc(t('At the end'))}</th><th class="num">${esc(t('Due'))}</th><th>${esc(t('State'))}</th>
+    </tr></thead><tbody>${r.classes.map(cls).join('')}</tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Disposals'))}</div>
+    ${r.disposals.length
+    ? `<table class="tbl"><thead><tr><th>${esc(t('Class'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Action'))}</th><th class="num">${esc(t('Count'))}</th><th>${esc(t('By'))}</th><th>${esc(t('When'))}</th></tr></thead><tbody>
+      ${r.disposals.map((d) => `<tr><td class="mono">${esc(d.class_code)}</td><td>${esc(d.what)}</td><td>${esc(t(d.action))}</td><td class="num">${d.count}</td><td class="mono" style="font-size:11px">${esc(d.decided_by)}</td><td class="sub">${esc(String(d.at || '').slice(0, 16))}</td></tr>`).join('')}
+    </tbody></table>`
+    : `<div class="empty">${esc(t('nothing has been disposed of'))}</div>`}
+  </div>`;
+
+  view.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', async () => {
+    const note = prompt(t('Why is the hold being lifted?'));
+    if (note === null) return;
+    try { await api(`/api/core2/records/hold/${b.dataset.release}/release`, { method: 'POST', body: { note } }); render(); }
+    catch (e) { toast(e.message, true); }
+  }));
+
+  $('#rec-hold').addEventListener('click', async () => {
+    const scopeKind = prompt(`${t('Covering what?')} ${r.scopes.join(' / ')}`);
+    if (!scopeKind) return;
+    const scopeId = scopeKind === 'everything' ? null : prompt(t('Which one? (an id, or a class code)'));
+    if (scopeKind !== 'everything' && !scopeId) return;
+    const matter = prompt(t('Which matter or case?'));
+    const reason = prompt(t('Why? A hold nobody can explain never gets lifted.'));
+    if (!reason) return;
+    try { await api('/api/core2/records/hold', { method: 'POST', body: { scopeKind, scopeId, matter, reason } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// Rosters, and the extra minutes that are not overtime until somebody says so.
+export async function renderShifts() {
+  const s = await api('/api/core2/shifts');
+  const shift = (x) => `<tr>
+      <td>${esc(x.name)}</td>
+      <td class="mono">${esc(x.starts)} – ${esc(x.ends)}</td>
+      <td class="sub">${x.days.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).map((d) => esc(t(d))).join(' ')}</td>
+      <td class="num">${x.assigned}</td>
+    </tr>`;
+  const claim = (c) => `<tr>
+      <td>${esc(c.display_name)}</td>
+      <td class="mono">${esc(c.day)}</td>
+      <td class="num">${Math.floor(c.minutes / 60)}h ${c.minutes % 60}m</td>
+      <td>${esc(c.reason)}</td>
+      <td class="mono" style="font-size:11px">${esc(c.claimed_by)}</td>
+      <td>
+        <button class="btn btn-sm" data-ot-yes="${c.id}">${esc(t('Approve'))}</button>
+        <button class="btn btn-sm btn-bad" data-ot-no="${c.id}">${esc(t('Refuse'))}</button>
+      </td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Shifts'), s.shifts.length, t('rosters defined'))}
+    ${tile(t('On no roster'), s.unrostered, t('cannot be late, cannot claim'), s.unrostered ? 'tile-warn' : '')}
+    ${tile(t('Waiting on you'), s.pending.length, t('overtime claims'), s.pending.length ? 'tile-warn' : '')}
+    ${tile(t('Approved'), `${Math.floor((s.approvedThisPeriod.m || 0) / 60)}h`, `${s.approvedThisPeriod.n} ${esc(t('claims this period'))}`)}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What counts, and what does not'))}</div>
+    <p class="lede">${esc(t(s.says))}</p>
+    <div class="map-legend">${esc(t('Arriving late is forgiven for the first'))} ${s.graceMinutes} ${esc(t('minutes — a company that counts one minute as late spends its mornings arguing about clocks.'))}</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Overtime waiting for a decision'))}</span></div>
+    ${s.pending.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('Day'))}</th><th class="num">${esc(t('Extra'))}</th><th>${esc(t('What for'))}</th><th>${esc(t('Claimed by'))}</th><th></th></tr></thead><tbody>${s.pending.map(claim).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing waiting'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Rosters'))}</span><button class="btn btn-sm" id="sh-add">${esc(t('Add a shift'))}</button></div>
+    ${s.shifts.length
+    ? `<table class="tbl"><thead><tr><th>${esc(t('Name'))}</th><th>${esc(t('Hours'))}</th><th>${esc(t('Days'))}</th><th class="num">${esc(t('On it'))}</th></tr></thead><tbody>${s.shifts.map(shift).join('')}</tbody></table>`
+    : `<div class="empty">${esc(t('no shifts yet'))}</div>`}
+  </div>`;
+
+  const decide = async (id, approve) => {
+    try { await api(`/api/core2/overtime/${id}/decide`, { method: 'POST', body: { approve } }); render(); }
+    catch (e) { toast(e.message, true); }
+  };
+  view.querySelectorAll('[data-ot-yes]').forEach((b) => b.addEventListener('click', () => decide(b.dataset.otYes, true)));
+  view.querySelectorAll('[data-ot-no]').forEach((b) => b.addEventListener('click', () => decide(b.dataset.otNo, false)));
+  $('#sh-add').addEventListener('click', async () => {
+    const name = prompt(t('What is this shift called?')); if (!name) return;
+    const starts = prompt(t('Starts at (HH:MM)'), '09:00'); if (!starts) return;
+    const ends = prompt(t('Ends at (HH:MM)'), '17:00'); if (!ends) return;
+    try { await api('/api/core2/shifts', { method: 'POST', body: { name, starts, ends } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// What the company deducts, and on whose authority.
+export async function renderPayRules() {
+  const p = await api('/api/core2/payrules');
+  const rule = (r) => `<tr>
+      <td class="mono">${esc(r.code)}</td>
+      <td>${esc(t(r.label))}<div class="sub">${esc(r.basis)}</div></td>
+      <td><span class="chip chip-dim">${esc(t(r.kind))}</span></td>
+      <td class="sub">${esc(t(r.base))} · ${esc(t(r.paid_by))}</td>
+      <td class="mono">${r.percent !== null ? `${r.percent}%` : `${(r.bands || []).length} ${esc(t('bands'))}`}</td>
+      <td class="mono">${r.cap_amount ? esc(money(r.cap_amount)) : '—'}</td>
+      <td>${r.active ? `<span class="chip chip-ok">${esc(t('live'))}</span>` : `<span class="chip chip-dim">${esc(t('off'))}</span>`}</td>
+    </tr>`;
+  const eos = p.endOfService;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Rules'), p.active, t('live, each with a stated basis'), p.configured ? '' : 'tile-warn')}
+    ${tile(t('Tax'), p.rules.filter((r) => r.kind === 'tax').length, t('declared'))}
+    ${tile(t('Contributions'), p.rules.filter((r) => r.kind === 'contribution').length, t('declared'))}
+    ${tile(t('End of service'), eos.configured ? `${eos.perYearFirst}/${eos.perYearAfter}` : t('not set'), eos.configured ? t('days per year, before and after the threshold') : t('reported as unknown, never as zero'), eos.configured ? '' : 'tile-warn')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Why this is not a set of zeros'))}</div>
+    <p class="lede">${esc(t(p.says))}</p>
+  </div>
+
+  ${p.example ? `<div class="panel">
+    <div class="panel-title">${esc(t('Worked through, on a salary of 5,000'))}</div>
+    <table class="tbl"><thead><tr><th>${esc(t('Line'))}</th><th>${esc(t('On'))}</th><th class="num">${esc(t('Amount'))}</th><th>${esc(t('Paid by'))}</th></tr></thead><tbody>
+      ${p.example.lines.map((l) => `<tr><td>${esc(t(l.label))}</td><td class="mono">${esc(money(l.on))} (${esc(t(l.base))})</td><td class="num">${esc(money(l.amount))}</td><td>${esc(t(l.paidBy))}</td></tr>`).join('')}
+      <tr><td><strong>${esc(t('Deducted from the employee'))}</strong></td><td></td><td class="num"><strong>${esc(money(p.example.employeeTotal))}</strong></td><td></td></tr>
+      <tr><td><strong>${esc(t('Cost to the company'))}</strong></td><td></td><td class="num"><strong>${esc(money(p.example.employerTotal))}</strong></td><td></td></tr>
+    </tbody></table>
+    <div class="map-legend">${esc(t('An employer contribution is a company cost, never a deduction from the person — adding them together understates somebody\'s net pay.'))}</div>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('The rules'))}</span><button class="btn btn-sm" id="pr-add">${esc(t('Add a rule'))}</button></div>
+    ${p.rules.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Code'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Kind'))}</th><th>${esc(t('Applied to'))}</th><th>${esc(t('Rate'))}</th><th>${esc(t('Cap'))}</th><th>${esc(t('State'))}</th></tr></thead><tbody>${p.rules.map(rule).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing declared — tax and contributions are reported as unknown'))}</div>`}
+  </div>`;
+
+  $('#pr-add').addEventListener('click', async () => {
+    const code = prompt(t('A short code (income, social, pension)')); if (!code) return;
+    const label = prompt(t('What is it called on a slip?')); if (!label) return;
+    const percent = prompt(t('A flat percentage, or leave blank to add bands by API'));
+    const basis = prompt(t('What says so? The law, the contract, or the policy.'));
+    if (!basis) { toast(t('a deduction nobody can cite is one nobody can defend'), true); return; }
+    try {
+      await api('/api/core2/payrules', { method: 'POST', body: { code, label, percent: percent ? Number(percent) : null, basis } });
+      render();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+// Who is holding what.
+export async function renderCustody() {
+  const c = await api('/api/core2/custody');
+  const item = (x) => `<tr>
+      <td>${esc(x.display_name)}</td>
+      <td>${esc(x.asset_name || x.description)}${x.serial ? `<div class="sub mono">${esc(x.serial)}</div>` : ''}</td>
+      <td><span class="chip chip-dim">${esc(t(x.asset_kind || 'unlisted'))}</span></td>
+      <td class="sub">${esc(t(x.condition_out))}</td>
+      <td class="sub">${esc(String(x.issued_at || '').slice(0, 10))}</td>
+      <td><button class="btn btn-sm" data-back="${x.id}">${esc(t('Take it back'))}</button></td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Out now'), c.out, t('in somebody\'s hands'))}
+    ${tile(t('With leavers'), c.withLeavers.reduce((n, w) => n + w.items, 0), t('held by people who have gone'), c.withLeavers.length ? 'tile-warn' : '')}
+    ${tile(t('Returned'), c.returned, t('handed back'))}
+    ${tile(t('Damaged'), c.damaged, t('came back worse than it went'), c.damaged ? 'tile-warn' : '')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What this is, and what it refuses'))}</div>
+    <p class="lede">${esc(t(c.says))}</p>
+  </div>
+
+  ${c.withLeavers.length ? `<div class="panel" style="border-color:var(--warn)">
+    <div class="panel-title">${esc(t('Held by people who have left'))}</div>
+    <table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('State'))}</th><th class="num">${esc(t('Items'))}</th></tr></thead><tbody>
+      ${c.withLeavers.map((w) => `<tr><td>${esc(w.display_name)}</td><td><span class="chip chip-warn">${esc(t(w.state))}</span></td><td class="num">${w.items}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Out now'))}</span><button class="btn btn-sm" id="cu-issue">${esc(t('Hand something over'))}</button></div>
+    ${c.items.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Kind'))}</th><th>${esc(t('Condition'))}</th><th>${esc(t('Since'))}</th><th></th></tr></thead><tbody>${c.items.map(item).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('nothing is out'))}</div>`}
+  </div>`;
+
+  view.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', async () => {
+    const condition = prompt(`${t('What condition is it in?')} ${c.conditions.join(' / ')}`, 'good');
+    if (!condition) return;
+    try { await api(`/api/core2/custody/${b.dataset.back}/return`, { method: 'POST', body: { condition } }); render(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  $('#cu-issue').addEventListener('click', async () => {
+    const employeeId = prompt(t('Which employee? (id)')); if (!employeeId) return;
+    const description = prompt(t('What is it? (or leave blank and give an asset id)'));
+    const assetId = description ? null : prompt(t('Asset id from the register'));
+    try { await api('/api/core2/custody', { method: 'POST', body: { employeeId: Number(employeeId), description, assetId: assetId ? Number(assetId) : null } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// A first day and a last day, as a checklist rather than as somebody's memory.
+export async function renderJoining() {
+  const j = await api('/api/core2/joining');
+  const row = (l) => `<tr>
+      <td>${esc(l.display_name)}</td>
+      <td><span class="chip ${l.kind === 'leaving' ? 'chip-warn' : 'chip-ok'}">${esc(t(l.kind))}</span></td>
+      <td class="mono">${esc(l.on_day)}</td>
+      <td class="num">${l.done}/${l.steps}</td>
+      <td>${l.critical_open ? `<span class="chip chip-bad">${l.critical_open} ${esc(t('critical open'))}</span>` : `<span class="chip chip-ok">${esc(t('clear'))}</span>`}</td>
+      <td><span class="chip ${l.state === 'open' ? 'chip-steel' : 'chip-dim'}">${esc(t(l.state))}</span></td>
+      <td><button class="btn btn-sm" data-open="${l.id}">${esc(t('Open'))}</button></td>
+    </tr>`;
+  view.innerHTML = `
+  <div class="grid grid-4">
+    ${tile(t('Open checklists'), j.open, `${j.joining} ${esc(t('joining'))} · ${j.leaving} ${esc(t('leaving'))}`)}
+    ${tile(t('Overdue steps'), j.overdue.length, t('past their day and not done'), j.overdue.length ? 'tile-warn' : '')}
+    ${tile(t('Joining template'), j.templates.joining.length, t('steps'))}
+    ${tile(t('Leaving template'), j.templates.leaving.length, t('steps'))}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('How this closes'))}</div>
+    <p class="lede">${esc(t(j.says))}</p>
+  </div>
+
+  ${j.overdue.length ? `<div class="panel" style="border-color:var(--warn)">
+    <div class="panel-title">${esc(t('Overdue'))}</div>
+    <table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('Step'))}</th><th>${esc(t('Owner'))}</th><th>${esc(t('Due'))}</th></tr></thead><tbody>
+      ${j.overdue.map((s) => `<tr><td>${esc(s.display_name)}</td><td>${esc(t(s.label))}${s.critical ? ` <span class="chip chip-bad">${esc(t('critical'))}</span>` : ''}</td><td class="sub">${esc(t(s.owner_role || ''))}</td><td class="mono">${esc(s.due_on)}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title"><span>${esc(t('Checklists'))}</span><button class="btn btn-sm" id="jn-new">${esc(t('Start one'))}</button></div>
+    ${j.lists.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${esc(t('Who'))}</th><th>${esc(t('Kind'))}</th><th>${esc(t('Day'))}</th><th class="num">${esc(t('Done'))}</th><th>${esc(t('Blocking'))}</th><th>${esc(t('State'))}</th><th></th></tr></thead><tbody>${j.lists.map(row).join('')}</tbody></table></div>`
+    : `<div class="empty">${esc(t('none yet'))}</div>`}
+  </div>
+
+  <div id="jn-detail"></div>`;
+
+  const showList = async (id) => {
+    const d = await api(`/api/core2/joining/${id}`);
+    const step = (s) => `<tr>
+        <td>${s.done_at ? '✓' : '·'}</td>
+        <td>${esc(t(s.label))}${s.critical ? ` <span class="chip chip-bad">${esc(t('critical'))}</span>` : ''}${s.skipped ? ` <span class="chip chip-warn">${esc(t('skipped'))}</span>` : ''}</td>
+        <td class="sub">${esc(t(s.owner_role || ''))}</td>
+        <td class="mono">${esc(s.due_on)}</td>
+        <td class="sub">${esc(s.done_by || '')}${s.note ? ` — ${esc(s.note)}` : ''}</td>
+        <td>${s.done_at ? '' : `<button class="btn btn-sm" data-tick="${s.id}">${esc(t('Done'))}</button> <button class="btn btn-sm" data-skip="${s.id}">${esc(t('Skip'))}</button>`}</td>
+      </tr>`;
+    $('#jn-detail').innerHTML = `<div class="panel">
+      <div class="panel-title">
+        <span>${esc(d.display_name)} — ${esc(t(d.kind))} ${esc(d.on_day)}</span>
+        <span>${d.state === 'open' ? `<button class="btn btn-sm btn-primary" id="jn-close">${esc(t('Close it'))}</button>` : `<span class="chip chip-dim">${esc(t('closed'))}</span>`}</span>
+      </div>
+      ${d.criticalOpen.length ? `<div class="map-legend" style="color:var(--warn)">${esc(t('Still blocking'))}: ${d.criticalOpen.map((x) => esc(t(x))).join(' · ')}</div>` : ''}
+      <div class="table-wrap"><table class="tbl"><thead><tr><th></th><th>${esc(t('Step'))}</th><th>${esc(t('Owner'))}</th><th>${esc(t('Due'))}</th><th>${esc(t('By'))}</th><th></th></tr></thead><tbody>${d.steps.map(step).join('')}</tbody></table></div>
+    </div>`;
+
+    $('#jn-detail').querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', async () => {
+      try { await api(`/api/core2/joining/step/${b.dataset.tick}`, { method: 'POST', body: {} }); showList(id); }
+      catch (e) { toast(e.message, true); }
+    }));
+    $('#jn-detail').querySelectorAll('[data-skip]').forEach((b) => b.addEventListener('click', async () => {
+      const why = prompt(t('Why is this being skipped?'));
+      if (why === null) return;
+      try { await api(`/api/core2/joining/step/${b.dataset.skip}`, { method: 'POST', body: { skip: true, why } }); showList(id); }
+      catch (e) { toast(e.message, true); }
+    }));
+    const close = $('#jn-close');
+    if (close) {
+      close.addEventListener('click', async () => {
+        try { await api(`/api/core2/joining/${id}/close`, { method: 'POST', body: {} }); toast(t('closed')); render(); }
+        catch (e) { toast(e.message, true); }
+      });
+    }
+  };
+
+  view.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => showList(b.dataset.open)));
+  $('#jn-new').addEventListener('click', async () => {
+    const employeeId = prompt(t('Which employee? (id)')); if (!employeeId) return;
+    const kind = prompt(t('joining or leaving?'), 'joining'); if (!kind) return;
+    try { await api('/api/core2/joining', { method: 'POST', body: { employeeId: Number(employeeId), kind } }); render(); }
+    catch (e) { toast(e.message, true); }
+  });
+  if (j.lists.length) showList(j.lists[0].id);
 }

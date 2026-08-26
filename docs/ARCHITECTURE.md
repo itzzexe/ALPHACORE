@@ -198,7 +198,13 @@ app/src/
   core2/            the enterprise core, held apart by three rules
     bridge.js       the five bridges: tools, events, gateway, identity, audit — and the ledger glue
     identity.js     hr_person is the root; employment and login are optional, in any combination
-    hrplus.js       time rules, compensation, movements, end of service, grievances
+    hrplus.js       the calendar and corrections, compensation, movements, end of service, grievances
+    shifts.js       rosters in force by date, lateness judged against them, overtime claimed and approved
+    payrules.js     the tax and contribution rules a company declares, and end-of-service days
+    custody.js      who is holding which of the company's things; a leaving cannot close over open custody
+    joining.js      a first day and a last day as checklists, with critical steps that block
+    files.js        attachments whose bytes are sealed under the person, never a path in a sealed column
+    records.js      retention classes with a basis, legal holds that outrank erasure, the disposal log
     payops.js       expenses, loans, cost centers, the payroll formula
     finance.js      budgets, payables, receivables, fixed assets, FX — the sub-ledgers
     bank.js         accounts as children of 1000, reconciliation, transfers, cheques, batches

@@ -11,7 +11,7 @@
 // may not run arbitrary code, touch another department's tables, or grant
 // itself an existing permission — the three things that would turn "install a
 // department" into "hand over the company".
-import { q, one, exec, db } from './db.js';
+import { q, one, exec, db, atomically } from './db.js';
 import { audit } from './audit.js';
 import { PERMS } from './auth.js';
 
@@ -97,31 +97,33 @@ export function installPackage(id, { actor }) {
   const v = validateManifest(m);
   if (!v.ok) throw new Error(`refusing to install: ${v.problems.join('; ')}`);
 
-  db.exec('BEGIN');
+  // The install is one act. Recording that it failed is a second one, and it
+  // has to happen *after* the rollback — written inside, it would be rolled
+  // back with everything else and the package would look untouched.
   try {
-    for (const t of m.tables || []) {
-      const cols = t.columns.map((c) => `${c.name} ${c.type.toUpperCase()}${c.notNull ? ' NOT NULL' : ''}${c.default !== undefined ? ` DEFAULT ${typeof c.default === 'string' ? `'${c.default.replace(/'/g, "''")}'` : c.default}` : ''}`);
-      db.exec(`CREATE TABLE IF NOT EXISTS ${t.name} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${cols.join(', ')}, created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-    }
-    for (const a of m.agents || []) {
-      // Re-installing has to bring the employee back. Uninstalling retires
-      // rather than deletes, so DO NOTHING here left a package installed with
-      // a retired workforce — installed, and unable to do anything.
-      db.prepare(
-        `INSERT INTO agents (id, name, role_group, spec, model_tier, status, human_owner, departments)
-         VALUES (?,?,?,?,?, 'active', ?, ?)
-         ON CONFLICT(id) DO UPDATE SET status = 'active', name = excluded.name,
-           role_group = excluded.role_group, spec = excluded.spec, departments = excluded.departments`,
-      ).run(
-        a.id, a.name, a.roleGroup,
-        JSON.stringify({ role: a.name, tier: a.tier || 'T2', brief: a.brief || '', fromPackage: m.id }),
-        a.tier || 'T2', actor, m.section.id,
-      );
-    }
-    db.prepare("UPDATE packages SET state = 'installed', installed_at = datetime('now'), installed_by = ?, last_error = NULL WHERE id = ?").run(actor, id);
-    db.exec('COMMIT');
+    atomically(() => {
+      for (const t of m.tables || []) {
+        const cols = t.columns.map((c) => `${c.name} ${c.type.toUpperCase()}${c.notNull ? ' NOT NULL' : ''}${c.default !== undefined ? ` DEFAULT ${typeof c.default === 'string' ? `'${c.default.replace(/'/g, "''")}'` : c.default}` : ''}`);
+        db.exec(`CREATE TABLE IF NOT EXISTS ${t.name} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${cols.join(', ')}, created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+      }
+      for (const a of m.agents || []) {
+        // Re-installing has to bring the employee back. Uninstalling retires
+        // rather than deletes, so DO NOTHING here left a package installed with
+        // a retired workforce — installed, and unable to do anything.
+        db.prepare(
+          `INSERT INTO agents (id, name, role_group, spec, model_tier, status, human_owner, departments)
+           VALUES (?,?,?,?,?, 'active', ?, ?)
+           ON CONFLICT(id) DO UPDATE SET status = 'active', name = excluded.name,
+             role_group = excluded.role_group, spec = excluded.spec, departments = excluded.departments`,
+        ).run(
+          a.id, a.name, a.roleGroup,
+          JSON.stringify({ role: a.name, tier: a.tier || 'T2', brief: a.brief || '', fromPackage: m.id }),
+          a.tier || 'T2', actor, m.section.id,
+        );
+      }
+      db.prepare("UPDATE packages SET state = 'installed', installed_at = datetime('now'), installed_by = ?, last_error = NULL WHERE id = ?").run(actor, id);
+    });
   } catch (err) {
-    db.exec('ROLLBACK');
     exec("UPDATE packages SET state = 'failed', last_error = ? WHERE id = ?", String(err.message).slice(0, 400), id);
     throw new Error(`install failed and was rolled back: ${err.message}`);
   }

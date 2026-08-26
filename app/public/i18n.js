@@ -76,7 +76,9 @@ export const SECTION_AR = {
   hrops: 'قواعد الوقت', comp: 'التعويضات والمزايا', budgets2: 'الموازنات', payables: 'الذمم الدائنة',
   receivables: 'الذمم المدينة', fixedassets: 'الأصول الثابتة', bank: 'المصرف', inventory: 'المخزون',
   facilities: 'المرافق والأسطول', helpdesk: 'مكتب المساعدة', secretariat: 'السكرتارية', legalcases: 'القضايا القانونية',
-  regulatory: 'الالتزامات والتراخيص', me: 'مساحتي',
+  regulatory: 'الالتزامات والتراخيص', me: 'مساحتي', erasure: 'المحو',
+  files: 'الملفات', records: 'السجلات والاحتفاظ', shifts: 'الورديات والعمل الإضافي', payrules: 'قواعد الرواتب',
+  custody: 'العهد', joining: 'الالتحاق والمغادرة',
 };
 
 // ---------- interface strings ----------
@@ -954,6 +956,51 @@ const AR = {
 
   // الخريطة الموحّدة — النواتان على صفحة واحدة، والشريط فوق كل قسم
   'AI core': 'النواة الذكية', 'Enterprise core': 'نواة المؤسسة', 'joined to': 'مرتبط بـ', 'TUNNELS': 'الأنفاق',
+  'Operations': 'التشغيل', 'Stock, work orders, vehicles, rooms, and the desk you call when something breaks.': 'المخزون وأوامر العمل والمركبات والقاعات، والمكتب الذي تتصل به حين يتعطّل شيء.',
+  // أبواب نواة المؤسسة
+  'People & HR': 'الأشخاص والموارد البشرية', 'Time & attendance': 'الوقت والحضور', 'Payroll & spending': 'الرواتب والإنفاق',
+  'Documents & records': 'الوثائق والسجلات', 'The seam': 'الخطّ الفاصل',
+  'Who works here, where they sit, and who is joining.': 'من يعمل هنا، وأين يجلس، ومن ينضمّ.',
+  'Who was here, who is on leave, and what was agreed.': 'من كان هنا، ومن في إجازة، وما اتُّفق عليه.',
+  'What people are paid, what they claimed, and what was bought.': 'ما يُدفع للناس، وما طالبوا به، وما اشتُري.',
+  'What is written down, what is attached to it, and how long it is kept.': 'ما كُتب، وما أُرفق به، وكم يُحتفظ به.',
+  'The map of both cores, and everything that crosses between them.': 'خريطة النواتين، وكل ما يعبر بينهما.',
+  // تلميحات أقسام بقية المؤسسة
+  'Shifts, holidays, overtime and corrections — lateness and absence measured, never explained': 'الورديات والعطل والعمل الإضافي والتصحيحات — التأخر والغياب يُقاسان ولا يُشرحان',
+  'Allowances, benefits, salary history, movements, end of service and grievances — sealed where it is about one person': 'البدلات والمزايا وتاريخ الرواتب والحركات الوظيفية ونهاية الخدمة والتظلّمات — مختومة حيث تخصّ شخصًا واحدًا',
+  'Adopted by a person, measured against the posted journal, line by line': 'يعتمدها شخص، وتُقاس على قيود اليومية المرحَّلة سطرًا سطرًا',
+  'Vendor bills from draft to paid, and what is overdue to whom': 'فواتير المورّدين من المسودّة إلى السداد، وما تأخّر ولمن',
+  'Customer invoices in the fiat books, receipts against them, and the aging': 'فواتير العملاء في الدفاتر النقدية، والمقبوضات عليها، وأعمار الذمم',
+  'The register, straight-line depreciation each month, and disposal by a person': 'السجل، والإهلاك بالقسط الثابت كل شهر، والشطب بيد شخص',
+  'Accounts and cash boxes, statements reconciled line by line, transfers, cheques and payment batches': 'الحسابات والصناديق، وكشوف مطابَقة سطرًا سطرًا، والتحويلات والصكوك ودفعات السداد',
+  'Warehouses, items and every move — a level is a sum, never a stored number': 'المستودعات والأصناف وكل حركة — الرصيد مجموع لا رقم مخزَّن',
+  'Work orders, vehicles and rooms — the physical company': 'أوامر العمل والمركبات والقاعات — الشركة المادية',
+  'The internal desk with an SLA clock, and workplace incidents kept apart from the technical ones': 'المكتب الداخلي بساعة اتفاقية خدمة، وحوادث مكان العمل منفصلة عن التقنية',
+  'The correspondence register, committees and their resolutions': 'سجل المراسلات، واللجان وقراراتها',
+  'Litigation, arbitration and claims — with the contract each one rests on': 'الدعاوى والتحكيم والمطالبات — مع العقد الذي تستند إليه كل منها',
+  'The obligations calendar and the licences, each with a clock the sweep watches': 'تقويم الالتزامات والتراخيص، ولكلّ منها ساعة يراقبها المسح',
+  'The page about you: your day, your leave, your slips, your things, your tickets': 'الصفحة التي تخصّك: يومك وإجازاتك وقسائمك وأشياؤك وتذاكرك',
+  // ملاحظات الوحدات
+  'Salaries and their history are sealed under each person. A correction is a time pair and a grievance is a sealed document — there is no column anywhere here for a reason. Shifts and overtime are judged on the Shifts page, the tax and contribution rules are declared on Pay rules, and who holds what is on Custody; the payroll formula reads all three.':
+    'الرواتب وتاريخها مختومة تحت مفتاح كل شخص. التصحيح زوج أوقات والتظلّم وثيقة مختومة — لا عمود هنا لسبب. الورديات والعمل الإضافي تُحكم في صفحة الورديات، وقواعد الضرائب والاشتراكات تُعلَن في قواعد الرواتب، ومن يحوز ماذا في العهد؛ ومعادلة الرواتب تقرأ الثلاثة.',
+  'A salary, its history and an end-of-service amount are one person\'s money and are sealed under that person\'s own key. The screen shows that a change happened, when, and who made it. Changing a salary is categorically a human act at the gateway; the module refuses any other actor as the second lock. Tax and contribution rules are declared on Pay rules; who holds which of the company\'s things is on Custody.':
+    'الراتب وتاريخه ومبلغ نهاية الخدمة مال شخص واحد، مختوم تحت مفتاحه. تعرض الشاشة أن تغييرًا حدث ومتى ومن أجراه. تغيير الراتب فعل بشري قطعًا عند البوابة؛ والوحدة ترفض أي فاعل آخر قفلًا ثانيًا. قواعد الضرائب والاشتراكات تُعلَن في قواعد الرواتب؛ ومن يحوز ماذا في العهد.',
+  'The statements are the ledger\'s and live on the Ledger page. These are the books that feed it: a bill, an invoice, a month of depreciation each become one balanced entry through the bridge, with a source id so a retried event cannot post twice.':
+    'القوائم المالية للدفتر وتسكن صفحة دفتر الأستاذ. هذه هي الدفاتر التي تغذّيه: فاتورة، أو فاتورة عميل، أو شهر إهلاك، يصير كل منها قيدًا متوازنًا واحدًا عبر الجسر بمعرّف مصدر، فلا يُرحَّل الحدث المعاد مرتين.',
+  'Each account is its own line in the one chart, so the balance shown is the ledger\'s and not a figure kept here. A statement is matched line by line and what does not match is shown. Money moves only when a person says so, and a batch is approved by somebody other than the person who built it.':
+    'كل حساب سطر خاص في الدليل الواحد، فالرصيد المعروض هو رصيد الدفتر لا رقمًا محفوظًا هنا. الكشف يُطابَق سطرًا سطرًا وما لا يتطابق يُعرض. لا يتحرك المال إلا حين يقول شخص ذلك، والدفعة يوافق عليها شخص غير من أعدّها.',
+  'A stock level is the sum of its moves and is never stored. A help-desk ticket has an SLA clock the sweep compares; an HR ticket\'s words are sealed under the person who raised it. Workplace incidents are kept apart from Core 1\'s technical incidents because a wet floor and a failed deploy should never share a graph.':
+    'رصيد المخزون مجموع حركاته ولا يُخزَّن أبدًا. لتذكرة مكتب المساعدة ساعة اتفاقية خدمة يقارنها المسح؛ وكلمات تذكرة الموارد البشرية مختومة تحت من رفعها. حوادث مكان العمل منفصلة عن الحوادث التقنية في النواة الأولى لأن أرضية مبلّلة ونشرًا فاشلًا لا ينبغي أن يتشاركا رسمًا بيانيًا.',
+  'Every letter, resolution, case and licence carries a number and a name. Adopting a resolution, settling a case and discharging an obligation are human acts on the chain; the words behind them are documents.':
+    'كل كتاب وقرار وقضية وترخيص يحمل رقمًا واسمًا. اعتماد قرار وتسوية قضية وأداء التزام أفعال بشرية على السلسلة؛ والكلمات خلفها وثائق.',
+  'Measured, never explained': 'يُقاس ولا يُشرح', 'One ledger, one master': 'دفتر واحد، مصدر واحد',
+  'sealed documents awaiting a decision': 'وثائق مختومة بانتظار قرار', 'with employer and employee shares': 'بحصص صاحب العمل والموظف',
+  'each sealed under the person — the fact is on the chain': 'كلّ منها مختوم تحت مفتاح الشخص — والواقعة على السلسلة',
+  'in/out claims awaiting a decision': 'مطالبات دخول/خروج بانتظار قرار', 'days nobody is expected in': 'أيام لا يُنتظر فيها أحد',
+  'setting OVERTIME_RATE — claims live on the Shifts page': 'الإعداد OVERTIME_RATE — والمطالبات في صفحة الورديات',
+  'Overtime rate': 'معدّل العمل الإضافي', 'next door': 'في الصفحة المجاورة', 'End of service computed': 'نهاية خدمة محتسبة',
+  'Pay rules': 'قواعد الرواتب', 'Custody': 'العهد', 'Shifts & overtime': 'الورديات والعمل الإضافي', 'rosters, lateness and overtime claims': 'الورديات والتأخر ومطالبات العمل الإضافي',
+  'the rule it is computed from': 'القاعدة التي تُحتسب منها',
   'CORE 1 — THINKS AND ACTS': 'النواة ١ — تفكّر وتتصرّف', 'CORE 2 — RECORDS THE TRUTH': 'النواة ٢ — تسجّل الحقيقة',
   'PEOPLE': 'الأشخاص', 'TIME': 'الوقت', 'FINANCE': 'المالية', 'THE BANK': 'المصرف', 'PROCUREMENT & STOCK': 'المشتريات والمخزون',
   'OPERATIONS': 'التشغيل', 'ADMINISTRATION': 'الإدارة', 'COLLABORATION': 'التعاون', 'THE BRIDGES': 'الجسور',

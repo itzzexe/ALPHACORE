@@ -223,7 +223,20 @@ const PII_COLUMNS = [
   // Core 2's people. The address or number reaches them; the national id and the
   // emergency contact are carried because they sit on the same row and could
   // never be matched against an erasure request naming an email.
-  ['hr_person', ['personal_email', 'personal_phone'], ['national_id', 'emergency_contact']],
+  // `display_name` is carried, not matched. A review put the omission plainly:
+  // "the customer's name is not an identifier" is not true in general, and
+  // erasing somebody while leaving their name in plaintext is not erasing them.
+  ['hr_person', ['personal_email', 'personal_phone'], ['national_id', 'emergency_contact', 'display_name']],
+  // Customers were reachable by no route at all, which meant a person who
+  // bought something could not be forgotten. The name is matched as well as
+  // carried, because for a sole trader it is the only identifier on the row —
+  // and `notes` goes with it, since a note about somebody is about them.
+  //
+  // Matched, not sealed at write: this column is a join key half the reports
+  // group by, and it is a company name as often as a person's. That is the Tier
+  // A / Tier B split doing its job — reachable when somebody asks, readable
+  // until they do.
+  ['customers', ['name'], ['company', 'notes']],
   // Support: somebody who wrote in is a person on file, and what they wrote is
   // about them as much as the address they wrote from.
   ['tickets', ['customer'], ['subject', 'body', 'draft', 'sent_body']],
@@ -494,9 +507,59 @@ export function findSubject({ kind = 'contact', identifier }) {
  * key to shred them with, which is the failure mode that makes people believe
  * crypto-shredding does not work.
  */
-export function eraseSubject({ kind = 'contact', identifier, reason = null, actor }) {
+/**
+ * Which live legal holds cover the person behind this reference.
+ *
+ * `rec_hold` scopes are by person or employee id; a PII reference is a hash. The
+ * join is `hr_person.subject_ref`, which is how Core 2 knows whose row is whose.
+ * A hold on "everything" needs no join at all.
+ */
+function holdsBlocking(ref) {
+  let holds = [];
+  try {
+    holds = q("SELECT * FROM rec_hold WHERE released_at IS NULL");
+  } catch { return []; }          // Core 2's schema is not there; nothing to check
+  if (!holds.length) return [];
+  if (holds.some((h) => h.scope_kind === 'everything')) return holds.filter((h) => h.scope_kind === 'everything');
+
+  let person = null;
+  try { person = one('SELECT id FROM hr_person WHERE subject_ref = ?', ref); } catch { person = null; }
+  if (!person) return [];
+  let employeeIds = [];
+  try { employeeIds = q('SELECT id FROM hr_employee WHERE person_id = ?', person.id).map((e) => String(e.id)); } catch { employeeIds = []; }
+
+  return holds.filter((h) => (h.scope_kind === 'person' && String(h.scope_id) === String(person.id))
+    || (h.scope_kind === 'employee' && employeeIds.includes(String(h.scope_id))));
+}
+
+export function eraseSubject({ kind = 'contact', identifier, reason = null, actor, overrideHold = false }) {
   if (!actor) throw new Error('an erasure is a human act and has to be signed');
   const ref = subjectRef(kind, identifier);
+
+  // A legal hold outranks the right to erasure, and the conflict is declared
+  // rather than resolved. Most systems get this wrong in one of two silent
+  // directions — destroying evidence, or ignoring the request and never saying
+  // so — and both are decisions made by an absence of code.
+  //
+  // Checked before anything is sealed or destroyed, because a refusal that
+  // arrives after the first UPDATE has already half-erased somebody.
+  const held = holdsBlocking(ref);
+  if (held.length && !overrideHold) {
+    const e = new Error(
+      `held: this cannot be erased while a legal hold is in force${held[0].matter ? ` for ${held[0].matter}` : ''}. `
+      + 'The request stands and is carried out when the hold is released.',
+    );
+    e.status = 409;
+    e.holds = held;
+    // The refusal goes on the chain too. A request that was received and
+    // lawfully refused has to be provable years later, by both sides.
+    audit({
+      actorType: 'human', actorId: actor, action: 'erasure.refused_hold',
+      subjectType: 'pii', subjectId: ref,
+      payload: { holds: held.map((h) => ({ id: h.id, matter: h.matter })), reason },
+    });
+    throw e;
+  }
   const existing = one('SELECT * FROM pii_subjects WHERE ref = ?', ref);
   if (existing?.erased_at) return { ok: true, alreadyErased: true, ref, at: existing.erased_at };
 

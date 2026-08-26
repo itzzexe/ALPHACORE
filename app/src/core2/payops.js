@@ -189,9 +189,15 @@ export function draftPayroll({ period, actor }) {
     };
     slip.gross = round2(base + slip.allowances + slip.overtime + slip.bonuses + slip.commissions);
     const adjusted = round2(slip.gross - slip.absences - slip.deductions - slip.loans - slip.penalties);
-    slip.taxes = inputs.tax(round2(slip.gross - slip.absences));
-    slip.contributions = inputs.contributions;
-    slip.employer = inputs.employer;           // the company's side, not in net
+    // Tax and contributions come from the rules the company declared
+    // (payrules.js) plus the plans the person is enrolled in. With no rule
+    // declared the lines are zero and the slip says so — rulesConfigured is
+    // the label that keeps a zero from looking computed.
+    const ded = inputs.deductions(round2(slip.gross - slip.absences));
+    slip.taxes = ded.taxes;
+    slip.contributions = ded.contributions;
+    slip.employer = ded.employer;              // the company's side, not in net
+    slip.rulesConfigured = ded.configured;
     slip.net = round2(adjusted - slip.taxes - slip.contributions);
 
     exec('INSERT INTO pay_slip (run_id, employee_id, detail, subject_ref) VALUES (?,?,?,?)',

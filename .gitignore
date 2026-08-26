@@ -25,3 +25,8 @@ backups/
 *.key
 *.pem
 master.key
+
+# Leftovers from the crucible-core -> app move. Local working data: a
+# workspace, a database and a node_modules, none of which belong in the
+# repository. Ignored by path so `git add -A` cannot pick them up again.
+crucible-core/

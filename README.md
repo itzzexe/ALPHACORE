@@ -5,32 +5,38 @@
 ### An AI company operating system where agents can act, but cannot silently exceed their authority.
 
 **An entire AI-native company inside a single Node process.**
-One hundred and sixty-four departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+One hundred and seventy departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
-door, under 242 atomic permissions, with every consequential act written to a hash chain before it happens.
+door, under 266 atomic permissions, with every consequential act written to a hash chain before it happens.
+
+Two halves, kept apart on purpose. The **AI core** thinks and acts. The
+**enterprise core** records what is true — people, time, payroll, documents,
+what is kept and for how long. Nothing crosses between them except through a
+declared tunnel that passes the same gate as a call to the outside world.
 
 The emphasis is on *silently*. An agent here can send the email, make the commit, place the call. What it
 cannot do is any of that without a scope that permits it, a record that survives it, and — where the act is
 irreversible or costs money — a named person who said yes. The company runs itself; it does not answer to
 itself.
 
-<img src="https://img.shields.io/badge/departments-164-c0563a?style=flat-square" alt="164 departments">
+<img src="https://img.shields.io/badge/departments-170-c0563a?style=flat-square" alt="170 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
-<img src="https://img.shields.io/badge/relationships-505-8d8477?style=flat-square" alt="505 declared relationships">
-<img src="https://img.shields.io/badge/API-762_routes-4f9cf0?style=flat-square" alt="762 API routes">
-<img src="https://img.shields.io/badge/permissions-251_atomic-e07bd2?style=flat-square" alt="251 atomic permissions">
+<img src="https://img.shields.io/badge/cores-2_(AI_%2B_enterprise)-e07bd2?style=flat-square" alt="two cores: AI and enterprise">
+<img src="https://img.shields.io/badge/relationships-521-8d8477?style=flat-square" alt="521 declared relationships">
+<img src="https://img.shields.io/badge/API-789_routes-4f9cf0?style=flat-square" alt="789 API routes">
+<img src="https://img.shields.io/badge/permissions-266_atomic-e07bd2?style=flat-square" alt="266 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-353-78bf6d?style=flat-square" alt="353 tests">
+<img src="https://img.shields.io/badge/tests-403-78bf6d?style=flat-square" alt="403 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
 
 *No frameworks. No build step. One process, one SQLite file, and a living map
-where you watch the company work.*
+where you watch both cores work — and every tunnel between them.*
 
 **[Install & run](docs/INSTALL.md)** · [Documentation](docs/) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Licence](LICENSE)
 
@@ -44,8 +50,9 @@ where you watch the company work.*
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 164 departments](#the-company--13-divisions-164-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 170 departments](#the-company--13-divisions-170-departments) | the shape |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
+| [**The two cores**](#two-cores-one-company) · [The enterprise core](#the-enterprise-core) · [The bridges](#the-bridges) | the other galaxy |
 | [What a real deployment needs](#what-a-real-deployment-needs) | anchoring, erasure, approvals, canaries, push |
 | [Security model](#security-model) · [Permissions](#authentication--fine-grained-permissions) · [The constitution](#the-constitution) | the guarantees |
 | [The API](#the-api) · [MCP](#mcp--both-directions) · [Webhooks](#webhooks) · [Command line](#the-command-line) | the surfaces |
@@ -225,13 +232,13 @@ flowchart TD
   WORLD["THE WORLD · 10<br/>integrations · the gate · vault<br/>web · browser · MCP · queue"] --> CORE
   BUILD["BUILD · 10<br/>system design · products<br/>projects · releases · packages"] --> CORE
   DECIDE["DECIDE · 10<br/>human gate · decisions · budgets<br/>risks · evals · shadow company"] --> CORE
-  DATA["DATA · 10<br/>intelligence · segments · datasets<br/>archive · knowledge graph · deep search"] --> CORE
+  DATA["DATA · 11<br/>intelligence · segments · datasets<br/>archive · knowledge graph · deep search"] --> CORE
   MARKETING["MARKETING · 21<br/>brand · content · design · SEO<br/>paid · lifecycle · events · press"] --> CORE
   COMMERCE["COMMERCE · 9<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
-  CAPITAL["CAPITAL · 15<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
-  OPERATE["OPERATE · 17<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
-  TALENT["TALENT · 19<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
-  TRUST["TRUST · 9<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
+  CAPITAL["CAPITAL · 16<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
+  OPERATE["OPERATE · 18<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
+  TALENT["TALENT · 21<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
+  TRUST["TRUST · 10<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
   EXEC["EXECUTIVE · 4<br/>board · investor relations<br/>comms · operating rhythm"] --> CORE
   GOVERN["GOVERN · 20<br/>constitution · oversight · audit · standing orders<br/>watchtower · time machine · backups"] --> CORE
   classDef c1 fill:#c0563a,color:#f2f0ea,stroke:none
@@ -265,7 +272,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **505 relationships** that the map
+Those declarations are data, not decoration: **521 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -296,10 +303,17 @@ flowchart LR
 
 ## The map
 
-The overview is a **living circuit board**: a dense core of the orchestrator and
-the chain, with a tree for every district growing out of it. Every leaf is a
-department, drawn from the same catalogue the router uses — never a picture that
-can drift from the code.
+The overview is a **living circuit board**, and it draws the *whole* company on
+one screen — both cores and the seam between them. On the left the AI core: a
+dense centre of the orchestrator and the chain, with a tree for every district
+growing out of it. On the right the enterprise core as its own constellation.
+Between them, one dotted line per **tunnel**.
+
+Every leaf is a department and every tunnel is a declared relationship, drawn
+from the same catalogue the router uses and the connectivity audit checks —
+never a picture that can drift from the code. **Nothing is drawn that the data
+does not have**: a diagram able to show a relationship nobody declared is a
+diagram that eventually will.
 
 - **Point** at a district to bring up its colour · **click** to go inside
 - **Right-click** any department for everything it touches
@@ -308,12 +322,29 @@ can drift from the code.
 - Edges are typed and drawn differently: hand-off, sent back to improve,
   independent peer review, audit verdict, stops for a human, memory kept
 
-`GET /api/map` returns the whole thing — divisions, departments, edges,
-connectivity audit and live flow counts — as JSON.
+**Three lenses turn it from a diagram into a console.** The map has always shown
+what *exists*, which is the right thing on the first day and the wrong thing
+every morning afterwards, when the questions are all about today:
+
+| | |
+|---|---|
+| **Waiting on a person** | everything that has stopped and needs a signature — a gated run, an unposted entry, an overtime claim, a held browser step |
+| **Failing** | what went wrong and stayed wrong: dead work, failed runs, open red-team findings |
+| **Moved today** | what actually happened, attributed through the same subject→section map the activity feed uses, so the map and the feed cannot disagree |
+
+Choosing one dims the whole company and lights only the departments the answer
+is in, with the count on each. There is a live search beside them that does the
+same for a name. **Every lens is a declared query against a real table**, and a
+department with no counter stays *unlit rather than shown as zero* — the two look
+identical on a screen and mean opposite things.
+
+`GET /api/map` returns the whole thing — both cores, departments, edges, tunnels,
+connectivity audit and live flow counts — as JSON. `GET /api/map/state` returns
+what the lenses light up.
 
 ---
 
-## The company — 13 divisions, 164 departments
+## The company — 13 divisions, 170 departments
 
 <details open>
 <summary><b>ENGINE · 10</b> — the workforce and the work</summary>
@@ -355,7 +386,7 @@ tried without touching the real one.
 </details>
 
 <details>
-<summary><b>DATA · 10</b> — what the company knows, and how it finds out</summary>
+<summary><b>DATA · 11</b> — what the company knows, and how it finds out</summary>
 
 **Intelligence** · **Segments** · **Datasets** · **Archive** · **Knowledge** ·
 **Insights** · **Knowledge graph** · **Recall** · **Deep search**
@@ -395,7 +426,7 @@ stop for a person.
 </details>
 
 <details>
-<summary><b>CAPITAL · 15</b> — the books, money going out, and money held</summary>
+<summary><b>CAPITAL · 16</b> — the books, money going out, and money held</summary>
 
 **Finance** · **Financial reports** · **Ledger** · **Bookkeeping** ·
 **Unit economics** · **FinOps** · **Treasury (crypto)** · **Money desk** · **Tax**
@@ -407,7 +438,7 @@ resolving one requires a signed-in human that no autonomy path can reach.
 </details>
 
 <details>
-<summary><b>OPERATE · 17</b> — keeping the lights on</summary>
+<summary><b>OPERATE · 18</b> — keeping the lights on</summary>
 
 **Incidents** · **Support** · **Dead work** · **Continuity** · **Assets** ·
 **Legal** · **Vendors** · **Objectives** · **Contact centre** · **Deliverability** ·
@@ -420,7 +451,7 @@ messages, calls, voicemail and carrier webhooks verified by signature.
 </details>
 
 <details>
-<summary><b>TALENT · 19</b> — the workforce grows itself</summary>
+<summary><b>TALENT · 21</b> — the workforce grows itself</summary>
 
 **People** · **Org & personas** · **The society** · **Disputes** ·
 **Enablement** · **Recruiting** · **Academy** · **Agent memory** ·
@@ -434,7 +465,7 @@ capabilities.
 </details>
 
 <details>
-<summary><b>TRUST · 9</b> — the company checking itself</summary>
+<summary><b>TRUST · 10</b> — the company checking itself</summary>
 
 **Security (SOC)** · **Compliance** · **Sustainability** · **Provenance** ·
 **Red team** · **Erasure** · **Privacy & DPO** · **Trust centre**
@@ -481,6 +512,166 @@ One door out, and everything that guards it. The browser lives here rather than
 with the tools, because an employee clicking buttons on somebody else's website
 is the company reaching outside, whatever it happens to be clicking.
 </details>
+
+---
+
+## Two cores, one company
+
+Most of this README describes the **AI core**: the workforce, the queue, the
+router, the gate — the half that thinks and acts. There is a second half, and it
+exists because those two jobs want opposite things from a database.
+
+| | **AI core** | **Enterprise core** |
+|---|---|---|
+| Job | thinks and acts | records what is true |
+| Optimised for | throughput, retries, being wrong cheaply | being right, and provable years later |
+| A bad write is | a run to redo | a payslip somebody was paid on |
+| Identity | an agent id, minted freely | a person, and a person is not an agent |
+
+Mixing them is the failure the split exists to prevent. An HR record and a run
+queue under one heading because both involve *people*; a salary in the same
+table as a token cost because both are *money*. So the galaxies are kept apart
+in the data, in the permissions, in the navigation and on the map — and the only
+way across is a declared tunnel.
+
+**The menu is the split, not a description of it.** The console shows one core at
+a time, with a switch above the rail. The AI core keeps its eight surfaces; the
+enterprise core has its own five. Open a payroll screen from a search result and
+the rail follows you across rather than leaving you looking at the other galaxy.
+
+### The enterprise core
+
+Sixteen departments behind five doors, on a schema that is deliberately
+different from Core 1's: **STRICT tables**, so a bad write is refused by the
+storage engine rather than by discipline.
+
+<details open>
+<summary><b>PEOPLE & HR</b> — who works here</summary>
+
+**Employees** · **Organisation** · **People lifecycle**
+
+`hr_person` is the root, and employment and a login are things a person may or
+may not have, in any combination — the contractor with no account, the founder
+with an account and no employment record, the employee who is both. **An AI
+agent is barred from every human slot twice over**: STRICT typing refuses an
+agent's TEXT id in an INTEGER person column at the storage engine, and a trigger
+refuses a person row created as a proxy under an agent's name. Six routes were
+tried and six refused, with a real person as the control.
+
+</details>
+
+<details>
+<summary><b>TIME & ATTENDANCE</b> — who was here, and what was agreed</summary>
+
+**Attendance & leave** · **Shifts & overtime** · **Joining & leaving**
+
+Leave has policies, balances and an approval that is somebody else's. Shifts are
+**dated assignments rather than a property of a person**, so last February is
+still judged against the roster that was in force last February — overwriting
+would quietly rewrite whether somebody was late.
+
+And the line that makes it a feature rather than a clock: **minutes past the end
+of a shift are not overtime**. Somebody who stays an hour because the traffic is
+bad has not earned an hour's pay, and a system that pays it teaches everybody to
+leave late. Extra minutes are recorded, wait for approval, and **nobody signs off
+their own**. Somebody on no roster reports *null* rather than zero — a zero would
+put them in the on-time column of every report.
+
+Joining and leaving are checklists generated from a template, with an owner and
+a due day on each step. Steps that cost money or open a door are marked
+**critical**: skippable when they genuinely do not apply, never silently, always
+with a name and a reason on them.
+
+</details>
+
+<details>
+<summary><b>PAYROLL & SPENDING</b> — what people are paid, and what was bought</summary>
+
+**Finance ops** · **Pay rules** · **Custody** · **Procurement**
+
+Expenses, cost centres, loans, and a payroll run that drafts, waits for a
+signature and closes. **`base_salary` is sealed**, which is why no aggregate over
+salaries can be computed in SQL — payroll totals are summed in the process after
+opening each one, and that is worth knowing before designing around it.
+
+**Pay rules** turn what used to be a named zero into a computation. The slip
+carried `taxes = 0; contributions = 0` with an honest comment saying
+jurisdiction-specific; that was right as a comment and wrong to ship, because a
+zero *looks computed* and somebody eventually pays against it. A company declares
+its own rules — flat or banded, on gross, basic or taxable, paid by employee or
+employer — **each with a stated basis**, because a deduction nobody can cite is
+one the employee may dispute and the company cannot defend. Bands tax only their
+own slice, which is the single most common progressive-tax bug and always
+overcharges the person who just crossed a threshold. With nothing declared, tax
+is reported **unknown, never zero**. End of service is counted in calendar years
+rather than by dividing days by 365.25 — an anniversary is a date, and 7.0011
+years on a slip invites an argument about the decimal.
+
+**Custody** answers the question the asset register never could: not what the
+company owns, but **who is holding it**. One item cannot be in two hands. A
+return is signed by somebody other than the holder, or "I gave it back" and the
+record saying so are the same act. And nobody is recorded as having left while
+still holding things — checked against the register rather than against a tick
+box, because a tick box records that somebody *said* so.
+
+</details>
+
+<details>
+<summary><b>DOCUMENTS & RECORDS</b> — what is written down, and how long it is kept</summary>
+
+**Documents** · **Files** · **Records & retention** · **Meetings**
+
+Documents are versioned, classified, and **sealed per subject** where they are
+about a person: a restricted document about somebody has every version under
+that person's key.
+
+**Files** closed the gap the documents module was deferred over. The reason is
+worth quoting: *"a file path in a sealed column is a pointer to unsealed bytes."*
+Sealing the path protects nothing — the bytes sit on disk in the clear and
+survive the erasure that was meant to destroy them. So **the bytes are sealed**,
+under the same per-subject key as the salary beside them, through the same
+audited path rather than a second AES implementation to get wrong. An executable
+is refused by extension *and* by its first bytes, so renaming it changes nothing.
+A file that could not be sealed is not stored at all.
+
+**Records & retention** is the half of archiving that is not storage: how long
+each kind of record is kept, on whose authority, and what happens at the end. A
+basis is required, because a retention period nobody can cite is a guess with a
+number on it.
+
+And the conflict most systems resolve silently in one of two wrong directions —
+**a legal hold against the right to erasure**. Destroying evidence, or ignoring
+the request and never saying so, are both decisions made by an absence of code.
+Here the erasure is *refused with 409, naming the matter*, saying the request
+stands and will be carried out when the hold lifts — and **the refusal goes on
+the chain**, so a lawful refusal is provable years later by both sides.
+
+</details>
+
+<details>
+<summary><b>THE SEAM</b> — the map of both cores, and everything that crosses</summary>
+
+**The two galaxies** · **The bridges**
+
+</details>
+
+### The bridges
+
+**Every call from Core 1 into Core 2 passes the egress gate.** Being in the same
+process buys no trust: the AI core reaches the enterprise core through a named
+connector with scopes and a quota, exactly as it reaches Gmail.
+
+Six commands are gated **categorically** — a granted scope does not clear them,
+`force: true` does not clear them, and a zero-value change is held exactly as a
+million-dollar one is, so it is demonstrably not the value ceiling doing the
+work. Terminating somebody and approving a payroll run are not things an agent
+does because its budget happened to allow it.
+
+One thing said plainly rather than buried: **`enterprise-core` is armed live,
+not dry.** Every other connector proves itself in dry-run first; a dry-run
+internal connector would execute nothing and make the enterprise core unusable.
+The gate, the scopes and the human gates all still apply — the *convention* does
+not, and it is the connector with access to salaries.
 
 ---
 
@@ -665,6 +856,71 @@ the attention of whoever wrote it:
 - Three fire per tick, not everything at once. Ten orders each able to start a
   model chain is a way to spend a month's budget in a minute.
 
+### Who can actually be forgotten
+
+A review made a point worth keeping in the document: *"the customer's name is
+not an identifier" is not accurate* — a name on its own identifies somebody often
+enough that every serious data-protection regime treats it as personal. Two
+things were wrong here, and both are measurable rather than arguable.
+
+**Customers were reachable by no route at all.** A person who bought something
+could not be forgotten, because the erasure walk did not look at that table.
+It does now — matched on the name, carrying the company and the notes, because
+a note about somebody is about them. Matched rather than sealed at write: that
+column is a join key half the reports group by, and it is a company name as
+often as a person's. That is the Tier A / Tier B split doing its job, not an
+exception to it.
+
+**Erasing somebody left their name behind.** `hr_person.display_name` was not
+carried, so a person could be erased and still be named on their own row. It goes
+with them now.
+
+**And the sweep would not have caught either**, because the column-name matcher
+deliberately omitted names — for a good reason that produced a bad result. There
+are 101 name-shaped columns in this schema and most of them are products and
+assets, so calling them all personal would give a hundred false positives and an
+inventory nobody reads. The way out was not a longer hand-maintained list:
+**eighteen tables already carry `subject_ref`**, which is the schema saying *this
+table is about people*. A name-shaped column is personal when the table it sits
+in is, and that is read from the schema.
+
+The honest effect of fixing it was to make the number worse before it got
+better — the gap went from 6 to 10 as names became visible, then to **8** as
+customers and names became reachable. The launch audit reports the remaining
+eight by name, and blocks outright on the one that is never acceptable: a column
+**sealed at write that erasure cannot reach**, which is data encrypted under a
+key nobody will ever destroy.
+
+Three of the eight are IP addresses in the session and login tables. They are
+personal data under most regimes and unreachable by design, because they are how
+a break-in is investigated. That is a decision somebody should make and record
+rather than one made by not looking, which is why they are named.
+
+### One act, or neither
+
+The constitution says every consequential act is written to the chain *before it
+happens*. That was not quite true, and nothing was hiding it: a handler mutated a
+table and then wrote the record, so a chain write that failed left the act done
+and unrecorded — the single outcome this design exists to prevent. Nothing
+swallowed the error. There was simply **nothing holding the two together**.
+
+Now there is. A write and its chain entry share one transaction, so a record that
+cannot be written takes the act with it. It nests, because a route already inside
+a transaction must not commit it early, and it **refuses an async function**
+rather than silently providing no atomicity — a transaction spanning an `await`
+would let another request interleave between the mutation and the commit, and
+calling that a transaction would be a comment.
+
+Which is the honest limit: a handler that awaits a model or a network call
+cannot be wrapped. So they are **counted and named** rather than treated as if
+they were. `GET /api/atomicity` reports both — currently **403 of 411 write
+routes are atomic**, and the eight that are not are listed by route.
+
+The rule was `severity: warn`, which was the wrong weight for the promise the
+whole system rests on. It is `deny` now, and it says that the enforcement is the
+storage engine rather than a predicate in the gate — because a rule claiming a
+check that lives somewhere else is how the last one came to be wrong.
+
 ### The audit chain
 
 Every consequential act is one row:
@@ -714,6 +970,11 @@ scope → allowlist → quota → constitution → value ceiling → dry-run
   nothing, so you can watch what it *would* do
 - Every verdict, allowed or refused, lands on the egress log with the rule that
   decided it
+- **The browser is on it too.** A click that submits, signs up, buys or sends is
+  the capability `web.commit`, held categorically — a zero-value signup waits
+  exactly as a purchase does, so it is demonstrably not the value ceiling doing
+  the work. The browser classifies the act, because it is the only thing that
+  can read the button; the gate decides whether it happens
 
 ### Connectors
 
@@ -913,7 +1174,7 @@ department rather than buried in Settings.
 | **Anchors** | The chain's head witnessed by an RFC 3161 timestamping authority, outside this disk. Verifying the chain proves it agrees with *itself*, which is exactly what a rewritten record also does — anybody who owns the file can edit it and recompute every hash. This is the only check that cannot be forged locally. |
 | **Erasure** | Crypto-shredding: a person's data sealed under their own key, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. It reaches the intelligence tables, support, and the contact centre — including a call transcript and the recording of somebody's voice, which are the most sensitive things here and the easiest to miss, because a recording is not equal to the phone number an erasure request names. |
 | **The desk** | Everything waiting on a person, ordered by what it blocks. Batches are recorded as one act naming every item, never as a dozen entries that read like a dozen judgements. |
-| **Roles** | Seven templates over the 251 permissions, with each irreversible power in exactly one of them. |
+| **Roles** | Seven templates over the 266 permissions, with each irreversible power in exactly one of them. |
 | **Model chains** | Which model does the work, and a canary that must pass — on the same day, against the chain in service — before it changes. An untested chain cannot be promoted, and an inconclusive canary does not count as evidence. |
 | **Recall** | Local embeddings via ollama, so search finds "the tool that reads receipts" from "invoice OCR platform" — trigrams score that pair at 0.000. Nothing leaves the machine. |
 | **Deliverability** | DKIM signing, and a preflight that reads live DNS to say what a receiver would conclude. Plus whether a call may lawfully be recorded, by jurisdiction. |
@@ -1007,7 +1268,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
   answers nothing about the company), and `/webhooks/*` — carrier callbacks
   from the phone network, which cannot hold a token and are authenticated by
   the carrier's own signature instead
-- **251 atomic permissions** across 126 families (`decisions.approve`,
+- **266 atomic permissions** across 133 families (`decisions.approve`,
   `treasury.payout`, `egress.grant`, …). The superadmin holds `*`
 - The launch audit checks that every permission the API demands exists in the
   catalogue — a route guarded by a permission nobody can hold is permanently
@@ -1021,7 +1282,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**762 routes** — all JSON, all
+**789 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1097,7 +1358,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 353 tests, on their own database files |
+| `npm test` | 403 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1187,11 +1448,11 @@ credential — keep them together.
 
 ```
 app/
-  src/                140 modules, ~40,600 lines
+  src/                146 modules, ~42,600 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
-    db.js             264 tables, forward-only migrations
+    db.js             270 tables, forward-only migrations
     audit.js          the hash chain
-    auth.js           sessions, 251 permissions, password generation
+    auth.js           sessions, 266 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
     policy.js         reservation-first budgets
     ledger.js         double-entry books: the chart, the journal, four statements
@@ -1235,7 +1496,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               353 tests across thirty-four files
+  test/               403 tests across thirty-seven files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1255,7 +1516,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 353 tests
+npm test                        # 403 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
@@ -1327,8 +1588,20 @@ configured, the public URL set, the licence files present, no test residue).
   form and puts all thirteen perceived elements through the real gate: twelve
   proceed, and "Submit order" stops.
 
-**The browser sweep** opens all 164 departments in both themes and both
-languages, at 1440×900 and again at 390×844 — 656 renders each — and fails on a
+**The depth probe** (`npm run depth`) answers a harder question than the sweep.
+A page that renders an empty state, with no endpoint behind it and no action
+that does anything, passes a render check — so this opens all 156 departments
+and records what is actually there: how many endpoints each called, how much of
+the page is content, and whether anything errored. It separates the two states
+that look identical on a screen: **empty**, meaning nothing has been created yet
+and the write path works, from **hollow**, meaning nothing is behind the page at
+all. It cannot tell them apart by looking, so it does not guess — a department
+that fetched nothing is reported as hollow and everything else is reported with
+its numbers. The current reading is **156 of 156 backed by a live endpoint, none
+erroring**, with three bare on a fresh database.
+
+**The browser sweep** opens all 170 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 680 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
 somebody runs once is a state the code leaves within a month.
@@ -1420,10 +1693,14 @@ Choices that shaped this, and what they cost:
   that monitoring does not page somebody at three in the morning because an
   accountant mistyped an amount. A 500 from that module means the ledger itself
   is broken, which *is* worth waking up for.
-- **The browser gate is not the egress gate.** The connector gate is built
-  around a named service with an allowlist and a quota, and a browser is none of
-  those. Forcing it through would have recorded every held step as *blocked by
-  an unknown connector*, which is a worse record than no record.
+- **The browser goes through the one gate, and did not at first.** The first
+  version kept its own, reasoning that the connector gate wants a named service
+  with an allowlist and a quota and a browser is none of those. That was wrong
+  twice over: it made *"nothing reaches outside except through one gate"* false
+  about the most dangerous outward path in the building, and it left the browser
+  with no allowlist and no quota at all. The objection — that forcing it through
+  would record every step as blocked by an unknown connector — was an argument
+  for **registering the connector**, which is what was missing.
 - **An approval is for one step, not for a session.** A session-wide yes would
   mean the first screenshot authorised every click after it.
 - **The element list is kept, not just the click.** Without the menu it was

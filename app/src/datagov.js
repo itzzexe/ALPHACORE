@@ -27,6 +27,36 @@ const SENSITIVITIES = ['public', 'internal', 'confidential', 'personal', 'restri
 // classification for a person to confirm — never to decide one, because a
 // regex that classifies personal data silently misclassifies it too.
 const LOOKS_PERSONAL = /(^|_)(email|phone|mobile|whatsapp|address|contact|recipient|sender|caller|msisdn|from_number|to_number|transcript|recording|ip)(_|$)/i;
+
+/**
+ * A person's name is personal data, and this system said otherwise for a while.
+ *
+ * The pattern above deliberately omitted names, and the reasoning was sound as
+ * far as it went: `products.name`, `assets.name` and `agents.name` are not
+ * people, and there are 101 name-shaped columns in this schema. Calling them all
+ * personal would produce a hundred false positives, and an inventory nobody
+ * believes is an inventory nobody reads.
+ *
+ * But the omission left the opposite error in place — a review put it plainly,
+ * that "the customer's name is not an identifier" is not true in general. A name
+ * on its own identifies somebody often enough that every serious data-protection
+ * regime treats it as personal.
+ *
+ * The way out is not a longer hand-maintained list. Eighteen tables already
+ * carry `subject_ref`, the one-way reference erasure joins on — which is the
+ * schema saying, in its own words, *this table is about people*. So a name-shaped
+ * column is personal **when the table it sits in is about a person**, and that
+ * is read from the schema rather than decided by somebody's judgement about
+ * which tables count.
+ */
+const LOOKS_LIKE_A_NAME = /(^|_)(name|full_name|display_name|first|last|surname|customer)(_|$)/i;
+const IS_A_REFERENCE = /(^|_)id$/i;
+
+const PERSON_TABLES = () => {
+  const out = new Set();
+  for (const { table, column } of schemaColumns()) if (column === 'subject_ref') out.add(table);
+  return out;
+};
 const LOOKS_SECRET = /(^|_)(pass|password|secret|token|key|wrapped_key|p256dh|auth|hash|ciphertext)(_|$)/i;
 
 export const SEED_CLASSES = [
@@ -89,6 +119,7 @@ function schemaColumns() {
  * something nobody has looked at.
  */
 export function rebuild({ actor = 'system:datagov' } = {}) {
+  const personTables = PERSON_TABLES();
   const erasure = erasureOverview();
   const reachable = new Set([...erasure.columnsCovered, ...(erasure.columnsCarried || [])]);
 
@@ -96,7 +127,10 @@ export function rebuild({ actor = 'system:datagov' } = {}) {
   let updated = 0;
   for (const { table, column } of schemaColumns()) {
     const key = `${table}.${column}`;
-    const suggestedPersonal = LOOKS_PERSONAL.test(column) ? 1 : 0;
+    const suggestedPersonal = (LOOKS_PERSONAL.test(column)
+      // A name only counts on a table the schema says is about a person, and a
+      // foreign key is a pointer rather than the name itself.
+      || (personTables.has(table) && LOOKS_LIKE_A_NAME.test(column) && !IS_A_REFERENCE.test(column))) ? 1 : 0;
     const erasable = reachable.has(key) ? 1 : 0;
     // The tier is not a proposal the way `personal` is. It is read from the
     // list the sealing code itself uses, so the inventory cannot claim a column

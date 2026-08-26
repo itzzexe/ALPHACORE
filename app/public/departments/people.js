@@ -613,14 +613,14 @@ export async function renderOverview() {
         ${here ? `<button class="btn btn-sm" data-atlasout>← ${esc(t('the whole company'))}</button>` : ''}
         ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}</span>` : ''}
         <a class="chip chip-dim" style="text-decoration:none" href="#/graph">${esc(t('relationship table'))} →</a>
-        <a class="chip chip-ember" style="text-decoration:none" href="#/map2">${esc(t('The two galaxies'))} →</a>
+        <a class="chip chip-ember" style="text-decoration:none" href="#/map2">${esc(t('The seam, in detail'))} →</a>
       </span>
     </div>
     <div ${tab === 'map' ? '' : 'hidden'}>
       ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
       <div class="map-legend">${esc(t(here
         ? 'One district, and the departments inside it. Each mark is a department; a filled one holds records, a hollow one is declared and still empty. The arrows walk you round the rim.'
-        : 'The whole company as one drawing: a dense core of the orchestrator and the chain, and a tree for every district growing out of it. The AI core grows to the left of the seam and the enterprise core to the right; every dotted arc through the core is a declared tunnel between them. Circles are AI-core departments, squares enterprise ones. Point at a district to bring up its colour and its tunnels; open it to go inside.'))}
+        : 'The whole company on one drawing, both cores. On the left the AI core: a dense centre of the orchestrator and the chain, with a tree for every district growing out of it. On the right the enterprise core, which records what is true. The dotted lines crossing between them are the tunnels — every one a declared relationship the connectivity audit checks, never a line drawn to look joined. Every leaf is a department; a filled one holds records, a hollow one is declared and still empty.'))}
         <b>${esc(t('Click'))}</b> ${esc(t('a district to go inside'))} · <b>${esc(t('right-click'))}</b> ${esc(t('for everything it touches and a hop-by-hop'))} <b>${esc(t('Trace flow'))}</b> · <b>${esc(t('drag / wheel'))}</b> ${esc(t('pans and zooms'))}.${mapData?.audit.orphans.length ? ` <b style="color:var(--bad)">${esc(t('Unwired'))}: ${mapData.audit.orphans.map((o) => o.label).join(', ')}</b>` : ''}</div>
       ${flowLegend(mapData?.flow)}
     </div>
@@ -708,21 +708,13 @@ export async function renderOverview() {
   view.querySelectorAll('[data-district]').forEach((g) => {
     g.querySelector('.at-hit')?.addEventListener('click', () => atlasGoTo(g.dataset.district));
     g.querySelector('.at-dname')?.addEventListener('click', () => atlasGoTo(g.dataset.district));
-    // The tunnels that touch this district come up with it: every crossing
-    // that lands here, or leaves from one of its enterprise departments.
-    const id = g.dataset.district;
-    const mineIds = new Set((mapData?.enterprise?.divisions || []).find((d) => d.id === id)?.departments.map((x) => x.id) || []);
-    const tunnelsOf = () => [...(view.querySelector('.atlas-svg')?.querySelectorAll('.at-tunnel') || [])]
-      .filter((p) => p.dataset.tunnelTo === id || mineIds.has(p.dataset.tunnelFrom));
     g.addEventListener('mouseenter', () => {
       view.querySelector('.atlas-svg')?.classList.add('focused');
       g.classList.add('lit');
-      tunnelsOf().forEach((p) => p.classList.add('lit'));
     });
     g.addEventListener('mouseleave', () => {
       view.querySelector('.atlas-svg')?.classList.remove('focused');
       g.classList.remove('lit');
-      tunnelsOf().forEach((p) => p.classList.remove('lit'));
     });
   });
   view.querySelectorAll('[data-step]').forEach((r) => r.addEventListener('click', () => atlasStep(Number(r.dataset.step))));

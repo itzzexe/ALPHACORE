@@ -269,7 +269,8 @@ export function myWorkspace(user) {
     },
     overtime: q("SELECT id, day, minutes, state FROM time_overtime WHERE employee_id = ? ORDER BY id DESC LIMIT 10", emp.id),
     payslips: q('SELECT s.id, r.period, r.state FROM pay_slip s JOIN pay_run r ON r.id = s.run_id WHERE s.employee_id = ? ORDER BY r.period DESC LIMIT 12', emp.id),
-    assets: q('SELECT h.id, a.name, a.kind, h.assigned_at FROM hr_asset_assignment h JOIN assets a ON a.id = h.asset_id WHERE h.employee_id = ? AND h.returned_at IS NULL', emp.id),
+    // Custody is custody.js's register: what is signed out to this person.
+    assets: q('SELECT c.id, COALESCE(a.name, c.description) AS name, COALESCE(a.kind, \'item\') AS kind, c.issued_at AS assigned_at FROM cust_item c LEFT JOIN assets a ON a.id = c.asset_id WHERE c.employee_id = ? AND c.returned_at IS NULL', emp.id),
     tasks: q("SELECT id, kind, what FROM rec_task WHERE employee_id = ? AND state = 'open' ORDER BY id", emp.id),
     tickets: q("SELECT id, ref, title, state, sla_due FROM ops_ticket WHERE requester_employee_id = ? AND state NOT IN ('closed') ORDER BY id DESC LIMIT 10", emp.id),
     bookings: q("SELECT b.id, r.name AS room, b.starts, b.ends FROM ops_booking b JOIN ops_room r ON r.id = b.room_id WHERE b.employee_id = ? AND b.state = 'booked' AND b.ends >= datetime('now') ORDER BY b.starts LIMIT 10", emp.id),
