@@ -40,6 +40,12 @@ import * as payops from './payops.js';
 import * as procure from './procure.js';
 import * as talent from './talent.js';
 import * as docs from './documents.js';
+import * as hrplus from './hrplus.js';
+import * as finance from './finance.js';
+import * as bank from './bank.js';
+import * as ops from './ops.js';
+import * as admin from './admin.js';
+import { openPii } from '../erasure.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 
@@ -180,6 +186,180 @@ export const TOOLS = {
     about: 'Open a position on a unit.',
     run: (a, ctx) => identity.createPosition({ ...a, actor: ctx.actor }),
   },
+
+  // --- the rest of the company: reads ---
+  get_attendance_exceptions: {
+    write: false, permission: 'people.view',
+    about: 'Lateness and absence for a month, measured against each person\'s shift. Counts, never reasons.',
+    run: ({ period = null }) => hrplus.attendanceExceptions(period ? { period } : {}),
+  },
+  get_stock_levels: {
+    write: false, permission: 'ops.view',
+    about: 'Every item, its level per warehouse, and whether it is below its minimum.',
+    run: () => ops.stockLevels(),
+  },
+  get_cash_position: {
+    write: false, permission: 'bank.view',
+    about: 'Ledger balance per bank account and cash box, against the last statement.',
+    run: () => bank.cashPosition(),
+  },
+  get_reconciliation: {
+    write: false, permission: 'bank.view',
+    about: 'Unmatched statement lines and open journal lines for one account.',
+    run: ({ accountId }) => bank.reconciliation(accountId),
+  },
+  get_budget_variance: {
+    write: false, permission: 'finance.view',
+    about: 'Budget against actual, line by line, from the posted journal.',
+    run: ({ budgetId }) => finance.budgetVariance(budgetId),
+  },
+  get_ap_aging: {
+    write: false, permission: 'finance.view',
+    about: 'What is owed to vendors, bucketed by how overdue it is.',
+    run: () => finance.apAging(),
+  },
+  get_ar_aging: {
+    write: false, permission: 'finance.view',
+    about: 'What customers owe, bucketed by how overdue it is.',
+    run: () => finance.arAging(),
+  },
+  list_open_tickets: {
+    write: false, permission: 'ops.view',
+    about: 'Help-desk tickets that are not yet resolved, SLA first.',
+    run: ({ state = null }) => ops.listTickets({ state }),
+  },
+  get_room_availability: {
+    write: false, permission: 'ops.view',
+    about: 'Rooms and their bookings for a day.',
+    run: ({ day = null }) => ops.roomAvailability(day || undefined),
+  },
+  get_fleet: {
+    write: false, permission: 'ops.view',
+    about: 'Vehicles, who holds them, and when they are next due for service.',
+    run: () => ops.fleet(),
+  },
+  list_obligations: {
+    write: false, permission: 'admin.view',
+    about: 'The regulatory calendar: what is due, to whom, and what is overdue.',
+    run: () => admin.listObligations(),
+  },
+  list_licenses: {
+    write: false, permission: 'admin.view',
+    about: 'Company licences and registrations with their expiry.',
+    run: () => admin.listLicenses(),
+  },
+  list_cases: {
+    write: false, permission: 'legal.view',
+    about: 'Legal cases, next hearing first.',
+    run: () => admin.listCases(),
+  },
+  list_letters: {
+    write: false, permission: 'admin.view',
+    about: 'The correspondence register.',
+    run: ({ limit = 50 }) => admin.listLetters({ limit }),
+  },
+
+  // --- the rest of the company: writes, through the gateway ---
+  request_overtime: {
+    write: true, permission: 'people.manage',
+    about: 'File an overtime claim for somebody. Deciding it is a manager\'s act.',
+    run: (a, ctx) => hrplus.requestOvertime({ ...a, actor: ctx.actor }),
+  },
+  draft_budget: {
+    write: true, permission: 'finance.export',
+    about: 'Draft a budget with its lines. Adopting it waits for a person.',
+    run: (a, ctx) => finance.createBudget({ ...a, actor: ctx.actor }),
+  },
+  draft_bill: {
+    write: true, permission: 'finance.export',
+    about: 'Record a vendor bill as a draft. Paying it waits for a person.',
+    run: (a, ctx) => finance.createBill({ ...a, actor: ctx.actor }),
+  },
+  approve_bill: {
+    write: true, permission: 'finance.export',
+    about: 'Approve a draft bill. Ordinary value ceiling applies; paying is still human.',
+    run: ({ id }, ctx) => finance.approveBill(id, { actor: ctx.actor }),
+  },
+  draft_invoice: {
+    write: true, permission: 'finance.export',
+    about: 'Draft a customer invoice in the fiat books.',
+    run: (a, ctx) => finance.createInvoice({ ...a, actor: ctx.actor }),
+  },
+  issue_invoice: {
+    write: true, permission: 'finance.export',
+    about: 'Issue a drafted invoice; the ledger recognises the receivable.',
+    run: ({ id }, ctx) => finance.issueInvoice(id, { actor: ctx.actor }),
+  },
+  run_depreciation: {
+    write: true, permission: 'finance.export',
+    about: 'Post a month of straight-line depreciation. Idempotent per asset and month.',
+    run: (a, ctx) => finance.runDepreciation({ ...a, actor: ctx.actor }),
+  },
+  set_fx_rate: {
+    write: true, permission: 'finance.export',
+    about: 'Record an exchange rate to USD for a day.',
+    run: (a, ctx) => finance.setFxRate({ ...a, actor: ctx.actor }),
+  },
+  draft_transfer: {
+    write: true, permission: 'bank.manage',
+    about: 'Draft a transfer between accounts or to an outside beneficiary. Executing it is human.',
+    run: (a, ctx) => bank.createTransfer({ ...a, actor: ctx.actor }),
+  },
+  import_statement: {
+    write: true, permission: 'bank.manage',
+    about: 'Import a bank statement\'s lines for reconciliation.',
+    run: (a, ctx) => bank.importStatement({ ...a, actor: ctx.actor }),
+  },
+  auto_match: {
+    write: true, permission: 'bank.manage',
+    about: 'Match statement lines to journal lines where exactly one candidate fits.',
+    run: ({ accountId }, ctx) => bank.autoMatch(accountId, { actor: ctx.actor }),
+  },
+  record_stock_move: {
+    write: true, permission: 'ops.manage',
+    about: 'Receipt, issue or adjustment of stock in a warehouse.',
+    run: (a, ctx) => ops.recordStockMove({ ...a, actor: ctx.actor }),
+  },
+  create_workorder: {
+    write: true, permission: 'ops.manage',
+    about: 'Raise a maintenance work order on an asset, vehicle or room.',
+    run: (a, ctx) => ops.createWorkOrder({ ...a, actor: ctx.actor }),
+  },
+  book_room: {
+    write: true, permission: 'ops.view',
+    about: 'Book a room for an employee. Refuses a clash.',
+    run: (a, ctx) => ops.bookRoom({ ...a, actor: ctx.actor }),
+  },
+  open_ticket: {
+    write: true, permission: 'ops.view',
+    about: 'Open a help-desk ticket on somebody\'s behalf.',
+    run: (a, ctx) => ops.openTicket({ ...a, actor: ctx.actor }),
+  },
+  report_incident: {
+    write: true, permission: 'ops.manage',
+    about: 'Report a workplace incident. Closing it is human.',
+    run: (a, ctx) => ops.reportIncident({ ...a, actor: ctx.actor }),
+  },
+  draft_letter: {
+    write: true, permission: 'admin.manage',
+    about: 'Register a letter, in or out. Sending an outgoing letter is human.',
+    run: (a, ctx) => admin.registerLetter({ ...a, actor: ctx.actor }),
+  },
+  add_obligation: {
+    write: true, permission: 'admin.manage',
+    about: 'Put a regulatory obligation on the calendar.',
+    run: (a, ctx) => admin.addObligation({ ...a, actor: ctx.actor }),
+  },
+  propose_resolution: {
+    write: true, permission: 'admin.manage',
+    about: 'Propose a resolution to a committee. Adopting it is human.',
+    run: (a, ctx) => admin.proposeResolution({ ...a, actor: ctx.actor }),
+  },
+  open_case: {
+    write: true, permission: 'legal.manage',
+    about: 'Open a legal case file. Concluding it is human.',
+    run: (a, ctx) => admin.openCase({ ...a, actor: ctx.actor }),
+  },
 };
 
 /**
@@ -296,6 +476,20 @@ export const ALWAYS_HUMAN = new Set([
   'signContract',
   'recordDisciplinary',
   'deletePerson',
+  // The rest of the company. Each of these is a different kind of act from a
+  // large expense: money leaving, a budget adopted, an asset written off, a
+  // case concluded. Amount is irrelevant; a person decides.
+  'approveBudget',
+  'payBill',
+  'releasePayments',
+  'executeTransfer',
+  'openBankAccount',
+  'disposeAsset',
+  'payEos',
+  'decideGrievance',
+  'adoptResolution',
+  'concludeCase',
+  'closePeriod',
 ]);
 
 /**
@@ -393,6 +587,21 @@ const NOTIFY = {
   'certificate.expiring': { level: 'warn', text: (p) => `A ${p.course || ''} certificate expires soon — renewal or retraining needed.` },
   'payroll.closed': { level: 'info', text: () => 'A payroll period closed.' },
   'invoice.paid': { level: 'info', text: (p) => `Invoice #${p.id ?? ''} was paid.` },
+  'overtime.requested': { level: 'info', text: (p) => `Overtime claim #${p.id ?? ''} is waiting for a manager.` },
+  'grievance.opened': { level: 'warn', text: (p) => `Grievance #${p.id ?? ''} was raised and waits for review.` },
+  'salary.changed': { level: 'info', text: () => 'A salary changed on the record.' },
+  'budget.approved': { level: 'info', text: (p) => `Budget #${p.id ?? ''} for ${p.period ?? ''} was adopted.` },
+  'bill.paid': { level: 'info', text: (p) => `Bill #${p.id ?? ''} was paid.` },
+  'ar.received': { level: 'info', text: (p) => `A receipt landed on invoice #${p.invoiceId ?? ''}.` },
+  'transfer.executed': { level: 'warn', text: (p) => `Transfer #${p.id ?? ''} was executed.` },
+  'payments.released': { level: 'warn', text: (p) => `Payment batch #${p.id ?? ''} (${p.kind ?? ''}) was released to the bank.` },
+  'stock.low': { level: 'warn', text: (p) => `${p.sku ?? 'An item'} is below its minimum stock.` },
+  'ticket.breached': { level: 'warn', text: (p) => `Help-desk ticket ${p.ref ?? ''} passed its SLA.` },
+  'workplace.incident': { level: 'warn', text: (p) => `A severity-${p.severity ?? ''} ${p.kind ?? ''} incident was reported.` },
+  'obligation.due': { level: 'warn', text: (p) => `A regulatory obligation is due on ${p.due ?? 'soon'}.` },
+  'license.expiring': { level: 'warn', text: (p) => `A licence expires on ${p.expires ?? 'soon'} — renewal needs a decision.` },
+  'case.opened': { level: 'warn', text: (p) => `A ${p.kind ?? ''} case was opened.` },
+  'resolution.adopted': { level: 'info', text: (p) => `Resolution ${p.ref ?? ''} was adopted.` },
 };
 
 /**
@@ -405,27 +614,131 @@ const NOTIFY = {
  * If Core 2 ever imports ledger.js directly, that is the second ledger the
  * directive forbids, wearing a disguise.
  */
-function ensureSalariesAccount() {
-  if (!one("SELECT code FROM accounts WHERE code = '5250'")) {
-    try {
-      addAccount({ code: '5250', name: 'Salaries and wages', type: 'expense', note: 'Payroll, posted by the bridge on close', actor: 'system:core2-bridge' });
-    } catch { /* raced another tick; the account exists */ }
-  }
+/**
+ * The one door from Core 2 into the chart of accounts. Core 1's addAccount(),
+ * called from Core 1's side of the bridge, so a bank account opened in the
+ * enterprise core gets its own line under 1000 without bank.js ever touching
+ * the ledger module. Idempotent: an account that exists is left alone.
+ */
+export function ensureLedgerAccount({ code, name, type, parentCode = null, note = null }) {
+  if (one('SELECT code FROM accounts WHERE code = ?', String(code))) return false;
+  try {
+    addAccount({ code: String(code), name, type, parentCode, note, actor: 'system:core2-bridge' });
+    return true;
+  } catch { return false; /* raced another tick; the account exists */ }
 }
 
+function ensureSalariesAccount() {
+  ensureLedgerAccount({ code: '5250', name: 'Salaries and wages', type: 'expense', note: 'Payroll, posted by the bridge on close' });
+  ensureLedgerAccount({ code: '5260', name: 'Employer contributions', type: 'expense', parentCode: '5250', note: 'The company\'s share of benefit plans' });
+  ensureLedgerAccount({ code: '2210', name: 'Contributions payable', type: 'liability', note: 'Withheld and owed to plans and funds' });
+}
+function ensureAssetAccounts() {
+  ensureLedgerAccount({ code: '1510', name: 'Accumulated depreciation', type: 'asset', parentCode: '1500', note: 'Contra to equipment; carries a credit balance' });
+  ensureLedgerAccount({ code: '5600', name: 'Depreciation', type: 'expense', note: 'Straight-line, posted monthly by the bridge' });
+}
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+/** Drop empty lines so an optional tax or fee of zero cannot unbalance an entry. */
+const live = (lines) => lines.filter((l) => r2(l.debit) > 0 || r2(l.credit) > 0);
+
 const LEDGER_GLUE = {
-  // Gross is the company's cost; net leaves the bank; the difference is
-  // withheld and owed onward. Splitting it this way is what makes tax payable
-  // visible as a liability instead of vanishing into "salaries".
+  // Gross is the company's cost; net leaves the bank; what is withheld is
+  // owed onward as two liabilities — tax to the state, contributions to the
+  // plans — and the employer's own share is a cost of its own.
   'payroll.closed': (p) => {
     ensureSalariesAccount();
-    const withheld = Math.round((p.totalGross - p.totalNet) * 100) / 100;
+    const tax = p.totalTax != null ? r2(p.totalTax) : r2(p.totalGross - p.totalNet);
+    const contrib = r2(p.totalContrib);
+    const employer = r2(p.totalEmployer);
+    const rest = r2(p.totalGross - p.totalNet - tax - contrib);
     const lines = [
       { account: '5250', debit: p.totalGross },
       { account: '1000', credit: p.totalNet },
+      { account: '2200', credit: r2(tax + Math.max(0, rest)) },
+      { account: '2210', credit: contrib },
     ];
-    if (withheld > 0) lines.push({ account: '2200', credit: withheld });
-    return { memo: `Payroll ${p.period}`, lines, sourceId: `payroll-${p.id}` };
+    if (employer > 0) lines.push({ account: '5260', debit: employer }, { account: '2210', credit: employer });
+    return { memo: `Payroll ${p.period}`, lines: live(lines), sourceId: `payroll-${p.id}` };
+  },
+  // End of service: one person's money, so the event carried no amount. The
+  // bridge opens the sealed figure here, at posting time, and the memo names
+  // the employment and never the person.
+  'eos.paid': (p) => {
+    ensureSalariesAccount();
+    const row = one('SELECT amount FROM hr_eos WHERE employee_id = ?', Number(p.id));
+    const amount = r2(openPii(row?.amount));
+    if (!(amount > 0)) return null;
+    return { memo: `End of service, employment #${p.id}`, lines: [{ account: '5250', debit: amount }, { account: '1000', credit: amount }], sourceId: `eos-${p.id}` };
+  },
+  // A bank account's opening balance is an opening entry against capital.
+  'bank.opened': (p) => ({
+    memo: `Opening balance, bank account #${p.id}`,
+    lines: [{ account: p.glCode, debit: p.opening }, { account: '3000', credit: p.opening }],
+    sourceId: `bank-open-${p.id}`,
+  }),
+  // A bill approved is a cost incurred and a debt owed; paid, the debt clears
+  // out of the account it was paid from.
+  'bill.approved': (p) => ({
+    memo: `Bill #${p.id} approved`,
+    lines: live([{ account: p.accountCode || '5100', debit: p.amount }, { account: '2200', debit: p.tax }, { account: '2000', credit: r2(p.amount + (p.tax || 0)) }]),
+    sourceId: `bill-appr-${p.id}`,
+  }),
+  'bill.paid': (p) => ({
+    memo: `Bill #${p.id} paid`,
+    lines: [{ account: '2000', debit: p.total }, { account: p.glCode || '1000', credit: p.total }],
+    sourceId: `bill-paid-${p.id}`,
+  }),
+  // A customer invoice issued is revenue earned and money owed to us; a
+  // receipt moves it from owed to held.
+  'ar.issued': (p) => ({
+    memo: `Invoice #${p.id} issued`,
+    lines: live([{ account: '1100', debit: r2(p.amount + (p.tax || 0)) }, { account: '4000', credit: p.amount }, { account: '2200', credit: p.tax }]),
+    sourceId: `ar-issued-${p.id}`,
+  }),
+  'ar.received': (p) => ({
+    memo: `Receipt #${p.id} on invoice #${p.invoiceId}`,
+    lines: [{ account: p.glCode || '1000', debit: p.amount }, { account: '1100', credit: p.amount }],
+    sourceId: `ar-rcpt-${p.id}`,
+  }),
+  // Fixed assets: bought, worn down a month at a time, written off.
+  'asset.acquired': (p) => {
+    ensureAssetAccounts();
+    return { memo: `Fixed asset #${p.id} acquired`, lines: [{ account: '1500', debit: p.cost }, { account: '1000', credit: p.cost }], sourceId: `fa-acq-${p.id}` };
+  },
+  'depreciation.posted': (p) => {
+    ensureAssetAccounts();
+    return { memo: `Depreciation ${p.period}`, lines: [{ account: '5600', debit: p.total }, { account: '1510', credit: p.total }], sourceId: `dep-${p.period}-${p.id}` };
+  },
+  'asset.disposed': (p) => {
+    ensureAssetAccounts();
+    const loss = r2(p.cost - p.accumulated);
+    return { memo: `Fixed asset #${p.id} disposed`, lines: live([{ account: '1510', debit: p.accumulated }, { account: '5900', debit: loss }, { account: '1500', credit: p.cost }]), sourceId: `fa-disp-${p.id}` };
+  },
+  // Money between our own accounts, or out to somebody else. The fee is a
+  // bank charge either way.
+  'transfer.executed': (p) => ({
+    memo: `Transfer #${p.id}`,
+    lines: live([
+      { account: p.toGl || p.purposeCode || '5900', debit: p.amount },
+      { account: '5500', debit: p.fee },
+      { account: p.fromGl, credit: r2(p.amount + (p.fee || 0)) },
+    ]),
+    sourceId: `xfer-${p.id}`,
+  }),
+  'cheque.cleared': (p) => ({
+    memo: `Cheque #${p.id} cleared`,
+    lines: p.direction === 'received'
+      ? [{ account: p.glCode, debit: p.amount }, { account: p.invoiceId ? '1100' : '4900', credit: p.amount }]
+      : [{ account: '5900', debit: p.amount }, { account: p.glCode, credit: p.amount }],
+    sourceId: `chq-${p.id}`,
+  }),
+  // A payroll batch released moves the cash the close already spent from the
+  // parent cash account to the account it actually left. Bills in an AP batch
+  // were posted one by one as they were paid, so that kind posts nothing.
+  'payments.released': (p) => {
+    if (p.kind === 'ap' || !p.glCode || p.glCode === '1000') return null;
+    return { memo: `Payments released, batch #${p.id} (${p.kind})`, lines: [{ account: '1000', debit: p.total }, { account: p.glCode, credit: p.total }], sourceId: `batch-${p.id}` };
   },
   'expense.paid': (p) => ({
     memo: `Expense #${p.id} (${p.category || 'other'})`,
@@ -474,7 +787,8 @@ handle('core2.event', async ({ event, payload }) => {
   let posted = false;
   if (glue && payload) {
     const entry = glue(payload);
-    if (entry.lines.every((l) => (l.debit || l.credit) > 0)) {
+    // A glue may decline (nothing to post for this shape) by returning null.
+    if (entry && entry.lines.length >= 2 && entry.lines.every((l) => (l.debit || l.credit) > 0)) {
       const dup = one("SELECT id FROM journal WHERE source = 'core2' AND source_id = ?", entry.sourceId);
       if (!dup) {
         const j = journalEntry({
@@ -497,6 +811,13 @@ export const EVENTS = [
   'task.created', 'task.overdue',
   'expense.submitted', 'invoice.created', 'invoice.paid',
   'payroll.closed', 'contract.signed', 'contract.expiring', 'certificate.expiring',
+  // the rest of the company
+  'overtime.requested', 'salary.changed', 'eos.paid', 'grievance.opened',
+  'budget.approved', 'bill.approved', 'bill.paid', 'ar.issued', 'ar.received',
+  'asset.acquired', 'depreciation.posted', 'asset.disposed',
+  'bank.opened', 'transfer.executed', 'cheque.cleared', 'payments.released',
+  'stock.low', 'workorder.created', 'ticket.opened', 'ticket.breached', 'workplace.incident',
+  'resolution.adopted', 'case.opened', 'case.settled', 'obligation.due', 'license.expiring',
 ];
 
 // -------------------------------------------------- Bridge 4 — Identity --
@@ -541,6 +862,8 @@ export const CHAINED_EVENTS = new Set([
   'salary.changed', 'employee.created', 'employee.terminated',
   'payroll.approved', 'contract.signed', 'leave.approved',
   'person.erased', 'disciplinary.recorded',
+  'eos.paid', 'budget.approved', 'bill.paid', 'ar.received', 'asset.acquired', 'asset.disposed',
+  'bank.opened', 'transfer.executed', 'payments.released', 'resolution.adopted', 'case.opened', 'case.settled',
 ]);
 
 export const shouldChain = (event) => CHAINED_EVENTS.has(event);
@@ -569,18 +892,34 @@ export function verbCoverage() {
     procurement: /^(create_procurement|advance_procurement|get_asset)$/,
     talent: /^(draft_review_evidence|advance_application)$/,
     contracts: /^(list_expiring_contracts)$/,
+    hrplus: /^(get_attendance_exceptions|request_overtime)$/,
+    finance: /^(get_budget_variance|get_ap_aging|get_ar_aging|draft_budget|draft_bill|approve_bill|draft_invoice|issue_invoice|run_depreciation|set_fx_rate)$/,
+    bank: /^(get_cash_position|get_reconciliation|draft_transfer|import_statement|auto_match)$/,
+    ops: /^(get_stock_levels|list_open_tickets|get_room_availability|get_fleet|record_stock_move|create_workorder|book_room|open_ticket|report_incident)$/,
+    admin: /^(list_obligations|list_licenses|list_cases|list_letters|draft_letter|add_obligation|propose_resolution|open_case)$/,
   };
   const gatedFor = {
     identity: ['deletePerson'], payops: ['approvePayroll', 'changeSalary'],
     talent: ['terminateEmployee', 'recordDisciplinary'], contracts: ['signContract'],
+    hrplus: ['changeSalary', 'payEos', 'decideGrievance'],
+    finance: ['approveBudget', 'payBill', 'disposeAsset', 'closePeriod'],
+    bank: ['openBankAccount', 'executeTransfer', 'releasePayments'],
+    admin: ['adoptResolution', 'concludeCase'],
+  };
+  const EVENT_PREFIX = {
+    payops: ['payroll.'], talent: ['employee.'], time: ['time.', 'leave.'], contracts: ['contract.'],
+    hrplus: ['overtime.', 'salary.', 'eos.', 'grievance.'],
+    finance: ['budget.', 'bill.', 'ar.', 'asset.', 'depreciation.'],
+    bank: ['bank.', 'transfer.', 'cheque.', 'payments.'],
+    ops: ['stock.', 'workorder.', 'ticket.', 'workplace.'],
+    admin: ['resolution.', 'case.', 'obligation.', 'license.'],
   };
   return Object.entries(MODULES).map(([module, re]) => {
     const tools = Object.entries(TOOLS).filter(([n]) => re.test(n));
     const reads = tools.filter(([, t2]) => !t2.write).map(([n]) => n);
     const writes = tools.filter(([, t2]) => t2.write).map(([n]) => n);
-    const events = EVENTS.filter((e2) => e2.startsWith(`${module === 'payops' ? 'payroll' : module === 'talent' ? 'employee' : module}.`)
-      || (module === 'time' && e2.startsWith('leave.'))
-      || (module === 'contracts' && e2.startsWith('contract.')));
+    const prefixes = EVENT_PREFIX[module] || [`${module}.`];
+    const events = EVENTS.filter((e2) => prefixes.some((p) => e2.startsWith(p)));
     return {
       module,
       ask: reads.length > 0,

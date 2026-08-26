@@ -23,6 +23,7 @@ import { sealForRef, openPii } from '../erasure.js';
 import { log, employ, getEmployee } from './identity.js';
 import { createDocument } from './documents.js';
 import { emit } from './bridge.js';
+import { computeEos } from './hrplus.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 const clean = (s, n = 160) => String(s ?? '').trim().slice(0, n);
@@ -282,6 +283,9 @@ export function terminateEmployee({ employeeId, actor }) {
   exec("INSERT INTO rec_task (employee_id, kind, what) VALUES (?, 'offboard', 'Hand over open tasks and record the exit')", emp.id);
 
   log({ entity: 'employee', entityId: emp.id, action: 'employee.terminated', actor, detail: { employeeNo: emp.employee_no }, chain: true });
+  // What the company owes on the way out is computed now, sealed under the
+  // person, and waits for a human to pay it — a separate act, separately gated.
+  try { computeEos({ employeeId: emp.id, actor }); } catch { /* no salary on file: nothing to compute */ }
   emit('employee.terminated', { id: emp.id });
   return getEmployee(emp.id);
 }

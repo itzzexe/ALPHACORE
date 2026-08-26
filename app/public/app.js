@@ -5,6 +5,7 @@ import { TOKEN_KEY, actor, currentUser, hasPermC, navPerm, setCurrentUser } from
 import { api, downloadFile, setUnauthorizedHandler } from '/services/api.js';
 import { routes, registerRoutes } from '/router/registry.js';
 import { renderWorkforce2, renderOrgChart, renderBridges, renderDocs, renderTime, renderMeetings, renderFinOps, renderProcure, renderTalent, renderGalaxies } from '/departments/core2.js';
+import { renderHrOps, renderComp, renderBudgets2, renderPayables, renderReceivables, renderFixedAssets, renderBank, renderInventory, renderFacilities, renderHelpdesk, renderSecretariat, renderLegalCases, renderRegulatory, renderMe } from '/departments/core2b.js';
 import { CATALOG, SURFACE_LABEL, SURFACE_ORDER, afterRender, currentRoute, holdPoll, initShell, loadCatalog, navGeneration, navigate, pollPaused, routeOf } from '/core/shell.js';
 import { tile } from '/components/tile.js';
 import { CHAT_EMOJI, REQ_STATE_CLS, bubble, chatState, connBtn, renderConnections, wireConnections, wireDownloads } from '/components/common.js';
@@ -245,6 +246,21 @@ const ROUTE_TABLE = {
   procure: { title: 'Procurement — the chain that refuses to skip', render: renderProcure },
   talent2: { title: 'People lifecycle — in, up, and out', render: renderTalent },
   map2: { title: 'Two galaxies — the AI core, the enterprise core, and the tunnels', render: renderGalaxies },
+  // The rest of the enterprise core.
+  hrops: { title: 'Time rules — shifts, holidays, overtime, corrections', render: renderHrOps },
+  comp: { title: 'Compensation — allowances, benefits, salary history, end of service', render: renderComp },
+  budgets2: { title: 'Budgets — adopted by a person, measured against the journal', render: renderBudgets2 },
+  payables: { title: 'Payables — vendor bills from draft to paid', render: renderPayables },
+  receivables: { title: 'Receivables — customer invoices and receipts', render: renderReceivables },
+  fixedassets: { title: 'Fixed assets — the register and its depreciation', render: renderFixedAssets },
+  bank: { title: 'The bank — accounts, statements, transfers, cheques, batches', render: renderBank },
+  inventory: { title: 'Inventory — warehouses, items, every move', render: renderInventory },
+  facilities: { title: 'Facilities & fleet — work orders, vehicles, rooms', render: renderFacilities },
+  helpdesk: { title: 'Help desk — the internal desk with an SLA clock', render: renderHelpdesk, poll: 30000 },
+  secretariat: { title: 'Secretariat — correspondence, committees, resolutions', render: renderSecretariat },
+  legalcases: { title: 'Legal cases — litigation, arbitration, claims', render: renderLegalCases },
+  regulatory: { title: 'Regulatory — the obligations calendar and the licences', render: renderRegulatory },
+  me: { title: 'My workspace', render: renderMe },
   surface: { title: 'Surface', render: renderSurfaceRoute },
   departments: { title: 'Every department', render: renderDepartments },
   browser: { title: 'Browser', render: renderBrowser },

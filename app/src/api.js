@@ -44,6 +44,11 @@ import {
   tasksFor, completeTask, setObjective, writeReviewEvidence, setRating, getReview,
   createCourse, grantCertificate, competencyMatrix, terminateEmployee, recordDisciplinary, talentOverview,
 } from './core2/talent.js';
+import * as hrplus from './core2/hrplus.js';
+import * as fin2 from './core2/finance.js';
+import * as bank from './core2/bank.js';
+import * as ops from './core2/ops.js';
+import * as adm from './core2/admin.js';
 import {
   overview as taxOverview, addJurisdiction, classify as taxClassify, recordLine as recordTaxLine,
   sweep as taxSweep, buildReturn, fileReturn, postDraft as postTaxDraft,
@@ -688,6 +693,129 @@ const routes = [
   // first map — see core2Map() in links.js — so a tunnel drawn here is always a
   // declared relationship, never an illustration.
   ['GET', /^\/api\/core2\/map$/, () => core2Map()],
+
+  // --- HR, the rest: time rules, compensation, movements, end of service ---
+  ['GET', /^\/api\/core2\/hrops$/, () => hrplus.hrplusOverview()],
+  ['POST', /^\/api\/core2\/hrops\/holiday$/, (_p, body, _u, user) => hrplus.addHoliday({ day: need(body, 'day'), name: body.name, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/hrops\/shift$/, (_p, body, _u, user) => hrplus.createShift({ name: need(body, 'name'), starts: need(body, 'starts'), ends: need(body, 'ends'), days: body.days, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/hrops\/shift\/assign$/, (_p, body, _u, user) => hrplus.assignShift({ employeeId: need(body, 'employeeId'), shiftId: need(body, 'shiftId'), starts: body.starts, ends: body.ends, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/hrops\/overtime$/, (_p, body, _u, user) => hrplus.requestOvertime({ employeeId: need(body, 'employeeId'), day: need(body, 'day'), minutes: need(body, 'minutes'), rate: body.rate, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/hrops\/overtime\/(\d+)\/decide$/, ([id], body, _u, user) => hrplus.decideOvertime(Number(id), { approve: Boolean(body.approve), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/hrops\/correction$/, (_p, body, _u, user) => hrplus.requestCorrection({ employeeId: need(body, 'employeeId'), day: need(body, 'day'), inAt: body.inAt, outAt: body.outAt, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/hrops\/correction\/(\d+)\/decide$/, ([id], body, _u, user) => hrplus.decideCorrection(Number(id), { approve: Boolean(body.approve), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/hrops\/exceptions$/, (_p, _b, url) => hrplus.attendanceExceptions({ period: url.searchParams.get('period') || undefined })],
+  ['GET', /^\/api\/core2\/comp$/, () => ({
+    plans: hrplus.listBenefitPlans(), taxBrackets: hrplus.taxBrackets('IQ'), grievances: hrplus.listGrievances(),
+    eosDaysPerYear: hrplus.hrplusOverview().eosDaysPerYear,
+  })],
+  ['POST', /^\/api\/core2\/comp\/allowance$/, (_p, body, _u, user) => hrplus.addAllowance({ employeeId: need(body, 'employeeId'), kind: need(body, 'kind'), amount: need(body, 'amount'), currency: body.currency, starts: body.starts, ends: body.ends, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/plan$/, (_p, body, _u, user) => hrplus.createBenefitPlan({ name: need(body, 'name'), kind: body.kind, employerShare: body.employerShare, employeeShare: body.employeeShare, provider: body.provider, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/enroll$/, (_p, body, _u, user) => hrplus.enroll({ employeeId: need(body, 'employeeId'), planId: need(body, 'planId'), starts: body.starts, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/enroll\/(\d+)\/end$/, ([id], _b, _u, user) => hrplus.endEnrollment(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/salary$/, (_p, body, _u, user) => hrplus.changeSalary({ employeeId: need(body, 'employeeId'), newSalary: need(body, 'newSalary'), effective: body.effective, actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/comp\/salary\/(\d+)$/, ([id]) => ({ history: hrplus.salaryHistory(Number(id)) })],
+  ['POST', /^\/api\/core2\/comp\/movement$/, (_p, body, _u, user) => hrplus.recordMovement({ employeeId: need(body, 'employeeId'), kind: need(body, 'kind'), toUnit: body.toUnit, toPosition: body.toPosition, toGrade: body.toGrade, effective: body.effective, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/tax$/, (_p, body, _u, user) => hrplus.setTaxBrackets({ jurisdiction: need(body, 'jurisdiction'), brackets: need(body, 'brackets'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/eos\/(\d+)$/, ([id], _b, _u, user) => hrplus.computeEos({ employeeId: Number(id), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/comp\/eos\/(\d+)$/, ([id]) => hrplus.eosFor(Number(id))],
+  ['POST', /^\/api\/core2\/comp\/eos\/(\d+)\/pay$/, ([id], _b, _u, user) => hrplus.payEos(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/grievance$/, (_p, body, _u, user) => hrplus.openGrievance({ employeeId: need(body, 'employeeId'), title: need(body, 'title'), body: need(body, 'body'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/grievance\/(\d+)\/decide$/, ([id], body, _u, user) => hrplus.decideGrievance(Number(id), { state: need(body, 'state'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/asset$/, (_p, body, _u, user) => hrplus.assignAsset({ employeeId: need(body, 'employeeId'), assetId: need(body, 'assetId'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/comp\/asset\/(\d+)\/return$/, ([id], _b, _u, user) => hrplus.returnAsset(Number(id), { actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/employees\/(\d+)\/assets$/, ([id]) => ({ assets: hrplus.assetsFor(Number(id)) })],
+  ['GET', /^\/api\/core2\/employees\/(\d+)\/movements$/, ([id]) => ({ movements: hrplus.movementsFor(Number(id)) })],
+  ['POST', /^\/api\/core2\/employees\/(\d+)\/letter$/, ([id], _b, _u, user) => hrplus.employmentLetter({ employeeId: Number(id), actor: `human:${user.username}` })],
+
+  // --- Finance sub-ledgers: budgets, payables, receivables, fixed assets, FX ---
+  ['GET', /^\/api\/core2\/finance$/, () => ({ ...fin2.financeOverview(), bills: fin2.listBills(), invoices: fin2.listInvoices(), assets: fin2.listFixedAssets() })],
+  ['POST', /^\/api\/core2\/budgets$/, (_p, body, _u, user) => fin2.createBudget({ name: body.name, period: need(body, 'period'), lines: need(body, 'lines'), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/budgets\/(\d+)$/, ([id]) => fin2.budgetVariance(Number(id))],
+  ['POST', /^\/api\/core2\/budgets\/(\d+)\/approve$/, ([id], _b, _u, user) => fin2.approveBudget(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/budgets\/(\d+)\/close$/, ([id], _b, _u, user) => fin2.closeBudget(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bills$/, (_p, body, _u, user) => fin2.createBill({ vendorId: need(body, 'vendorId'), ref: body.ref, amount: need(body, 'amount'), tax: body.tax, currency: body.currency, accountCode: body.accountCode || '5100', issued: body.issued, due: body.due, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bills\/(\d+)\/approve$/, ([id], _b, _u, user) => fin2.approveBill(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bills\/(\d+)\/pay$/, ([id], body, _u, user) => fin2.payBill(Number(id), { actor: `human:${user.username}`, bankAccountId: body.bankAccountId || null })],
+  ['POST', /^\/api\/core2\/bills\/(\d+)\/void$/, ([id], _b, _u, user) => fin2.voidBill(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ar$/, (_p, body, _u, user) => fin2.createInvoice({ customerId: body.customerId, description: need(body, 'description'), amount: need(body, 'amount'), tax: body.tax, currency: body.currency, due: body.due, actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/ar\/(\d+)$/, ([id]) => fin2.getInvoice(Number(id))],
+  ['POST', /^\/api\/core2\/ar\/(\d+)\/issue$/, ([id], _b, _u, user) => fin2.issueInvoice(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ar\/(\d+)\/receipt$/, ([id], body, _u, user) => fin2.recordReceipt(Number(id), { amount: need(body, 'amount'), bankAccountId: body.bankAccountId || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ar\/(\d+)\/void$/, ([id], _b, _u, user) => fin2.voidInvoice(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/fixed-assets$/, (_p, body, _u, user) => fin2.registerFixedAsset({ name: need(body, 'name'), category: body.category, cost: need(body, 'cost'), salvage: body.salvage, lifeMonths: need(body, 'lifeMonths'), acquired: body.acquired, costCenterId: body.costCenterId, core1AssetId: body.core1AssetId, actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/fixed-assets\/(\d+)$/, ([id]) => fin2.getFixedAsset(Number(id))],
+  ['POST', /^\/api\/core2\/fixed-assets\/(\d+)\/dispose$/, ([id], _b, _u, user) => fin2.disposeAsset(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/depreciation$/, (_p, body, _u, user) => fin2.runDepreciation({ period: body.period || undefined, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/fx$/, (_p, body, _u, user) => fin2.setFxRate({ currency: need(body, 'currency'), rateToUsd: need(body, 'rateToUsd'), day: body.day, actor: `human:${user.username}` })],
+
+  // --- The bank ---
+  ['GET', /^\/api\/core2\/bank$/, () => bank.bankOverview()],
+  ['POST', /^\/api\/core2\/bank\/accounts$/, (_p, body, _u, user) => bank.createBankAccount({ name: need(body, 'name'), bank: body.bank, kind: body.kind, currency: body.currency, iban: body.iban, openingBalance: body.openingBalance, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/accounts\/(\d+)\/close$/, ([id], _b, _u, user) => bank.closeBankAccount(Number(id), { actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/bank\/accounts\/(\d+)\/reconcile$/, ([id]) => bank.reconciliation(Number(id))],
+  ['POST', /^\/api\/core2\/bank\/accounts\/(\d+)\/statement$/, ([id], body, _u, user) => bank.importStatement({ accountId: Number(id), label: body.label, lines: need(body, 'lines'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/accounts\/(\d+)\/automatch$/, ([id], _b, _u, user) => bank.autoMatch(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/lines\/(\d+)\/match$/, ([id], body, _u, user) => bank.matchLine(Number(id), { journalLineId: need(body, 'journalLineId'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/lines\/(\d+)\/exclude$/, ([id], _b, _u, user) => bank.excludeLine(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/transfers$/, (_p, body, _u, user) => bank.createTransfer({ fromAccountId: need(body, 'fromAccountId'), toAccountId: body.toAccountId, beneficiary: body.beneficiary, purposeCode: body.purposeCode || '5900', amount: need(body, 'amount'), fee: body.fee, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/transfers\/(\d+)\/approve$/, ([id], _b, _u, user) => bank.approveTransfer(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/transfers\/(\d+)\/execute$/, ([id], _b, _u, user) => bank.executeTransfer(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/cheques$/, (_p, body, _u, user) => bank.issueCheque({ accountId: need(body, 'accountId'), number: need(body, 'number'), direction: body.direction, payee: need(body, 'payee'), amount: need(body, 'amount'), day: body.day, billId: body.billId, invoiceId: body.invoiceId, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/cheques\/(\d+)\/state$/, ([id], body, _u, user) => bank.setChequeState(Number(id), { state: need(body, 'state'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/batches\/payroll$/, (_p, body, _u, user) => bank.buildPayrollBatch({ runId: need(body, 'runId'), accountId: need(body, 'accountId'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/batches\/ap$/, (_p, body, _u, user) => bank.buildApBatch({ billIds: need(body, 'billIds'), accountId: need(body, 'accountId'), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/bank\/batches\/(\d+)$/, ([id]) => bank.getBatch(Number(id))],
+  ['POST', /^\/api\/core2\/bank\/batches\/(\d+)\/approve$/, ([id], _b, _u, user) => bank.approveBatch(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/bank\/batches\/(\d+)\/release$/, ([id], _b, _u, user) => bank.releaseBatch(Number(id), { actor: `human:${user.username}` })],
+
+  // --- Operations ---
+  ['GET', /^\/api\/core2\/ops$/, () => ops.opsOverview()],
+  ['POST', /^\/api\/core2\/ops\/warehouse$/, (_p, body, _u, user) => ops.createWarehouse({ name: need(body, 'name'), code: body.code, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/item$/, (_p, body, _u, user) => ops.createItem({ sku: need(body, 'sku'), name: body.name, unit: body.unit, minQty: body.minQty, cost: body.cost, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/stock$/, (_p, body, _u, user) => ops.recordStockMove({ itemId: need(body, 'itemId'), warehouseId: need(body, 'warehouseId'), qty: need(body, 'qty'), kind: body.kind, ref: body.ref, procRequestId: body.procRequestId, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/stock\/transfer$/, (_p, body, _u, user) => ops.transferStock({ itemId: need(body, 'itemId'), fromWarehouseId: need(body, 'fromWarehouseId'), toWarehouseId: need(body, 'toWarehouseId'), qty: need(body, 'qty'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/workorder$/, (_p, body, _u, user) => ops.createWorkOrder({ title: need(body, 'title'), targetKind: body.targetKind, targetId: body.targetId, priority: body.priority, assigneeEmployeeId: body.assigneeEmployeeId, due: body.due, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/workorder\/(\d+)\/state$/, ([id], body, _u, user) => ops.setWorkOrderState(Number(id), { state: need(body, 'state'), cost: body.cost, assigneeEmployeeId: body.assigneeEmployeeId, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/vehicle$/, (_p, body, _u, user) => ops.addVehicle({ plate: need(body, 'plate'), make: need(body, 'make'), model: body.model, year: body.year, odometer: body.odometer, assigneeEmployeeId: body.assigneeEmployeeId, nextService: body.nextService, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/vehicle\/(\d+)$/, ([id], body, _u, user) => ops.updateVehicle(Number(id), { odometer: body.odometer, assigneeEmployeeId: body.assigneeEmployeeId, nextService: body.nextService, state: body.state, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/room$/, (_p, body, _u, user) => ops.createRoom({ name: need(body, 'name'), building: body.building, capacity: body.capacity, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/booking$/, (_p, body, _u, user) => ops.bookRoom({ roomId: need(body, 'roomId'), employeeId: need(body, 'employeeId'), starts: need(body, 'starts'), ends: need(body, 'ends'), meetingId: body.meetingId, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/booking\/(\d+)\/cancel$/, ([id], _b, _u, user) => ops.cancelBooking(Number(id), { actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/helpdesk$/, (_p, _b, url) => ({ tickets: ops.listTickets({ state: url.searchParams.get('state') || null }), incidents: ops.listIncidents(), open: ops.opsOverview().ticketsOpen, breached: ops.opsOverview().ticketsBreached })],
+  ['POST', /^\/api\/core2\/helpdesk$/, (_p, body, _u, user) => ops.openTicket({ category: body.category, priority: body.priority, title: need(body, 'title'), requesterEmployeeId: body.requesterEmployeeId, body: body.body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/helpdesk\/(\d+)\/assign$/, ([id], body, _u, user) => ops.assignTicket(Number(id), { assigneeEmployeeId: need(body, 'assigneeEmployeeId'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/helpdesk\/(\d+)\/state$/, ([id], body, _u, user) => ops.setTicketState(Number(id), { state: need(body, 'state'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/incident$/, (_p, body, _u, user) => ops.reportIncident({ kind: body.kind, severity: body.severity, title: need(body, 'title'), occurredAt: body.occurredAt, action: body.action, body: body.body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/ops\/incident\/(\d+)\/state$/, ([id], body, _u, user) => ops.setIncidentState(Number(id), { state: need(body, 'state'), action: body.action, actor: `human:${user.username}` })],
+
+  // --- Administration ---
+  ['GET', /^\/api\/core2\/admin$/, () => adm.adminOverview()],
+  ['POST', /^\/api\/core2\/admin\/letter$/, (_p, body, _u, user) => adm.registerLetter({ direction: body.direction, subject: need(body, 'subject'), counterparty: body.counterparty, orgUnitId: body.orgUnitId, day: body.day, body: body.body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/letter\/(\d+)\/state$/, ([id], body, _u, user) => adm.setLetterState(Number(id), { state: need(body, 'state'), orgUnitId: body.orgUnitId, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/committee$/, (_p, body, _u, user) => adm.createCommittee({ name: need(body, 'name'), chairEmployeeId: body.chairEmployeeId, memberIds: body.memberIds, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/resolution$/, (_p, body, _u, user) => adm.proposeResolution({ committeeId: need(body, 'committeeId'), title: need(body, 'title'), body: body.body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/resolution\/(\d+)\/decide$/, ([id], body, _u, user) => adm.decideResolution(Number(id), { state: need(body, 'state'), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/core2\/legalcases$/, () => ({ cases: adm.listCases() })],
+  ['POST', /^\/api\/core2\/legalcases$/, (_p, body, _u, user) => adm.openCase({ kind: body.kind, counterparty: need(body, 'counterparty'), court: body.court, contractId: body.contractId, nextHearing: body.nextHearing, exposure: body.exposure, body: body.body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/legalcases\/(\d+)\/state$/, ([id], body, _u, user) => adm.setCaseState(Number(id), { state: need(body, 'state'), nextHearing: body.nextHearing, exposure: body.exposure, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/obligation$/, (_p, body, _u, user) => adm.addObligation({ title: need(body, 'title'), authority: body.authority, due: need(body, 'due'), recurrence: body.recurrence, orgUnitId: body.orgUnitId, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/obligation\/(\d+)\/done$/, ([id], _b, _u, user) => adm.completeObligation(Number(id), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/license$/, (_p, body, _u, user) => adm.addLicense({ name: need(body, 'name'), authority: body.authority, number: body.number, issued: body.issued, expires: need(body, 'expires'), body: body.body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/core2\/admin\/license\/(\d+)\/renew$/, ([id], body, _u, user) => adm.renewLicense(Number(id), { expires: need(body, 'expires'), actor: `human:${user.username}` })],
+  // Anybody may acknowledge a policy — for themselves. Only admin.manage may
+  // record one on somebody else's behalf; everybody else's employeeId is
+  // whatever their own login resolves to, whatever the body says.
+  ['POST', /^\/api\/core2\/admin\/policy-ack$/, (_p, body, _u, user) => {
+    const own = adm.myWorkspace(user)?.employee?.id || null;
+    const employeeId = hasPerm(user, 'admin.manage') ? (body.employeeId || own) : own;
+    if (!employeeId) throw new HttpError(400, 'this login is not linked to an employment');
+    return adm.acknowledgePolicy({ docId: need(body, 'docId'), employeeId, actor: `human:${user.username}` });
+  }],
+  ['GET', /^\/api\/core2\/admin\/policy-ack\/(\d+)$/, ([id]) => adm.policyAckStatus(Number(id))],
+
+  // The page about you. No permission beyond being signed in: it shows only
+  // what is yours, and a login with no person behind it is told so.
+  ['GET', /^\/api\/core2\/me$/, (_p, _b, _u, user) => adm.myWorkspace(user)],
 
   // --- time: attendance and leave ---
   ['GET', /^\/api\/core2\/time$/, () => timeOverview()],
@@ -1986,6 +2114,19 @@ function permFor(m, path) {
   // cannot end up guarded differently for the same act.
   if (path.startsWith('/api/core2/org')) return m === 'GET' ? 'org.view' : 'org.manage';
   if (path === '/api/core2/map') return 'dashboard.view';
+  // The page about you: any signed-in account; the handler shows only what is theirs.
+  if (path === '/api/core2/me') return null;
+  // Salary changes and end of service are money about one person: finance.export
+  // to write, and reading the history needs the same.
+  if (/^\/api\/core2\/comp\/(salary|eos|tax)/.test(path)) return 'finance.export';
+  if (path.startsWith('/api/core2/comp') || path.startsWith('/api/core2/hrops')) return m === 'GET' ? 'people.view' : 'people.manage';
+  if (path.startsWith('/api/core2/bank')) return m === 'GET' ? 'bank.view' : 'bank.manage';
+  if (/^\/api\/core2\/(finance|budgets|bills|ar|fixed-assets|depreciation|fx)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
+  if (path.startsWith('/api/core2/helpdesk') && m === 'POST' && /^\/api\/core2\/helpdesk$/.test(path)) return 'ops.view';   // anybody may raise a ticket
+  if (path.startsWith('/api/core2/ops') || path.startsWith('/api/core2/helpdesk')) return m === 'GET' ? 'ops.view' : 'ops.manage';
+  if (path.startsWith('/api/core2/legalcases')) return m === 'GET' ? 'legal.view' : 'legal.manage';
+  if (path === '/api/core2/admin/policy-ack' && m === 'POST') return null;   // your own acknowledgement; scoped in the handler
+  if (path.startsWith('/api/core2/admin')) return m === 'GET' ? 'admin.view' : 'admin.manage';
   if (path.startsWith('/api/core2/docs')) return m === 'GET' ? 'docs.view' : 'docs.manage';
   if (/^\/api\/core2\/(finops|expenses|costcenter|loans|payroll|procurement)/.test(path)) return m === 'GET' ? 'finance.view' : 'finance.export';
   if (path.startsWith('/api/core2/contracts')) return 'legal.view';

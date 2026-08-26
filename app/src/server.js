@@ -57,6 +57,9 @@ import { seedConnectors, callConnector } from './connectors/index.js';
 import { seedBridge } from './core2/bridge.js';
 import { contractExpirySweep } from './core2/procure.js';
 import { certificateExpirySweep } from './core2/talent.js';
+import { seedTaxBrackets } from './core2/hrplus.js';
+import { slaSweep } from './core2/ops.js';
+import { obligationSweep, licenseSweep } from './core2/admin.js';
 import { verifyState, exchangeCode, refreshExpiring } from './connectors/oauth.js';
 import { handle as handleJob, enqueue as enqueueJob, jobsTick, reclaimStuck } from './jobs.js';
 import { seedConstitution } from './constitution.js';
@@ -126,6 +129,14 @@ seedConnectors();
 // agent is governed from the first request rather than from whenever somebody
 // remembers to run a seed.
 seedBridge();
+// The payroll tax table exists from the first boot, as placeholders that say
+// so on screen; a run without one would silently tax at zero.
+seedTaxBrackets();
+// The enterprise clocks: help-desk SLAs, the regulatory calendar, licences.
+// Hourly, like the contract and certificate watches; each announces once.
+setInterval(() => {
+  try { slaSweep(); obligationSweep(); licenseSweep(); } catch { /* next hour */ }
+}, 3600 * 1000).unref?.();
 seedConstitution();
 seedPackages();
 seedSlos();

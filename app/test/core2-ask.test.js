@@ -75,7 +75,14 @@ test('the payroll answer is a pointer, never a number', async () => {
 
 test('every module has the verbs its wiring earns, and none it does not', () => {
   const cov = verbCoverage();
-  assert.equal(cov.length, 8, 'eight modules, eight rows');
+  // Eight modules from the first build, five from the rest of the company:
+  // time rules and compensation, the finance sub-ledgers, the bank, operations,
+  // administration. A row per module, measured from the wiring.
+  assert.equal(cov.length, 13, 'thirteen modules, thirteen rows');
+  const bank = cov.find((m) => m.module === 'bank');
+  assert.ok(bank.executeGated.includes('executeTransfer') && bank.executeGated.includes('releasePayments'), 'money leaving the bank is human');
+  assert.equal(bank.ask, true, 'the cash position is a read tool');
+  assert.ok(cov.find((m) => m.module === 'finance').executeGated.includes('approveBudget'));
   for (const m of cov) {
     assert.equal(m.ask, m.tools.some((t2) => !TOOLS[t2].write), `${m.module}: ask must mean a read tool exists`);
     if (m.executeGated.length) {

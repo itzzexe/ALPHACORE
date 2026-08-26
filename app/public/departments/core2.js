@@ -13,7 +13,7 @@ import { $, esc, view, money } from '../core/dom.js';
 import { api } from '../services/api.js';
 import { hasPermC, actor } from '../state/session.js';
 import { tile } from '../components/tile.js';
-import { t } from '/i18n.js';
+import { t, sectionName, divisionName } from '/i18n.js';
 
 const stateChip2 = (s) => {
   const cls = { active: 'chip-ok', pending: 'chip-warn', suspended: 'chip-warn', notice: 'chip-warn', ended: 'chip-dim' }[s] || 'chip-dim';
@@ -528,18 +528,19 @@ export async function renderGalaxies() {
   if (!d) { view.innerHTML = `<div class="empty">${esc(t('You do not have permission to see the map.'))}</div>`; return; }
 
   // Core 1: thirteen divisions on an arc, sized by department count.
-  const W = 1000; const H = 640;
-  const c1 = d.core1.map((div, i) => {
-    const a = (Math.PI * (i + 0.5)) / d.core1.length - Math.PI / 2;
-    return { ...div, x: 210 + Math.cos(a) * -150, y: 320 + Math.sin(a) * 260 };
-  });
-  // Core 2: six enterprise divisions stacked on the right, departments as pills.
+  // Core 2: the enterprise divisions stacked on the right, departments as
+  // pills. Laid out first, because the drawing is as tall as this stack.
   let y = 46;
   const c2 = d.divisions.map((div) => {
     const h = 34 + div.departments.length * 30;
     const g = { ...div, x: 640, y, h };
     y += h + 16;
     return g;
+  });
+  const W = 1000; const H = Math.max(640, y + 10);
+  const c1 = d.core1.map((div, i) => {
+    const a = (Math.PI * (i + 0.5)) / d.core1.length - Math.PI / 2;
+    return { ...div, x: 210 + Math.cos(a) * -150, y: H / 2 + Math.sin(a) * (H / 2 - 60) };
   });
   const deptPos = new Map();
   for (const g of c2) g.departments.forEach((s, i) => deptPos.set(s.id, { x: 660, y: g.y + 40 + i * 30 }));
@@ -564,7 +565,7 @@ export async function renderGalaxies() {
       <text x="150" y="26" fill="var(--ink-faint)" font-size="12" letter-spacing="2">${esc(t('CORE 1 — THINKS AND ACTS'))}</text>
       <text x="640" y="26" fill="var(--ink-faint)" font-size="12" letter-spacing="2">${esc(t('CORE 2 — RECORDS THE TRUTH'))}</text>
       ${tunnels}
-      ${c1.map((v) => `<a href="#/graph"><g>
+      ${c1.map((v) => `<a href="#/graph" aria-label="${esc(v.label)}"><g>
         <circle cx="${v.x}" cy="${v.y}" r="${10 + Math.min(v.count, 30) / 2}" fill="var(--bg-raise)" stroke="${esc(v.color)}" stroke-width="${v.touched ? 2.4 : 1.2}"/>
         <text x="${v.x}" y="${v.y - 16 - Math.min(v.count, 30) / 2}" text-anchor="middle" fill="${esc(v.color)}" font-size="10">${esc(divisionName(v.id, v.label))}</text>
         <title>${esc(v.label)} · ${v.count} ${esc(t('departments'))}${v.touched ? ' · ' + esc(t('reached by a tunnel')) : ''}</title>
@@ -572,7 +573,7 @@ export async function renderGalaxies() {
       ${c2.map((g) => `<g>
         <rect x="${g.x}" y="${g.y}" width="320" height="${g.h}" rx="8" fill="var(--bg-raise)" stroke="${esc(g.color)}" stroke-opacity="0.6"/>
         <text x="${g.x + 12}" y="${g.y + 22}" fill="${esc(g.color)}" font-size="11" letter-spacing="1.5">${esc(t(g.label))}</text>
-        ${g.departments.map((s, i) => `<a href="${esc(s.href)}">
+        ${g.departments.map((s, i) => `<a href="${esc(s.href)}" aria-label="${esc(s.label)}">
           <text x="${g.x + 22}" y="${g.y + 44 + i * 30}" fill="var(--ink)" font-size="12.5">${esc(sectionName(s.id, s.label))} <tspan fill="var(--ink-faint)" font-size="10.5">${s.count}</tspan></text>
         </a>`).join('')}
       </g>`).join('')}

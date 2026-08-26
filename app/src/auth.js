@@ -36,6 +36,13 @@ export const PERMS = [
   // docs.view reads internal, docs.confidential reads the two guarded levels,
   // docs.manage writes. Public needs only a session.
   'docs.view', 'docs.manage', 'docs.confidential',
+  // The bank: seeing the cash position, preparing instructions, and — held
+  // apart — the acts that move money, which the gateway lists as human anyway.
+  'bank.view', 'bank.manage',
+  // Operations: stock, work orders, rooms, the help desk.
+  'ops.view', 'ops.manage',
+  // Administration: correspondence, committees, the regulatory calendar.
+  'admin.view', 'admin.manage',
   'legal.view', 'legal.manage',
   'vendors.view', 'vendors.manage',
   'knowledge.view', 'knowledge.manage',

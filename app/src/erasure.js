@@ -253,6 +253,12 @@ const PII_BY_REF = [
   // contain nothing that equals their email address. Reached by the reference
   // the employment row carried from the moment it was written.
   ['hr_employee', ['bank_account', 'base_salary']],
+  // Salary history and end of service: one person's money, sealed under them,
+  // found by the reference each row carried from the moment it was written.
+  ['hr_salary_change', ['old_salary', 'new_salary']],
+  ['hr_eos', ['amount']],
+  // A payment line names a person and their bank detail. Same rule.
+  ['bank_payment_item', ['beneficiary']],
   // Restricted document versions — a disciplinary note, a doctor's note held as
   // an opaque body. Sealed at write under the subject's key; found by the
   // reference each version carries.
@@ -380,6 +386,11 @@ export const TIER_A = [
   // organizer's key holds it, and the limitation is in NEXT.md, not hidden.
   { table: 'mtg_meeting', column: 'transcript', subject: [] },
   { table: 'perf_review', column: 'evidence', subject: [] },
+  // Salary history, end of service, and payment lines naming a person.
+  { table: 'hr_salary_change', column: 'old_salary', subject: [] },
+  { table: 'hr_salary_change', column: 'new_salary', subject: [] },
+  { table: 'hr_eos', column: 'amount', subject: [] },
+  { table: 'bank_payment_item', column: 'beneficiary', subject: [] },
 ];
 
 const TIER_A_KEYS = new Set(TIER_A.map((c) => `${c.table}.${c.column}`));

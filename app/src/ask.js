@@ -87,6 +87,36 @@ export const RULES = [
     why: 'the contract watch already knows what lapses soon',
   },
   {
+    id: 'cash',
+    target: 'core2',
+    test: /\b(?:cash\s+position|bank\s+balance|how\s+much\s+(?:cash|money)\s+(?:do\s+we\s+have|in\s+the\s+bank)|in\s+the\s+bank)\b|رصيد البنك|كم عندنا فلوس|النقد|الصندوق/i,
+    why: 'the cash position is the ledger\'s balance per account — a reading, not a search',
+  },
+  {
+    id: 'stock',
+    target: 'core2',
+    test: /\b(?:stock\s+levels?|low\s+stock|inventory|out\s+of\s+stock|in\s+the\s+warehouse)\b|المخزون|المستودع|ناقص من المخزن/i,
+    why: 'a stock level is the sum of its moves, answered from the record',
+  },
+  {
+    id: 'tickets',
+    target: 'core2',
+    test: /\b(?:help\s*desk|open\s+tickets|it\s+tickets|sla\s+breach)\b|تذاكر الدعم|الهيلب ديسك|تذاكر مفتوحة/i,
+    why: 'open help-desk tickets and breached SLAs are counts the desk already keeps',
+  },
+  {
+    id: 'owed',
+    target: 'core2',
+    test: /\b(?:overdue\s+(?:bills|invoices)|what\s+do\s+we\s+owe|who\s+owes\s+us|payables|receivables|unpaid\s+invoices)\b|الذمم|الفواتير المتأخرة|شنو علينا|منو عليه/i,
+    why: 'aging is computed from the sub-ledgers, not searched for',
+  },
+  {
+    id: 'obligations',
+    target: 'core2',
+    test: /\b(?:obligations?\s+due|licen[cs]es?\s+expiring|regulatory\s+calendar|what\s+is\s+due\s+this\s+month)\b|الالتزامات|الرخص|التراخيص|انتهاء الرخصة/i,
+    why: 'the regulatory calendar knows what is due and what lapses',
+  },
+  {
     id: 'lookup',
     target: 'lookup',
     test: /.*/,
@@ -137,6 +167,57 @@ async function core2Answer(ruleId) {
         href: '#/procure',
       };
     }
+    case 'cash': {
+      const { cashPosition } = await import('./core2/bank.js');
+      const p = cashPosition();
+      return {
+        headline: `${p.accounts.length} account(s), ${p.total.toFixed(2)} on the ledger`,
+        rows: p.accounts.map((a) => ({ title: a.name, sub: `${a.ledger.toFixed(2)} ${a.currency}${a.unmatched ? ` · ${a.unmatched} unmatched` : ''}` })),
+        href: '#/bank',
+      };
+    }
+    case 'stock': {
+      const { stockLevels } = await import('./core2/ops.js');
+      const rows = stockLevels();
+      const low = rows.filter((r) => r.low);
+      return {
+        headline: `${rows.length} item(s), ${low.length} below minimum`,
+        rows: (low.length ? low : rows).slice(0, 8).map((r) => ({ title: `${r.sku} — ${r.name}`, sub: `${r.level} ${r.unit}${r.low ? ' · low' : ''}` })),
+        href: '#/inventory',
+      };
+    }
+    case 'tickets': {
+      const { listTickets } = await import('./core2/ops.js');
+      const open = listTickets().filter((t) => !['resolved', 'closed'].includes(t.state));
+      return {
+        headline: `${open.length} open ticket(s), ${open.filter((t) => t.breached).length} past SLA`,
+        rows: open.slice(0, 8).map((t) => ({ title: `${t.ref} — ${t.title}`, sub: `${t.priority} · ${t.state}` })),
+        href: '#/helpdesk',
+      };
+    }
+    case 'owed': {
+      const { apAging, arAging } = await import('./core2/finance.js');
+      const ap = apAging(); const ar = arAging();
+      return {
+        headline: `we owe ${ap.total.toFixed(2)} on ${ap.count} bill(s); we are owed ${ar.total.toFixed(2)} on ${ar.count} invoice(s)`,
+        rows: [
+          { title: 'Payables overdue', sub: `${(ap.d30 + ap.d60 + ap.d90).toFixed(2)}` },
+          { title: 'Receivables overdue', sub: `${(ar.d30 + ar.d60 + ar.d90).toFixed(2)}` },
+        ],
+        href: '#/payables',
+      };
+    }
+    case 'obligations': {
+      const { listObligations, listLicenses } = await import('./core2/admin.js');
+      const due = listObligations().filter((o) => o.state !== 'done').slice(0, 6);
+      const lic = listLicenses().filter((l) => l.state === 'active').slice(0, 4);
+      return {
+        headline: `${due.length} obligation(s) pending, ${lic.length} licence(s) on file`,
+        rows: [...due.map((o) => ({ title: o.title, sub: `${o.authority} · due ${o.due}${o.state === 'overdue' ? ' · overdue' : ''}` })),
+          ...lic.map((l) => ({ title: l.name, sub: `${l.authority} · expires ${l.expires}` }))],
+        href: '#/regulatory',
+      };
+    }
     default: return null;
   }
 }
@@ -162,6 +243,12 @@ const TABLE_DEPARTMENT = {
   // The enterprise galaxy's tables, so a hit on a person or a purchase names
   // the Core 2 department it lives in rather than the table it came from.
   hr_person: 'workforce2', hr_employee: 'workforce2', hr_org_unit: 'orgchart',
+  time_overtime: 'hrops', time_shift: 'hrops', hr_allowance: 'comp', hr_benefit_plan: 'comp', hr_grievance: 'comp',
+  fin_budget: 'budgets2', fin_ap_bill: 'payables', fin_ar_invoice: 'receivables', fin_fixed_asset: 'fixedassets',
+  bank_account: 'bank', bank_transfer: 'bank', bank_cheque: 'bank', bank_payment_batch: 'bank',
+  ops_item: 'inventory', ops_warehouse: 'inventory', ops_workorder: 'facilities', ops_vehicle: 'facilities', ops_room: 'facilities',
+  ops_ticket: 'helpdesk', ops_incident: 'helpdesk', adm_letter: 'secretariat', adm_committee: 'secretariat', adm_resolution: 'secretariat',
+  adm_case: 'legalcases', adm_obligation: 'regulatory', adm_license: 'regulatory',
   rec_application: 'talent2', rec_vacancy: 'talent2', mtg_meeting: 'meetings',
   time_leave_request: 'time', fin_expense: 'finops2', proc_request: 'procure', doc_document: 'docs',
 };

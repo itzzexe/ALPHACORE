@@ -56,6 +56,11 @@ export const navPerm = {
   attribution: 'marketing.view', pages: 'marketing.view', mktops: 'marketing.view',
   seo: 'marketing.view', paidmedia: 'marketing.view', lifecycle: 'marketing.view',
   calendar: 'marketing.view', personas: 'marketing.view', positioning: 'marketing.view',
+  // The enterprise core. `me` needs nothing but a login: it shows only what is yours.
+  hrops: 'people.view', comp: 'people.view', budgets2: 'finance.view', payables: 'finance.view',
+  receivables: 'finance.view', fixedassets: 'finance.view', bank: 'bank.view', inventory: 'ops.view',
+  facilities: 'ops.view', helpdesk: 'ops.view', secretariat: 'admin.view', legalcases: 'legal.view',
+  regulatory: 'admin.view',
 };
 
 /**

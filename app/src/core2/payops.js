@@ -22,6 +22,7 @@ import { q, one, exec } from '../db.js';
 import { sealForRef, openPii } from '../erasure.js';
 import { log } from './identity.js';
 import { emit } from './bridge.js';
+import { payrollInputs } from './hrplus.js';
 
 const refuse = (m) => { const e = new Error(m); e.status = 400; throw e; };
 const clean = (s, n = 120) => String(s ?? '').trim().slice(0, n);
@@ -165,6 +166,7 @@ export function draftPayroll({ period, actor }) {
   const employees = q(`SELECT e.*, p.subject_ref FROM hr_employee e
                         JOIN hr_person p ON p.id = e.person_id WHERE e.state = 'active'`);
   let totalGross = 0; let totalNet = 0; let skipped = 0;
+  let totalTax = 0; let totalContrib = 0; let totalEmployer = 0;
   for (const e of employees) {
     const base = round2(Number(openPii(e.base_salary)) || 0);
     if (!base) { skipped++; continue; }        // no salary on file: nothing to compute
@@ -173,26 +175,35 @@ export function draftPayroll({ period, actor }) {
     const loans = q("SELECT * FROM pay_loan WHERE employee_id = ? AND state = 'active'", e.id);
     const loanDeduction = round2(loans.reduce((a, l) => a + Math.min(l.monthly, l.balance), 0));
 
-    // The formula, in the directive's order. Allowances, overtime, bonuses,
-    // commissions, other deductions and penalties are zero until the modules
-    // that produce them exist — written as named zeros rather than omitted, so
-    // the slip's shape is the formula's shape from day one.
+    // The formula, in the directive's order. Allowances and overtime come from
+    // the time and compensation modules; tax from the bracket table for the
+    // employee's jurisdiction; contributions from the plans they are enrolled
+    // in. Bonuses, commissions, other deductions and penalties are still named
+    // zeros — the slip's shape is the formula's shape whether or not a module
+    // feeds every line yet.
+    const inputs = payrollInputs(e, period, base);
     const slip = {
       period, base,
-      allowances: 0, overtime: 0, bonuses: 0, commissions: 0,
+      allowances: inputs.allowances, overtime: inputs.overtime, bonuses: 0, commissions: 0,
       absences: absence, deductions: 0, loans: loanDeduction, penalties: 0,
     };
     slip.gross = round2(base + slip.allowances + slip.overtime + slip.bonuses + slip.commissions);
     const adjusted = round2(slip.gross - slip.absences - slip.deductions - slip.loans - slip.penalties);
-    slip.taxes = 0; slip.contributions = 0;    // jurisdiction-specific; named zeros, same argument
+    slip.taxes = inputs.tax(round2(slip.gross - slip.absences));
+    slip.contributions = inputs.contributions;
+    slip.employer = inputs.employer;           // the company's side, not in net
     slip.net = round2(adjusted - slip.taxes - slip.contributions);
 
     exec('INSERT INTO pay_slip (run_id, employee_id, detail, subject_ref) VALUES (?,?,?,?)',
       runId, e.id, e.subject_ref ? sealForRef(JSON.stringify(slip), e.subject_ref) : JSON.stringify(slip), e.subject_ref);
     totalGross = round2(totalGross + slip.gross);
     totalNet = round2(totalNet + slip.net);
+    totalTax = round2(totalTax + slip.taxes);
+    totalContrib = round2(totalContrib + slip.contributions);
+    totalEmployer = round2(totalEmployer + slip.employer);
   }
-  exec('UPDATE pay_run SET total_gross = ?, total_net = ? WHERE id = ?', totalGross, totalNet, runId);
+  exec('UPDATE pay_run SET total_gross = ?, total_net = ?, total_tax = ?, total_contrib = ?, total_employer = ? WHERE id = ?',
+    totalGross, totalNet, totalTax, totalContrib, totalEmployer, runId);
   log({ entity: 'payroll', entityId: runId, action: 'payroll.drafted', actor, detail: { period, employees: employees.length - skipped, skipped } });
   return getRun(runId);
 }
@@ -234,7 +245,10 @@ export function closePayrollRun(runId, { actor }) {
   }
   exec("UPDATE pay_run SET state = 'closed', closed_at = datetime('now') WHERE id = ?", r.id);
   log({ entity: 'payroll', entityId: r.id, action: 'payroll.closed', actor, detail: { period: r.period }, chain: true });
-  emit('payroll.closed', { id: r.id, period: r.period, totalGross: r.total_gross, totalNet: r.total_net });
+  emit('payroll.closed', {
+    id: r.id, period: r.period, totalGross: r.total_gross, totalNet: r.total_net,
+    totalTax: r.total_tax || 0, totalContrib: r.total_contrib || 0, totalEmployer: r.total_employer || 0,
+  });
   return getRun(r.id);
 }
 

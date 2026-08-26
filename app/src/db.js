@@ -3484,6 +3484,604 @@ for (const sql of [
   'CREATE INDEX IF NOT EXISTS runs_subject ON runs (subject_ref)',
 ]) { try { db.exec(sql); } catch { /* index exists */ } }
 
+// ---------------------------------------------------------------------------
+// Core 2, the rest of the company: time rules, compensation, the finance
+// sub-ledgers, the bank, operations, and administration.
+//
+// Same rules as the first block. STRICT throughout; every reference to a human
+// is an INTEGER employment id; every amount that is about one person is TEXT
+// because it is sealed; and there is no column anywhere for a reason, a note,
+// a diagnosis, or a judgement about somebody. Where words are needed they are a
+// pointer to a document that is sealed under the person it is about.
+//
+// The ledger is still Core 1's. Nothing here holds a debit; the tables that
+// touch money hold facts (a bill, a receipt, a transfer) and the bridge turns
+// the fact into an entry.
+// ---------------------------------------------------------------------------
+db.exec(`
+-- TIME RULES: the calendar, shifts assigned to people, overtime and corrections
+CREATE TABLE IF NOT EXISTS hr_holiday (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  day        TEXT NOT NULL UNIQUE,                -- 'YYYY-MM-DD'
+  name       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS time_shift_assignment (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  shift_id    INTEGER NOT NULL REFERENCES time_shift(id),
+  starts      TEXT NOT NULL,
+  ends        TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS time_shift_assignment_emp ON time_shift_assignment (employee_id, starts);
+
+CREATE TABLE IF NOT EXISTS time_overtime (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  day         TEXT NOT NULL,
+  minutes     INTEGER NOT NULL,
+  rate        REAL NOT NULL DEFAULT 1.5,
+  state       TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','approved','rejected')),
+  decided_by  TEXT,
+  decided_at  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS time_overtime_emp ON time_overtime (employee_id, day);
+
+-- A correction is a claimed in/out pair waiting on a manager. No reason column:
+-- the manager sees the claim and the day, decides, and their name is recorded.
+CREATE TABLE IF NOT EXISTS time_correction (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  day         TEXT NOT NULL,
+  in_at       TEXT,
+  out_at      TEXT,
+  state       TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','approved','rejected')),
+  decided_by  TEXT,
+  decided_at  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- COMPENSATION: allowances, benefits, salary history, movements, tax, end of service.
+CREATE TABLE IF NOT EXISTS hr_allowance (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  kind        TEXT NOT NULL CHECK (kind IN ('housing','transport','phone','meal','hardship','other')),
+  amount      REAL NOT NULL,                      -- Tier B: a policy figure, not a salary
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  starts      TEXT NOT NULL,
+  ends        TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS hr_allowance_emp ON hr_allowance (employee_id);
+
+CREATE TABLE IF NOT EXISTS hr_benefit_plan (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL,
+  kind           TEXT NOT NULL CHECK (kind IN ('health','life','pension','social','other')),
+  employer_share REAL NOT NULL DEFAULT 0,         -- per month, per enrolled employee
+  employee_share REAL NOT NULL DEFAULT 0,
+  provider       TEXT,
+  state          TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- Enrollment is a fact about a plan and a person. It carries no health detail
+-- and cannot: there is no column for it.
+CREATE TABLE IF NOT EXISTS hr_benefit_enrollment (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  plan_id     INTEGER NOT NULL REFERENCES hr_benefit_plan(id),
+  starts      TEXT NOT NULL,
+  ends        TEXT,
+  created_by  TEXT NOT NULL,
+  UNIQUE (employee_id, plan_id, starts)
+) STRICT;
+
+-- Salary history. Both figures sealed under the person; what is readable is
+-- that a change happened, when, and who made it. Chained as a fact.
+CREATE TABLE IF NOT EXISTS hr_salary_change (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  old_salary  TEXT,                               -- Tier A
+  new_salary  TEXT,                               -- Tier A
+  effective   TEXT NOT NULL,
+  changed_by  TEXT NOT NULL,                      -- a human, always; asserted in code
+  subject_ref TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS hr_salary_change_subject ON hr_salary_change (subject_ref);
+
+CREATE TABLE IF NOT EXISTS hr_movement (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id   INTEGER NOT NULL REFERENCES hr_employee(id),
+  kind          TEXT NOT NULL CHECK (kind IN ('promotion','transfer','regrade','demotion','acting')),
+  from_unit     INTEGER REFERENCES hr_org_unit(id),
+  to_unit       INTEGER REFERENCES hr_org_unit(id),
+  from_position INTEGER REFERENCES hr_position(id),
+  to_position   INTEGER REFERENCES hr_position(id),
+  from_grade    INTEGER REFERENCES hr_grade(id),
+  to_grade      INTEGER REFERENCES hr_grade(id),
+  effective     TEXT NOT NULL,
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- Progressive income tax, as data. Brackets are ordered; up_to NULL is the top.
+CREATE TABLE IF NOT EXISTS pay_tax_bracket (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  jurisdiction TEXT NOT NULL,
+  ordinal      INTEGER NOT NULL,
+  up_to        REAL,                              -- monthly taxable amount ceiling; NULL = no ceiling
+  rate         REAL NOT NULL,
+  UNIQUE (jurisdiction, ordinal)
+) STRICT;
+
+-- End of service. The amount is about one person and is sealed under them;
+-- the years of service are an org fact and stay readable.
+CREATE TABLE IF NOT EXISTS hr_eos (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL UNIQUE REFERENCES hr_employee(id),
+  years       REAL NOT NULL,
+  days_per_year REAL NOT NULL,
+  amount      TEXT,                               -- Tier A
+  subject_ref TEXT,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  paid_by     TEXT,
+  paid_at     TEXT
+) STRICT;
+
+-- A grievance is a sealed document plus a state machine with a name at each
+-- step. The words live in the document, under the person's key, and nowhere else.
+CREATE TABLE IF NOT EXISTS hr_grievance (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  doc_id      INTEGER NOT NULL REFERENCES doc_document(id),
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','under_review','resolved','dismissed')),
+  opened_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  decided_by  TEXT,
+  decided_at  TEXT
+) STRICT;
+
+-- Who holds which of the company's things. The asset is Core 1's (one register).
+CREATE TABLE IF NOT EXISTS hr_asset_assignment (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  asset_id    INTEGER NOT NULL,                   -- Core 1 assets.id
+  assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+  returned_at TEXT,
+  assigned_by TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS hr_asset_assignment_emp ON hr_asset_assignment (employee_id);
+
+-- FINANCE SUB-LEDGERS. Budgets, payables, receivables, fixed assets, FX.
+-- The statements are Core 1's ledger and are not duplicated here.
+CREATE TABLE IF NOT EXISTS fin_budget (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  period      TEXT NOT NULL,                      -- 'YYYY' | 'YYYY-Qn' | 'YYYY-MM'
+  state       TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','approved','closed')),
+  approved_by TEXT,                               -- a human, always
+  approved_at TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_budget_line (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  budget_id      INTEGER NOT NULL REFERENCES fin_budget(id),
+  account_code   TEXT NOT NULL,                   -- Core 1 accounts.code
+  cost_center_id INTEGER REFERENCES fin_cost_center(id),
+  amount         REAL NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS fin_budget_line_budget ON fin_budget_line (budget_id);
+
+CREATE TABLE IF NOT EXISTS fin_ap_bill (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor_id    TEXT NOT NULL,                     -- Core 1 vendors.id (slug)
+  ref          TEXT NOT NULL,
+  amount       REAL NOT NULL,
+  tax          REAL NOT NULL DEFAULT 0,
+  currency     TEXT NOT NULL DEFAULT 'USD',
+  account_code TEXT NOT NULL DEFAULT '5100',
+  issued       TEXT NOT NULL,
+  due          TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','approved','paid','void')),
+  approved_by  TEXT,
+  paid_at      TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (vendor_id, ref)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_ar_invoice (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref         TEXT NOT NULL UNIQUE,               -- AR-2026-0001
+  customer_id INTEGER,                            -- Core 1 customers.id
+  description TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  tax         REAL NOT NULL DEFAULT 0,
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  issued      TEXT,
+  due         TEXT,
+  state       TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','issued','paid','void')),
+  paid_amount REAL NOT NULL DEFAULT 0,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_ar_receipt (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_id      INTEGER NOT NULL REFERENCES fin_ar_invoice(id),
+  amount          REAL NOT NULL,
+  bank_account_id INTEGER,
+  received_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  created_by      TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_fixed_asset (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL,
+  category       TEXT NOT NULL DEFAULT 'equipment',
+  cost           REAL NOT NULL,
+  salvage        REAL NOT NULL DEFAULT 0,
+  life_months    INTEGER NOT NULL,
+  acquired       TEXT NOT NULL,                   -- 'YYYY-MM-DD'
+  method         TEXT NOT NULL DEFAULT 'straight' CHECK (method = 'straight'),
+  accumulated    REAL NOT NULL DEFAULT 0,
+  state          TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','disposed')),
+  cost_center_id INTEGER REFERENCES fin_cost_center(id),
+  core1_asset_id INTEGER,                         -- Core 1 assets.id, when it is also a device on that register
+  disposed_at    TEXT,
+  disposed_by    TEXT,
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_depreciation (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  asset_id INTEGER NOT NULL REFERENCES fin_fixed_asset(id),
+  period   TEXT NOT NULL,                         -- 'YYYY-MM'
+  amount   REAL NOT NULL,
+  UNIQUE (asset_id, period)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS fin_fx_rate (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  currency    TEXT NOT NULL,
+  rate_to_usd REAL NOT NULL,                      -- 1 unit of currency = rate_to_usd USD
+  day         TEXT NOT NULL,
+  UNIQUE (currency, day)
+) STRICT;
+
+-- THE BANK. Accounts, statements, reconciliation, transfers, cheques, batches.
+CREATE TABLE IF NOT EXISTS bank_account (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT NOT NULL,
+  bank            TEXT,
+  kind            TEXT NOT NULL DEFAULT 'bank' CHECK (kind IN ('bank','cashbox')),
+  currency        TEXT NOT NULL DEFAULT 'USD',
+  iban            TEXT,                           -- the company's own; masked on screen
+  gl_code         TEXT NOT NULL UNIQUE,           -- its own child of 1000 in Core 1's chart
+  opening_balance REAL NOT NULL DEFAULT 0,
+  state           TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','closed')),
+  created_by      TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS bank_statement (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id  INTEGER NOT NULL REFERENCES bank_account(id),
+  label       TEXT NOT NULL,
+  imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_by  TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS bank_statement_line (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  statement_id    INTEGER NOT NULL REFERENCES bank_statement(id),
+  account_id      INTEGER NOT NULL REFERENCES bank_account(id),
+  day             TEXT NOT NULL,
+  amount          REAL NOT NULL,                  -- signed: money in positive
+  ref             TEXT,
+  journal_line_id INTEGER,                        -- Core 1 journal_lines.id once matched
+  state           TEXT NOT NULL DEFAULT 'unmatched' CHECK (state IN ('unmatched','matched','excluded'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS bank_statement_line_acct ON bank_statement_line (account_id, state);
+
+CREATE TABLE IF NOT EXISTS bank_transfer (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_account_id INTEGER NOT NULL REFERENCES bank_account(id),
+  to_account_id   INTEGER REFERENCES bank_account(id),
+  beneficiary     TEXT,                           -- external, when to_account_id is NULL
+  purpose_code    TEXT NOT NULL DEFAULT '5900',   -- the account an external payment hits
+  amount          REAL NOT NULL,
+  fee             REAL NOT NULL DEFAULT 0,
+  state           TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','approved','executed','void')),
+  approved_by     TEXT,
+  executed_at     TEXT,
+  created_by      TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS bank_cheque (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES bank_account(id),
+  number     TEXT NOT NULL,
+  direction  TEXT NOT NULL CHECK (direction IN ('issued','received')),
+  payee      TEXT NOT NULL,
+  amount     REAL NOT NULL,
+  day        TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'drafted'
+             CHECK (state IN ('drafted','issued','presented','cleared','bounced','void')),
+  bill_id    INTEGER REFERENCES fin_ap_bill(id),
+  invoice_id INTEGER REFERENCES fin_ar_invoice(id),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (account_id, number)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS bank_payment_batch (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL CHECK (kind IN ('payroll','ap','expenses','eos','other')),
+  source_id   TEXT,                               -- pay_run.id for payroll, and so on
+  account_id  INTEGER NOT NULL REFERENCES bank_account(id),
+  total       REAL NOT NULL DEFAULT 0,
+  count       INTEGER NOT NULL DEFAULT 0,
+  state       TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','approved','released','void')),
+  approved_by TEXT,
+  released_at TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- A payment item names a beneficiary. When that is an employee, the name and
+-- the bank detail are sealed under them; the amount stays readable because the
+-- batch total is an org fact the ledger shows anyway.
+CREATE TABLE IF NOT EXISTS bank_payment_item (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id    INTEGER NOT NULL REFERENCES bank_payment_batch(id),
+  beneficiary TEXT NOT NULL,                      -- Tier A when it is a person
+  amount      REAL NOT NULL,
+  employee_id INTEGER REFERENCES hr_employee(id),
+  bill_id     INTEGER REFERENCES fin_ap_bill(id),
+  expense_id  INTEGER REFERENCES fin_expense(id),
+  subject_ref TEXT
+) STRICT;
+CREATE INDEX IF NOT EXISTS bank_payment_item_subject ON bank_payment_item (subject_ref);
+
+-- OPERATIONS. Stock, work orders, fleet, rooms, the internal help desk, and
+-- workplace incidents. Core 1's incidents table is the technical SEV ladder;
+-- these are the ones with a wet floor in them.
+CREATE TABLE IF NOT EXISTS ops_warehouse (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  code       TEXT NOT NULL UNIQUE,
+  state      TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','closed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS ops_item (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  sku        TEXT NOT NULL UNIQUE,
+  name       TEXT NOT NULL,
+  unit       TEXT NOT NULL DEFAULT 'each',
+  min_qty    REAL NOT NULL DEFAULT 0,
+  cost       REAL NOT NULL DEFAULT 0,
+  state      TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS ops_stock_move (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id         INTEGER NOT NULL REFERENCES ops_item(id),
+  warehouse_id    INTEGER NOT NULL REFERENCES ops_warehouse(id),
+  qty             REAL NOT NULL,                  -- signed
+  kind            TEXT NOT NULL CHECK (kind IN ('receipt','issue','transfer_in','transfer_out','adjust')),
+  ref             TEXT,
+  proc_request_id INTEGER REFERENCES proc_request(id),
+  created_by      TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS ops_stock_move_item ON ops_stock_move (item_id, warehouse_id);
+
+CREATE TABLE IF NOT EXISTS ops_workorder (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  target_kind TEXT NOT NULL DEFAULT 'other' CHECK (target_kind IN ('fixed_asset','vehicle','room','other')),
+  target_id   INTEGER,
+  priority    TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','in_progress','done','cancelled')),
+  assignee_employee_id INTEGER REFERENCES hr_employee(id),
+  due         TEXT,
+  cost        REAL NOT NULL DEFAULT 0,
+  created_by  TEXT NOT NULL,
+  closed_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS ops_vehicle (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  plate        TEXT NOT NULL UNIQUE,
+  make         TEXT NOT NULL,
+  model        TEXT,
+  year         INTEGER,
+  odometer     INTEGER NOT NULL DEFAULT 0,
+  assignee_employee_id INTEGER REFERENCES hr_employee(id),
+  next_service TEXT,
+  state        TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','in_service','retired')),
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS ops_room (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  building   TEXT,
+  capacity   INTEGER NOT NULL DEFAULT 4,
+  state      TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','closed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS ops_booking (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id     INTEGER NOT NULL REFERENCES ops_room(id),
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  starts      TEXT NOT NULL,
+  ends        TEXT NOT NULL,
+  meeting_id  INTEGER REFERENCES mtg_meeting(id),
+  state       TEXT NOT NULL DEFAULT 'booked' CHECK (state IN ('booked','cancelled')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS ops_booking_room ON ops_booking (room_id, starts);
+
+-- The internal help desk. Requester and assignee are employments; the
+-- narrative, if any, is a document. SLA is a due time the sweep can compare.
+CREATE TABLE IF NOT EXISTS ops_ticket (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref         TEXT NOT NULL UNIQUE,               -- HD-2026-0001
+  category    TEXT NOT NULL DEFAULT 'it' CHECK (category IN ('it','facilities','hr','finance','other')),
+  priority    TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
+  title       TEXT NOT NULL,
+  requester_employee_id INTEGER REFERENCES hr_employee(id),
+  assignee_employee_id  INTEGER REFERENCES hr_employee(id),
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','in_progress','waiting','resolved','closed')),
+  sla_due     TEXT NOT NULL,
+  breached    INTEGER NOT NULL DEFAULT 0,
+  doc_id      INTEGER REFERENCES doc_document(id),
+  opened_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT,
+  closed_at   TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS ops_incident (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL CHECK (kind IN ('safety','quality','security','environment')),
+  severity    INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 4),
+  title       TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','investigating','closed')),
+  action      TEXT,                               -- the corrective action, about the workplace, never a person
+  doc_id      INTEGER REFERENCES doc_document(id),
+  reported_by TEXT NOT NULL,
+  closed_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+-- ADMINISTRATION. The registry of letters, the committees, the cases, the
+-- regulatory calendar, the licences, and who has read which policy.
+CREATE TABLE IF NOT EXISTS adm_letter (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref          TEXT NOT NULL UNIQUE,              -- IN-2026-0001 / OUT-2026-0001
+  direction    TEXT NOT NULL CHECK (direction IN ('in','out')),
+  subject      TEXT NOT NULL,
+  counterparty TEXT NOT NULL,
+  org_unit_id  INTEGER REFERENCES hr_org_unit(id),
+  doc_id       INTEGER REFERENCES doc_document(id),
+  day          TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'received'
+               CHECK (state IN ('received','routed','answered','closed','drafted','sent')),
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_committee (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  name              TEXT NOT NULL UNIQUE,
+  chair_employee_id INTEGER REFERENCES hr_employee(id),
+  state             TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','dissolved')),
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_committee_member (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  committee_id INTEGER NOT NULL REFERENCES adm_committee(id),
+  employee_id  INTEGER NOT NULL REFERENCES hr_employee(id),
+  UNIQUE (committee_id, employee_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_resolution (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  committee_id INTEGER NOT NULL REFERENCES adm_committee(id),
+  ref          TEXT NOT NULL UNIQUE,
+  title        TEXT NOT NULL,
+  doc_id       INTEGER REFERENCES doc_document(id),
+  state        TEXT NOT NULL DEFAULT 'proposed' CHECK (state IN ('proposed','adopted','rejected')),
+  decided_on   TEXT,
+  adopted_by   TEXT,                              -- a human, always
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_case (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref          TEXT NOT NULL UNIQUE,              -- CASE-2026-0001
+  kind         TEXT NOT NULL CHECK (kind IN ('litigation','arbitration','claim','regulatory','labour')),
+  counterparty TEXT NOT NULL,
+  court        TEXT,
+  contract_id  INTEGER,                           -- Core 1 contracts.id
+  state        TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','hearing','settled','won','lost','closed')),
+  next_hearing TEXT,
+  exposure     REAL NOT NULL DEFAULT 0,
+  doc_id       INTEGER REFERENCES doc_document(id),
+  decided_by   TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_obligation (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  authority   TEXT NOT NULL,
+  due         TEXT NOT NULL,
+  recurrence  TEXT NOT NULL DEFAULT 'none' CHECK (recurrence IN ('none','monthly','quarterly','yearly')),
+  org_unit_id INTEGER REFERENCES hr_org_unit(id),
+  state       TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','done','overdue')),
+  done_by     TEXT,
+  done_at     TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_license (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  authority  TEXT NOT NULL,
+  number     TEXT,
+  issued     TEXT,
+  expires    TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','expired','renewed')),
+  doc_id     INTEGER REFERENCES doc_document(id),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS adm_policy_ack (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id      INTEGER NOT NULL REFERENCES doc_document(id),
+  employee_id INTEGER NOT NULL REFERENCES hr_employee(id),
+  acked_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (doc_id, employee_id)
+) STRICT;
+`);
+
+// The payroll run learns to carry what it withholds. Named totals rather than
+// one "withheld" figure, so tax payable and contributions payable are two
+// liabilities in the ledger and not one number nobody can reconcile.
+for (const sql of [
+  'ALTER TABLE pay_run ADD COLUMN total_tax REAL NOT NULL DEFAULT 0',
+  'ALTER TABLE pay_run ADD COLUMN total_contrib REAL NOT NULL DEFAULT 0',
+  'ALTER TABLE pay_run ADD COLUMN total_employer REAL NOT NULL DEFAULT 0',
+  'ALTER TABLE hr_employee ADD COLUMN jurisdiction TEXT NOT NULL DEFAULT \'IQ\'',
+  'ALTER TABLE hr_employee ADD COLUMN probation_ends TEXT',
+  'ALTER TABLE hr_employee ADD COLUMN contract_ends TEXT',
+]) { try { db.exec(sql); } catch { /* column exists */ } }
+
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }
 export function exec(sql, ...params) { return db.prepare(sql).run(...params); }
