@@ -453,6 +453,18 @@ export function holdPoll(reason, on) {
 function isReading() {
   const sel = window.getSelection?.();
   if (sel && !sel.isCollapsed && sel.toString().trim() && view.contains(sel.anchorNode)) return true;
+  // The page itself is a scroller, and it was the one this never checked. The
+  // chip has always said "scroll back to the bottom and it resumes"; only the
+  // inner boxes ever implemented that, so a long department page re-rendered
+  // under somebody halfway down it — and a fresh innerHTML is momentarily
+  // shorter than what it replaced, so the browser clamped them to the top.
+  // That is the jump: not a scroll bug, a refresh that should not have run.
+  const doc = document.documentElement;
+  if (doc.scrollHeight - window.innerHeight > 24) {
+    const atTop = window.scrollY < 24;
+    const atBottom = doc.scrollHeight - window.scrollY - window.innerHeight < 40;
+    if (!atTop && !atBottom) return true;
+  }
   for (const el of view.querySelectorAll(SCROLLERS)) {
     const scrollable = el.scrollHeight - el.clientHeight > 12;
     // Anywhere but the bottom means reading. The first version of this also
@@ -478,7 +490,24 @@ function restoreScroll(snap) {
   });
   // The page itself, too: a table that gained a row must not shift what you
   // were looking at up the screen.
-  if (Math.abs(window.scrollY - snap.win) > 2) window.scrollTo({ top: snap.win, behavior: 'instant' });
+  //
+  // Once is not enough. Content that has just been assigned has not been laid
+  // out yet, so the document is briefly shorter than it will be, and a
+  // scrollTo past the current height is silently clamped — which lands the
+  // reader near the top and looks like the page threw them there. So it is
+  // re-applied over the next few frames, until the height exists to hold it.
+  const target = snap.win;
+  if (Math.abs(window.scrollY - target) <= 2) return;
+  let tries = 0;
+  const put = () => {
+    if (Math.abs(window.scrollY - target) <= 2) return;
+    const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    window.scrollTo({ top: Math.min(target, max), behavior: 'instant' });
+    // Only while the page is still too short to reach it. If the reader has
+    // scrolled further down themselves in the meantime, they are left alone.
+    if (++tries < 6 && window.scrollY < target - 2) requestAnimationFrame(put);
+  };
+  requestAnimationFrame(put);
 }
 export function pollPaused() {
   return document.hidden || isEditingField() || hasUnsavedInput() || pollHolds.size > 0 || isReading();
@@ -653,3 +682,15 @@ window.addEventListener('hashchange', navigate);
 for (const evt of ['input', 'focusin', 'focusout', 'change']) {
   view.addEventListener(evt, () => showPollState(Boolean(routes[currentRoute().key]?.poll) && pollPaused()));
 }
+// Scrolling now decides whether a page refreshes itself, so it has to move the
+// chip too — otherwise the timer goes quiet with nothing on screen saying why.
+// Coalesced into a frame: this fires on every wheel notch.
+let scrollChipQueued = false;
+window.addEventListener('scroll', () => {
+  if (scrollChipQueued) return;
+  scrollChipQueued = true;
+  requestAnimationFrame(() => {
+    scrollChipQueued = false;
+    showPollState(Boolean(routes[currentRoute().key]?.poll) && pollPaused());
+  });
+}, { passive: true });

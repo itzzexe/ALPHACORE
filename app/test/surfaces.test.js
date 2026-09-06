@@ -221,6 +221,24 @@ test('a department on the whole-company map can be clicked, not only looked at',
   assert.match(css, /\.at-hit\s*\{[^}]*fill:\s*transparent/, 'the hit disc cannot receive a click');
 });
 
+test('a page that refreshes itself does not throw the reader back to the top', () => {
+  // Measured in the browser before this landed: scrolled to 1427px on the
+  // overview, one poll tick put it at 430. Two things did it, and both are
+  // asserted here because both are one line away from coming back.
+  const shell = fs.readFileSync(path.join(root, 'public', 'core', 'shell.js'), 'utf8');
+  const reading = shell.slice(shell.indexOf('function isReading()'), shell.indexOf('function snapshotScroll()'));
+  assert.ok(reading.includes('documentElement'),
+    'isReading only watches the inner scroll boxes again — the page itself is the one people scroll');
+  assert.ok(/scrollY/.test(reading), 'the page scroll position is not part of deciding whether somebody is reading');
+
+  // And the restore has to survive a layout that has not happened yet: fresh
+  // content is briefly shorter than what it replaced, so a single scrollTo is
+  // clamped near the top and looks like the page jumped.
+  const restore = shell.slice(shell.indexOf('function restoreScroll('), shell.indexOf('export function pollPaused'));
+  assert.ok(restore.includes('requestAnimationFrame'),
+    'the scroll is restored once, before the new content has a height to hold it');
+});
+
 test('the waiting count is on the bar at every width, not only on the phone', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   assert.ok(html.includes('id="waiting-chip"'), 'the count is not on the top bar');
