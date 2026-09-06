@@ -868,6 +868,8 @@ export async function renderSettings() {
         <select id="o-model" aria-label="${esc(t('Model'))}">${o.models.map((mm) => `<option value="${esc(mm)}"${mm === o.model ? ' selected' : ''}>${esc(mm)}</option>`).join('')}</select></div>
       <div style="flex:1;min-width:220px"><label class="fl" for="o-key">${esc(t('DeepSeek API key'))}${o.keyConfigured ? ` <span class="sub">····${esc(o.keyTail)}</span>` : ''}</label>
         <input type="password" id="o-key" placeholder="${esc(o.keyConfigured ? t('set — paste a new one to replace it') : 'sk-…')}" autocomplete="new-password" style="width:100%"></div>
+      <div style="flex:1;min-width:200px"><label class="fl" for="o-url">${esc(t('Address (a mirror or proxy, if any)'))}</label>
+        <input type="text" id="o-url" dir="ltr" value="${esc(o.baseUrlOverridden ? o.baseUrl : '')}" placeholder="${esc(o.baseUrlDefault || '')}" style="width:100%"></div>
       <button class="btn btn-primary" id="o-save">${esc(t('Save'))}</button>
     </div>
     <div style="margin-top:10px">
@@ -930,6 +932,9 @@ export async function renderSettings() {
       persona: $('#o-persona').value,
     };
     if ($('#o-key').value.trim()) body.apiKey = $('#o-key').value.trim();
+    // Sent even when empty: clearing the field is how the default address
+    // comes back, and a save that silently kept an old proxy would be worse.
+    body.baseUrl = $('#o-url').value.trim();
     try {
       const r = await api('/api/oracle', { method: 'POST', body });
       toast(r.ready ? t('Hired — mention it on the floor.') : r.enabled ? t('Saved. It still needs a DeepSeek key.') : t('Saved.'));

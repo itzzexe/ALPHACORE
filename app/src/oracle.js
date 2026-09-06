@@ -67,7 +67,12 @@ export function oracleSettings() {
     keyTail: key ? String(key).slice(-4) : null,
     // The two facts that decide whether it can actually answer.
     ready: Boolean(key) && getSetting('ORACLE_ENABLED') === 'true',
-    baseUrl: providersConfig.providers.deepseek?.baseUrl || null,
+    // Where the calls go. The default is DeepSeek's own address; an install
+    // behind a corporate proxy, or one using a regional mirror that speaks the
+    // same wire format, points this somewhere else without touching the code.
+    baseUrl: getSetting('DEEPSEEK_BASE_URL') || providersConfig.providers.deepseek?.baseUrl || null,
+    baseUrlDefault: providersConfig.providers.deepseek?.baseUrl || null,
+    baseUrlOverridden: Boolean(getSetting('DEEPSEEK_BASE_URL')),
     note: 'This employee answers anything, in any language, with no output schema — its reply is the text itself. '
       + 'It still passes the audit chain and the budget, it holds no gateway tools, and the sensitivity router keeps '
       + 'customer and restricted content away from DeepSeek, which is declared without a DPA and without a no-training '
@@ -112,7 +117,7 @@ export function seedOracle({ actor = 'system:seed' } = {}) {
 }
 
 /** Settings writes come through here so the roster row never drifts from them. */
-export function setOracle({ enabled, model, persona, name, apiKey, actor }) {
+export function setOracle({ enabled, model, persona, name, apiKey, baseUrl, actor }) {
   if (!actor) { const e = new Error('changing the consultant carries a name'); e.status = 400; throw e; }
   if (enabled !== undefined) setSetting('ORACLE_ENABLED', enabled ? 'true' : 'false');
   if (model !== undefined && model !== null && model !== '') {
@@ -124,6 +129,17 @@ export function setOracle({ enabled, model, persona, name, apiKey, actor }) {
   // The key is a secret like any other provider key: stored, never echoed.
   if (apiKey !== undefined && apiKey !== null && apiKey !== '') setSetting(KEY, String(apiKey).trim());
   if (apiKey === '') setSetting(KEY, null);
+  if (baseUrl !== undefined) {
+    const url = String(baseUrl || '').trim();
+    if (url) {
+      // A typo here sends the key somewhere unintended, so it is parsed rather
+      // than trusted, and only over a real transport.
+      let parsed;
+      try { parsed = new URL(url); } catch { const e = new Error('that is not a URL'); e.status = 400; throw e; }
+      if (!['http:', 'https:'].includes(parsed.protocol)) { const e = new Error('the address must be http or https'); e.status = 400; throw e; }
+      setSetting('DEEPSEEK_BASE_URL', url.replace(/\/+$/, ''));
+    } else setSetting('DEEPSEEK_BASE_URL', null);
+  }
 
   const after = seedOracle({ actor });
   audit({

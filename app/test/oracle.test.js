@@ -107,8 +107,14 @@ test('it is hired from settings, pinned to DeepSeek, and its key is never echoed
   assert.equal(before.enabled, false);
   assert.equal(one('SELECT status FROM agents WHERE id = ?', ORACLE_ID).status, 'paused', 'unhired means paused, not missing');
 
-  setSetting('DEEPSEEK_BASE_URL', stubUrl);
-  const after = setOracle({ enabled: true, model: 'deepseek-chat', apiKey: 'sk-secret-value-1234', actor: 'human:zaid' });
+  // The address is a setting too: a mirror or a company proxy in front of the
+  // same wire format. Here it points at the stub, which is what makes the
+  // whole path testable without a key.
+  assert.throws(() => setOracle({ baseUrl: 'not a url', actor: 'human:zaid' }), /not a URL/);
+  assert.throws(() => setOracle({ baseUrl: 'ftp://example.test/v1', actor: 'human:zaid' }), /http or https/);
+  const after = setOracle({ enabled: true, model: 'deepseek-chat', apiKey: 'sk-secret-value-1234', baseUrl: `${stubUrl}/`, actor: 'human:zaid' });
+  assert.equal(after.baseUrl, stubUrl, 'a trailing slash is trimmed rather than sent as a double slash');
+  assert.equal(after.baseUrlOverridden, true);
   assert.equal(after.ready, true);
   assert.equal(after.keyTail, '1234');
   assert.ok(!JSON.stringify(after).includes('sk-secret-value-1234'), 'the key came back to the screen');
