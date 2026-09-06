@@ -1354,7 +1354,7 @@ const routes = [
   // will not discuss, pinned to the key the owner pastes here. ---
   ['GET', /^\/api\/oracle$/, () => ({ ...oracleSettings(), recent: oracleActivity({}) })],
   ['POST', /^\/api\/oracle$/, (_p, body, _u, user) => setOracle({
-    enabled: body.enabled, model: body.model, persona: body.persona, name: body.name,
+    enabled: body.enabled, provider: body.provider, model: body.model, persona: body.persona, name: body.name,
     apiKey: body.apiKey, baseUrl: body.baseUrl, actor: `human:${user.username}`,
   })],
   ['POST', /^\/api\/settings$/, (_p, body) => {

@@ -863,11 +863,24 @@ export async function renderSettings() {
           <option value="false"${o.enabled ? '' : ' selected'}>${esc(t('off'))}</option>
           <option value="true"${o.enabled ? ' selected' : ''}>${esc(t('on'))}</option>
         </select></div>
-      <div><label class="fl" for="o-name">${esc(t('Name on the floor'))}</label><input type="text" id="o-name" value="${esc(o.name)}" style="width:190px"></div>
+      <div><label class="fl" for="o-name">${esc(t('Name on the floor'))}</label><input type="text" id="o-name" value="${esc(o.name)}" style="width:170px"></div>
+      <div><label class="fl" for="o-prov">${esc(t('Provider'))}</label>
+        <select id="o-prov" aria-label="${esc(t('Provider'))}">${(o.providers || []).map((p) => `<option value="${esc(p.name)}"${p.name === o.provider ? ' selected' : ''}>${esc(p.name)}${p.local ? ` — ${t('on this machine')}` : ''}</option>`).join('')}</select></div>
       <div><label class="fl" for="o-model">${esc(t('Model'))}</label>
-        <select id="o-model" aria-label="${esc(t('Model'))}">${o.models.map((mm) => `<option value="${esc(mm)}"${mm === o.model ? ' selected' : ''}>${esc(mm)}</option>`).join('')}</select></div>
-      <div style="flex:1;min-width:220px"><label class="fl" for="o-key">${esc(t('DeepSeek API key'))}${o.keyConfigured ? ` <span class="sub">····${esc(o.keyTail)}</span>` : ''}</label>
-        <input type="password" id="o-key" placeholder="${esc(o.keyConfigured ? t('set — paste a new one to replace it') : 'sk-…')}" autocomplete="new-password" style="width:100%"></div>
+        ${o.anyModel
+    // A provider whose wire format passes the name through takes any model —
+    // including one pulled locally that no list here could know about.
+    ? `<input type="text" id="o-model" dir="ltr" value="${esc(o.model)}" list="o-model-list" placeholder="${esc(o.models[0] || '')}" style="width:210px">
+           <datalist id="o-model-list">${o.models.map((mm) => `<option value="${esc(mm)}"></option>`).join('')}</datalist>`
+    : `<select id="o-model" aria-label="${esc(t('Model'))}">${o.models.map((mm) => `<option value="${esc(mm)}"${mm === o.model ? ' selected' : ''}>${esc(mm)}</option>`).join('')}</select>`}</div>
+      ${o.isFlag
+    ? `<div><label class="fl" for="o-key">${esc(t('Switched on'))}</label>
+        <select id="o-key" aria-label="${esc(t('Switched on'))}">
+          <option value=""${o.keyConfigured ? '' : ' selected'}>${esc(t('off'))}</option>
+          <option value="true"${o.keyConfigured ? ' selected' : ''}>${esc(t('on'))}</option>
+        </select></div>`
+    : `<div style="flex:1;min-width:200px"><label class="fl" for="o-key">${esc(t('API key'))} <span class="mono sub">${esc(o.keyName || '')}</span>${o.keyConfigured ? ` <span class="sub">····${esc(o.keyTail)}</span>` : ''}</label>
+        <input type="password" id="o-key" placeholder="${esc(o.keyConfigured ? t('set — paste a new one to replace it') : 'sk-…')}" autocomplete="new-password" style="width:100%"></div>`}
       <div style="flex:1;min-width:200px"><label class="fl" for="o-url">${esc(t('Address (a mirror or proxy, if any)'))}</label>
         <input type="text" id="o-url" dir="ltr" value="${esc(o.baseUrlOverridden ? o.baseUrl : '')}" placeholder="${esc(o.baseUrlDefault || '')}" style="width:100%"></div>
       <button class="btn btn-primary" id="o-save">${esc(t('Save'))}</button>
@@ -928,18 +941,29 @@ export async function renderSettings() {
     const body = {
       enabled: $('#o-on').value === 'true',
       name: $('#o-name').value,
-      model: $('#o-model').value || undefined,
+      provider: $('#o-prov').value,
+      model: $('#o-model').value.trim() || undefined,
       persona: $('#o-persona').value,
     };
-    if ($('#o-key').value.trim()) body.apiKey = $('#o-key').value.trim();
+    // A switch sends its state either way, so turning a local model off is a
+    // save like any other; a password field is sent only when something was
+    // typed, so saving the prompt cannot wipe a key that is already there.
+    const keyEl = $('#o-key');
+    if (keyEl.tagName === 'SELECT') body.apiKey = keyEl.value;
+    else if (keyEl.value.trim()) body.apiKey = keyEl.value.trim();
     // Sent even when empty: clearing the field is how the default address
     // comes back, and a save that silently kept an old proxy would be worse.
     body.baseUrl = $('#o-url').value.trim();
     try {
       const r = await api('/api/oracle', { method: 'POST', body });
-      toast(r.ready ? t('Hired — mention it on the floor.') : r.enabled ? t('Saved. It still needs a DeepSeek key.') : t('Saved.'));
+      toast(r.ready ? t('Hired — mention it on the floor.') : r.enabled ? t('Saved. It still needs a key or a model.') : t('Saved.'));
       renderSettings(); refreshShell();
     } catch (e) { toast(e.message, true); }
+  });
+  // Switching provider redraws the row: the model box, the key field and the
+  // default address all belong to the provider that is chosen.
+  $('#o-prov')?.addEventListener('change', async () => {
+    try { await api('/api/oracle', { method: 'POST', body: { provider: $('#o-prov').value } }); renderSettings(); } catch (e) { toast(e.message, true); }
   });
   $('#o-reset')?.addEventListener('click', async () => {
     try { await api('/api/oracle', { method: 'POST', body: { persona: '' } }); renderSettings(); } catch (e) { toast(e.message, true); }

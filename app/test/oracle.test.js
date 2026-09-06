@@ -155,6 +155,37 @@ test('it answers in prose, in the language it was asked in, with no schema to fa
   assert.match(user, /اعتماد مستندي/);
 });
 
+test('it can be pinned to any provider and any model name, including one on this machine', async () => {
+  const s = oracleSettings();
+  assert.ok(s.providers.length >= 5, 'the panel offers every provider the router can call');
+  assert.ok(s.providers.some((p) => p.local && p.name === 'ollama'), 'a model on this machine must be one of them');
+  assert.throws(() => setOracle({ provider: 'nonesuch', actor: 'human:zaid' }), /unknown provider/);
+
+  // A local model is switched on rather than authenticated, takes whatever
+  // name was pulled, and is cleared for every sensitivity level because
+  // nothing leaves the building to reach it.
+  const local = setOracle({ provider: 'ollama', model: 'dolphin-mixtral:8x7b', apiKey: 'true', actor: 'human:zaid' });
+  assert.equal(local.provider, 'ollama');
+  assert.equal(local.model, 'dolphin-mixtral:8x7b', 'a model name this list never heard of is still accepted');
+  assert.equal(local.isFlag, true);
+  assert.equal(local.keyConfigured, true);
+  assert.equal(local.ready, true);
+  const spec = JSON.parse(one('SELECT spec FROM agents WHERE id = ?', ORACLE_ID).spec);
+  assert.deepEqual(spec.chain, [{ provider: 'ollama', model: 'dolphin-mixtral:8x7b' }]);
+  assert.equal(spec.sensitivity, 'restricted', 'a local model may see anything — it is the only provider cleared for it');
+
+  // A provider that pins its own ids is held to them.
+  assert.throws(() => setOracle({ provider: 'anthropic', model: 'not-a-real-model', actor: 'human:zaid' }), /no model called/);
+
+  // Back to the hosted default for the rest of the file, and moving provider
+  // must not carry a model name that belonged to the old one.
+  const back = setOracle({ provider: 'deepseek', actor: 'human:zaid' });
+  assert.equal(back.model, 'deepseek-chat');
+  assert.equal(JSON.parse(one('SELECT spec FROM agents WHERE id = ?', ORACLE_ID).spec).sensitivity, 'internal');
+  setOracle({ apiKey: 'sk-secret-value-1234', actor: 'human:zaid' });
+  setSetting('DEEPSEEK_BASE_URL', stubUrl);
+});
+
 test('the default prompt can be restored, and the persona is what is actually sent', async () => {
   setOracle({ persona: 'You answer only in haiku.', actor: 'human:zaid' });
   assert.match(JSON.parse(one('SELECT spec FROM agents WHERE id = ?', ORACLE_ID).spec).system, /haiku/);

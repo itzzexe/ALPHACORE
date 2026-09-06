@@ -964,6 +964,8 @@ const AR = {
   'Mention': 'أشر إليه بـ', 'in any channel, or open a direct message.': 'في أي قناة، أو افتح محادثة مباشرة.',
   'Run': 'التشغيل', 'Cost': 'الكلفة', 'When': 'متى', 'If it stopped': 'إن توقّف',
   'Address (a mirror or proxy, if any)': 'العنوان (مرآة أو وكيل، إن وُجد)',
+  'Provider': 'المزوّد', 'on this machine': 'على هذا الجهاز', 'Switched on': 'مُفعَّل', 'API key': 'مفتاح الواجهة',
+  'Saved. It still needs a key or a model.': 'حُفظ. لا يزال يحتاج مفتاحًا أو نموذجًا.',
   'Hired — mention it on the floor.': 'عُيِّن — أشر إليه في الساحة.',
   'Saved. It still needs a DeepSeek key.': 'حُفظ. لا يزال يحتاج مفتاح DeepSeek.',
   'This employee answers anything, in any language, with no output schema — its reply is the text itself. It still passes the audit chain and the budget, it holds no gateway tools, and the sensitivity router keeps customer and restricted content away from DeepSeek, which is declared without a DPA and without a no-training guarantee. Treat what you type to it as leaving the building.':
