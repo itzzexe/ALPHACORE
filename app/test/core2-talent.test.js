@@ -132,8 +132,13 @@ test('certificates expire on the course\'s clock, and the watch announces once',
   const yearly = createCourse({ name: 'First aid', expiresMonths: 12, actor: 'human:hr' });
   const c1 = grantCertificate({ employeeId: emp.id, courseId: forever.id, actor: 'human:hr' });
   assert.equal(c1.expires_at, null);
-  const c2 = grantCertificate({ employeeId: emp.id, courseId: yearly.id, earnedAt: '2025-09-01', actor: 'human:hr' });
-  assert.equal(c2.expires_at, '2026-09-01');
+  // Earned eleven months ago, so it lapses in about a month: inside the
+  // sixty-day watch and still current today. Relative on purpose — a fixed
+  // date turns this into a test that passes until the calendar reaches it,
+  // which is exactly how it failed once the clock rolled past 2026-09-01.
+  const earned = one("SELECT date('now', '-11 month') AS d").d;
+  const c2 = grantCertificate({ employeeId: emp.id, courseId: yearly.id, earnedAt: earned, actor: 'human:hr' });
+  assert.equal(c2.expires_at, one("SELECT date(?, '+12 month') AS d", earned).d);
 
   const m = competencyMatrix();
   assert.equal(m.length, 2);

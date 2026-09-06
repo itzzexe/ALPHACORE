@@ -23,14 +23,14 @@ itself.
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/cores-2_(AI_%2B_enterprise)-e07bd2?style=flat-square" alt="two cores: AI and enterprise">
 <img src="https://img.shields.io/badge/relationships-521-8d8477?style=flat-square" alt="521 declared relationships">
-<img src="https://img.shields.io/badge/API-789_routes-4f9cf0?style=flat-square" alt="789 API routes">
+<img src="https://img.shields.io/badge/API-791_routes-4f9cf0?style=flat-square" alt="791 API routes">
 <img src="https://img.shields.io/badge/permissions-266_atomic-e07bd2?style=flat-square" alt="266 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-403-78bf6d?style=flat-square" alt="403 tests">
+<img src="https://img.shields.io/badge/tests-409-78bf6d?style=flat-square" alt="409 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -1282,7 +1282,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**789 routes** — all JSON, all
+**791 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1358,7 +1358,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 403 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
+| `npm test` | 409 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1448,7 +1448,7 @@ credential — keep them together.
 
 ```
 app/
-  src/                146 modules, ~42,600 lines
+  src/                147 modules, ~42,600 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
     db.js             270 tables, forward-only migrations
     audit.js          the hash chain
@@ -1481,7 +1481,7 @@ app/
   public/
     index.html        the shell
     app.js            the console — 900 lines, vanilla, hash routing
-    styles.css        2,500 lines: design tokens, light and dark, RTL-aware
+    styles.css        2,700 lines: design tokens, light and dark, RTL-aware
     i18n.js           Arabic as a first-class language
     sw.js             network-first service worker
     manifest.webmanifest
@@ -1496,7 +1496,7 @@ app/
     prove-platform.mjs
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               403 tests across thirty-seven files
+  test/               409 tests across thirty-eight files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1516,7 +1516,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 403 tests
+npm test                        # 409 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker

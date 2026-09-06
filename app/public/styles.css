@@ -2715,3 +2715,8 @@ html[lang="ar"] .wheel .at-dname { font-size: 15px; letter-spacing: 0; }
 .at-door .at-dname { font-size: 9.5px; letter-spacing: var(--track-mid); fill: currentColor; pointer-events: none; }
 .at-door-n { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0; }
 html[lang="ar"] .at-door .at-dname { letter-spacing: 0; font-size: 11.5px; }
+
+/* A button in an inline form is a label, not a paragraph: when the row runs
+   out of width it wraps to the next line rather than stacking its own words
+   one per line, which is what "Restore the default prompt" looked like. */
+.form-inline .btn, .form-inline a.btn { white-space: nowrap; }

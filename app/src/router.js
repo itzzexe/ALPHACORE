@@ -65,7 +65,10 @@ async function callStep(step, { system, prompt, maxTokens, runId }) {
   const t0 = Date.now();
   try {
     const result = await adapter({
-      baseUrl: p.baseUrl,
+      // The address may be overridden per provider — a regional mirror, a
+      // company proxy, or a gateway in front of the same wire format. The
+      // provider file stays the default; a setting beats it when one exists.
+      baseUrl: getSecret(`${step.provider.toUpperCase().replace(/-/g, '_')}_BASE_URL`) || p.baseUrl,
       apiKey: p.keyEnv ? getSecret(p.keyEnv) : null,
       model: step.model,
       system, prompt, maxTokens,

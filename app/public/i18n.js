@@ -955,6 +955,19 @@ const AR = {
   'a limit was hit — theirs or ours — and respected': 'بُلغ حدّ — حدّهم أو حدّنا — واحتُرم',
 
   // الخريطة الموحّدة — النواتان على صفحة واحدة، والشريط فوق كل قسم
+  // المستشار — الموظف الذي يجيب على أي سؤال
+  'The consultant — one employee who answers anything': 'المستشار — موظف واحد يجيب على أي شيء',
+  'answering': 'يُجيب', 'needs a key': 'يحتاج مفتاحًا', 'Hired': 'مُعيَّن', 'Name on the floor': 'الاسم في الساحة',
+  'Model': 'النموذج', 'DeepSeek API key': 'مفتاح DeepSeek', 'set — paste a new one to replace it': 'مضبوط — الصق مفتاحًا جديدًا لاستبداله',
+  'How it should answer — its whole system prompt': 'كيف يجيب — نصّ تعليماته كاملًا',
+  'Restore the default prompt': 'استعادة النصّ الافتراضي', 'Talk to it on the floor': 'كلّمه في الساحة',
+  'Mention': 'أشر إليه بـ', 'in any channel, or open a direct message.': 'في أي قناة، أو افتح محادثة مباشرة.',
+  'Run': 'التشغيل', 'Cost': 'الكلفة', 'When': 'متى', 'If it stopped': 'إن توقّف',
+  'Hired — mention it on the floor.': 'عُيِّن — أشر إليه في الساحة.',
+  'Saved. It still needs a DeepSeek key.': 'حُفظ. لا يزال يحتاج مفتاح DeepSeek.',
+  'This employee answers anything, in any language, with no output schema — its reply is the text itself. It still passes the audit chain and the budget, it holds no gateway tools, and the sensitivity router keeps customer and restricted content away from DeepSeek, which is declared without a DPA and without a no-training guarantee. Treat what you type to it as leaving the building.':
+    'هذا الموظف يجيب على أي شيء وبأي لغة، بلا قالب إخراج — وردّه هو النصّ نفسه. ومع ذلك يمرّ بسلسلة التدقيق وبالميزانية، ولا يملك أي أداة تنفيذ، وموجّه الحساسية يمنع بيانات العملاء والمقيَّدة من الوصول إلى DeepSeek المُعلَن بلا اتفاقية حماية بيانات وبلا ضمان عدم التدريب. اعتبر ما تكتبه له خارجًا من المبنى.',
+
   'AI core': 'النواة الذكية', 'Enterprise core': 'نواة المؤسسة', 'joined to': 'مرتبط بـ', 'TUNNELS': 'الأنفاق',
   'Operations': 'التشغيل', 'Stock, work orders, vehicles, rooms, and the desk you call when something breaks.': 'المخزون وأوامر العمل والمركبات والقاعات، والمكتب الذي تتصل به حين يتعطّل شيء.',
   // أبواب نواة المؤسسة

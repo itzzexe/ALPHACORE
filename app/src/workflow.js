@@ -139,6 +139,24 @@ function declinedReason(text) {
   return sentence.slice(0, 300);
 }
 
+/**
+ * What an employee is told about itself when it is talking rather than working.
+ *
+ * Everything that governs what it may *do* is unchanged — the tier, the
+ * sensitivity ceiling, the gateway, the budget all sit outside this string.
+ * What is dropped is the output schema, which belongs to a deliverable and
+ * has no business in a chat window.
+ */
+function conversationSystem(agentId, spec) {
+  const row = one('SELECT name, role_group FROM agents WHERE id = ?', agentId);
+  const who = [row?.name, row?.role_group].filter(Boolean).join(', ');
+  // A free-form employee brings its own prompt and is not given a second one.
+  if (spec.freeform) return spec.system;
+  return `You are ${agentId}${who ? ` — ${who}` : ''}, an employee of ${companyName()}, talking to a colleague in a chat window.
+
+Answer as that colleague would: in the language you were written to, plainly, and only as long as the question needs. Say what you actually know; if you do not know, say that in one line. Do not restate your job title, do not open with a greeting, and do not produce a report when a sentence was asked for.`;
+}
+
 /** Execute one leased run end-to-end. */
 export async function executeRun(run) {
   const spec = getAgentSpec(run.agent_id);
@@ -169,6 +187,14 @@ export async function executeRun(run) {
     // recorded. Stamped here, once, before anything is sent, so a run that
     // fails still says what it was asked with.
     const promptV = promptVersion(run.agent_id, spec.system);
+    // A conversation is not a deliverable, and asking for both at once is how
+    // the floor filled with JSON. The role prompt ends in "Output JSON:
+    // {summary, files…}"; the chat prompt asks for {"text", "action"}. A model
+    // obeys the system prompt, answers in the role's shape, and the person in
+    // the channel reads a schema — or, when nothing parses, nothing at all.
+    // So a chat run gets the employee's identity without its output contract.
+    const chatting = String(run.task_type || '').startsWith('chat:');
+    const identity = chatting ? conversationSystem(run.agent_id, spec) : spec.system;
     const baseReq = {
       tier: spec.tier,
       agentId: run.agent_id,
@@ -176,9 +202,14 @@ export async function executeRun(run) {
       sensitivity: spec.sensitivity || 'internal',
       // The persona is appended, never substituted: character shapes how the
       // work reads, the role specification still governs what it may do.
-      system: spec.system + personaPrompt(run.agent_id),
+      system: identity + personaPrompt(run.agent_id),
       prompt,
       runId: run.id,
+      // An employee may be pinned to one provider — the consultant is, because
+      // the point of it is the key the owner pasted rather than whichever tier
+      // chain is cheapest today. The pin is still filtered by availability and
+      // by the sensitivity ceiling; it can narrow the chain, never widen it.
+      chainOverride: Array.isArray(spec.chain) && spec.chain.length ? spec.chain : null,
     };
     let result;
     let forceHumanReason = null;
@@ -204,7 +235,17 @@ export async function executeRun(run) {
     const floor = spec.confidenceFloor ?? 0;
     const confidence = parsed?.confidence;
 
-    if (parsed === null) {
+    // A free-form employee has no schema to fail. Prose is its whole output,
+    // so "no parseable JSON" is the expected shape rather than a fault, and
+    // stopping it at the human gate would mean the consultant's every answer
+    // waited for somebody to release it.
+    if (spec.freeform) {
+      setState(run.id, 'done', {
+        output: { ...output, freeform: true }, flags: result.flags,
+        provider: result.provider, model: result.model, family: result.family, promptVersion: promptV,
+      });
+      audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.done', subjectType: 'run', subjectId: run.id, payload: { costUsd: result.costUsd, provider: result.provider, model: result.model, freeform: true } });
+    } else if (parsed === null) {
       // Two very different things produce unparseable output, and calling both
       // "schema validation" hid the important one: an employee that declined
       // the work and said why. A refusal is an answer, not a malformed reply,

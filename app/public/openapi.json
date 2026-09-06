@@ -24401,6 +24401,100 @@
         ]
       }
     },
+    "/api/oracle": {
+      "get": {
+        "summary": "GET /api/oracle",
+        "tags": [
+          "oracle"
+        ],
+        "description": "Requires the `settings.manage` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `settings.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "POST /api/oracle",
+        "tags": [
+          "oracle"
+        ],
+        "description": "Requires the `settings.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `settings.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
     "/api/intel": {
       "get": {
         "summary": "GET /api/intel",

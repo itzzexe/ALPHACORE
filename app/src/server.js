@@ -55,6 +55,7 @@ import { seedMarketingTeam, seedMarketingOps, syncMarketing } from './marketing.
 // systems that keep all of it honest.
 import { seedConnectors, callConnector } from './connectors/index.js';
 import { seedBrowserConnector } from './browser.js';
+import { seedOracle } from './oracle.js';
 import { seedBridge } from './core2/bridge.js';
 import { contractExpirySweep } from './core2/procure.js';
 import { certificateExpirySweep } from './core2/talent.js';
@@ -113,6 +114,10 @@ const VERSION = JSON.parse(
 import { handleApi } from './api.js';
 
 seedAgents();
+// The consultant is hired (or left paused) from its settings, so an install
+// that switched it on keeps it across restarts and one that never did has an
+// employee sitting quietly in the roster rather than a missing route.
+seedOracle();
 seedRituals();
 seedVendors();
 seedPeople();

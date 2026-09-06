@@ -771,6 +771,12 @@ export async function renderUsers() {
 }
 export async function renderSettings() {
   const s = await api('/api/settings');
+  // The consultant's own panel. Degrades to an empty shape rather than losing
+  // the whole page on an install that predates the endpoint.
+  const o = await api('/api/oracle').catch(() => ({
+    id: 'AGT-ORACLE-001', name: 'The Consultant', enabled: false, model: '', models: [], persona: '',
+    keyConfigured: false, keyTail: null, ready: false, recent: [], note: 'This install has no consultant endpoint yet.',
+  }));
   view.innerHTML = `
   <div class="panel">
     <div class="panel-title">This company — the name every agent, report and letter uses</div>
@@ -844,6 +850,45 @@ export async function renderSettings() {
       <span id="s-probe-out" class="mono" style="color:var(--ink-mute)"></span>
     </div>
   </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title">
+      <span>${esc(t('The consultant — one employee who answers anything'))}</span>
+      <span class="chip ${o.ready ? 'chip-ok' : 'chip-warn'}">${esc(o.ready ? t('answering') : o.enabled ? t('needs a key') : t('off'))}</span>
+    </div>
+    <div class="map-legend">${esc(t(o.note))}</div>
+    <div class="form-inline" style="margin-top:12px">
+      <div><label class="fl" for="o-on">${esc(t('Hired'))}</label>
+        <select id="o-on" aria-label="${esc(t('Hired'))}">
+          <option value="false"${o.enabled ? '' : ' selected'}>${esc(t('off'))}</option>
+          <option value="true"${o.enabled ? ' selected' : ''}>${esc(t('on'))}</option>
+        </select></div>
+      <div><label class="fl" for="o-name">${esc(t('Name on the floor'))}</label><input type="text" id="o-name" value="${esc(o.name)}" style="width:190px"></div>
+      <div><label class="fl" for="o-model">${esc(t('Model'))}</label>
+        <select id="o-model" aria-label="${esc(t('Model'))}">${o.models.map((mm) => `<option value="${esc(mm)}"${mm === o.model ? ' selected' : ''}>${esc(mm)}</option>`).join('')}</select></div>
+      <div style="flex:1;min-width:220px"><label class="fl" for="o-key">${esc(t('DeepSeek API key'))}${o.keyConfigured ? ` <span class="sub">····${esc(o.keyTail)}</span>` : ''}</label>
+        <input type="password" id="o-key" placeholder="${esc(o.keyConfigured ? t('set — paste a new one to replace it') : 'sk-…')}" autocomplete="new-password" style="width:100%"></div>
+      <button class="btn btn-primary" id="o-save">${esc(t('Save'))}</button>
+    </div>
+    <div style="margin-top:10px">
+      <label class="fl" for="o-persona">${esc(t('How it should answer — its whole system prompt'))}</label>
+      <textarea id="o-persona" dir="auto" rows="6" style="width:100%;font-family:var(--font-mono);font-size:11.5px">${esc(o.persona)}</textarea>
+    </div>
+    <div class="form-inline" style="margin-top:8px">
+      <button class="btn btn-sm" id="o-reset">${esc(t('Restore the default prompt'))}</button>
+      <a class="btn btn-sm" href="#/chat">${esc(t('Talk to it on the floor'))} →</a>
+      <span class="sub">${esc(t('Mention'))} <span class="mono">@${esc(o.id)}</span> ${esc(t('in any channel, or open a direct message.'))}</span>
+    </div>
+    ${o.recent?.length ? `<div class="table-wrap" style="margin-top:12px"><table class="tbl"><thead><tr>
+      <th>${esc(t('Run'))}</th><th>${esc(t('State'))}</th><th class="num">${esc(t('Cost'))}</th><th>${esc(t('When'))}</th><th>${esc(t('If it stopped'))}</th>
+    </tr></thead><tbody>${o.recent.map((r) => `<tr>
+      <td class="mono">${esc(String(r.id).slice(0, 8))}</td>
+      <td><span class="chip ${r.state === 'done' ? 'chip-ok' : r.state === 'failed' ? 'chip-bad' : 'chip-warn'}">${esc(r.state)}</span></td>
+      <td class="num">${money(r.cost_usd || 0)}</td>
+      <td class="mono sub">${esc(String(r.created_at || '').slice(0, 16))}</td>
+      <td class="sub">${esc(r.failure_reason || '—')}</td>
+    </tr>`).join('')}</tbody></table></div>` : ''}
+  </div>
   ${currentUser?.role === 'superadmin' ? `
   <div class="panel" style="margin-top:16px;border-color:#e5533d">
     <div class="panel-title" style="color:#e5533d">Danger zone — wipe all data</div>
@@ -874,6 +919,26 @@ export async function renderSettings() {
   view.querySelectorAll('[data-sclear]').forEach((b) => b.addEventListener('click', async () => {
     try { await api('/api/settings', { method: 'POST', body: { key: b.dataset.sclear, value: null } }); renderSettings(); refreshShell(); } catch (e) { toast(e.message, true); }
   }));
+
+  // The consultant. The key is sent only when something was typed into it, so
+  // saving the persona does not wipe a key that is already there.
+  $('#o-save')?.addEventListener('click', async () => {
+    const body = {
+      enabled: $('#o-on').value === 'true',
+      name: $('#o-name').value,
+      model: $('#o-model').value || undefined,
+      persona: $('#o-persona').value,
+    };
+    if ($('#o-key').value.trim()) body.apiKey = $('#o-key').value.trim();
+    try {
+      const r = await api('/api/oracle', { method: 'POST', body });
+      toast(r.ready ? t('Hired — mention it on the floor.') : r.enabled ? t('Saved. It still needs a DeepSeek key.') : t('Saved.'));
+      renderSettings(); refreshShell();
+    } catch (e) { toast(e.message, true); }
+  });
+  $('#o-reset')?.addEventListener('click', async () => {
+    try { await api('/api/oracle', { method: 'POST', body: { persona: '' } }); renderSettings(); } catch (e) { toast(e.message, true); }
+  });
   (async () => {
     const box = $('#sec-body');
     if (!box) return;

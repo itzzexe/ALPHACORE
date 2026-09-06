@@ -239,6 +239,7 @@ import {
   connectionsFor, relationshipMatrix, sectionCatalog, DIVISIONS, connectivityAudit, flowStats,
   SURFACES, surfaceCatalog, surfaceAudit, core2Map, CORE2_DIVISIONS, CORES, mapState,
 } from './links.js';
+import { oracleSettings, setOracle, oracleActivity } from './oracle.js';
 import { ask, askRules } from './ask.js';
 import { maestroOverview, startCycle, getCycle, setEnabled as setMaestro, setMode as setMaestroMode, assessCompany, harmonyScore, remediations, boostHarmony } from './maestro.js';
 import {
@@ -1348,6 +1349,14 @@ const routes = [
   }],
 
   ['GET', /^\/api\/settings$/, () => settingsOverview()],
+
+  // --- The consultant: one employee with no output schema and no subject it
+  // will not discuss, pinned to the key the owner pastes here. ---
+  ['GET', /^\/api\/oracle$/, () => ({ ...oracleSettings(), recent: oracleActivity({}) })],
+  ['POST', /^\/api\/oracle$/, (_p, body, _u, user) => setOracle({
+    enabled: body.enabled, model: body.model, persona: body.persona, name: body.name,
+    apiKey: body.apiKey, actor: `human:${user.username}`,
+  })],
   ['POST', /^\/api\/settings$/, (_p, body) => {
     setSetting(need(body, 'key'), body.value ?? null);
     audit({ actorType: 'human', actorId: need(body, 'actor'), action: 'settings.updated', subjectType: 'settings', subjectId: body.key, payload: { cleared: !body.value } });
@@ -2316,6 +2325,9 @@ function permFor(m, path) {
   if (path === '/api/journey-template' || path.startsWith('/api/journeys')) return m === 'GET' ? 'journeys.view' : 'journeys.manage';
   if (path === '/api/perms' || path.startsWith('/api/users')) return 'users.manage';
   if (path.startsWith('/api/settings') || path === '/api/system/wipe') return 'settings.manage';
+  // Hiring the consultant and holding its key is the same authority as any
+  // other provider key; reading what it is set to is not.
+  if (path === '/api/oracle') return m === 'GET' ? 'settings.manage' : 'settings.manage';
   if (path === '/api/map/activity') return 'dashboard.view';
   if (path.startsWith('/api/chat')) return m === 'GET' ? 'chat.view' : 'chat.post';
   // Money leaving the company is its own permission, held apart from invoicing.

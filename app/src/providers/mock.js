@@ -145,6 +145,19 @@ function pick(system, prompt) {
   if (s.includes('"article"')) {
     return { title: '[mock] Why every AI action needs a human gate', article: '[mock] Draft article body — three sections: the problem with silent automation, the reservation-first budget model, and what an append-only audit chain buys you. Connect a provider key for real prose.', seoKeywords: ['ai governance', 'human in the loop', 'audit'], confidence: 0.8 };
   }
+  // Somebody talking on the floor. Mock has nothing to say, but a colleague
+  // who answers with a JSON summary is worse than one who says plainly that
+  // there is no model behind them yet — that sentence is the whole point of a
+  // demo mode, and it names the fix.
+  if (s.includes('RECENT CONVERSATION')) {
+    const ar = /[؀-ۿ]/.test(prompt || '');
+    return {
+      text: ar
+        ? '[تجريبي] لا يوجد مزوّد نماذج موصول بعد، فلا أستطيع أن أجيب فعليًا. أضف مفتاحًا في الإعدادات ← مزوّدو الذكاء (DeepSeek مثلًا) وسأردّ عليك حقيقةً.'
+        : '[mock] There is no model provider connected yet, so I cannot actually answer. Add a key in Settings → AI providers (DeepSeek, for example) and I will reply for real.',
+      action: null,
+    };
+  }
   return { summary: '[mock] Task completed in mock mode — connect a provider key for real output.', confidence: 0.85 };
 }
 

@@ -161,8 +161,10 @@
         { "provider": "anthropic", "model": "claude-opus-5" },
         { "provider": "claude-subscription", "model": "sonnet" },
         { "provider": "openai", "model": "gpt-5.1" },
-        { "provider": "google", "model": "gemini-3-pro-preview" }
+        { "provider": "google", "model": "gemini-3-pro-preview" },
+        { "provider": "deepseek", "model": "deepseek-reasoner" }
       ],
+      "_lastResort": "deepseek-reasoner sits at the end so an install whose only key is DeepSeek still has a reasoning tier rather than a company that stops. It is last for a reason: no DPA and no no-training guarantee, so the sensitivity map keeps customer_min and restricted work away from it regardless of this chain.",
       "onExhausted": "stop-human"
     },
     "T4": {

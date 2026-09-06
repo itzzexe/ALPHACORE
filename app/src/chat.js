@@ -175,8 +175,15 @@ const ACTIONS = {
 
 const roleOf = (agentId) => one('SELECT role_group FROM agents WHERE id = ?', agentId)?.role_group || '';
 /** The executive stands in for the owner, so it inherits the whole catalogue. */
-const allowedActions = (agentId) => {
+export const allowedActions = (agentId) => {
   const role = roleOf(agentId);
+  // A free-form employee is an adviser, and the trade is explicit: it may
+  // discuss anything, and it may do nothing. It answers in prose rather than
+  // in an envelope, so there is nowhere for it to put an action in the first
+  // place — this makes that a rule instead of a consequence of the format.
+  let spec = {};
+  try { spec = JSON.parse(one('SELECT spec FROM agents WHERE id = ?', agentId)?.spec || '{}'); } catch { /* defaults */ }
+  if (spec.freeform) return [];
   const all = agentId === 'AGT-EXE-001' || agentId === 'AGT-ORC-001';
   return Object.entries(ACTIONS)
     .filter(([, a]) => all || a.roles.includes(role))
@@ -362,6 +369,30 @@ function wakeAgent(agentId, { channelId, messageId, body, actor }) {
     jobs.length ? `${jobs.length} run(s) in flight (${jobs.map((j) => `${j.task_type}:${j.state}`).join(', ')})` : null,
     tasks.length ? `open tasks: ${tasks.map((t) => t.title).join('; ')}` : null,
   ].filter(Boolean).join(' · ') || 'nothing in flight right now';
+  // A free-form employee is asked for words, not for an envelope. It holds no
+  // actions, so there is nothing for the JSON to carry, and demanding one is
+  // the difference between an answer and a serialised object in the channel.
+  let spec = {};
+  try { spec = JSON.parse(one('SELECT spec FROM agents WHERE id = ?', agentId)?.spec || '{}'); } catch { /* defaults */ }
+  if (spec.freeform) {
+    const runId = enqueueRun({
+      agentId,
+      taskType: `chat:${channelId}:${messageId}`,
+      input: {
+        prompt: `You are in ${ch.kind === 'dm' ? 'a direct message' : `the #${ch.name} channel`} with ${actor.replace('human:', '')}.
+
+RECENT CONVERSATION
+${history}
+
+Answer the last message. Write the answer itself — no JSON, no envelope, no preamble.`,
+      },
+      actor: `chat:${actor}`,
+    });
+    exec(`INSERT INTO chat_messages (channel_id, parent_id, author_id, author_kind, body, run_id, state)
+          VALUES (?,?,?,'agent','…', ?, 'thinking')`, channelId, null, agentId, runId);
+    return runId;
+  }
+
   const runId = enqueueRun({
     agentId,
     taskType: `chat:${channelId}:${messageId}`,
@@ -387,6 +418,59 @@ Most messages are conversation, not instructions — leave action null unless yo
   return runId;
 }
 
+/**
+ * What a stopped run says in the channel.
+ *
+ * Two things end a run at the human gate without producing a word: the budget
+ * hard-stop and an exhausted router. Both are the company's problem rather
+ * than the employee's, and both have a fix somebody can act on — so the
+ * sentence names the cause and where to go, instead of a shrug.
+ */
+function stoppedText(run, out) {
+  const why = clean(run.failure_reason);
+  const raw = clean(out?.raw);
+  if (/router exhausted/i.test(why)) {
+    return 'I could not answer: no model provider is available to me right now. '
+      + 'Settings → AI providers: add a key (DeepSeek, Anthropic, OpenAI…) or turn on a local model, and ask me again.';
+  }
+  if (/budget/i.test(why)) {
+    return 'I could not answer: the spending cap for this period has been reached, so my run was stopped before it ran. '
+      + 'Budgets holds the caps, and Approvals holds anything waiting on a person.';
+  }
+  // Everything else that lands at the gate did produce text — a refusal, or a
+  // reply that failed its schema. The words are the answer; show them.
+  if (raw) return raw.slice(0, 1200);
+  return why ? `I stopped and this needs a person: ${why}` : 'I stopped and this needs a person.';
+}
+
+/**
+ * The reply, out of whatever the employee actually returned.
+ *
+ * A model told to answer in one shape and asked for another will pick one, so
+ * the reply may arrive as `text`, as a role field like `summary` or
+ * `markdown`, or as plain prose that never was JSON. All three are answers.
+ * What must never reach the channel is the JSON envelope itself: a person
+ * asked a colleague a question and a serialised object is not a reply.
+ */
+function readReply(parsed, out, run) {
+  const named = clean(parsed?.text || parsed?.reply || parsed?.answer || parsed?.draft
+    || parsed?.body || parsed?.summary || parsed?.markdown || parsed?.article || parsed?.note);
+  if (named) return named;
+
+  // Prose that was never JSON — the free-form employee's whole output, and
+  // what most models return when they ignore a schema they were given.
+  const raw = clean(out?.raw);
+  if (raw && !raw.startsWith('{') && !raw.startsWith('[')) return raw.slice(0, 4000);
+
+  // JSON with nothing human in it. Say so rather than pasting the object.
+  if (parsed && typeof parsed === 'object') {
+    const fields = Object.keys(parsed).slice(0, 6).join(', ');
+    return `I answered in my working format rather than in words${fields ? ` (${fields})` : ''} — the full output is on run ${run.id}.`;
+  }
+  if (raw) return raw.slice(0, 4000);
+  return `I have nothing to show for that — run ${run.id} finished without output.`;
+}
+
 // ---------- the tick: land what employees came back with ----------
 export async function syncChat() {
   for (const m of q("SELECT * FROM chat_messages WHERE state = 'thinking' AND run_id IS NOT NULL")) {
@@ -397,14 +481,24 @@ export async function syncChat() {
       exec("UPDATE chat_messages SET state='failed', body=? WHERE id = ?", `I could not answer: ${run.failure_reason || run.state}`, m.id);
       continue;
     }
+    let out = null;
     let parsed = null;
     try {
-      const o = JSON.parse(openPii(run.output) || 'null');
-      parsed = o?.parsed || (typeof o?.raw === 'string' ? JSON.parse(o.raw) : null);
+      out = JSON.parse(openPii(run.output) || 'null');
+      parsed = out?.parsed || (typeof out?.raw === 'string' ? JSON.parse(out.raw) : null);
     } catch { /* falls through to the raw text below */ }
-    const text = clean(parsed?.text || parsed?.draft || parsed?.body)
-      || clean(String(openPii(run.output) || '').slice(0, 600))
-      || '(no answer)';
+
+    // A run that stopped for a person is not an answer, and it used to arrive
+    // in the channel as "(no answer)" — the two paths that end this way, a
+    // budget hard-stop and an exhausted router, both set a reason and no
+    // output at all. Somebody reading a chat window has no way to guess that
+    // the company ran out of money or has no provider key, so it is said.
+    if (run.state === 'awaiting_human') {
+      exec("UPDATE chat_messages SET state='failed', body=? WHERE id = ?", stoppedText(run, out), m.id);
+      continue;
+    }
+
+    const text = readReply(parsed, out, run);
 
     let action = null;
     let refs = null;
