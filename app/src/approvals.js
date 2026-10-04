@@ -61,7 +61,7 @@ export const ROLE_TEMPLATES = {
     perms: ['*.view', 'runs.create', 'runs.apply', 'pipelines.create', 'pipelines.cancel',
       'incidents.manage', 'support.manage', 'tasks.manage', 'projects.manage', 'sprints.manage',
       'releases.manage', 'jobs.manage', 'assets.manage', 'notifications.read', 'rituals.complete',
-      'agents.manage', 'workstreams.manage', 'evals.run', 'lab.manage'],
+      'agents.manage', 'workstreams.manage', 'evals.run', 'lab.manage', 'crew.manage'],
   },
   finance: {
     label: 'Finance',
@@ -80,6 +80,12 @@ export const ROLE_TEMPLATES = {
     describes: 'The twenty desks of the marketing district. Can publish; cannot approve a press statement — that stays with an approver.',
     perms: ['*.view', 'marketing.manage', 'content.manage', 'design.manage', 'brand.manage',
       'social.manage', 'localization.manage', 'marketwatch.manage', 'segments.manage'],
+  },
+  engineering: {
+    label: 'Engineering',
+    describes: 'Builds and ships: the software factory, websites, deployments and monitoring. Runs commands on servers only if given servers.exec on top.',
+    perms: ['*.view', 'forge.manage', 'forge.run', 'sites.manage', 'deploys.manage', 'monitors.manage', 'servers.manage',
+      'releases.manage', 'lab.manage', 'infra.manage', 'systems.manage'],
   },
   platform: {
     label: 'Platform',

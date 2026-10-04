@@ -35,6 +35,9 @@ import { createFinReport } from './finreports.js';
 import { createBlueprint } from './systemdesign.js';
 import { createInfraPlan } from './infra.js';
 import { createJourney } from './journey.js';
+import { planWork } from './crew.js';
+import { requestChange } from './forge.js';
+import { createCheck } from './monitor.js';
 import { openPii } from './erasure.js';
 
 const ACTOR = 'system:maestro';
@@ -120,6 +123,23 @@ const ACTIONS = {
     describe: 'Plan infrastructure for a design or product. params: {name, section, blueprintId}',
     key: (p) => `${p.name}:${p.section || 'full'}`,
     run: (p) => { const i = createInfraPlan({ name: p.name, section: p.section || 'full', blueprintId: p.blueprintId || null, spec: p.spec || {}, actor: ACTOR }); return `infra plan #${i.id}`; },
+  },
+  // Build and run, and the crew. Each is a request that ends at a person:
+  // a plan waits to be dispatched, a change waits to be applied.
+  'crew.plan': {
+    describe: 'Draft a work plan for the human team toward a goal; a person dispatches it. params: {goal, horizonDays}',
+    key: (p) => String(p.goal || '').slice(0, 60),
+    run: (p) => { const plan = planWork({ goal: p.goal, horizonDays: p.horizonDays || 7, actor: ACTOR }); return `crew plan #${plan.id} drafting`; },
+  },
+  'forge.change': {
+    describe: 'Ask an AI engineer for a change to a factory project; a person applies it. params: {project (slug), prompt}',
+    key: (p) => `${p.project}:${String(p.prompt || '').slice(0, 40)}`,
+    run: (p) => { const c = requestChange({ projectId: p.project, prompt: p.prompt, actor: ACTOR }); return `change #${c.id} for ${p.project}`; },
+  },
+  'monitor.watch': {
+    describe: 'Start watching a URL for uptime. params: {url, name}',
+    key: (p) => String(p.url || ''),
+    run: (p) => { const c = createCheck({ name: p.name || p.url, kind: 'http', target: p.url, actor: ACTOR }); return `check #${c.id} watching ${p.url}`; },
   },
   'journey.launch': {
     describe: 'Launch a company journey across all departments. params: {title, autopilot}',

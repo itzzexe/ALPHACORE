@@ -5,14 +5,10 @@
 <!-- viewport-fit=cover lets the page paint under the notch and the home bar;
      the layout pays that back with env(safe-area-inset-*) where it matters. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>AlphaCore — Operations Console</title>
-
-<!-- Installed on a phone, this should look like an application and not like a
-     browser tab wearing a costume: no address bar, the right status-bar colour
-     in both themes, and a real icon. -->
+<title>AlphaCore</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#f2f0ea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#16150f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#edeff6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0f1f" media="(prefers-color-scheme: dark)">
 <meta name="application-name" content="AlphaCore">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,96 +16,120 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%2314100c'/><polygon points='50,20 78,50 50,80 22,50' fill='%23e0714f'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23141833'/><path d='M16 5 27 16 16 27 5 16z' fill='%238d8eff'/><circle cx='16' cy='16' r='3.4' fill='%23ffb547'/></svg>">
+<!-- The theme is decided before the first paint, so a night-time visit never
+     flashes white: a stored choice wins, otherwise the operating system's. -->
+<script>
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('alphacore-theme'); } catch (e) { /* private window */ }
+    if (t !== 'light' && t !== 'dark') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+    try { if (localStorage.getItem('alphacore-side') === 'collapsed') document.documentElement.classList.add('side-collapsed'); } catch (e) { /* ignore */ }
+  })();
+</script>
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/ui.css">
 </head>
 <body>
-<!-- The first thing focus lands on. Visible only when focused, because it is
-     for people who are already tabbing — but it must be first in the DOM or it
-     is not a skip link, it is a link that comes after the thing it skips. -->
 <a class="skip-link" href="#view">Skip to the page</a>
-<div class="app" id="app">
-  <!-- Icon rail: one button per division. The 76 departments live one click
-       deeper, so the shell stays quiet until you ask it for something. -->
-  <aside class="rail" id="rail" aria-label="Divisions">
-    <a class="rail-brand" href="#/" title="AlphaCore">◆</a>
-    <!-- Which galaxy the rail below is showing. Hidden entirely when only one
-         of them has anything in it. -->
-    <div class="rail-cores" id="rail-cores" role="group" aria-label="Which core" hidden></div>
-    <div id="rail-items"></div>
-    <div class="rail-spacer"></div>
-    <button class="rail-btn" id="rail-search" type="button" aria-label="Search">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <span class="rail-tip" data-i18n="Search  Ctrl+K">Search · Ctrl+K</span>
-    </button>
+<div class="sx-app" id="app">
+  <!-- The sidebar. Every department the catalogue declares appears here,
+       grouped by what somebody is trying to do and by which core it lives in. -->
+  <aside class="sx-side" id="side" aria-label="Navigation">
+    <div class="sx-brand">
+      <a href="#/" class="sx-brand-link" aria-label="AlphaCore — home" style="display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit;min-width:0">
+        <svg class="sx-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <rect width="32" height="32" rx="8" fill="var(--sx-mark)"/>
+          <path d="M16 5 27 16 16 27 5 16z" fill="var(--sx-ai)"/>
+          <circle cx="16" cy="16" r="3.4" fill="var(--sx-human-bright)"/>
+        </svg>
+        <span class="sx-word"><b>ALPHACORE</b><small id="sx-company" data-i18n="The company that runs itself">The company that runs itself</small></span>
+      </a>
+      <button class="sx-collapse" id="side-collapse" type="button" aria-label="Collapse the sidebar" title="Collapse">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+    <nav class="sx-nav" id="sx-nav" aria-label="Departments"></nav>
+    <div class="sx-foot">
+      <button class="sx-who" id="who-chip" type="button" aria-label="Your account">
+        <span class="avatar" id="who-avatar">—</span>
+        <span class="who-txt"><span class="who-name" id="who-name">—</span><span class="who-role" id="who-role"></span></span>
+      </button>
+      <button class="sx-tool" id="lang-toggle" type="button" title="العربية / English">ع</button>
+      <button class="sx-tool" id="theme-toggle" type="button" title="Day / night" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+      </button>
+    </div>
   </aside>
+  <div class="sx-scrim" id="nav-scrim"></div>
 
-  <nav class="flyout" id="flyout" hidden aria-label="Departments"></nav>
-
-  <main class="main">
-    <header class="topbar">
-      <h1 id="page-title">Overview</h1>
-      <button class="top-search" id="open-palette" type="button">
-        <svg width="14" height="14" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <span data-i18n="Search departments, actions…">Search departments, actions…</span>
+  <main class="sx-main">
+    <header class="sx-top">
+      <button class="sx-tool sx-burger" id="tab-nav" type="button" aria-label="Menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="sx-title">
+        <div class="sx-crumb" id="sx-crumb"></div>
+        <h1 id="page-title">Home</h1>
+      </div>
+      <button class="sx-cmd" id="open-palette" type="button" aria-label="Search or ask">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span data-i18n="Jump anywhere, or ask the company…">Jump anywhere, or ask the company…</span>
         <kbd>Ctrl K</kbd>
       </button>
-      <div class="top-right">
-        <!-- Everything stopped, waiting for a person. It was on the phone's tab
-             bar and nowhere else, which meant the one number the whole design
-             is about was invisible on the screen most people use. -->
-        <a id="waiting-chip" class="chip chip-warn waiting-chip" href="#/s/approvals" title="Waiting for a person to decide" hidden></a>
-        <span id="poll-chip" class="chip chip-warn" title="This page refreshes itself on a timer. It is holding off while you type, read, select text, or watch something play — scroll back to the bottom and it resumes." hidden>✎ auto-refresh paused</span>
+      <div class="sx-chips">
+        <a id="waiting-chip" class="chip chip-warn" href="#/approvals" hidden></a>
+        <span id="poll-chip" class="chip chip-warn" title="This page refreshes itself. It holds off while you type, read or select — scroll back to the top or bottom and it resumes." hidden>✎ <span data-i18n="auto-refresh paused">auto-refresh paused</span></span>
         <span id="prod-chip" class="chip chip-bad" hidden>PRODUCTION</span>
         <span id="chain-chip" class="chip chip-dim" title="Audit hash-chain integrity">chain —</span>
-        <button class="icon-btn wide" id="lang-toggle" type="button" title="العربية / English">ع</button>
-        <button class="icon-btn" id="theme-toggle" type="button" title="Day / night" aria-pressed="false">◐</button>
-        <button class="who-chip" id="who-chip" type="button" title="Sign out" aria-label="Signed in — sign out">
-          <span class="avatar" id="who-avatar">—</span>
-          <span>
-            <span class="who-name" id="who-name">—</span><br>
-            <span class="who-role" id="who-role"></span>
-          </span>
-        </button>
       </div>
     </header>
+
+    <!-- The duty bar: what the machines are doing, and what is waiting on a person. -->
+    <div class="sx-duty" id="sx-duty" aria-live="off">
+      <a class="lane lane-ai" id="lane-ai" href="#/runs">
+        <span class="lane-tag" data-i18n="Machines">Machines</span>
+        <span class="lane-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="lane-txt" id="lane-ai-txt">—</span>
+      </a>
+      <a class="lane lane-people calm" id="lane-people" href="#/approvals">
+        <span class="lane-tag" data-i18n="People">People</span>
+        <span class="lane-txt" id="lane-people-txt">—</span>
+        <span class="lane-go" id="lane-people-go"></span>
+      </a>
+    </div>
+
     <section id="view" class="view" tabindex="-1"></section>
-    <!-- Announced politely: these interrupt nothing, they queue behind
-         whatever is being read. -->
     <div id="toast" role="status" aria-live="polite" aria-atomic="false"></div>
   </main>
 
-  <!-- Phone navigation. The rail and the flyout are the wrong shape for a
-       thumb, so on a small screen they slide in as a drawer and this bar takes
-       over: four targets, all reachable without moving your grip. It is
-       display:none above the breakpoint, so nothing here costs a desktop
-       anything. -->
-  <div class="nav-scrim" id="nav-scrim" hidden></div>
-  <nav class="tabbar" id="tabbar" aria-label="Main">
-    <a class="tab" href="#/" data-tab="home">
+  <!-- Phone navigation: four targets within reach of a thumb. -->
+  <nav class="sx-tabbar" id="tabbar" aria-label="Main">
+    <a class="sx-tab" href="#/" data-tab="home">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
-      <span data-i18n="Overview">Overview</span>
+      <span data-i18n="Home">Home</span>
     </a>
-    <button class="tab" type="button" id="tab-nav">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      <span data-i18n="Departments">Departments</span>
-      <span class="tab-dot" id="tab-dot"></span>
-    </button>
-    <button class="tab" type="button" id="tab-search">
+    <a class="sx-tab" href="#/approvals" data-tab="approvals">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 4.5h14v15l-7-3.2-7 3.2z"/><path d="M9 10.2l2.2 2.2 4-4.2"/></svg>
+      <span data-i18n="Waiting">Waiting</span>
+      <span class="sx-badge" id="tab-dot"></span>
+    </a>
+    <button class="sx-tab" type="button" id="tab-search">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <span data-i18n="Search">Search</span>
     </button>
-    <button class="tab" type="button" id="tab-who">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>
-      <span id="tab-who-label" data-i18n="Account">Account</span>
+    <button class="sx-tab" type="button" id="tab-menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span data-i18n="Menu">Menu</span>
     </button>
   </nav>
 </div>
 
-<!-- Command palette: every department and every quick action, one keystroke away -->
+<!-- Command palette: every department, every quick action, and a way to ask. -->
 <div id="palette" hidden>
   <div class="pal-box" role="dialog" aria-modal="true" aria-label="Command palette">
-    <input type="text" id="pal-input" autocomplete="off" spellcheck="false" placeholder="Jump to a department…">
+    <input type="text" id="pal-input" autocomplete="off" spellcheck="false" placeholder="Go to a department, or type a question…" aria-label="Search">
     <div class="pal-list" id="pal-list"></div>
     <div class="pal-foot">
       <span>↑↓ <span data-i18n="navigate">navigate</span></span>
@@ -119,11 +139,14 @@
   </div>
 </div>
 
-<!-- The way in. Two states in one panel: sign in, and — on first run — choose a
-     password, because the generated one was only ever meant to get you here. -->
+<!-- The way in. -->
 <div id="login" hidden>
   <div class="login-panel">
-    <div class="login-mark">◆</div>
+    <svg class="login-mark" viewBox="0 0 32 32" width="48" height="48" aria-hidden="true" focusable="false">
+      <rect width="32" height="32" rx="8" fill="var(--sx-mark)"/>
+      <path d="M16 5 27 16 16 27 5 16z" fill="var(--sx-ai)"/>
+      <circle cx="16" cy="16" r="3.4" fill="var(--sx-human-bright)"/>
+    </svg>
     <h1 class="login-name">ALPHACORE</h1>
     <p class="login-tag" data-i18n="The company that runs itself">The company that runs itself</p>
 
@@ -156,8 +179,8 @@
     <div id="login-err" class="login-err" role="alert" aria-live="polite"></div>
 
     <div class="login-foot">
-      <button class="icon-btn wide" id="login-lang" type="button">العربية</button>
-      <button class="icon-btn" id="login-theme" type="button" title="Day / night">◐</button>
+      <button class="sx-tool" id="login-lang" type="button" style="width:auto;padding:0 12px">العربية</button>
+      <button class="sx-tool" id="login-theme" type="button" title="Day / night">◐</button>
     </div>
   </div>
 </div>

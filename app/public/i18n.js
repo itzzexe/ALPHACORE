@@ -10,6 +10,8 @@
 // an agent name or a model id must survive the flip untouched. Technical terms
 // (API, DPA, Sprint, RAG, SEV1) stay English on purpose — translating them
 // costs the reader more than it gains.
+import { AR_BUILD } from '/i18n-build.js';
+
 export const LANGS = { en: 'English', ar: 'العربية' };
 const KEY = 'alphacore-lang';
 
@@ -79,6 +81,8 @@ export const SECTION_AR = {
   regulatory: 'الالتزامات والتراخيص', me: 'مساحتي', erasure: 'المحو',
   files: 'الملفات', records: 'السجلات والاحتفاظ', shifts: 'الورديات والعمل الإضافي', payrules: 'قواعد الرواتب',
   custody: 'العهد', joining: 'الالتحاق والمغادرة',
+  forge: 'مصنع البرمجيات', sites: 'المواقع الإلكترونية', servers: 'الخوادم', deploys: 'النشر',
+  monitors: 'المراقبة', crew: 'قيادة القوى العاملة', atlas: 'خريطة الشركة',
 };
 
 // ---------- interface strings ----------
@@ -1104,6 +1108,9 @@ const AR = {
     'لا شيء في هذا الجدول يكتبه أحد. إنه عرض (view) فوق أدلة تكتبها البوابة عند كل نداء، فاعتمادٌ لا نداء خلفه لا يمكن أن يوجد — إذ لا يوجد جدول يُوضع فيه أصلًا. و"مُتحقَّق في بيئة اختبار" درجة لا يبلغها شيء حاليًا: لا بيئة اختبار في هذه المنصّة، وعلامةٌ هناك ستكون ادّعاءً لا قراءة.',
 };
 
+// The build-and-run surfaces carry their own block, kept in a file of its own.
+Object.assign(AR, AR_BUILD);
+
 export function t(s) {
   if (lang !== 'ar' || s == null) return s;
   return AR[String(s).trim()] ?? s;
@@ -1146,7 +1153,7 @@ export function applyLang() {
   root.dir = lang === 'ar' ? 'rtl' : 'ltr';
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   const pal = document.getElementById('pal-input');
-  if (pal) pal.placeholder = t('Jump to a department…');
+  if (pal) pal.placeholder = t('Go to a department, or type a question…');
 }
 
 export function setLang(next) {

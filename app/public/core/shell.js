@@ -1,312 +1,214 @@
-// The shell: the rail, the flyout, the phone drawer, the palette, and the
-// router that decides what fills the page.
+// The shell: the sidebar, the phone drawer, the palette, and the router that
+// decides what fills the page.
 //
 // Navigation and routing are one module because they are one loop. The router
-// asks the shell which door to light; the shell asks the router where it is.
-// Splitting them would mean two files importing each other to no benefit —
-// a cycle ES modules would in fact tolerate, and a reader would not.
+// asks the shell which item to light; the shell asks the router where it is.
 //
 // Everything drawn here comes from the catalogue the server serves, so a new
-// department appears in the rail, the flyout and the palette the moment it is
-// declared. There is no list in this file to forget to update.
+// department appears in the sidebar and the palette the moment it is declared.
+// There is no list of departments in this file to forget to update — only the
+// order the groups are shown in, and an icon for each.
 
-import { $, esc, money, view } from './dom.js';
+import { $, esc, view } from './dom.js';
 import { TOKEN_KEY, currentUser, hasPermC, navPerm } from '../state/session.js';
 import { api } from '../services/api.js';
 import { routes } from '../router/registry.js';
 import { t, lang, setLang, applyLang, translateDom, sectionName, divisionName } from '/i18n.js';
 
-// ---------- shell v2: rail + flyout + command palette ----------
-// The navigation is generated from the same catalogue the map draws, so a new
-// department appears in the rail, the flyout and the palette the moment it is
-// declared server-side — one source of truth, no list to forget to update.
-const DIV_ORDER = ['engine', 'world', 'build', 'decide', 'data', 'marketing', 'commerce', 'capital', 'operate', 'talent', 'trust', 'exec', 'govern'];
-
-/* ---------- the eight doors ----------
-   A hundred and forty departments is the right number for a company and the
-   wrong number for a menu. The rail now carries what somebody is trying to do
-   rather than who owns the answer; the divisions above are still the org chart
-   and still draw the map. Nothing was removed: every department keeps its page
-   and its route, and appears under exactly one of these — checked by the launch
-   audit, because a mapping that can rot silently will.
-
-   The order is deliberate. Ask first because it is the answer to "I don't know
-   where to look", and Approvals third because it is the one that carries a
-   number somebody is waiting on. */
-export const SURFACE_ORDER = ['ask', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'];
-const SURFACE_ICON = {
+/* ---------- the groups ----------
+   A hundred and seventy departments is the right number for a company and the
+   wrong number for a menu. The sidebar carries what somebody is trying to do;
+   every department keeps its page and its route, and sits behind exactly one
+   group — checked by the launch audit, because a mapping that can rot will. */
+export const SURFACE_ORDER = ['ask', 'ship', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'];
+export const CORE2_SURFACE_ORDER = ['e-people', 'e-time', 'e-money', 'e-records', 'e-ops', 'e-seam'];
+const ICON = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/>',
+  mywork: '<path d="M8 6h12M8 12h12M8 18h12"/><path d="M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/>',
+  waiting: '<path d="M5 4.5h14v15l-7-3.2-7 3.2z"/><path d="M9 10.2l2.2 2.2 4-4.2"/>',
   ask: '<circle cx="12" cy="12" r="8.5"/><path d="M9.4 9.3a2.7 2.7 0 015.2.9c0 1.8-2.6 2.2-2.6 4"/><path d="M12 17.2v.2"/>',
+  ship: '<path d="M8 4l-5 8 5 8"/><path d="M16 4l5 8-5 8"/><path d="M13.5 4.5l-3 15"/>',
   work: '<path d="M3.5 7.5h17v11h-17z"/><path d="M9 7.5V5.6c0-.6.5-1.1 1.1-1.1h3.8c.6 0 1.1.5 1.1 1.1v1.9"/><path d="M3.5 12h17"/>',
-  approvals: '<path d="M5 4.5h14v15l-7-3.2-7 3.2z"/><path d="M9 10.2l2.2 2.2 4-4.2"/>',
+  approvals: '<path d="M12 3v18M5 7h14"/><path d="M5 7l-2.5 6h5zM19 7l-2.5 6h5z"/>',
   company: '<path d="M4 20V6.5l7-3 7 3V20"/><path d="M8 20v-4.5h6V20"/><path d="M8 9h2M14 9h2M8 12.5h2M14 12.5h2"/>',
   intelligence: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4L20.5 20.5"/><path d="M7.6 10.5h5.8M10.5 7.6v5.8"/>',
   money: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 2-2.5.8-2.5 2 1.1 2 2.5 2 2.5-.8 2.5-2"/>',
   people: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.5a3 3 0 010 5.6M18 20c0-2.4-1-4.2-2.6-5.2"/>',
   world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.8 5.4 3.8 8.5S14.5 18.4 12 20.5c-2.5-2.1-3.8-5.4-3.8-8.5S9.5 6.1 12 3.5z"/>',
-  // The ninth button, and not a surface: the way to the full list and the map,
-  // so consolidating the menu never means losing the department you knew by name.
-  all: '<path d="M4 5h6v6H4zM14 5h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
-  // The enterprise core's five. Drawn in the same hand as the rest — a second
-  // icon language would say "a different product" when it is one company.
-  'e-people': '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.5a3 3 0 010 5.6M18 20c0-2.4-1-4.2-2.6-5.2"/>',
+  'e-people': '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>',
   'e-time': '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.4 2"/>',
   'e-money': '<path d="M3.5 7.5h17v10h-17z"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6.5 12.5h.01M17.5 12.5h.01"/>',
   'e-records': '<path d="M6 3.5h9l4 4V20a.5.5 0 01-.5.5h-12A.5.5 0 016 20z"/><path d="M14.5 3.5v4.5H19"/><path d="M9 12.5h6M9 16h4"/>',
   'e-ops': '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M3 12h4M17 12h4"/>',
   'e-seam': '<circle cx="6.5" cy="12" r="3"/><circle cx="17.5" cy="12" r="3"/><path d="M9.5 12h5"/>',
+  all: '<path d="M4 5h6v6H4zM14 5h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
+  atlas: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5"/>',
 };
+const ico = (id) => `<svg class="sx-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICON[id] || ICON.all}</svg>`;
+const CHEV = '<svg class="sx-chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>';
+
 export const SURFACE_LABEL = {
-  ask: 'Ask AlphaCore', work: 'Work', approvals: 'Approvals', company: 'Company',
+  ask: 'Ask AlphaCore', ship: 'Build & run', work: 'Work', approvals: 'Decisions & gates', company: 'Company',
   intelligence: 'Intelligence', money: 'Money', people: 'People', world: 'World',
   all: 'All departments',
   'e-people': 'People & HR', 'e-time': 'Time & attendance', 'e-money': 'Payroll & spending', 'e-ops': 'Operations',
   'e-records': 'Documents & records', 'e-seam': 'The seam',
 };
 
-/* ---------- the two cores ----------
-   §2 of the Core 2 directive keeps the galaxies apart in the data: the AI core
-   thinks and acts, the enterprise core records what is true, and nothing
-   crosses but the declared tunnels. The menu was the last place they were still
-   mixed — an HR record and a run queue under one heading because both happened
-   to involve people.
-
-   So the rail shows one core at a time and a switch sits above it. Which core
-   you are looking at follows the page you are on: opening a payroll screen from
-   a search result switches the rail rather than leaving it pointing at the
-   other galaxy. */
-export const CORE_ORDER = ['core1', 'core2'];
-export const CORE_LABEL = { core1: 'AI core', core2: 'Enterprise core' };
-export const CORE2_SURFACE_ORDER = ['e-people', 'e-time', 'e-money', 'e-records', 'e-ops', 'e-seam'];
-let openCore = localStorage.getItem('alphacore-core') || 'core1';
-const DIV_ICON = {
-  engine: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
-  build: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
-  decide: '<path d="M12 3v18M5 7h14"/><path d="M5 7l-2.5 6h5zM19 7l-2.5 6h5z"/>',
-  data: '<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/>',
-  marketing: '<path d="M4 20l3.5-9 9-3.5L20 4"/><path d="M14 6l4 4"/><circle cx="7" cy="17" r="1.6"/>',
-  commerce: '<path d="M3 7h13l-1.5 8H6z"/><circle cx="8" cy="19" r="1.4"/><circle cx="15" cy="19" r="1.4"/><path d="M3 7L2 4"/>',
-  capital: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 2-2.5.8-2.5 2 1.1 2 2.5 2 2.5-.8 2.5-2"/>',
-  operate: '<path d="M3 12h4l2.5 6 5-14 2.5 8h4"/>',
-  talent: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.5a3 3 0 010 5.6M18 20c0-2.4-1-4.2-2.6-5.2"/>',
-  trust: '<path d="M12 3l7.5 3v6c0 4.4-3 8.2-7.5 9.5C7.5 20.2 4.5 16.4 4.5 12V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
-  exec: '<path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/>',
-  govern: '<path d="M12 3l8 4v5c0 4.5-3.3 8.4-8 9.5-4.7-1.1-8-5-8-9.5V7z"/><path d="M12 8v5M12 15.5v.5"/>',
-  // A globe with a door in it: everything that reaches past the front door.
-  world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.8 5.4 3.8 8.5S14.5 18.4 12 20.5c-2.5-2.1-3.8-5.4-3.8-8.5S9.5 6.1 12 3.5z"/>',
-};
 export let CATALOG = { sections: [], divisions: [], surfaces: [] };
-let openDiv = null;
-function railBtn(id, label, count = '') {
-  return `<button class="rail-btn" type="button" data-div="${id}" aria-label="${esc(label)}">
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">${SURFACE_ICON[id] || DIV_ICON[id] || DIV_ICON.govern}</svg>
-    <span class="rail-dot">${count || ''}</span>
-    <span class="rail-tip">${esc(label)}</span>
-  </button>`;
-}
 export const routeOf = (href) => String(href || '').replace(/^#\//, '').split('/')[0];
 const visibleSections = () => CATALOG.sections.filter((s) => {
   const perm = navPerm[routeOf(s.href)];
   return !perm || hasPermC(perm);
 });
-/** Which door a department sits behind. Read from the server, never guessed. */
 let SURFACE_OF = new Map();
 function indexSurfaces() {
   SURFACE_OF = new Map();
-  for (const s of CATALOG.surfaces || []) {
-    for (const d of s.departments || []) SURFACE_OF.set(d.id, s.id);
-  }
+  for (const s of CATALOG.surfaces || []) for (const d of s.departments || []) SURFACE_OF.set(d.id, s.id);
 }
 const surfaceOfSection = (id) => SURFACE_OF.get(id) || null;
-/**
- * Point the rail at the core the current page belongs to.
- *
- * Without this, opening a payroll screen from a search result leaves the menu
- * showing the other galaxy — and the person concludes the page they are looking
- * at does not exist in the navigation.
- */
-function followCore(sectionId) {
-  const surface = surfaceOfSection(sectionId);
-  if (!surface) return false;
-  const core = coreOfSurface(surface);
-  if (core === openCore) return false;
-  openCore = core;
-  localStorage.setItem('alphacore-core', core);
-  return true;
-}
 const sectionsIn = (surfaceId) => visibleSections().filter((s) => surfaceOfSection(s.id) === surfaceId);
-/** Which core a surface belongs to, read from the server rather than guessed. */
-const coreOfSurface = (id) => (CATALOG.surfaces || []).find((x) => x.id === id)?.core || 'core1';
-const surfacesOfCore = (core) => (core === 'core2' ? CORE2_SURFACE_ORDER : SURFACE_ORDER);
 
-function buildCoreSwitch() {
-  const host = $('#rail-cores');
-  if (!host) return;
-  // The index has to exist before anything can ask what is behind a surface.
-  // Built here as well as in buildRail because this runs first, and reading an
-  // empty index made every core look empty — so the switch hid itself.
-  indexSurfaces();
-  // Only offered when there is something behind both. A company that has not
-  // switched the enterprise core on should not be asked to choose between two
-  // things when it has one.
-  const live = CORE_ORDER.filter((c) => surfacesOfCore(c).some((id) => sectionsIn(id).length));
-  if (live.length < 2) { host.hidden = true; return; }
-  host.hidden = false;
-  host.innerHTML = live.map((c) => `<button class="core-btn${c === openCore ? ' on' : ''}" type="button"
-      data-core="${c}" aria-pressed="${c === openCore}">${esc(t(CORE_LABEL[c]))}</button>`).join('');
-  host.querySelectorAll('[data-core]').forEach((b) => b.addEventListener('click', () => {
-    openCore = b.dataset.core;
-    localStorage.setItem('alphacore-core', openCore);
-    openDiv = null;
-    buildCoreSwitch();
-    buildRail();
-    renderFlyout();
-  }));
+/* ---------- which groups are open ----------
+   Remembered per browser. The group holding the page you are on always opens,
+   so following a link never lands you somewhere the menu does not show. */
+const OPEN_KEY = 'alphacore-open-groups';
+const readOpen = () => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '["ship"]')); } catch { return new Set(['ship']); } };
+let openGroups = readOpen();
+const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openGroups])); } catch { /* private window */ } };
+
+function groupHtml(id) {
+  const list = sectionsIn(id);
+  if (!list.length) return '';
+  const label = t(SURFACE_LABEL[id] || id);
+  return `<details class="sx-group" data-group="${id}" ${openGroups.has(id) ? 'open' : ''}>
+    <summary data-div="${id}" title="${esc(label)}">${ico(id)}<span class="sx-label">${esc(label)}</span><span class="sx-badge rail-dot"></span>${CHEV}</summary>
+    <div class="sx-sub">
+      ${list.map((s) => `<a href="${s.href}" data-route="${routeOf(s.href)}"><span>${esc(sectionName(s.id, s.label))}</span><span class="n">${s.count ?? ''}</span></a>`).join('')}
+      <a class="sx-all" href="#/s/${id}"><span>${esc(t('Overview of this group'))}</span></a>
+    </div>
+  </details>`;
 }
 
-function buildRail() {
-  const host = $('#rail-items');
+function buildNav() {
+  const host = $('#sx-nav');
   if (!host) return;
   indexSurfaces();
-  // A door with nothing behind it that this person may see is not shown —
-  // the permission filter has always worked that way and still does.
-  const shown = surfacesOfCore(openCore).filter((id) => sectionsIn(id).length);
-  host.innerHTML = shown.map((id) => railBtn(id, t(SURFACE_LABEL[id] || id))).join('')
-    + railBtn('all', t(SURFACE_LABEL.all));
-  host.querySelectorAll('[data-div]').forEach((b) => b.addEventListener('click', () => {
-    // "All departments" is a page, not a drawer: it is where the full list and
-    // the map live, so nothing is only reachable by remembering a URL.
-    if (b.dataset.div === 'all') { openDiv = null; renderFlyout(); location.hash = '#/departments'; return; }
-    toggleDiv(b.dataset.div);
+  const item = (href, id, label, badge = '', extra = '') => `<a class="sx-item" href="${href}" data-nav="${id}" ${extra} title="${esc(label)}">${ico(id)}<span class="sx-label">${esc(label)}</span>${badge}</a>`;
+  const core1 = SURFACE_ORDER.filter((id) => id !== 'ask').map(groupHtml).join('');
+  const core2 = CORE2_SURFACE_ORDER.map(groupHtml).join('');
+  host.innerHTML = `
+    ${item('#/', 'home', t('Home'))}
+    ${item('#/approvals', 'waiting', t('Waiting on you'), '<span class="sx-badge" id="nav-waiting"></span>', 'data-div="approvals-top"')}
+    ${item('#/ask', 'ask', t('Ask the company'))}
+    ${item('#/mywork', 'mywork', t('My work'), '<span class="sx-badge ai" id="nav-mywork"></span>')}
+    ${core1 ? `<div class="sx-sec"><span>${esc(t('AI core'))}</span></div>${core1}` : ''}
+    ${core2 ? `<div class="sx-sec enterprise"><span>${esc(t('Enterprise core'))}</span></div>${core2}` : ''}
+    <div class="sx-sec"><span>${esc(t('Everything'))}</span></div>
+    ${item('#/departments', 'all', t('All departments'))}
+    ${item('#/atlas', 'atlas', t('Company map'))}`;
+  host.querySelectorAll('details.sx-group').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) openGroups.add(d.dataset.group); else openGroups.delete(d.dataset.group);
+    saveOpen();
   }));
-  markActiveNav();
-}
-function toggleDiv(id) {
-  openDiv = openDiv === id ? null : id;
-  renderFlyout();
-}
-function renderFlyout() {
-  const fly = $('#flyout');
-  const app = $('#app');
-  if (!fly) return;
-  if (!openDiv) { fly.hidden = true; app.classList.remove('nav-open'); markActiveNav(); return; }
-  const meta = (CATALOG.surfaces || []).find((x) => x.id === openDiv);
-  const list = sectionsIn(openDiv);
-  fly.innerHTML = `<a class="flyout-head" href="#/s/${openDiv}">
-      <span>${esc(t(SURFACE_LABEL[openDiv] || openDiv))}</span><span class="fh-count">${list.length}</span></a>
-    ${meta?.hint ? `<div class="flyout-hint">${esc(t(meta.hint))}</div>` : ''}
-    ${list.map((s) => `<a href="${s.href}" data-route="${routeOf(s.href)}">
-      <span>${esc(sectionName(s.id, s.label))}</span><span class="fly-n">${s.count}</span></a>`).join('')}
-    <a href="#/departments" class="fly-all"><span>${esc(t('All departments'))}</span><span class="fly-n">${visibleSections().length}</span></a>`;
-  fly.hidden = false;
-  app.classList.add('nav-open');
   markActiveNav();
 }
 
 /* ---------- the phone ----------
-   A rail you hover and a flyout that lives beside it are the wrong shape for a
-   thumb. Below the breakpoint the same two elements slide in as a drawer, and
-   the bar at the bottom of the screen becomes the way around: home, the
-   departments, search, and who you are. Nothing here runs on a desktop except
-   the media query that turns it off. */
-const onPhone = () => window.matchMedia('(max-width: 860px)').matches;
-function openMobileNav() {
+   Below the breakpoint the sidebar slides in as a drawer and a bar at the
+   bottom of the screen takes over: home, what is waiting, search, the menu. */
+const onPhone = () => window.matchMedia('(max-width: 900px)').matches;
+function openDrawer() {
+  $('#app').classList.add('drawer');
   $('#tab-nav')?.setAttribute('aria-expanded', 'true');
-  // A drawer that opens onto a bare strip of icons is a drawer that has to be
-  // used twice. If no division is chosen it opens on the one you are already
-  // standing in, so the list is there the moment it slides in.
-  if (!openDiv) {
-    const here = CATALOG.sections?.find((s) => routeOf(s.href) === currentRoute().key);
-    const first = SURFACE_ORDER.find((id) => sectionsIn(id).length);
-    openDiv = surfaceOfSection(here?.id) || first || null;
-    if (openDiv) renderFlyout();
-  }
-  $('#app').classList.add('mnav');
-  $('#nav-scrim').classList.add('on');
-  $('#tab-nav')?.classList.add('on');
   document.body.style.overflow = 'hidden';
 }
-function closeMobileNav() {
+function closeDrawer() {
+  $('#app').classList.remove('drawer');
   $('#tab-nav')?.setAttribute('aria-expanded', 'false');
-  $('#app').classList.remove('mnav');
-  $('#nav-scrim').classList.remove('on');
-  $('#tab-nav')?.classList.remove('on');
   document.body.style.overflow = '';
 }
 function initMobileNav() {
-  $('#nav-scrim')?.addEventListener('click', closeMobileNav);
-  $('#tab-nav')?.addEventListener('click', () => {
-    if ($('#app').classList.contains('mnav')) closeMobileNav();
-    else openMobileNav();
-  });
-  $('#tab-search')?.addEventListener('click', () => { closeMobileNav(); openPalette(); });
-  // The fourth tab is the account: who you are, and the way out.
-  $('#tab-who')?.addEventListener('click', () => { closeMobileNav(); $('#who-chip')?.click(); });
-  $('[data-tab="home"]')?.addEventListener('click', closeMobileNav);
-  // Escape closes the drawer before anything else gets to see it.
+  $('#nav-scrim')?.addEventListener('click', closeDrawer);
+  const toggle = () => ($('#app').classList.contains('drawer') ? closeDrawer() : openDrawer());
+  $('#tab-nav')?.addEventListener('click', toggle);
+  $('#tab-menu')?.addEventListener('click', toggle);
+  $('#tab-search')?.addEventListener('click', () => { closeDrawer(); openPalette(); });
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && $('#app').classList.contains('mnav')) { closeMobileNav(); e.stopPropagation(); }
+    if (e.key === 'Escape' && $('#app').classList.contains('drawer')) { closeDrawer(); e.stopPropagation(); }
   }, true);
-  // Rotating a phone to landscape can cross the breakpoint; a drawer left open
-  // there would be a panel floating over a layout that no longer expects it.
-  window.matchMedia('(max-width: 860px)').addEventListener('change', closeMobileNav);
+  window.matchMedia('(max-width: 900px)').addEventListener('change', closeDrawer);
 }
-/** Mirror the shell's state onto the bar: which tab is lit, and what is waiting. */
-function paintTabbar() {
-  const bar = $('#tabbar');
-  if (!bar) return;
-  const home = currentRoute().key === 'home';
-  $('[data-tab="home"]')?.classList.toggle('on', home);
-  const label = $('#tab-who-label');
-  if (label && currentUser) label.textContent = currentUser.displayName || currentUser.username;
-  // One number, the same one the rail carries: everything stopped for a person.
-  const waiting = document.querySelector('[data-div="approvals"] .rail-dot')?.textContent || '';
-  const dot = $('#tab-dot');
-  if (dot) dot.textContent = $('#app').classList.contains('mnav') ? '' : waiting;
+
+/* ---------- collapsing ----------
+   On a desktop the sidebar folds to its icons and remembers that it did. */
+function applyCollapsed(on) {
+  $('#app')?.classList.toggle('collapsed', on);
+  document.documentElement.classList.toggle('side-collapsed', on);
+  const b = $('#side-collapse');
+  if (b) { b.setAttribute('aria-label', t(on ? 'Expand the sidebar' : 'Collapse the sidebar')); b.title = t(on ? 'Expand' : 'Collapse'); }
 }
+
 function markActiveNav() {
-  const here = currentRoute().key;
-  document.querySelectorAll('#flyout a').forEach((a) => {
-    const active = a.dataset.route === here;
-    a.classList.toggle('active', active);
-    // Colour alone says nothing to a screen reader, and nothing at all to
-    // somebody who cannot distinguish these two greys.
-    if (active) a.setAttribute('aria-current', 'page');
-    else a.removeAttribute('aria-current');
+  const { key } = currentRoute();
+  const navKey = { '': 'home', approvals: 'waiting', ask: 'ask', mywork: 'mywork', departments: 'all', atlas: 'atlas' }[key];
+  document.querySelectorAll('#sx-nav .sx-item').forEach((a) => {
+    const on = a.dataset.nav === navKey;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  const sec = CATALOG.sections.find((s) => routeOf(s.href) === here);
-  // Standing on a page belonging to the other core moves the rail to it, and
-  // rebuilds it — otherwise the menu shows one galaxy while the page shows the
-  // other, and the department you are reading looks like it does not exist.
-  if (sec && followCore(sec.id)) { buildCoreSwitch(); buildRail(); }
-  // The lit door is the one you are standing behind, or the one you opened.
-  // On the full-list page it is the ninth button, which is not a surface.
-  const litSurface = here === 'departments' ? 'all' : (openDiv || surfaceOfSection(sec?.id));
-  document.querySelectorAll('#rail-items .rail-btn').forEach((b) => {
-    b.classList.toggle('on', b.dataset.div === litSurface);
+  // Detail pages light their department: a project lights the factory.
+  const deptKey = { forgeProject: 'forge', server: 'servers', deployTarget: 'deploys', decision: 'decisions', journey: 'journeys', request: 'requests', workstream: 'workstreams', system: 'systems' }[key] || key;
+  let litGroup = null;
+  document.querySelectorAll('#sx-nav .sx-sub a[data-route]').forEach((a) => {
+    const on = a.dataset.route === deptKey && !navKey;
+    a.classList.toggle('on', on);
+    if (on) { a.setAttribute('aria-current', 'page'); litGroup = a.closest('details'); } else a.removeAttribute('aria-current');
   });
-  paintTabbar();
+  if (litGroup && !litGroup.open) litGroup.open = true;
+  document.querySelectorAll('.sx-tab[data-tab]').forEach((tab) => tab.classList.toggle('on', (tab.dataset.tab === 'home' && key === '') || (tab.dataset.tab === 'approvals' && key === 'approvals')));
 }
+
+/** The line above the title: which group and which core a page belongs to. */
+function paintCrumb(key, sec) {
+  const host = $('#sx-crumb');
+  if (!host) return;
+  const surface = sec ? surfaceOfSection(sec.id) : null;
+  const core = surface && (CATALOG.surfaces || []).find((s) => s.id === surface)?.core;
+  const parent = { forgeProject: ['#/forge', 'Software factory'], server: ['#/servers', 'Servers'], deployTarget: ['#/deploys', 'Deployments'] }[key];
+  host.innerHTML = [
+    core ? `<span>${esc(t(core === 'core2' ? 'Enterprise core' : 'AI core'))}</span>` : '',
+    surface ? `<a href="#/s/${esc(surface)}">${esc(t(SURFACE_LABEL[surface] || surface))}</a>` : '',
+    parent ? `<a href="${parent[0]}">${esc(sectionName(parent[0].slice(2), t(parent[1])))}</a>` : '',
+  ].filter(Boolean).join('<span aria-hidden="true">›</span>');
+}
+
 export async function loadCatalog() {
   try {
     const map = await api('/api/map');
-    // The edges and the enterprise projection ride along: the band above
-    // every department page and the seam on the atlas are drawn from them.
-    // `core2` is the enterprise projection (divisions with their departments
-    // resolved); the band reads it to say which side of the seam a page is on.
     CATALOG = { sections: map.sections, divisions: map.divisions, surfaces: map.surfaces || [], edges: map.edges || [], enterprise: map.core2 || map.enterprise || null };
   } catch {
     // A user without dashboard.view still needs to move around.
     const flat = Object.keys(navPerm).filter((k) => k).map((k) => ({ id: k, label: k, division: 'govern', href: `#/${k}`, count: '' }));
-    // No map means no surface mapping either, so everything lands behind one
-    // door rather than vanishing from the rail entirely.
-    CATALOG = { sections: flat, divisions: [], surfaces: [{ id: 'company', label: 'Company', departments: flat }] };
+    CATALOG = { sections: flat, divisions: [], surfaces: [{ id: 'company', core: 'core1', label: 'Company', departments: flat }] };
   }
-  buildCoreSwitch();
-  buildRail();
+  buildNav();
 }
+
 // ---------- command palette ----------
+/* Departments, a handful of actions, and — always last — "ask the company",
+   so typing a question and pressing Enter does what it says. */
 let palIndex = 0;
 let palHits = [];
+const ACTIONS = [
+  { label: 'New software project', href: '#/forge?new=1', kind: 'Create', perm: 'forge.manage' },
+  { label: 'Build a website', href: '#/sites?new=1', kind: 'Create', perm: 'sites.manage' },
+  { label: 'Add a server', href: '#/servers?new=1', kind: 'Create', perm: 'servers.manage' },
+  { label: 'Watch a site or server', href: '#/monitors?new=1', kind: 'Create', perm: 'monitors.manage' },
+  { label: 'Plan work for the team', href: '#/crew?plan=1', kind: 'Create', perm: 'crew.manage' },
+  { label: 'Everything waiting on me', href: '#/approvals', kind: 'Go' },
+  { label: 'My work', href: '#/mywork', kind: 'Go' },
+];
 function openPalette() {
   const p = $('#palette');
   p.hidden = false;
@@ -316,20 +218,30 @@ function openPalette() {
   palFilter('');
 }
 function closePalette() { $('#palette').hidden = true; }
+function go(hit) {
+  closePalette();
+  if (hit.ask) {
+    try { sessionStorage.setItem('alphacore-ask', hit.ask); } catch { /* fine */ }
+    if (location.hash === '#/ask') navigate(); else location.hash = '#/ask';
+    return;
+  }
+  location.hash = hit.href;
+}
 function palFilter(qv) {
   const q = qv.trim().toLowerCase();
-  const all = visibleSections().map((s) => ({
-    ...s, ar: sectionName(s.id, ''), div: CATALOG.divisions.find((d) => d.id === s.division),
-  }));
-  palHits = (!q ? all : all.filter((s) => `${s.label} ${s.ar} ${s.id} ${s.hint || ''}`.toLowerCase().includes(q))).slice(0, 40);
+  const depts = visibleSections().map((s) => ({ href: s.href, title: sectionName(s.id, s.label), sub: t(SURFACE_LABEL[surfaceOfSection(s.id)] || ''), hay: `${s.label} ${sectionName(s.id, '')} ${s.id} ${s.hint || ''}`.toLowerCase() }));
+  const acts = ACTIONS.filter((a) => !a.perm || hasPermC(a.perm)).map((a) => ({ href: a.href, title: t(a.label), sub: t(a.kind), hay: `${a.label} ${t(a.label)}`.toLowerCase() }));
+  const pool = [...acts, ...depts];
+  palHits = (!q ? pool : pool.filter((x) => x.hay.includes(q))).slice(0, 30);
+  if (q.length > 2) palHits.push({ ask: qv.trim(), title: `${t('Ask the company')}: “${qv.trim()}”`, sub: t('Ask') });
   palIndex = 0;
   const list = $('#pal-list');
   list.innerHTML = palHits.length ? palHits.map((s, i) => `
-    <div class="pal-item ${i === 0 ? 'sel' : ''}" data-href="${s.href}" data-i="${i}">
-      <span class="pal-title">${esc(sectionName(s.id, s.label))}</span>
-      <span class="pal-div" style="color:${s.div?.color || ''}">${esc(divisionName(s.division, s.div?.label || ''))}</span>
-    </div>`).join('') : `<div class="pal-empty">${esc(t('Nothing found'))}</div>`;
-  list.querySelectorAll('.pal-item').forEach((el) => el.addEventListener('click', () => { location.hash = el.dataset.href; closePalette(); }));
+    <div class="pal-item ${i === 0 ? 'sel' : ''} ${s.ask ? 'ask' : ''}" data-i="${i}" role="option">
+      <span class="pal-title">${esc(s.title)}</span>
+      <span class="pal-kind">${esc(s.sub || '')}</span>
+    </div>`).join('') : `<div class="pal-empty empty">${esc(t('Nothing found'))}</div>`;
+  list.querySelectorAll('.pal-item').forEach((el) => el.addEventListener('click', () => go(palHits[Number(el.dataset.i)])));
 }
 function palMove(step) {
   if (!palHits.length) return;
@@ -338,10 +250,18 @@ function palMove(step) {
   items.forEach((el, i) => el.classList.toggle('sel', i === palIndex));
   items[palIndex]?.scrollIntoView({ block: 'nearest' });
 }
+
 export function initShell() {
   initMobileNav();
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('alphacore-side') === 'collapsed'; } catch { /* default */ }
+  applyCollapsed(collapsed && !onPhone());
+  $('#side-collapse')?.addEventListener('click', () => {
+    const next = !$('#app').classList.contains('collapsed');
+    try { localStorage.setItem('alphacore-side', next ? 'collapsed' : 'open'); } catch { /* fine */ }
+    applyCollapsed(next);
+  });
   $('#open-palette')?.addEventListener('click', openPalette);
-  $('#rail-search')?.addEventListener('click', openPalette);
   $('#pal-input')?.addEventListener('input', (e) => palFilter(e.target.value));
   $('#palette')?.addEventListener('click', (e) => { if (e.target.id === 'palette') closePalette(); });
   document.addEventListener('keydown', (e) => {
@@ -350,31 +270,28 @@ export function initShell() {
     if (e.key === 'Escape') closePalette();
     else if (e.key === 'ArrowDown') { e.preventDefault(); palMove(1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); palMove(-1); }
-    else if (e.key === 'Enter') { const h = palHits[palIndex]; if (h) { location.hash = h.href; closePalette(); } }
+    else if (e.key === 'Enter') { const h = palHits[palIndex]; if (h) go(h); }
   });
 
-  // Two skins of one design: warm paper by day, the same paper after dark. The
-  // choice is explicit and remembered — the operating system is not asked,
-  // because somebody working at night on a bright machine means it, and being
-  // overruled by a setting they did not make is worse than either default.
-  // The parameter is not called `t`: that is the translation function, and
-  // shadowing it here would turn every title into a call on a string.
+  // Day and night. A stored choice wins; without one the page follows the
+  // operating system — decided in index.html before the first paint.
   const applyTheme = (skin) => {
-    if (skin === 'dark') document.documentElement.dataset.theme = 'dark';
-    else delete document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = skin;
     for (const btn of [$('#theme-toggle'), $('#login-theme')]) {
       if (!btn) continue;
-      btn.textContent = skin === 'dark' ? '◑' : '◐';
       btn.setAttribute('aria-pressed', skin === 'dark' ? 'true' : 'false');
       btn.title = skin === 'dark' ? t('Back to daylight') : t('After dark');
     }
+    document.querySelector('meta[name="theme-color"]:not([media])')?.remove();
   };
-  applyTheme(localStorage.getItem('alphacore-theme') === 'dark' ? 'dark' : 'light');
-  $('#theme-toggle')?.addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  const flipTheme = () => {
     const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('alphacore-theme', next);
+    try { localStorage.setItem('alphacore-theme', next); } catch { /* private window */ }
     applyTheme(next);
-  });
+  };
+  $('#theme-toggle')?.addEventListener('click', flipTheme);
+  $('#login-theme')?.addEventListener('click', flipTheme);
 
   const flipLang = () => {
     setLang(lang === 'ar' ? 'en' : 'ar');
@@ -382,20 +299,36 @@ export function initShell() {
   };
   $('#lang-toggle')?.addEventListener('click', flipLang);
   $('#login-lang')?.addEventListener('click', flipLang);
-  $('#login-theme')?.addEventListener('click', () => {
-    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('alphacore-theme', next);
-    applyTheme(next);
-  });
-  $('#lang-toggle') && ($('#lang-toggle').textContent = lang === 'ar' ? 'EN' : 'ع');
+  if ($('#lang-toggle')) $('#lang-toggle').textContent = lang === 'ar' ? 'EN' : 'ع';
 
-  $('#who-chip')?.addEventListener('click', async () => {
-    try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* session gone anyway */ }
-    localStorage.removeItem(TOKEN_KEY);
-    location.reload();
+  // The account button opens a small menu rather than signing out on a single
+  // click — the old behaviour lost more than one afternoon's form.
+  $('#who-chip')?.addEventListener('click', () => {
+    const existing = $('#who-menu');
+    if (existing) { existing.remove(); return; }
+    const m = document.createElement('div');
+    m.id = 'who-menu';
+    m.className = 'panel';
+    m.setAttribute('role', 'menu');
+    m.style.cssText = 'position:fixed;bottom:64px;inset-inline-start:12px;z-index:60;min-width:220px;padding:8px;display:grid;gap:2px';
+    m.innerHTML = `
+      <a class="btn btn-ghost" style="justify-content:flex-start" href="#/mywork" role="menuitem">${esc(t('My work'))}</a>
+      <a class="btn btn-ghost" style="justify-content:flex-start" href="#/me" role="menuitem">${esc(t('My workspace'))}</a>
+      <a class="btn btn-ghost" style="justify-content:flex-start" href="#/settings" role="menuitem">${esc(t('Settings'))}</a>
+      <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--sx-bad)" id="who-out" type="button" role="menuitem">${esc(t('Sign out'))}</button>`;
+    document.body.appendChild(m);
+    const close = (e) => { if (!m.contains(e.target) && e.target.closest('#who-chip') === null) { m.remove(); document.removeEventListener('click', close, true); } };
+    setTimeout(() => document.addEventListener('click', close, true));
+    m.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => m.remove()));
+    $('#who-out').addEventListener('click', async () => {
+      try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* session gone anyway */ }
+      localStorage.removeItem(TOKEN_KEY);
+      location.reload();
+    });
   });
   applyLang();
 }
+
 // ---------- router ----------
 let pollTimer = null;
 /* ---------- the eight subsystems that had an API and no way in ----------
@@ -518,9 +451,13 @@ function showPollState(paused) {
   chip.hidden = !paused;
 }
 export function currentRoute() {
-  const hash = location.hash.replace(/^#\/?/, '');
+  // A query after the route (#/forge?new=1) is for the page, not the router.
+  const hash = location.hash.replace(/^#\/?/, '').split('?')[0];
   const [seg, arg] = hash.split('/');
   if (seg === 'decisions' && arg) return { key: 'decision', arg };
+  if (seg === 'forge' && arg) return { key: 'forgeProject', arg: decodeURIComponent(arg) };
+  if (seg === 'servers' && arg) return { key: 'server', arg };
+  if (seg === 'deploys' && arg) return { key: 'deployTarget', arg };
   if (seg === 'journeys' && arg) return { key: 'journey', arg };
   if (seg === 'systems' && arg) return { key: 'system', arg: hash.split('/').slice(1).join('/') };
   if (seg === 'requests' && arg) return { key: 'request', arg };
@@ -554,8 +491,10 @@ export async function navigate() {
   if (!currentUser) return;
   const { key, arg } = currentRoute();
   const r = routes[key];
-  const sec = CATALOG.sections.find((s) => routeOf(s.href) === key);
-  $('#page-title').textContent = sec ? sectionName(sec.id, r.title) : t(r.title);
+  const deptKey = { forgeProject: 'forge', server: 'servers', deployTarget: 'deploys' }[key] || key;
+  const sec = CATALOG.sections.find((s) => routeOf(s.href) === deptKey);
+  $('#page-title').textContent = sec && deptKey === key ? sectionName(sec.id, r.title) : t(r.title);
+  paintCrumb(key, sec);
   document.title = `${$('#page-title').textContent} · AlphaCore`;
   const perm = navPerm[key];
   if (perm && !hasPermC(perm)) {
@@ -563,11 +502,11 @@ export async function navigate() {
     return;
   }
   markActiveNav();
-  closeMobileNav();
+  closeDrawer();
   // Move the reading position to the content that just replaced everything.
   // Without this a screen reader stays where it was and announces nothing,
   // which reads as "the link did not work".
-  if (document.activeElement?.closest('#flyout, #rail, #tabbar, #palette')) {
+  if (document.activeElement?.closest('#side, #tabbar, #palette')) {
     requestAnimationFrame(() => view.focus({ preventScroll: true }));
   }
   view.innerHTML = `<div class="empty">${esc(t('Loading…'))}</div>`;

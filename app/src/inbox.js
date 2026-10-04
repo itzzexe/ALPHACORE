@@ -390,6 +390,68 @@ export function pendingApprovals() {
     }));
   }
 
+  // --- build & run: what the factory, the fleet and the crew are holding ---
+  // Each table belongs to a module that may not have loaded in every process
+  // (a test imports what it needs), so a missing table is simply nothing waiting.
+  const safely = (fn) => { try { fn(); } catch { /* module not loaded here */ } };
+  safely(() => {
+    for (const c of q(`SELECT c.*, p.name AS project, p.slug FROM forge_changes c JOIN forge_projects p ON p.id = c.project_id
+                       WHERE c.state = 'proposed' ORDER BY c.id LIMIT 20`)) {
+      items.push(item({
+        kind: 'forgeChange', dept: 'forge', id: c.id,
+        title: `${c.project} — ${String(c.summary || c.prompt).split('\n')[0].slice(0, 90)}`,
+        sub: `${JSON.parse(c.files || '[]').length} file(s) proposed by ${c.agent_id}`,
+        href: `#/forge/${c.slug}`, at: c.created_at, severity: 'normal',
+        action: { method: 'POST', path: `/api/forge/changes/${c.id}/apply`, body: {} }, actionLabel: 'Apply',
+        secondary: { method: 'POST', path: `/api/forge/changes/${c.id}/reject`, body: {}, label: 'Reject' },
+      }));
+    }
+  });
+  safely(() => {
+    for (const c of q(`SELECT c.*, s.name AS server, s.environment FROM srv_commands c JOIN srv_servers s ON s.id = c.server_id
+                       WHERE c.state = 'awaiting_approval' ORDER BY c.id LIMIT 20`)) {
+      items.push(item({
+        kind: 'serverCommand', dept: 'servers', id: c.id,
+        title: `${c.server} (${c.environment}) — ${c.purpose || c.command.split('\n')[0].slice(0, 80)}`,
+        sub: `requested by ${c.requested_by} — runs on a real machine once approved`,
+        href: `#/servers/${c.server_id}`, at: c.started_at, severity: 'high',
+        action: { method: 'POST', path: `/api/servers/commands/${c.id}/decide`, body: { approve: true } }, actionLabel: 'Run it',
+        secondary: { method: 'POST', path: `/api/servers/commands/${c.id}/decide`, body: { approve: false }, label: 'Refuse' },
+      }));
+    }
+  });
+  safely(() => {
+    for (const r of q(`SELECT r.*, t.name AS target FROM dep_releases r JOIN dep_targets t ON t.id = r.target_id
+                       WHERE r.state = 'awaiting_approval' ORDER BY r.id LIMIT 20`)) {
+      items.push(item({
+        kind: 'release', dept: 'deploys', id: r.id,
+        title: `Release ${r.target} to production`, sub: `requested by ${r.requested_by}`,
+        href: '#/deploys', at: r.started_at, severity: 'high',
+        action: { method: 'POST', path: `/api/deploys/releases/${r.id}/decide`, body: { approve: true } }, actionLabel: 'Release',
+        secondary: { method: 'POST', path: `/api/deploys/releases/${r.id}/decide`, body: { approve: false }, label: 'Refuse' },
+      }));
+    }
+  });
+  safely(() => {
+    for (const p of q("SELECT * FROM crew_plans WHERE state = 'proposed' ORDER BY id LIMIT 10")) {
+      items.push(item({
+        kind: 'crewPlan', dept: 'crew', id: p.id,
+        title: `Work plan — ${p.goal.slice(0, 90)}`, sub: `${JSON.parse(p.proposal || '[]').length} assignment(s) drafted for the team`,
+        href: '#/crew', at: p.created_at, severity: 'normal',
+        action: { method: 'POST', path: `/api/crew/plans/${p.id}/dispatch`, body: {} }, actionLabel: 'Dispatch',
+        secondary: { method: 'POST', path: `/api/crew/plans/${p.id}/discard`, body: {}, label: 'Discard' },
+      }));
+    }
+    for (const a of q(`SELECT a.*, pe.display_name AS who FROM crew_assignments a JOIN hr_employee e ON e.id = a.employee_id
+                       JOIN hr_person pe ON pe.id = e.person_id WHERE a.state = 'submitted' ORDER BY a.submitted_at LIMIT 20`)) {
+      items.push(item({
+        kind: 'crewReview', dept: 'crew', id: a.id,
+        title: `${a.who} submitted "${a.title.slice(0, 80)}"`, sub: 'work is approved by a person who looked at it',
+        href: '#/crew', at: a.submitted_at, severity: 'normal',
+      }));
+    }
+  });
+
   const order = { high: 0, normal: 1, low: 2 };
   items.sort((a, b) => (order[a.severity] - order[b.severity]) || (b.ageHours - a.ageHours));
   return items;

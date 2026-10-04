@@ -121,6 +121,10 @@ export async function renderAsk() {
     </tbody></table>` : ''}
   </div>`;
 
+  // A question typed into the palette arrives here and is asked at once.
+  let pending = null;
+  try { pending = sessionStorage.getItem('alphacore-ask'); sessionStorage.removeItem('alphacore-ask'); } catch { /* fine */ }
+  if (pending) setTimeout(() => { $('#ask-q').value = pending; $('#ask-form')?.requestSubmit(); });
   $('#ask-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const q = $('#ask-q').value.trim();

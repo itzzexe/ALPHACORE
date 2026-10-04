@@ -10,7 +10,7 @@
 //
 // Nothing under /api is cached, ever. A stale run count or a cached approval
 // queue is worse than an error message — it looks like the truth.
-const VERSION = 'alphacore-v3';
+const VERSION = 'alphacore-v4';
 
 // Enough to paint the shell and reach the login screen offline.
 //
@@ -28,11 +28,13 @@ const SHELL = [
   '/',
   '/index.html',
   '/styles.css',
+  '/ui.css',
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
   '/app.js',
   '/i18n.js',
+  '/i18n-build.js',
   '/core/dom.js',
   '/core/shell.js',
   '/state/session.js',
@@ -44,6 +46,7 @@ const SHELL = [
   '/components/bits.js',
   '/components/widgets.js',
   '/components/dept-page.js',
+  '/components/ui.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -73,7 +76,8 @@ self.addEventListener('fetch', (e) => {
 
   // Live data, the websocket handshake, and the liveness probe all go straight
   // to the network. If they fail, they should fail visibly.
-  if (url.pathname.startsWith('/api/') || url.pathname === '/live' || url.pathname === '/mcp') return;
+  // A project preview is somebody else's app, served live: never cached here.
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/preview/') || url.pathname === '/live' || url.pathname === '/mcp') return;
 
   e.respondWith((async () => {
     try {

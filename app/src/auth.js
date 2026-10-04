@@ -145,6 +145,17 @@ export const PERMS = [
   'chief.view', 'chief.run',
   'observe.view', 'observe.run',
   'backups.view', 'backups.take', 'backups.restore',
+  // Build and run. Writing code, running a build tool on this machine, holding
+  // a server's key and running a command on it are four different amounts of
+  // reach, so they are four keys — a person can edit a project without being
+  // able to touch production.
+  'forge.view', 'forge.manage', 'forge.run',
+  'sites.view', 'sites.manage',
+  'servers.view', 'servers.manage', 'servers.exec',
+  'deploys.view', 'deploys.manage',
+  'monitors.view', 'monitors.manage',
+  // Directing human staff. Seeing the board is not dispatching work to people.
+  'crew.view', 'crew.manage',
   // Putting the company on record in a newspaper is its own act, separate from
   // running a campaign.
   'press.approve',

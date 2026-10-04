@@ -290,6 +290,14 @@ import {
 import { INFRA_SECTIONS, createInfraPlan, listInfraPlans, getInfraPlan, infraOverview } from './infra.js';
 import { REPORT_KINDS, createFinReport, listFinReports, getFinReport, approveFinReport, finReportsOverview, ownFinancials } from './finreports.js';
 import { listAutomations, setAutomation, nexusFeed } from './nexus.js';
+import * as forge from './forge.js';
+import * as sites from './sites.js';
+import * as servers from './servers.js';
+import * as deploys from './deploy.js';
+import * as monitors from './monitor.js';
+import * as crew from './crew.js';
+import { headquarters } from './hq.js';
+import { getSecret as vaultSecret } from './vault.js';
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -1712,6 +1720,130 @@ const routes = [
     return { __raw: { contentType: 'text/markdown; charset=utf-8', filename: `infra-plan-${id}.md`, body: p.content } };
   }],
 
+  // --- Headquarters: the one read the home page is drawn from ---
+  ['GET', /^\/api\/hq$/, (_p, _b, _u, user) => headquarters(user)],
+
+  // --- The software factory ---
+  ['GET', /^\/api\/forge$/, () => ({ overview: forge.forgeOverview(), projects: forge.listProjects() })],
+  ['POST', /^\/api\/forge$/, (_p, body) => {
+    const p = forge.createProject({ name: need(body, 'name'), kind: body.kind || 'blank', description: body.description || '', actor: need(body, 'actor') });
+    const first = String(body.prompt || '').trim() ? forge.requestChange({ projectId: p.id, prompt: body.prompt, actor: body.actor }) : null;
+    return { ...p, firstChange: first };
+  }],
+  ['POST', /^\/api\/forge\/changes\/(\d+)\/apply$/, ([id], body) => forge.applyChange(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/changes\/(\d+)\/reject$/, ([id], body) => forge.rejectChange(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/forge\/commands\/(\d+)$/, ([id]) => forge.getCommand(Number(id))],
+  ['POST', /^\/api\/forge\/commands\/(\d+)\/kill$/, ([id], body) => forge.killCommand(Number(id), { actor: need(body, 'actor') })],
+  ['GET', /^\/api\/forge\/([\w-]+)$/, ([id]) => forge.getProject(id)],
+  ['POST', /^\/api\/forge\/([\w-]+)\/settings$/, ([id], body) => forge.updateProject(forge.projectRow(id).id, {
+    name: body.name, description: body.description, repoUrl: body.repoUrl, autopilot: body.autopilot, archived: body.archived, actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/forge\/([\w-]+)\/file$/, ([id], _b, url) => forge.readProjectFile(id, url.searchParams.get('path'))],
+  ['POST', /^\/api\/forge\/([\w-]+)\/file$/, ([id], body) => forge.writeProjectFile(id, { path: need(body, 'path'), content: body.content ?? '', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/file\/delete$/, ([id], body) => forge.deleteProjectFile(id, { path: need(body, 'path'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/ask$/, ([id], body) => forge.requestChange({ projectId: id, prompt: need(body, 'prompt'), agentId: body.agentId || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/run$/, ([id], body) => forge.runCommand({ projectId: id, command: need(body, 'command'), actor: need(body, 'actor') })],
+  ['GET', /^\/api\/forge\/([\w-]+)\/preview$/, ([id]) => forge.previewLog(id)],
+  ['POST', /^\/api\/forge\/([\w-]+)\/preview\/start$/, async ([id], body) => forge.startPreview(id, { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/preview\/stop$/, ([id], body) => forge.stopPreview(id, { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/push$/, async ([id], body) => forge.pushProject(id, { actor: need(body, 'actor'), token: vaultSecret('GITHUB_TOKEN') })],
+  ['GET', /^\/api\/forge\/([\w-]+)\/download$/, ([id]) => {
+    const p = forge.projectRow(id);
+    const pkg = forge.packageProject(p.id);
+    return { __raw: { contentType: 'application/gzip', filename: p.slug + (pkg.commit ? '-' + pkg.commit : '') + '.tar.gz', body: pkg.buffer } };
+  }],
+
+  // --- The website builder ---
+  ['GET', /^\/api\/sites$/, () => ({ overview: sites.sitesOverview(), sites: sites.listSites() })],
+  ['POST', /^\/api\/sites$/, (_p, body) => sites.createSite({ brief: need(body, 'brief'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/sites\/(\d+)\/regenerate$/, ([id], body) => sites.regenerate(Number(id), { brief: body.brief || {}, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/sites\/(\d+)\/copy$/, ([id], body) => sites.requestCopy(Number(id), { notes: body.notes || '', actor: need(body, 'actor') })],
+
+  // --- The fleet ---
+  ['GET', /^\/api\/servers$/, () => ({ overview: servers.serversOverview(), servers: servers.listServers(), pending: servers.pendingCommands() })],
+  ['POST', /^\/api\/servers$/, (_p, body) => servers.addServer({
+    name: need(body, 'name'), transport: body.transport || 'ssh', host: body.host || null, port: body.port || 22, username: body.username || null,
+    privateKey: body.privateKey || null, environment: body.environment || 'production', provider: body.provider || null, region: body.region || null,
+    notes: body.notes || null, actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/servers\/commands\/(\d+)$/, ([id]) => servers.getServerCommand(Number(id))],
+  ['POST', /^\/api\/servers\/commands\/(\d+)\/decide$/, async ([id], body) => servers.decideCommand(Number(id), { approve: body.approve === true, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/servers\/diagnosis\/([\w-]+)$/, ([runId]) => servers.diagnosisFor(runId)],
+  ['GET', /^\/api\/servers\/(\d+)$/, ([id]) => servers.getServer(Number(id))],
+  ['POST', /^\/api\/servers\/(\d+)\/update$/, ([id], body) => servers.updateServer(Number(id), { ...body, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/servers\/(\d+)\/key$/, ([id], body) => servers.setKey(Number(id), { privateKey: need(body, 'privateKey'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/servers\/(\d+)\/remove$/, ([id], body) => servers.removeServer(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/servers\/(\d+)\/test$/, async ([id]) => servers.testConnection(Number(id))],
+  ['POST', /^\/api\/servers\/(\d+)\/collect$/, async ([id]) => servers.collect(Number(id))],
+  ['POST', /^\/api\/servers\/(\d+)\/run$/, async ([id], body) => servers.runOnServer(Number(id), { command: need(body, 'command'), purpose: body.purpose || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/servers\/(\d+)\/provision$/, async ([id], body) => servers.provision(Number(id), { recipe: need(body, 'recipe'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/servers\/(\d+)\/diagnose$/, async ([id], body) => servers.diagnose(Number(id), { question: body.question || '', actor: need(body, 'actor') })],
+  ['GET', /^\/api\/servers\/(\d+)\/services$/, async ([id]) => servers.services(Number(id))],
+  ['GET', /^\/api\/servers\/(\d+)\/logs$/, async ([id], _b, url) => servers.serviceLogs(Number(id), { unit: url.searchParams.get('unit'), lines: url.searchParams.get('lines') })],
+  ['POST', /^\/api\/servers\/(\d+)\/service$/, async ([id], body) => servers.serviceAction(Number(id), { unit: need(body, 'unit'), action: need(body, 'action'), actor: need(body, 'actor') })],
+
+  // --- Deployments ---
+  ['GET', /^\/api\/deploys$/, () => ({ overview: deploys.deployOverview(), targets: deploys.listTargets(), pending: deploys.pendingReleases() })],
+  ['POST', /^\/api\/deploys$/, (_p, body) => deploys.createTarget({
+    name: body.name || null, projectId: need(body, 'projectId'), serverId: need(body, 'serverId'), runtime: body.runtime || 'node',
+    remoteDir: body.remoteDir || null, domain: body.domain || null, port: body.port || null, startCommand: body.startCommand || null,
+    healthPath: body.healthPath || '/', env: body.env || '', ssl: body.ssl === true, sslEmail: body.sslEmail || null, actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/deploys\/releases\/(\d+)$/, ([id]) => deploys.getRelease(Number(id))],
+  ['POST', /^\/api\/deploys\/releases\/(\d+)\/decide$/, async ([id], body) => deploys.decideRelease(Number(id), { approve: body.approve === true, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/deploys\/(\d+)$/, ([id]) => deploys.getTarget(Number(id))],
+  ['POST', /^\/api\/deploys\/(\d+)\/update$/, ([id], body) => deploys.updateTarget(Number(id), { ...body, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/deploys\/(\d+)\/remove$/, ([id], body) => deploys.removeTarget(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/deploys\/(\d+)\/release$/, async ([id], body) => deploys.deploy(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/deploys\/(\d+)\/rollback$/, async ([id], body) => deploys.rollback(Number(id), { actor: need(body, 'actor') })],
+
+  // --- Monitoring ---
+  ['GET', /^\/api\/monitors$/, () => ({ overview: monitors.monitorOverview(), checks: monitors.listChecks() })],
+  ['POST', /^\/api\/monitors$/, (_p, body) => monitors.createCheck({
+    name: body.name || null, kind: need(body, 'kind'), target: need(body, 'target'), intervalS: body.intervalS || 60, timeoutMs: body.timeoutMs || 10000,
+    expectStatus: body.expectStatus || null, expectText: body.expectText || null, thresholds: body.thresholds || null, actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/monitors\/(\d+)$/, ([id]) => monitors.getCheck(Number(id))],
+  ['POST', /^\/api\/monitors\/(\d+)\/update$/, ([id], body) => monitors.updateCheck(Number(id), { ...body, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/monitors\/(\d+)\/remove$/, ([id], body) => monitors.removeCheck(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/monitors\/(\d+)\/run$/, async ([id]) => monitors.runCheck(Number(id))],
+
+  // --- Workforce command: the AI directs the work, people do it ---
+  ['GET', /^\/api\/crew$/, () => ({
+    overview: crew.crewOverview(), workload: crew.workload(), roster: crew.roster(),
+    assignments: [...crew.listAssignments({ state: 'open' }), ...crew.listAssignments({ state: 'submitted' })],
+    recent: crew.listAssignments({ limit: 40 }).filter((a) => ['approved', 'declined', 'cancelled'].includes(a.state)).slice(0, 20),
+    plans: crew.listPlans(), checkins: crew.checkinsFor({}),
+  })],
+  ['GET', /^\/api\/crew\/mine$/, (_p, _b, _u, user) => crew.mine(crew.employeeForUser(user))],
+  ['POST', /^\/api\/crew\/mine\/checkin$/, (_p, body, _u, user) => {
+    const emp = crew.employeeForUser(user);
+    if (!emp) throw new HttpError(400, 'this account is not linked to an employee record');
+    return crew.checkIn({ employeeId: emp, plan: body.plan, done: body.done, blockers: body.blockers, energy: body.energy, actor: need(body, 'actor') });
+  }],
+  ['POST', /^\/api\/crew\/mine\/seen$/, (_p, _b, _u, user) => crew.seeNudges(crew.employeeForUser(user) || 0)],
+  ['POST', /^\/api\/crew\/mine\/(\d+)\/move$/, ([id], body, _u, user) => crew.move(Number(id), {
+    action: need(body, 'action'), note: body.note || null, submission: body.submission || null, actor: need(body, 'actor'),
+    asManager: false, selfEmployeeId: crew.employeeForUser(user),
+  })],
+  ['POST', /^\/api\/crew\/mine\/(\d+)\/progress$/, ([id], body, _u, user) => crew.setProgress(Number(id), { progress: body.progress, selfEmployeeId: crew.employeeForUser(user), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/crew\/assign$/, (_p, body) => crew.assign({
+    employeeId: need(body, 'employeeId'), title: need(body, 'title'), details: body.details || null, priority: body.priority || 'normal',
+    dueAt: body.dueAt || null, estimateH: body.estimateH || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/crew\/assignments\/(\d+)\/move$/, ([id], body) => crew.move(Number(id), {
+    action: need(body, 'action'), note: body.note || null, submission: body.submission || null, toEmployeeId: body.toEmployeeId || null,
+    actor: need(body, 'actor'), asManager: true,
+  })],
+  ['GET', /^\/api\/crew\/employee\/(\d+)$/, ([id]) => ({
+    workload: crew.workload(Number(id))[0], assignments: crew.listAssignments({ employeeId: Number(id) }),
+    checkins: crew.checkinsFor({ employeeId: Number(id) }), nudges: crew.nudgesFor(Number(id)),
+  })],
+  ['POST', /^\/api\/crew\/plan$/, (_p, body) => crew.planWork({ goal: need(body, 'goal'), horizonDays: body.horizonDays || 7, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/crew\/plans\/(\d+)\/dispatch$/, ([id], body) => crew.dispatchPlan(Number(id), { only: Array.isArray(body.only) ? body.only : null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/crew\/plans\/(\d+)\/discard$/, ([id], body) => crew.discardPlan(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/crew\/autopilot$/, (_p, body) => crew.setAutopilot(body.on === true, { actor: need(body, 'actor') })],
+
   // --- Financial reporting ---
   ['GET', /^\/api\/finreports$/, () => ({ overview: finReportsOverview(), reports: listFinReports() })],
   ['GET', /^\/api\/finreports\/ledger$/, (_p, _b, url) => ownFinancials(url.searchParams.get('period'))],
@@ -2124,6 +2256,24 @@ function permFor(m, path) {
   // namespace matters: /api/security is the SOC department, and putting these
   // there unauthenticated its entire prefix.
   if (path.startsWith('/api/account/')) return null;
+  // Build and run, and the crew. The home page reads across all of them, so it
+  // needs only a dashboard. An employee's own work needs only a login — the
+  // handler resolves which employee the account is and shows nothing else.
+  if (path === '/api/hq') return 'dashboard.view';
+  if (path.startsWith('/api/crew/mine')) return null;
+  if (path === '/api/crew/autopilot') return 'owner.rule';
+  if (path.startsWith('/api/crew')) return m === 'GET' ? 'crew.view' : 'crew.manage';
+  if (path.startsWith('/api/forge')) {
+    if (m === 'GET') return 'forge.view';
+    return /\/(run|push|preview\/start|preview\/stop)$|^\/api\/forge\/commands\/\d+\/kill$/.test(path) ? 'forge.run' : 'forge.manage';
+  }
+  if (path.startsWith('/api/sites')) return m === 'GET' ? 'sites.view' : 'sites.manage';
+  if (path.startsWith('/api/servers')) {
+    if (m === 'GET') return 'servers.view';
+    return /\/(run|service|provision)$|^\/api\/servers\/commands\/\d+\/decide$/.test(path) ? 'servers.exec' : 'servers.manage';
+  }
+  if (path.startsWith('/api/deploys')) return m === 'GET' ? 'deploys.view' : 'deploys.manage';
+  if (path.startsWith('/api/monitors')) return m === 'GET' ? 'monitors.view' : 'monitors.manage';
   // Erasing somebody is irreversible by design, so it sits with the powers
   // that are given on purpose rather than with ordinary record management.
   if (path === '/api/vault/key') return 'vault.manage';

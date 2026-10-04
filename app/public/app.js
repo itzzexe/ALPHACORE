@@ -21,6 +21,10 @@ import { renderBookkeeper, renderCustomers, renderEconomics, renderFinReports, r
 import { renderAttribution, renderBrand, renderBrowser, renderCalendar, renderCommunity, renderConnectors, renderContact, renderContent, renderDeliverability, renderDesign, renderEgress, renderEvents, renderGrowth, renderHelp, renderKeys, renderLifecycle, renderMarketing, renderMarketingDept, renderMcp, renderMktOps, renderPages, renderPaidMedia, renderPersonas, renderPositioning, renderPress, renderSeo, renderSocial, renderStatus, renderSupport, renderTenants, renderVault, renderWeb, renderWebhooks } from '/departments/world.js';
 import { renderAnchors, renderAudit, renderAutopilot, renderBackups, renderBoard, renderChief, renderComms, renderCompliance, renderConstitution, renderContinuity, renderDataGov, renderErasure, renderGovernance, renderHarmony, renderIncidents, renderIp, renderIr, renderLegal, renderObjectives, renderObservability, renderObserve, renderOversight, renderPrivacy, renderProvenance, renderRedteam, renderRoles, renderScorecard, renderSecurity, renderSettings, renderStanding, renderSustainability, renderTimeMachine, renderUsers, renderVendors } from '/departments/company.js';
 import { atlasGoTo, atlasStep, atlasZoom, buildMap, buildSystemMap, initAtlas, initMapInteractivity, mapChip, mapEdge, mapNode } from '/views/map.js';
+import { renderHQ } from '/departments/hq.js';
+import { renderForge, renderForgeProject, renderSites } from '/departments/build.js';
+import { renderServers, renderServer, renderDeploys, renderDeployTarget, renderMonitors } from '/departments/fleet.js';
+import { renderCrew, renderMyWork } from '/departments/crew.js';
 import { renderAcademy, renderAsk, renderDecisionDetail, renderDepartments, renderDesignDoc, renderDisputes, renderGraph, renderJourneyDetail, renderMemory, renderOffices, renderOrg, renderOverview, renderOwner, renderPackageSection, renderPeople, renderRecruiting, renderRequestDetail, renderSkills, renderSociety, renderSurfaceRoute, renderTrust, renderWorkstreamDetail } from '/departments/people.js';
 
 
@@ -195,7 +199,23 @@ $('#pw-form').addEventListener('submit', async (e) => {
 // between top-level declarations, so a 165-line top-level *statement* is
 // carried along by whichever declaration sits above it. This owns its span.
 const ROUTE_TABLE = {
-  '': { title: 'Overview', render: renderOverview, poll: 5000 },
+  '': { title: 'Home', render: renderHQ, poll: 15000 },
+  // The atlas: every department and every relationship, drawn as a wheel. It
+  // was the home page; it is now one click away, because a map is a place to
+  // look things up and not the first thing somebody needs in the morning.
+  atlas: { title: 'Company map', render: renderOverview, poll: 5000 },
+  // Build and run.
+  forge: { title: 'Software factory', render: renderForge, poll: 15000 },
+  forgeProject: { title: 'Project', render: renderForgeProject },
+  sites: { title: 'Websites', render: renderSites, poll: 20000 },
+  servers: { title: 'Servers', render: renderServers, poll: 20000 },
+  server: { title: 'Server', render: renderServer },
+  deploys: { title: 'Deployments', render: renderDeploys, poll: 10000 },
+  deployTarget: { title: 'Deployment', render: renderDeployTarget },
+  monitors: { title: 'Monitoring', render: renderMonitors, poll: 15000 },
+  // The AI directing the work of people, and each person's own list.
+  crew: { title: 'Workforce command', render: renderCrew, poll: 20000 },
+  mywork: { title: 'My work', render: renderMyWork },
   gate: { title: 'Approvals inbox — everything waiting on a human', render: renderGate, poll: 6000 },
   pipelines: { title: 'Pipelines', render: renderPipelines, poll: 4000 },
   runs: { title: 'Runs', render: renderRuns, poll: 6000 },

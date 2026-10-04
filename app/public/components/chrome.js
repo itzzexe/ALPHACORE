@@ -107,7 +107,48 @@ export async function refreshShell() {
     if (gdot) gdot.textContent = alerts || '';
     const jdot = document.querySelector('[data-div="work"] .rail-dot');
     if (jdot) jdot.textContent = journeys.filter((j) => j.state === 'awaiting_human').length || '';
+    paintDuty(stats, waiting);
   } catch { /* server restarting */ }
+  // An employee's own open work, for the sidebar. Any account may ask; an
+  // account that is nobody's employee simply has none.
+  try {
+    const mine = await api('/api/crew/mine');
+    const open = (mine.assignments || []).filter((a) => ['assigned', 'accepted', 'in_progress', 'blocked', 'returned'].includes(a.state)).length;
+    const b = $('#nav-mywork');
+    if (b) b.textContent = open || '';
+  } catch { /* not linked, or the server is restarting */ }
+}
+
+/**
+ * The duty bar: two lanes, always on. What the machines are doing — runs in
+ * flight, queued, what today has cost — and what is waiting on a person.
+ */
+function paintDuty(stats, waiting) {
+  const q = stats.queue || {};
+  const running = (q.running || 0) + (q.leased || 0);
+  const queued = q.queued || 0;
+  const ai = $('#lane-ai-txt');
+  if (ai) {
+    const spend = Number(stats.spend?.todayUsd || 0);
+    ai.innerHTML = running || queued
+      ? `<b>${running}</b> ${esc(t('running'))} · <b>${queued}</b> ${esc(t('queued'))}<span class="wide"> · ${esc(t('today'))} <b>$${spend.toFixed(2)}</b></span>`
+      : `${esc(t('Idle — nothing in flight'))}<span class="wide"> · ${esc(t('today'))} <b>$${spend.toFixed(2)}</b></span>`;
+  }
+  document.querySelectorAll('#lane-ai .lane-pulse i').forEach((el, i) => el.classList.toggle('on', i < Math.min(5, running)));
+  const lane = $('#lane-people');
+  const txt = $('#lane-people-txt');
+  const goEl = $('#lane-people-go');
+  if (lane && txt) {
+    lane.classList.toggle('calm', !waiting);
+    txt.innerHTML = waiting
+      ? `<b>${waiting}</b> ${esc(t(waiting === 1 ? 'thing waiting on a person' : 'things waiting on a person'))}`
+      : esc(t('Nothing is waiting on a person'));
+    if (goEl) goEl.textContent = waiting ? `${t('Decide')} →` : '';
+  }
+  const top = $('#nav-waiting');
+  if (top) top.textContent = waiting || '';
+  const tab = $('#tab-dot');
+  if (tab) tab.textContent = waiting || '';
 }
 setInterval(refreshShell, 7000);
 export const DEPT_LABEL = {

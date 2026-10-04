@@ -13,6 +13,31 @@ The full reasoning for any change is in its commit message; this is the index.
 
 ## Unreleased
 
+### Build and run, workforce command, and a new console
+
+- **The company can build and ship software.** A software factory with real
+  git repositories, an in-browser editor, a terminal limited to build tools,
+  live previews served through the console, and AI engineers whose changes
+  arrive as proposals a person applies.
+- **A business website from a few answers**, in English or Arabic, generated
+  without a model and published to your own server with HTTPS.
+- **Servers over SSH**: vital signs, services and logs, provisioning recipes,
+  a recorded terminal, and an AI diagnosis. An AI employee asking to run a
+  command waits for a person.
+- **Deployments** to a server with nginx, Let's Encrypt, systemd or Docker,
+  each release in its own folder so a failed one never takes the live one down,
+  and a one-click rollback.
+- **Monitoring** of sites, ports and servers that opens an incident when
+  something is down twice in a row, and watches every deployed site by itself.
+- **Workforce command**: the AI drafts work plans for human staff, dispatches
+  them once a person agrees, follows up, and reviews the work — never the
+  person. Each employee has their own list and a daily check-in.
+- **The console was redesigned**: a labelled sidebar, a home page about what
+  needs you, a duty bar on every page showing what the machines are doing and
+  what is waiting on a person, a palette that can ask as well as jump, and dark
+  mode that follows the system. Every one of the 176 departments was swept in
+  both themes, both languages and both sizes.
+
 ### Production hardening
 
 - **The server refuses to start in an unsafe shape.** Turn on production mode

@@ -3,6 +3,38 @@
 // the system prompt) and returns a structurally valid answer, clearly marked.
 function pick(system, prompt) {
   const s = (system || '') + '\n' + (prompt || '');
+  // The software factory. Mock cannot write the code that was asked for, so it
+  // writes one honest file saying so — a real proposal, through the real apply
+  // path, that changes nothing that runs.
+  if (s.includes('[FORGE-CHANGE]')) {
+    const asked = ((prompt || '').match(/THE CHANGE REQUESTED:\n([\s\S]*?)\n\nRULES:/) || [])[1] || 'the requested change';
+    return {
+      summary: '[mock] Recorded the request in AI-NOTES.md. Connect a provider key and an engineer writes the actual code.',
+      files: [{ path: 'AI-NOTES.md', content: `# Requested changes\n\n- ${asked.trim().replace(/\n/g, ' ')}\n\n> Written in mock mode: no model is connected, so nothing was implemented. Add a provider key in Settings and ask again.\n` }],
+      deletes: [], commands: [], knownGaps: ['[mock] no code was written'], confidence: 0.3,
+    };
+  }
+  // Dispatching work to people. Mock spreads one placeholder assignment to each
+  // of the first three people listed, so the plan → dispatch → nudge path is
+  // demoable — and says on every line that a model did not choose it.
+  if (s.includes('[CREW-PLAN]')) {
+    const goal = ((prompt || '').match(/Goal: ([^\n]+)/) || [])[1] || 'the goal';
+    const people = [...(prompt || '').matchAll(/^(\d+) \| ([^|]+) \|/gm)].slice(0, 3);
+    return {
+      assignments: people.map(([, id, name], i) => ({
+        employeeId: Number(id), title: `[mock] Part ${i + 1} of: ${goal.slice(0, 60)}`,
+        details: '[mock] Placeholder assignment — connect a provider key and the program manager breaks the goal down properly.',
+        priority: 'normal', dueDays: 3 + i, estimateH: 4, why: `[mock] ${name.trim()} is on the roster.`,
+      })),
+      rationale: '[mock] Spread evenly across the first people on the roster; no judgement was applied.',
+      confidence: 0.3,
+    };
+  }
+  // Website copy. Mock leaves the generated words alone rather than replacing
+  // them with placeholders — an empty answer changes nothing.
+  if (s.includes('[SITE-COPY]')) {
+    return { siteCopy: {}, note: '[mock] Connect a provider key for a copywriter to rewrite the site.', confidence: 0.3 };
+  }
   // Intelligence campaign shapes — keyed off the task brief, not the role.
   if (s.includes('"decisions"') && s.includes('approve|reject|hold')) {
     return { decisions: [], note: '[mock] Autonomy needs a real model to judge — connect a provider key.', confidence: 0.3 };

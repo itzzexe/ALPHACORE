@@ -112,6 +112,12 @@ const VERSION = JSON.parse(
   fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'),
 ).version;
 import { handleApi } from './api.js';
+import { syncForge, servePreview, stopAllPreviews } from './forge.js';
+import { syncSites } from './sites.js';
+import { serversTick } from './servers.js';
+import { monitorTick } from './monitor.js';
+import { syncCrew, crewSweep } from './crew.js';
+import './deploy.js';
 
 seedAgents();
 // The consultant is hired (or left paused) from its settings, so an install
@@ -305,6 +311,13 @@ setInterval(() => { try { nexusTick(); } catch { /* next tick retries */ } }, 50
 setInterval(() => { try { syncIntel(); } catch { /* next tick retries */ } }, 3500).unref?.();
 setInterval(() => { try { advanceBlueprints(); } catch { /* next tick retries */ } }, 3000).unref?.();
 setInterval(() => { try { syncInfraPlans(); syncFinReports(); } catch { /* next tick retries */ } }, 3000).unref?.();
+// Build and run: engineer proposals and copy coming back, plans for the crew,
+// the monitors, the fleet's vital signs, and the hourly look at what is slipping.
+setInterval(() => { try { syncForge(); syncSites(); syncCrew(); } catch { /* next tick retries */ } }, 3000).unref?.();
+setInterval(() => { monitorTick().catch(() => { /* next tick */ }); }, 15_000).unref?.();
+setInterval(() => { serversTick().catch(() => { /* next sweep */ }); }, 5 * 60_000).unref?.();
+setInterval(() => { try { crewSweep(); } catch { /* next sweep */ } }, 60 * 60_000).unref?.();
+for (const sig of ['SIGINT', 'SIGTERM', 'exit']) process.once(sig, () => { try { stopAllPreviews(); } catch { /* exiting */ } if (sig !== 'exit') process.exit(0); });
 setInterval(() => { maestroTick().catch(() => { /* next tick retries */ }); }, 20_000).unref?.();
 setInterval(() => { autonomyTick().catch(() => { /* next tick retries */ }); }, 15_000).unref?.();
 // The social layer runs slowly on purpose — a workplace does not talk constantly.
@@ -488,6 +501,10 @@ const server = http.createServer(async (req, res) => {
       try { body = JSON.parse(raw); } catch { return send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'that was not JSON' } }); }
       return send(await handleMcp(body, { user, tools: mcpTools }));
     }
+
+    // A project preview from the software factory. Authenticated by a signed
+    // link rather than the console header, because an iframe cannot send one.
+    if (url.pathname.startsWith('/preview/')) { servePreview(req, res, url); return; }
 
     if (url.pathname.startsWith('/api/')) {
       let body = null;

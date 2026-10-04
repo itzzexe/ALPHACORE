@@ -330,6 +330,7 @@ export function connectionsFor(type, rawId) {
 export function sectionCatalog() {
   const n = (sql, ...p) => one(sql, ...p).n;
   const S = (id, label, division, href, count, hint) => ({ id, label, division, href, count, hint });
+  const soft = (sql) => { try { return n(sql); } catch { return 0; } };
   return [
     // Engine
     S('requests', 'Request desk', 'engine', '#/requests', n('SELECT COUNT(*) AS n FROM requests'), 'Write what you need — the company routes it department to department until it is done'),
@@ -383,6 +384,13 @@ export function sectionCatalog() {
     S('deadletter', 'Dead work', 'operate', '#/deadletter', n('SELECT COUNT(*) AS n FROM dead_letter'), 'Work that failed for good: what died, why, what it cost, and whether to try again'),
     S('continuity', 'Continuity', 'operate', '#/continuity', n('SELECT COUNT(*) AS n FROM backups'), 'Draining, who can be reached at 3am, and whether a copy has ever left this machine'),
     // Operate
+    // Build and run — the company writing, shipping and watching its own software.
+    S('forge', 'Software factory', 'build', '#/forge', soft("SELECT COUNT(*) AS n FROM forge_projects WHERE state = 'active'"), 'Code repositories built by people and AI engineers — edit, run, commit, preview'),
+    S('sites', 'Websites', 'build', '#/sites', soft("SELECT COUNT(*) AS n FROM forge_projects WHERE kind = 'website' AND state = 'active'"), 'A business website from a short brief, in English or Arabic, ready to publish'),
+    S('servers', 'Servers', 'operate', '#/servers', soft('SELECT COUNT(*) AS n FROM srv_servers'), 'The fleet: VPS and machines over SSH — vital signs, services, commands, provisioning'),
+    S('deploys', 'Deployments', 'operate', '#/deploys', soft('SELECT COUNT(*) AS n FROM dep_targets'), 'Ship a project to a server with nginx, HTTPS and one-click rollback'),
+    S('monitors', 'Monitoring', 'operate', '#/monitors', soft('SELECT COUNT(*) AS n FROM mon_checks'), 'Uptime, latency, certificates and server thresholds — incidents opened when something falls over'),
+    S('crew', 'Workforce command', 'talent', '#/crew', soft("SELECT COUNT(*) AS n FROM crew_assignments WHERE state NOT IN ('approved','cancelled','declined')"), 'The AI plans and dispatches work to human staff, tracks it and nudges — people keep the judgement'),
     S('incidents', 'Incidents', 'operate', '#/incidents', n('SELECT COUNT(*) AS n FROM incidents'), 'SEV lifecycle with postmortems'),
     S('support', 'Support', 'operate', '#/support', n('SELECT COUNT(*) AS n FROM tickets'), 'Tickets, AI drafts, human sends'),
     S('people', 'People', 'talent', '#/people', n('SELECT COUNT(*) AS n FROM people'), 'The human layer'),
@@ -718,6 +726,13 @@ export const SURFACES = [
     ],
   },
   {
+    id: 'ship',
+    core: 'core1',
+    label: 'Build & run',
+    hint: 'Write software, build websites, put them on servers and keep them up.',
+    departments: ['forge', 'sites', 'deploys', 'servers', 'monitors'],
+  },
+  {
     id: 'approvals',
     core: 'core1',
     label: 'Approvals',
@@ -759,7 +774,7 @@ export const SURFACES = [
     core: 'core1',
     label: 'People',
     hint: 'The workforce, human and synthetic — and how it gets better.',
-    departments: ['people', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
+    departments: ['crew', 'people', 'org', 'society', 'disputes', 'enablement', 'recruiting', 'academy', 'memory', 'skills', 'offices'],
   },
   {
     id: 'world',
@@ -944,6 +959,7 @@ export function relationshipMatrix() {
   // hiding how the company actually operates.
   const edge = (from, to, label, count, href, kind = 'flow') => ({ from, to, label, count, href, kind });
   const n = (sql, ...p) => one(sql, ...p).n;
+  const soft = (sql) => { try { return n(sql); } catch { return 0; } };
 
   // The request desk's edges are not declared — they are drawn from the routes
   // it has actually taken, so the map shows the real spread of intake work.
@@ -995,6 +1011,9 @@ export function relationshipMatrix() {
     'design.package': ['systems', 'starts a specification package'],
     'infra.plan': ['infra', 'plans infrastructure'],
     'journey.launch': ['journeys', 'launches a cross-department journey'],
+    'crew.plan': ['crew', 'drafts work plans for the human team'],
+    'forge.change': ['forge', 'asks an engineer to change a project'],
+    'monitor.watch': ['monitors', 'starts watching a site'],
     'human.flag': ['gate', 'raises what only a human may decide'],
   };
   const dispatched = Object.fromEntries(
@@ -1027,6 +1046,19 @@ export function relationshipMatrix() {
     edge('marketing', 'social', 'campaign posts', n('SELECT COUNT(*) AS n FROM posts WHERE campaign_id IS NOT NULL'), '#/social'),
     edge('marketing', 'design', 'campaign visuals', n('SELECT COUNT(*) AS n FROM designs WHERE campaign_id IS NOT NULL'), '#/design'),
     edge('marketing', 'customers', 'customers attributed to campaigns', n('SELECT COUNT(*) AS n FROM customers WHERE campaign_id IS NOT NULL'), '#/customers'),
+    edge('forge', 'runs', 'engineers propose code as change sets', soft('SELECT COUNT(*) AS n FROM forge_changes'), '#/forge'),
+    edge('sites', 'forge', 'websites built as factory projects', soft("SELECT COUNT(*) AS n FROM forge_projects WHERE kind = 'website'"), '#/sites'),
+    edge('sites', 'deploys', 'websites published to a server', soft("SELECT COUNT(*) AS n FROM dep_targets t JOIN forge_projects p ON p.id = t.project_id WHERE p.kind = 'website'"), '#/deploys'),
+    edge('forge', 'deploys', 'projects shipped to a server', soft('SELECT COUNT(*) AS n FROM dep_targets'), '#/deploys'),
+    edge('deploys', 'servers', 'releases landed on a machine', soft('SELECT COUNT(*) AS n FROM dep_releases'), '#/servers'),
+    edge('deploys', 'monitors', 'live sites watched without being asked', soft('SELECT COUNT(*) AS n FROM mon_checks WHERE target_ref IS NOT NULL'), '#/monitors'),
+    edge('monitors', 'servers', 'machines held to their thresholds', soft("SELECT COUNT(*) AS n FROM mon_checks WHERE kind = 'server'"), '#/monitors', 'review'),
+    edge('monitors', 'incidents', 'outages opened as incidents', soft("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'monitor.down'"), '#/incidents'),
+    edge('infra', 'servers', 'plans become machines', soft('SELECT COUNT(*) AS n FROM srv_servers'), '#/servers'),
+    edge('servers', 'gate', 'an AI may ask to run a command; a person decides', soft("SELECT COUNT(*) AS n FROM srv_commands WHERE requested_by NOT LIKE 'human:%'"), '#/servers', 'gate'),
+    edge('crew', 'people', 'human staff directed day to day', soft('SELECT COUNT(*) AS n FROM crew_assignments'), '#/crew'),
+    edge('crew', 'runs', 'plans drafted by the program manager', soft('SELECT COUNT(*) AS n FROM crew_plans'), '#/crew'),
+    edge('crew', 'workforce2', 'assignments go to employees on the roster', soft("SELECT COUNT(DISTINCT employee_id) AS n FROM crew_assignments"), '#/workforce2'),
     edge('systems', 'infra', 'infrastructure planned from a blueprint', n('SELECT COUNT(*) AS n FROM infra_plans WHERE blueprint_id IS NOT NULL'), '#/infra'),
     edge('systems', 'products', 'specification packages for products', n('SELECT COUNT(*) AS n FROM blueprints WHERE product_id IS NOT NULL'), '#/systems'),
     edge('systems', 'runs', 'blueprint documents written by agents', n('SELECT COUNT(*) AS n FROM blueprint_docs WHERE run_id IS NOT NULL'), '#/runs'),
@@ -1611,6 +1643,8 @@ export function relationshipMatrix() {
 
 // ---------- live activity feed: the map's heartbeat ----------
 const SUBJECT_SECTION = {
+  forgeProject: 'forge', forgeCommand: 'forge', fleetServer: 'servers', deployTarget: 'deploys', monitor: 'monitors',
+  crewAssignment: 'crew', crewPlan: 'crew',
   run: 'runs', ticket: 'support', incident: 'incidents', decision: 'decisions', task: 'tasks',
   product: 'products', campaign: 'marketing', customer: 'customers', intelQuery: 'intel',
   intelRecord: 'intel', segment: 'segments', dataset: 'data', archiveItem: 'archive',
@@ -1626,6 +1660,7 @@ const SUBJECT_SECTION = {
   request: 'requests', journey: 'journeys', system: 'settings',
 };
 const ACTION_SECTION = {
+  forge: 'forge', sites: 'sites', servers: 'servers', deploy: 'deploys', monitor: 'monitors', crew: 'crew',
   auth: 'users', server: 'settings', settings: 'settings', security: 'security',
   lab: 'lab', pmo: 'pmo', ir: 'ir', board: 'board', comms: 'comms', brand: 'brand',
   release: 'releases', academy: 'academy', recruiting: 'recruiting', procurement: 'procurement',

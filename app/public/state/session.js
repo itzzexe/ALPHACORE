@@ -61,6 +61,10 @@ export const navPerm = {
   receivables: 'finance.view', fixedassets: 'finance.view', bank: 'bank.view', inventory: 'ops.view',
   facilities: 'ops.view', helpdesk: 'ops.view', secretariat: 'admin.view', legalcases: 'legal.view',
   regulatory: 'admin.view',
+  // Build and run, and the crew. `mywork` needs only a login.
+  atlas: 'dashboard.view', forge: 'forge.view', forgeProject: 'forge.view', sites: 'sites.view',
+  servers: 'servers.view', server: 'servers.view', deploys: 'deploys.view', deployTarget: 'deploys.view',
+  monitors: 'monitors.view', crew: 'crew.view',
 };
 
 /**
