@@ -371,6 +371,33 @@ test('the metrics measure what happened and say null for what did not', () => {
   assert.ok(m.projects.length >= 1 && m.projects.every((p) => p.gate && p.gate.mode));
 });
 
+// ------------------------------------------------------------ speed --
+
+test('the incremental chain proof agrees with the full walk, and keeps up with new entries', async () => {
+  const { verifyChainFast, audit } = await import('../src/audit.js');
+  const full = verifyChain();
+  const fast = verifyChainFast();
+  assert.equal(fast.ok, true);
+  assert.equal(fast.checked, full.checked);
+  audit({ actorType: 'human', actorId: ME, action: 'test.after_proof' });
+  const later = verifyChainFast();
+  assert.equal(later.checked, full.checked + 1);
+  assert.equal(later.incremental, true);
+});
+
+test('a backlog at the human gate is one notice, not one per run', async () => {
+  const { immuneTick } = await import('../src/immune.js');
+  for (let i = 0; i < 300; i++) {
+    exec("INSERT INTO runs (id, agent_id, task_type, input, state, created_at) VALUES (?, 'AGT-ENG-001', 'test:stale', '{}', 'awaiting_human', datetime('now','-3 days'))", crypto.randomUUID());
+  }
+  const before = one("SELECT COUNT(*) AS n FROM notifications WHERE source = 'immune.gate'").n;
+  immuneTick();
+  immuneTick();
+  const notices = q("SELECT message FROM notifications WHERE source = 'immune.gate'");
+  assert.equal(notices.length - before, 1);
+  assert.match(notices.at(-1).message, /^\d+ run\(s\) have waited/);
+});
+
 // -------------------------------------------------------- the wiring --
 
 test('the engineering floor is filed, wired, permissioned and on the chain', () => {

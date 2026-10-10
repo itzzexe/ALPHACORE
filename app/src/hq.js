@@ -5,7 +5,7 @@
 // twice. Two lanes, because the design draws them apart on purpose: what the
 // machines are doing, and what is waiting on a person.
 import { q, one } from './db.js';
-import { verifyChain } from './audit.js';
+import { verifyChainFast } from './audit.js';
 import { inboxSummary } from './inbox.js';
 import { activityFeed } from './links.js';
 import { forgeOverview, listProjects } from './forge.js';
@@ -27,7 +27,7 @@ export function headquarters(user) {
     doneToday: n("SELECT COUNT(*) AS n FROM runs WHERE state = 'done' AND ended_at >= date('now')"),
     spendToday: safe(() => one("SELECT COALESCE(SUM(cost_usd),0) AS v FROM model_calls WHERE created_at >= date('now')").v, 0),
   };
-  const chain = safe(() => verifyChain(), { ok: null });
+  const chain = safe(() => verifyChainFast(), { ok: null });
   return {
     company: safe(() => companyName(), null) || 'AlphaCore',
     greetingName: user?.displayName || user?.username || null,

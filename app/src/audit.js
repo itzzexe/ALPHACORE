@@ -34,10 +34,8 @@ export function audit({ actorType, actorId, action, subjectType = null, subjectI
   return hash;
 }
 
-/** Recompute the whole chain; returns {ok, checked, brokenAt}. */
-export function verifyChain() {
-  const rows = db.prepare('SELECT * FROM audit_log ORDER BY seq ASC').all();
-  let prevHash = GENESIS;
+/** Walk rows forward from a known hash; the first that does not follow is where it broke. */
+function walkFrom(rows, prevHash) {
   for (const r of rows) {
     const body = canon({
       actorType: r.actor_type, actorId: r.actor_id, action: r.action,
@@ -45,10 +43,49 @@ export function verifyChain() {
       payload: r.payload ? JSON.parse(r.payload) : null,
     });
     const expect = createHash('sha256').update(prevHash + '|' + body).digest('hex');
-    if (r.prev_hash !== prevHash || r.hash !== expect) {
-      return { ok: false, checked: rows.length, brokenAt: r.seq };
-    }
+    if (r.prev_hash !== prevHash || r.hash !== expect) return { brokenAt: r.seq, prevHash };
     prevHash = r.hash;
   }
+  return { brokenAt: null, prevHash };
+}
+
+// What has already been proved, so the next question only costs what is new.
+let proved = { seq: 0, hash: GENESIS, count: 0, fullAt: null };
+
+/** Recompute the whole chain; returns {ok, checked, brokenAt}. */
+export function verifyChain() {
+  const rows = db.prepare('SELECT * FROM audit_log ORDER BY seq ASC').all();
+  const w = walkFrom(rows, GENESIS);
+  if (w.brokenAt !== null) {
+    proved = { seq: 0, hash: GENESIS, count: 0, fullAt: null };
+    return { ok: false, checked: rows.length, brokenAt: w.brokenAt };
+  }
+  const tip = rows.at(-1);
+  proved = { seq: tip?.seq || 0, hash: tip?.hash || GENESIS, count: rows.length, fullAt: new Date().toISOString() };
   return { ok: true, checked: rows.length, brokenAt: null };
+}
+
+/**
+ * The same answer for the badge on every page, at the cost of what was added
+ * since it was last asked.
+ *
+ * Recomputing seventy-six thousand hashes took two seconds of a blocked event
+ * loop, and every open console asked every seven seconds — the record was
+ * busy proving itself instead of answering anybody. So the proof is kept: rows
+ * already verified are not walked again, and the tip that was proved is
+ * re-read each time. A rewrite that recomputes the chain changes that tip, and
+ * this falls back to the full walk at once. An edit deep in the chain that
+ * leaves the tip alone breaks a link the next full walk finds — which runs on
+ * a clock, and whenever somebody opens the audit page.
+ */
+export function verifyChainFast() {
+  if (proved.seq) {
+    const tip = one('SELECT hash FROM audit_log WHERE seq = ?', proved.seq);
+    if (!tip || tip.hash !== proved.hash) return verifyChain();
+  } else return verifyChain();
+  const rows = db.prepare('SELECT * FROM audit_log WHERE seq > ? ORDER BY seq ASC').all(proved.seq);
+  const w = walkFrom(rows, proved.hash);
+  if (w.brokenAt !== null) return verifyChain();
+  if (rows.length) proved = { ...proved, seq: rows.at(-1).seq, hash: rows.at(-1).hash, count: proved.count + rows.length };
+  return { ok: true, checked: proved.count, brokenAt: null, incremental: true, lastFullAt: proved.fullAt };
 }

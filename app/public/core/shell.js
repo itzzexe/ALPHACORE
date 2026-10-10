@@ -12,6 +12,7 @@
 import { $, esc, view } from './dom.js';
 import { TOKEN_KEY, currentUser, hasPermC, navPerm } from '../state/session.js';
 import { api } from '../services/api.js';
+import { isNew, markSeen, newMark, openOnce } from '../components/whatsnew.js';
 import { routes } from '../router/registry.js';
 import { t, lang, setLang, applyLang, translateDom, sectionName, divisionName } from '/i18n.js';
 
@@ -77,15 +78,18 @@ const OPEN_KEY = 'alphacore-open-groups';
 const readOpen = () => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '["engineering"]')); } catch { return new Set(['engineering']); } };
 let openGroups = readOpen();
 const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openGroups])); } catch { /* private window */ } };
+// A browser that remembered its groups from before a release would keep the
+// new one shut, and the new places would be there and unfound.
+openOnce(openGroups, saveOpen);
 
 function groupHtml(id) {
   const list = sectionsIn(id);
   if (!list.length) return '';
   const label = t(SURFACE_LABEL[id] || id);
   return `<details class="sx-group" data-group="${id}" ${openGroups.has(id) ? 'open' : ''}>
-    <summary data-div="${id}" title="${esc(label)}">${ico(id)}<span class="sx-label">${esc(label)}</span><span class="sx-badge rail-dot"></span>${CHEV}</summary>
+    <summary data-div="${id}" title="${esc(label)}">${ico(id)}<span class="sx-label">${esc(label)}</span>${list.some((s) => isNew(routeOf(s.href))) ? `<span class="sx-new" data-group-new>${esc(t('New'))}</span>` : ''}<span class="sx-badge rail-dot"></span>${CHEV}</summary>
     <div class="sx-sub">
-      ${list.map((s) => `<a href="${s.href}" data-route="${routeOf(s.href)}"><span>${esc(sectionName(s.id, s.label))}</span><span class="n">${s.count ?? ''}</span></a>`).join('')}
+      ${list.map((s) => `<a href="${s.href}" data-route="${routeOf(s.href)}"><span>${esc(sectionName(s.id, s.label))}${newMark(routeOf(s.href))}</span><span class="n">${s.count ?? ''}</span></a>`).join('')}
       <a class="sx-all" href="#/s/${id}"><span>${esc(t('Overview of this group'))}</span></a>
     </div>
   </details>`;
@@ -510,6 +514,8 @@ export async function navigate() {
   }
   markActiveNav();
   closeDrawer();
+  // Opening a new place takes its mark off the menu.
+  if (markSeen(deptKey)) buildNav();
   // Move the reading position to the content that just replaced everything.
   // Without this a screen reader stays where it was and announces nothing,
   // which reads as "the link did not work".

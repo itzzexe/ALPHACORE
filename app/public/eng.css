@@ -255,3 +255,30 @@
 .eng-bars span { flex: 1; height: 100%; position: relative; display: flex; align-items: flex-end; background: var(--sx-sunk); border-radius: 3px; overflow: hidden; }
 .eng-bars i { display: block; width: 100%; background: var(--sx-ai); }
 .eng-bars b { position: absolute; bottom: 0; left: 0; right: 0; background: var(--sx-bad); }
+
+/* ============================================================= what's new == */
+.sx-new {
+  display: inline-block; margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; vertical-align: 1px;
+  font: 650 10px/16px var(--sx-text); background: var(--sx-human-bright); color: #241500;
+}
+.wn {
+  margin: 4px 0 18px; padding: 18px 20px; border-radius: var(--sx-r3);
+  border: 1px solid color-mix(in srgb, var(--sx-ai) 35%, var(--sx-line));
+  background: linear-gradient(135deg, var(--sx-ai-wash), var(--sx-panel) 60%);
+}
+.wn-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+.wn-head h3 { margin: 4px 0 2px; font-family: var(--sx-display); font-size: 19px; color: var(--sx-ink); }
+.wn-head p { margin: 0; color: var(--sx-mute); font-size: 13.5px; }
+.wn-tag { font: 650 11px/18px var(--sx-text); padding: 1px 8px; border-radius: 999px; background: var(--sx-ai); color: var(--sx-ai-ink); }
+.wn-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.wn-card {
+  display: grid; gap: 6px; align-content: start; padding: 14px; border-radius: var(--sx-r2); text-decoration: none; color: var(--sx-ink);
+  background: var(--sx-panel); border: 1px solid var(--sx-line); transition: border-color 0.12s, transform 0.12s;
+}
+.wn-card:hover { border-color: var(--sx-ai); transform: translateY(-1px); }
+.wn-card.unseen { box-shadow: inset 3px 0 0 var(--sx-human-bright); }
+:root[dir="rtl"] .wn-card.unseen { box-shadow: inset -3px 0 0 var(--sx-human-bright); }
+.wn-card b { font-size: 14.5px; }
+.wn-card span:not(.wn-ico) { font-size: 12.5px; color: var(--sx-mute); line-height: 1.5; }
+.wn-card em { font-style: normal; font-size: 12.5px; color: var(--sx-ai); font-weight: 600; margin-top: 2px; }
+.wn-ico { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--sx-ai-wash); color: var(--sx-ai); font-size: 17px; }

@@ -438,4 +438,15 @@ export const AR_ENG = {
   'Closed': 'المُغلقة',
   'From the scanner / AI': 'من الماسح / الذكاء الاصطناعي',
   'Test runs passing': 'تشغيلات الاختبار الناجحة',
+
+  // ---- what's new
+  'New': 'جديد',
+  'The engineering floor is here': 'قسم الهندسة الجديد هنا',
+  'Five new places, all under Engineering in the menu on the side.': 'خمسة أقسام جديدة، كلها تحت «الهندسة» في القائمة الجانبية.',
+  'Got it, hide this': 'فهمت، أخفِ هذا',
+  'Edit any project like in VS Code: tabs, search, source control, a terminal, and an AI pair programmer.': 'عدّل أي مشروع كما في VS Code: تبويبات، بحث، إدارة الإصدارات، طرفية، ومبرمج ذكي يعمل معك.',
+  'Describe an app in a paragraph. Agents write the spec, the design, the code and the tests — you approve each step.': 'صِف تطبيقًا في فقرة. يكتب الوكلاء المواصفات والتصميم والكود والاختبارات — وأنت توافق على كل خطوة.',
+  'Security, tests, quality, performance, accessibility and dependencies — reviewed by a scanner and AI reviewers.': 'الأمان والاختبارات والجودة والأداء وإمكانية الوصول والاعتماديات — يراجعها ماسح ومراجعون أذكياء.',
+  'Clone your repositories, review pull requests, and push — every call through the gate.': 'استنسخ مستودعاتك، وراجع طلبات الدمج، وادفع التغييرات — كل استدعاء يمرّ عبر البوابة.',
+  'How often you ship, how long changes take, how often they fail — measured.': 'كم مرة تنشر، وكم تستغرق التغييرات، وكم مرة تفشل — مقيسة فعليًا.',
 };

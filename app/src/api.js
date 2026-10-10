@@ -1,8 +1,9 @@
 // REST API — thin JSON layer over the modules. Human actions (approvals,
 // evidence verification, decisions, freezes) require an `actor` field naming
 // the human; the audit log records it. No agent path can reach these handlers.
+import zlib from 'node:zlib';
 import { q, one, atomically } from './db.js';
-import { verifyChain, audit } from './audit.js';
+import { verifyChain, verifyChainFast, audit } from './audit.js';
 import { providersConfig, budgetsConfig } from './env.js';
 import { isProviderAvailable as providerAvailable, isMockMode as mockMode, settingsOverview, setSetting } from './settings.js';
 import {
@@ -438,7 +439,9 @@ const routes = [
     return q('SELECT * FROM audit_log ORDER BY seq DESC LIMIT ?', limit)
       .map((r) => ({ ...r, payload: r.payload ? JSON.parse(r.payload) : null }));
   }],
-  ['GET', /^\/api\/audit\/verify$/, () => verifyChain()],
+  // The badge on every page asks this every few seconds: it gets the
+  // incremental proof. ?full=1 walks the whole chain again (the audit page).
+  ['GET', /^\/api\/audit\/verify$/, (_p, _b, url) => (url.searchParams.get('full') === '1' ? verifyChain() : verifyChainFast())],
 
   ['GET', /^\/api\/pipeline-templates$/, () => listTemplates()],
   ['GET', /^\/api\/pipelines$/, () => listPipelines()],
@@ -1173,7 +1176,7 @@ const routes = [
     suspendedAgents: q("SELECT id, name, human_owner FROM agents WHERE status = 'suspended'"),
     frozenBudgets: q('SELECT scope, scope_id, period_key, spent_usd, cap_usd FROM budgets WHERE frozen = 1'),
     humanActions7d: q(`SELECT actor_id, COUNT(*) AS n FROM audit_log WHERE actor_type = 'human' AND occurred_at >= datetime('now','-7 days') GROUP BY actor_id ORDER BY n DESC`),
-    chain: verifyChain(),
+    chain: verifyChainFast(),
   })],
   ['GET', /^\/api\/perms$/, () => PERMS],
   ['GET', /^\/api\/users$/, () => listUsers()],
@@ -2669,6 +2672,9 @@ export function atomicity() {
   };
 }
 
+const SHARED_TTL = { '/api/stats': 5000, '/api/map': 10_000 };
+const sharedCache = new Map();
+
 export async function handleApi(req, res, url, body, user) {
   const perm = permFor(req.method, url.pathname);
   if (perm && !hasPerm(user, perm)) {
@@ -2680,6 +2686,20 @@ export async function handleApi(req, res, url, body, user) {
   const actorId = `human:${user.username}`;
   if (body && typeof body === 'object') body.actor = actorId;
   url.searchParams.set('actor', actorId);
+
+  // A few answers are the same for everybody and asked by every open console
+  // every few seconds. Computed once per short window, they are shared — the
+  // permission check above has already run, so a cached answer reaches only
+  // somebody allowed to read it.
+  if (req.method === 'GET' && SHARED_TTL[url.pathname]) {
+    const hit = sharedCache.get(url.pathname);
+    if (hit && Date.now() - hit.at < SHARED_TTL[url.pathname]) {
+      const gzip = hit.text.length > 4096 && /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+      res.writeHead(200, { 'content-type': 'application/json', ...(gzip ? { 'content-encoding': 'gzip', vary: 'accept-encoding' } : {}) });
+      res.end(gzip ? zlib.gzipSync(hit.text, { level: 5 }) : hit.text);
+      return true;
+    }
+  }
 
   for (const [method, pattern, handler] of routes) {
     if (req.method !== method) continue;
@@ -2711,8 +2731,19 @@ export async function handleApi(req, res, url, body, user) {
         res.end(result.__raw.body);
         return true;
       }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(result));
+      // The map, the catalogue and a project's tree run to hundreds of
+      // kilobytes of very repetitive JSON; over a slow line that was most of a
+      // page's wait. Small answers go as they are — gzip costs more than it saves.
+      const text = JSON.stringify(result);
+      if (req.method === 'GET' && SHARED_TTL[url.pathname]) sharedCache.set(url.pathname, { at: Date.now(), text });
+      if (text.length > 4096 && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+        const gz = zlib.gzipSync(text, { level: 5 });
+        res.writeHead(200, { 'content-type': 'application/json', 'content-encoding': 'gzip', vary: 'accept-encoding' });
+        res.end(gz);
+      } else {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(text);
+      }
     } catch (err) {
       // A constraint the caller tripped is the caller's error, not a fault in
       // the server. Left as a 500 it pages somebody at three in the morning

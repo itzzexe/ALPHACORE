@@ -62,11 +62,22 @@ function ruleEvalRegression() {
   }
 }
 
+// One notice for the whole backlog, not one per run. This used to notify per
+// run, and each notify checked for a duplicate: with seven thousand runs left
+// at the gate that was seven thousand table scans a minute, the event loop
+// blocked for half of every minute, and twenty thousand unread notices nobody
+// could read. A pile is one fact — how big, how old, and who is in it.
 function ruleStaleGate() {
-  const rows = q(`SELECT id, agent_id FROM runs WHERE state = 'awaiting_human' AND created_at < datetime('now', '-24 hours')`);
-  for (const r of rows) {
-    notify({ level: 'warn', source: 'immune.gate', message: `Run by ${r.agent_id} has waited at the human gate for over 24h.`, subjectType: 'run', subjectId: r.id });
-  }
+  const s = one(`SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM runs
+                 WHERE state = 'awaiting_human' AND created_at < datetime('now', '-24 hours')`);
+  if (!s?.n) return;
+  const who = q(`SELECT agent_id, COUNT(*) AS n FROM runs WHERE state = 'awaiting_human' AND created_at < datetime('now', '-24 hours')
+                 GROUP BY agent_id ORDER BY n DESC LIMIT 3`).map((r) => `${r.agent_id} (${r.n})`).join(', ');
+  notify({
+    level: 'warn', source: 'immune.gate',
+    message: `${s.n} run(s) have waited at the human gate for over 24h — oldest since ${String(s.oldest).slice(0, 10)}. Most from ${who}.`,
+    subjectType: 'gate', subjectId: 'stale',
+  });
 }
 
 function ruleStaleSev1() {

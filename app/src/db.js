@@ -4259,6 +4259,20 @@ export function atomically(fn) {
 /** Whether anything is currently holding a transaction open. */
 export const inTransaction = () => savepointDepth > 0;
 
+// Indexes for the questions the clocks ask every few seconds. Without them a
+// production database with fourteen thousand runs and twenty thousand notices
+// answered each one by reading the whole table, and the clocks between them
+// kept the event loop busy for half of every minute — every page waited.
+for (const sql of [
+  // notify()'s duplicate check: unread, from this source, about this subject.
+  'CREATE INDEX IF NOT EXISTS notifications_dedupe ON notifications (source, subject_type, subject_id) WHERE read = 0',
+  'CREATE INDEX IF NOT EXISTS notifications_unread ON notifications (read, id)',
+  // The queue by state: the workers, the chief, the inbox and the gate all ask it.
+  'CREATE INDEX IF NOT EXISTS runs_state ON runs (state, created_at)',
+  'CREATE INDEX IF NOT EXISTS runs_task ON runs (task_type)',
+  'CREATE INDEX IF NOT EXISTS model_calls_created ON model_calls (created_at)',
+]) { try { db.exec(sql); } catch { /* a table this install does not have */ } }
+
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
 export function one(sql, ...params) { return db.prepare(sql).get(...params); }
 export function exec(sql, ...params) { return db.prepare(sql).run(...params); }

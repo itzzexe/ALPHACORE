@@ -1102,7 +1102,7 @@ export async function renderSettings() {
   });
 }
 export async function renderAudit() {
-  const [rows, chain] = await Promise.all([api('/api/audit?limit=150'), api('/api/audit/verify')]);
+  const [rows, chain] = await Promise.all([api('/api/audit?limit=150'), api('/api/audit/verify?full=1')]);
   view.innerHTML = `
   <div class="panel">
     <div class="panel-title">

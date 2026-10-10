@@ -8,6 +8,7 @@ import { api } from '../services/api.js';
 import { hasPermC, currentUser } from '../state/session.js';
 import { t, lang } from '/i18n.js';
 import { kpi, dot, who, bar, strip, ago, act, wireActs, emptyCta, stateTag } from '../components/ui.js';
+import { whatsNewPanel, wireWhatsNew } from '../components/whatsnew.js';
 
 const ACTION_LABEL = {
   'run.enqueued': 'queued work for', 'run.done': 'finished', 'forge.change_requested': 'asked an engineer to change',
@@ -39,7 +40,9 @@ export async function renderHQ() {
   const today = new Date().toLocaleDateString(lang === 'ar' ? 'ar' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const quick = [
-    hasPermC('forge.manage') ? `<a class="btn btn-primary" href="#/forge?new=1">＋ ${esc(t('New software project'))}</a>` : '',
+    hasPermC('appbuilder.manage') ? `<a class="btn btn-primary" href="#/appbuilder">✦ ${esc(t('Build an app from an idea'))}</a>` : '',
+    hasPermC('forge.view') ? `<a class="btn" href="#/studio">⌨ ${esc(t('Open Dev Studio'))}</a>` : '',
+    hasPermC('forge.manage') ? `<a class="btn" href="#/forge?new=1">＋ ${esc(t('New software project'))}</a>` : '',
     hasPermC('sites.manage') ? `<a class="btn" href="#/sites?new=1">${esc(t('Build a website'))}</a>` : '',
     hasPermC('servers.manage') ? `<a class="btn" href="#/servers?new=1">${esc(t('Add a server'))}</a>` : '',
     hasPermC('crew.manage') ? `<a class="btn" href="#/crew?plan=1">${esc(t('Plan work for the team'))}</a>` : '',
@@ -107,6 +110,8 @@ export async function renderHQ() {
     <div class="quick">${quick}</div>
   </div>
 
+  ${whatsNewPanel(hasPermC)}
+
   ${d.mock ? `<div class="callout"><b>${esc(t('Demo mode.'))}</b> ${esc(t('No AI provider is connected, so the workforce answers with placeholders. Everything else — servers, deployments, monitoring, the factory — is real.'))} ${hasPermC('settings.manage') ? `<a href="#/providers">${esc(t('Connect a provider'))} →</a>` : ''}</div>` : ''}
 
   <div class="kpis">
@@ -157,4 +162,5 @@ export async function renderHQ() {
     </div>
   </div>`;
   wireActs(view, api, toast, renderHQ);
+  wireWhatsNew(view);
 }

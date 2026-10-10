@@ -4,10 +4,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { PORT, ROOT, mockMode } from './env.js';
 import { bootCheck } from './production.js';
 import './db.js';
-import { audit } from './audit.js';
+import { audit, verifyChain } from './audit.js';
+import { notify } from './notify.js';
 import { sealPii } from './erasure.js';
 import { seedChart, periodOf } from './ledger.js';
 import { bookkeep } from './bookkeeper.js';
@@ -349,6 +352,15 @@ setInterval(() => { try { ruleAssetRenewals(); ruleEnablementFromEvals(); ruleAu
 setInterval(() => { try { advanceJourneys(); } catch { /* next tick retries */ } }, 2500).unref?.();
 setInterval(() => { try { ruleStaleRelations(); } catch { /* next tick retries */ } }, 6 * 3600 * 1000).unref?.();
 setInterval(() => { try { immuneTick(); } catch { /* next tick retries */ } }, 60_000).unref?.();
+// The badge on every page reads the incremental proof; this walks the whole
+// chain again on a clock, so an edit deep in the record that left the tip
+// alone is found within ten minutes rather than whenever somebody looks.
+setInterval(() => {
+  try {
+    const v = verifyChain();
+    if (!v.ok) notify({ level: 'error', source: 'audit', message: `The audit chain is broken at entry ${v.brokenAt}. Something changed the record outside the platform.`, subjectType: 'audit', subjectId: 'chain' });
+  } catch { /* next round */ }
+}, 10 * 60_000).unref?.();
 setInterval(() => { try { expirySweep(); } catch { /* logged via audit on success */ } }, 60 * 60 * 1000).unref?.();
 // The contract watch, on the same hourly cadence as the registry sweep and
 // idempotent by queue key, so running it often costs nothing.
@@ -371,22 +383,49 @@ const MIME = {
 
 const publicDir = path.join(ROOT, 'public');
 
-function serveStatic(res, urlPath) {
+// The console is about two hundred files of uncompressed JavaScript, and every
+// page used to fetch each one in full, every time. Now each file is read and
+// gzipped once per change on disk, carries an ETag, and is revalidated rather
+// than re-sent: an unchanged file costs a 304 of a few bytes. `no-cache` still
+// asks the server every time, so nobody is ever shown last week's app.js.
+const staticCache = new Map();
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.svg', '.json', '.webmanifest']);
+function staticEntry(file) {
+  const st = fs.statSync(file);
+  const key = `${st.size}-${st.mtimeMs}`;
+  const hit = staticCache.get(file);
+  if (hit && hit.key === key) return hit;
+  const raw = fs.readFileSync(file);
+  const ext = path.extname(file);
+  const entry = {
+    key,
+    raw,
+    gz: COMPRESSIBLE.has(ext) && raw.length > 1024 ? zlib.gzipSync(raw, { level: 6 }) : null,
+    etag: `"${crypto.createHash('sha1').update(raw).digest('base64url').slice(0, 20)}"`,
+    type: MIME[ext] || 'application/octet-stream',
+  };
+  staticCache.set(file, entry);
+  return entry;
+}
+
+function serveStatic(req, res, urlPath) {
   let rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
-  const file = path.resolve(publicDir, rel);
+  let file = path.resolve(publicDir, rel);
   if (!file.startsWith(publicDir) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     // SPA fallback
-    const index = path.join(publicDir, 'index.html');
-    if (fs.existsSync(index)) {
-      res.writeHead(200, { 'content-type': MIME['.html'] });
-      res.end(fs.readFileSync(index));
-      return;
-    }
-    res.writeHead(404); res.end('not found');
+    file = path.join(publicDir, 'index.html');
+    if (!fs.existsSync(file)) { res.writeHead(404); res.end('not found'); return; }
+  }
+  const e = staticEntry(file);
+  const headers = { 'content-type': e.type, etag: e.etag, 'cache-control': 'no-cache', vary: 'accept-encoding' };
+  if (req.headers['if-none-match'] === e.etag) { res.writeHead(304, headers); res.end(); return; }
+  if (e.gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+    res.writeHead(200, { ...headers, 'content-encoding': 'gzip', 'content-length': e.gz.length });
+    res.end(e.gz);
     return;
   }
-  res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-  res.end(fs.readFileSync(file));
+  res.writeHead(200, { ...headers, 'content-length': e.raw.length });
+  res.end(e.raw);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -641,7 +680,7 @@ const server = http.createServer(async (req, res) => {
       }
       return;
     }
-    serveStatic(res, url.pathname);
+    serveStatic(req, res, url.pathname);
   } catch (err) {
     res.writeHead(500, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: String(err.message) }));

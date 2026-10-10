@@ -10,7 +10,7 @@
 //
 // Nothing under /api is cached, ever. A stale run count or a cached approval
 // queue is worse than an error message — it looks like the truth.
-const VERSION = 'alphacore-v5';
+const VERSION = 'alphacore-v6';
 
 // Enough to paint the shell and reach the login screen offline.
 //
@@ -49,6 +49,7 @@ const SHELL = [
   '/components/widgets.js',
   '/components/dept-page.js',
   '/components/ui.js',
+  '/components/whatsnew.js',
 ];
 
 self.addEventListener('install', (e) => {
