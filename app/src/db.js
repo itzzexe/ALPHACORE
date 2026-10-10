@@ -4271,6 +4271,12 @@ for (const sql of [
   'CREATE INDEX IF NOT EXISTS runs_state ON runs (state, created_at)',
   'CREATE INDEX IF NOT EXISTS runs_task ON runs (task_type)',
   'CREATE INDEX IF NOT EXISTS model_calls_created ON model_calls (created_at)',
+  // Autonomy asks, for every item waiting on a person, whether it already
+  // decided it in the last two hours — every fifteen seconds.
+  'CREATE INDEX IF NOT EXISTS autonomy_log_subject ON autonomy_log (kind, subject_id, created_at)',
+  'CREATE INDEX IF NOT EXISTS autonomy_log_verdict ON autonomy_log (verdict, run_id)',
+  // "Has this already been done?" is asked of the chain by action name.
+  'CREATE INDEX IF NOT EXISTS audit_log_action ON audit_log (action, subject_id)',
 ]) { try { db.exec(sql); } catch { /* a table this install does not have */ } }
 
 export function q(sql, ...params) { return db.prepare(sql).all(...params); }
