@@ -150,6 +150,13 @@ export const PERMS = [
   // reach, so they are four keys — a person can edit a project without being
   // able to touch production.
   'forge.view', 'forge.manage', 'forge.run',
+  // The engineering floor around the factory. Reading findings, asking for a
+  // review, and deciding a finding does not matter are three amounts of trust;
+  // speaking on GitHub (a posted review, an issue, a push) is a fourth.
+  'reviews.view', 'reviews.run', 'reviews.decide',
+  'github.view', 'github.manage', 'github.post',
+  'appbuilder.view', 'appbuilder.manage',
+  'engmetrics.view',
   'sites.view', 'sites.manage',
   'servers.view', 'servers.manage', 'servers.exec',
   'deploys.view', 'deploys.manage',

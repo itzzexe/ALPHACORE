@@ -3,15 +3,54 @@
 // the system prompt) and returns a structurally valid answer, clearly marked.
 function pick(system, prompt) {
   const s = (system || '') + '\n' + (prompt || '');
+  // The task markers are read from the task itself. The prompt also carries
+  // the employee's memory of earlier work, and an engineer who once wrote a
+  // change set remembers "[FORGE-CHANGE]" — which used to make the mock answer
+  // a question about a file with a change set.
+  const p = prompt || '';
+  const task = p.slice(Math.max(0, p.lastIndexOf('Task (')));
   // The software factory. Mock cannot write the code that was asked for, so it
   // writes one honest file saying so — a real proposal, through the real apply
   // path, that changes nothing that runs.
-  if (s.includes('[FORGE-CHANGE]')) {
+  if (task.includes('[FORGE-CHANGE]')) {
     const asked = ((prompt || '').match(/THE CHANGE REQUESTED:\n([\s\S]*?)\n\nRULES:/) || [])[1] || 'the requested change';
     return {
       summary: '[mock] Recorded the request in AI-NOTES.md. Connect a provider key and an engineer writes the actual code.',
       files: [{ path: 'AI-NOTES.md', content: `# Requested changes\n\n- ${asked.trim().replace(/\n/g, ' ')}\n\n> Written in mock mode: no model is connected, so nothing was implemented. Add a provider key in Settings and ask again.\n` }],
       deletes: [], commands: [], knownGaps: ['[mock] no code was written'], confidence: 0.3,
+    };
+  }
+  // The review board. Mock cannot read code, and an invented finding would be
+  // worse than none — it teaches people that the reviewers make things up. So
+  // it reviews nothing and says so; the scanner's findings stand on their own.
+  if (task.includes('[ENG-REVIEW:')) {
+    const dim = ((prompt || '').match(/\[ENG-REVIEW:(\w+)\]/) || [])[1] || 'this dimension';
+    return { summary: `[mock] No ${dim} reviewer is connected, so only the deterministic scanner read this code. Connect a provider key for a real review.`, verdict: 'pass', findings: [], confidence: 0.3 };
+  }
+  if (task.includes('[ENG-ASSIST]')) {
+    return { answer: '[mock] No model is connected, so nobody has read this code. Connect a provider key in Settings and ask again.', code: '', confidence: 0.3 };
+  }
+  // The app builder's first two stages. Structurally real so every gate can be
+  // walked through for free; every line says that no model wrote it.
+  if (task.includes('[APP-SPEC]')) {
+    const name = ((prompt || '').match(/Name: ([^\n]+)/) || [])[1] || 'the app';
+    return {
+      summary: `[mock] ${name} — a placeholder specification. Connect a provider key and a product manager writes the real one.`,
+      users: ['[mock] the owner'],
+      features: [{ name: '[mock] Items', stories: ['[mock] As a user I can add and list items'], acceptance: ['[mock] Given no items, when I add one, then the list shows it'] }],
+      screens: ['[mock] List', '[mock] Add'], dataModel: [{ entity: 'Item', fields: ['id', 'title', 'createdAt'] }],
+      outOfScope: ['[mock] everything a real specification would list'], risks: ['[mock] written without a model'], confidence: 0.3,
+    };
+  }
+  if (task.includes('[APP-ARCH]')) {
+    return {
+      summary: '[mock] The smallest thing that runs: a Node API on the standard library.', kind: 'node-api', stack: 'Node.js, node:http, node:test',
+      structure: [{ path: 'src/server.js', purpose: '[mock] HTTP entry point' }, { path: 'test/', purpose: '[mock] tests' }],
+      milestones: [
+        { title: '[mock] Skeleton that starts and answers /health', goal: '[mock] A running server', acceptance: ['GET /health answers 200'] },
+        { title: '[mock] The first feature', goal: '[mock] Items can be added and listed', acceptance: ['POST then GET returns the item'] },
+      ],
+      nfr: ['[mock] none considered'], risks: ['[mock] designed without a model'], confidence: 0.3,
     };
   }
   // Dispatching work to people. Mock spreads one placeholder assignment to each

@@ -103,10 +103,10 @@ test('every department sits behind exactly one of the eight doors', () => {
   assert.deepEqual(a.unfiled, [], 'a department nobody filed can only be reached by typing its URL');
   assert.deepEqual(a.duplicated, [], 'a department behind two doors is a menu that disagrees with itself');
   assert.deepEqual(a.dangling, [], 'a door pointing at a department that does not exist');
-  // Nine in the AI core, six in the enterprise core. Asserted as a total so
+  // Ten in the AI core, six in the enterprise core. Asserted as a total so
   // adding a door without deciding which core it belongs to fails here rather
   // than showing up in the menu.
-  assert.equal(a.surfaces, 15);
+  assert.equal(a.surfaces, 16);
   assert.equal(a.departments, sectionCatalog().length);
 
   // And the resolved view agrees with the raw declaration, so the navigation
@@ -118,7 +118,9 @@ test('every department sits behind exactly one of the eight doors', () => {
 test('the doors are exactly the ones the design names, in each core', () => {
   assert.deepEqual(
     SURFACES.map((s) => s.id),
-    ['ask', 'work', 'ship', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'],
+    // Engineering split from shipping: writing and reviewing code is a
+    // different errand from keeping a server up, and both had outgrown one door.
+    ['ask', 'work', 'engineering', 'ship', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'],
   );
   // The enterprise core keeps its own five. Same boundary the bridges enforce
   // in the data — a surface claiming both cores, or neither, would put an HR

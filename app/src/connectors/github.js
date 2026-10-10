@@ -14,9 +14,67 @@ export default {
   label: 'GitHub',
   docs: 'https://docs.github.com/rest',
   auth: { kind: 'token', note: 'fine-grained personal access token, or a GitHub App installation token' },
-  capabilities: ['repo.read', 'repo.issues', 'issue.create', 'issue.comment', 'pr.create', 'pr.review', 'repo.merge', 'actions.status'],
+  capabilities: ['repo.read', 'repo.issues', 'issue.create', 'issue.comment', 'pr.create', 'pr.review', 'repo.merge', 'actions.status',
+    'repo.list', 'repo.info', 'repo.branches', 'pr.list', 'pr.files', 'repo.clone', 'repo.pull', 'repo.push'],
   quotaDay: 800,
   ops: {
+    // The engineering hub's reads. Each is one page of the REST API, trimmed to
+    // the fields a screen shows — a pull request object is eight kilobytes of
+    // links nobody follows.
+    'repo.list': {
+      target: () => 'github.com',
+      async run({ max = 60 } = {}, ctx) {
+        const token = need(ctx, 'token');
+        const rows = await wire(`${API}/user/repos?per_page=${Math.min(100, max)}&sort=updated&affiliation=owner,collaborator,organization_member`, { headers: gh(token), service: 'github' });
+        return {
+          repos: (rows || []).map((r) => ({
+            fullName: r.full_name, description: r.description, private: r.private, defaultBranch: r.default_branch,
+            language: r.language, stars: r.stargazers_count, openIssues: r.open_issues_count, url: r.html_url, cloneUrl: r.clone_url, pushed: r.pushed_at,
+          })),
+        };
+      },
+    },
+    'repo.info': {
+      target: (a) => a.repo,
+      async run({ repo }, ctx) {
+        const token = need(ctx, 'token');
+        const r = await wire(`${API}/repos/${repo}`, { headers: gh(token), service: 'github' });
+        return { fullName: r.full_name, description: r.description, private: r.private, defaultBranch: r.default_branch, language: r.language, url: r.html_url, cloneUrl: r.clone_url, pushed: r.pushed_at };
+      },
+    },
+    'repo.branches': {
+      target: (a) => a.repo,
+      async run({ repo }, ctx) {
+        const token = need(ctx, 'token');
+        const rows = await wire(`${API}/repos/${repo}/branches?per_page=100`, { headers: gh(token), service: 'github' });
+        return { branches: (rows || []).map((b) => ({ name: b.name, sha: b.commit?.sha?.slice(0, 7), protected: b.protected })) };
+      },
+    },
+    'pr.list': {
+      target: (a) => a.repo,
+      async run({ repo, state = 'open', max = 30 }, ctx) {
+        const token = need(ctx, 'token');
+        const rows = await wire(`${API}/repos/${repo}/pulls?state=${encodeURIComponent(state)}&per_page=${Math.min(100, max)}&sort=updated&direction=desc`, { headers: gh(token), service: 'github' });
+        return {
+          pulls: (rows || []).map((p) => ({
+            number: p.number, title: p.title, state: p.state, draft: p.draft, author: p.user?.login,
+            head: p.head?.ref, base: p.base?.ref, sha: p.head?.sha?.slice(0, 7), url: p.html_url, updated: p.updated_at, merged: Boolean(p.merged_at),
+          })),
+        };
+      },
+    },
+    'pr.files': {
+      target: (a) => a.repo,
+      async run({ repo, number }, ctx) {
+        const token = need(ctx, 'token');
+        const pr = await wire(`${API}/repos/${repo}/pulls/${Number(number)}`, { headers: gh(token), service: 'github' });
+        const files = await wire(`${API}/repos/${repo}/pulls/${Number(number)}/files?per_page=100`, { headers: gh(token), service: 'github' });
+        return {
+          pull: { number: pr.number, title: pr.title, body: String(pr.body || '').slice(0, 4000), author: pr.user?.login, head: pr.head?.ref, base: pr.base?.ref, sha: pr.head?.sha, url: pr.html_url, additions: pr.additions, deletions: pr.deletions },
+          files: (files || []).map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions, patch: f.patch ? String(f.patch).slice(0, 60_000) : null })),
+        };
+      },
+    },
     'repo.read': {
       target: (a) => a.repo,
       async run({ repo, path = '', ref = null }, ctx) {

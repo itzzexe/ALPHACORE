@@ -1,0 +1,14 @@
+# One dependency and a handful of actions — few enough that a weekly look costs
+# nothing, and the one dependency is the one that talks to the model provider.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

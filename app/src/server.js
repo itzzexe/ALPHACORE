@@ -113,6 +113,10 @@ const VERSION = JSON.parse(
 ).version;
 import { handleApi } from './api.js';
 import { syncForge, servePreview, stopAllPreviews } from './forge.js';
+import { syncReviews } from './engineering/reviews.js';
+import { syncBuilds } from './engineering/builder.js';
+import { syncAssist } from './engineering/assist.js';
+import { receiveWebhook as receiveGitHub, ensureHubScopes } from './engineering/github.js';
 import { syncSites } from './sites.js';
 import { serversTick } from './servers.js';
 import { monitorTick } from './monitor.js';
@@ -314,6 +318,14 @@ setInterval(() => { try { syncInfraPlans(); syncFinReports(); } catch { /* next 
 // Build and run: engineer proposals and copy coming back, plans for the crew,
 // the monitors, the fleet's vital signs, and the hourly look at what is slipping.
 setInterval(() => { try { syncForge(); syncSites(); syncCrew(); } catch { /* next tick retries */ } }, 3000).unref?.();
+// The engineering floor: reviews folded in, builds moved along, answers delivered.
+// Each in its own try, so one stuck build cannot stop every review behind it.
+setInterval(() => {
+  try { syncReviews(); } catch { /* next tick */ }
+  try { syncBuilds(); } catch { /* next tick */ }
+  try { syncAssist(); } catch { /* next tick */ }
+}, 3000).unref?.();
+try { ensureHubScopes(); } catch { /* the connector catalogue is seeded later on a first boot */ }
 setInterval(() => { monitorTick().catch(() => { /* next tick */ }); }, 15_000).unref?.();
 setInterval(() => { serversTick().catch(() => { /* next sweep */ }); }, 5 * 60_000).unref?.();
 setInterval(() => { try { crewSweep(); } catch { /* next sweep */ } }, 60 * 60_000).unref?.();
@@ -383,6 +395,19 @@ const server = http.createServer(async (req, res) => {
     // Carrier callbacks. These cannot carry a session token — the phone network
     // is calling us — so they are authenticated by the carrier's own signature
     // instead, and they are the only unauthenticated write surface.
+    // GitHub signs its deliveries with a shared secret over the raw body, so it
+    // is checked here, before anything is parsed, and nowhere else.
+    if (url.pathname === '/webhooks/github' && req.method === 'POST') {
+      const chunks = [];
+      let size = 0;
+      for await (const c of req) { size += c.length; if (size > 5_000_000) { res.writeHead(413); res.end('too large'); return; } chunks.push(c); }
+      const r = await receiveGitHub({
+        event: req.headers['x-github-event'], delivery: req.headers['x-github-delivery'],
+        raw: Buffer.concat(chunks).toString('utf8'), signature: req.headers['x-hub-signature-256'],
+      });
+      res.writeHead(r.status, { 'content-type': 'text/plain' }); res.end(r.body);
+      return;
+    }
     if (url.pathname.startsWith('/webhooks/')) {
       const chunks = [];
       for await (const c of req) chunks.push(c);

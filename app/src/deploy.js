@@ -20,6 +20,7 @@ import { projectRow, packageProject, walk } from './forge.js';
 import { serverRow, run, upload } from './servers.js';
 import { ensureMonitorForTarget } from './monitor.js';
 import { getSetting, setSetting } from './settings.js';
+import { qualityGate } from './engineering/reviews.js';
 
 exec(`CREATE TABLE IF NOT EXISTS dep_targets (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -329,10 +330,15 @@ export async function deploy(targetId, { actor }) {
   const t = targetRow(targetId);
   const s = serverRow(t.server_id);
   if (one("SELECT id FROM dep_releases WHERE target_id = ? AND state = 'running'", t.id)) refuse('a release to this target is already running');
+  // The review board's verdict travels with every production release. In
+  // `enforce` it can stop one; in `warn` it is only written down — but written
+  // down on the chain, so "we shipped it knowing" is a fact rather than a memory.
+  const gate = s.environment === 'production' ? qualityGate(t.project_id) : null;
+  if (gate && !gate.ok) refuse(`the quality gate holds this release: ${gate.why}. Fix or dismiss the findings, review again, then deploy.`, 409);
   const waiting = s.environment === 'production' && !isHuman(actor);
   exec('INSERT INTO dep_releases (target_id, version, state, requested_by) VALUES (?,?,?,?)', t.id, stamp(), waiting ? 'awaiting_approval' : 'running', actor);
   const rel = one('SELECT * FROM dep_releases WHERE id = last_insert_rowid()');
-  audit({ actorType: isHuman(actor) ? 'human' : 'agent', actorId: actor, action: waiting ? 'deploy.release_requested' : 'deploy.release_started', subjectType: 'deployTarget', subjectId: t.id, payload: { releaseId: rel.id, server: s.name, environment: s.environment } });
+  audit({ actorType: isHuman(actor) ? 'human' : 'agent', actorId: actor, action: waiting ? 'deploy.release_requested' : 'deploy.release_started', subjectType: 'deployTarget', subjectId: t.id, payload: { releaseId: rel.id, server: s.name, environment: s.environment, gate: gate ? { mode: gate.mode, state: gate.state, reviewId: gate.reviewId || null } : null } });
   if (waiting) {
     notify({ level: 'warn', source: 'deploy', message: `${actor} wants to release ${t.name} to production (${s.name}). A person must approve it.`, subjectType: 'deployTarget', subjectId: t.id });
     return rel;

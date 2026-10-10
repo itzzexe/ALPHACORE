@@ -210,6 +210,13 @@ app/src/
     bank.js         accounts as children of 1000, reconciliation, transfers, cheques, batches
     ops.js          stock as a sum of moves, work orders, fleet, rooms, the help desk
     admin.js        correspondence, committees, cases, the regulatory calendar, my workspace
+  engineering/      the floor around the factory
+    scan.js         the deterministic reviewer: rules per dimension, the SBOM, the score
+    reviews.js      the review board: scanner, then one reviewer per dimension; findings; the quality gate
+    github.js       the GitHub hub: repositories, pull requests, clone/pull/push through the gate, the webhook
+    builder.js      the app builder: spec → architecture → milestones → tests → review, a person at each gate
+    assist.js       the pair programmer in the editor — advice, never an edit
+    metrics.js      DORA and the AI-engineering numbers, measured
   offices.js        the workforce in a building — rooms, encounters, learning
   …                 and one module per department
 app/public/         the console: vanilla JS, no build step, no external requests

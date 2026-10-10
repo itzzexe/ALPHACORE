@@ -1,0 +1,119 @@
+name: Review agents
+
+# Every pull request is read three ways before a person decides on it.
+#
+#   review-board   the platform's own deterministic scanner over the lines the
+#                  change adds. Free, needs no key, and holds the change on a
+#                  critical finding (a committed key, a private key).
+#   claude-review  an AI code reviewer: correctness first, then the house rules
+#                  in CLAUDE.md. Comments only — it never approves or merges.
+#   claude-security an AI security reviewer for what a pattern cannot see.
+#
+# The two AI jobs run only when the ANTHROPIC_API_KEY secret is set, and only
+# for branches of this repository: a pull request from a fork is somebody
+# else's code, and a reviewer that reads instructions out of code must not be
+# handed a stranger's. Approving and merging stay a person's acts.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review-board:
+    name: Review board (scanner)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+      - name: Read the lines this change adds
+        run: node scripts/review-diff.mjs --base=origin/${{ github.base_ref }} --fail-on=critical
+
+  dependencies:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  claude-review:
+    name: AI code review
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: env.HAS_KEY == 'true'
+        with:
+          fetch-depth: 1
+      - name: Review
+        if: env.HAS_KEY == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Read CLAUDE.md first: it holds the rules this codebase refuses changes for.
+
+            Report, in this order:
+            1. Correctness bugs, with the file and line and the input that breaks it.
+            2. Anything that breaks a rule in CLAUDE.md: the audit chain made mutable, an
+               outward act without a human gate, a front-end request to another origin,
+               a new dependency or build step, a UI string without its Arabic entry,
+               a hex colour instead of a design token.
+            3. Missing tests for behaviour the change adds.
+            Leave inline comments on the lines concerned and one short summary. Say
+            nothing about style the codebase does not already enforce. Never approve.
+          claude_args: |
+            --max-turns 12
+      - name: No key, no AI review
+        if: env.HAS_KEY != 'true'
+        run: echo "ANTHROPIC_API_KEY is not set for this repository — the AI review was skipped. The scanner job still ran."
+
+  claude-security:
+    name: AI security review
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: env.HAS_KEY == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+      - name: Security review
+        if: env.HAS_KEY == 'true'
+        uses: anthropics/claude-code-security-review@main
+        with:
+          comment-pr: true
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          exclude-directories: docs
+      - name: No key, no AI review
+        if: env.HAS_KEY != 'true'
+        run: echo "ANTHROPIC_API_KEY is not set for this repository — the AI security review was skipped."

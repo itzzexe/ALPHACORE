@@ -291,6 +291,11 @@ import { INFRA_SECTIONS, createInfraPlan, listInfraPlans, getInfraPlan, infraOve
 import { REPORT_KINDS, createFinReport, listFinReports, getFinReport, approveFinReport, finReportsOverview, ownFinancials } from './finreports.js';
 import { listAutomations, setAutomation, nexusFeed } from './nexus.js';
 import * as forge from './forge.js';
+import * as reviews from './engineering/reviews.js';
+import * as ghub from './engineering/github.js';
+import * as builder from './engineering/builder.js';
+import * as assist from './engineering/assist.js';
+import * as engMetrics from './engineering/metrics.js';
 import * as sites from './sites.js';
 import * as servers from './servers.js';
 import * as deploys from './deploy.js';
@@ -1739,7 +1744,7 @@ const routes = [
     name: body.name, description: body.description, repoUrl: body.repoUrl, autopilot: body.autopilot, archived: body.archived, actor: need(body, 'actor'),
   })],
   ['GET', /^\/api\/forge\/([\w-]+)\/file$/, ([id], _b, url) => forge.readProjectFile(id, url.searchParams.get('path'))],
-  ['POST', /^\/api\/forge\/([\w-]+)\/file$/, ([id], body) => forge.writeProjectFile(id, { path: need(body, 'path'), content: body.content ?? '', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/file$/, ([id], body) => forge.writeProjectFile(id, { path: need(body, 'path'), content: body.content ?? '', commit: body.commit !== false, actor: need(body, 'actor') })],
   ['POST', /^\/api\/forge\/([\w-]+)\/file\/delete$/, ([id], body) => forge.deleteProjectFile(id, { path: need(body, 'path'), actor: need(body, 'actor') })],
   ['POST', /^\/api\/forge\/([\w-]+)\/ask$/, ([id], body) => forge.requestChange({ projectId: id, prompt: need(body, 'prompt'), agentId: body.agentId || null, actor: need(body, 'actor') })],
   ['POST', /^\/api\/forge\/([\w-]+)\/run$/, ([id], body) => forge.runCommand({ projectId: id, command: need(body, 'command'), actor: need(body, 'actor') })],
@@ -1752,6 +1757,83 @@ const routes = [
     const pkg = forge.packageProject(p.id);
     return { __raw: { contentType: 'application/gzip', filename: p.slug + (pkg.commit ? '-' + pkg.commit : '') + '.tar.gz', body: pkg.buffer } };
   }],
+
+  // --- The studio: an editor's view of a factory project ---
+  ['GET', /^\/api\/forge\/assist\/(\d+)$/, ([id]) => assist.getAnswer(Number(id))],
+  ['GET', /^\/api\/forge\/([\w-]+)\/search$/, ([id], _b, url) => forge.searchProject(id, {
+    query: url.searchParams.get('q') || '', regex: url.searchParams.get('regex') === '1', caseSensitive: url.searchParams.get('case') === '1',
+  })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/file\/rename$/, ([id], body) => forge.renameProjectFile(id, { from: need(body, 'from'), to: need(body, 'to'), actor: need(body, 'actor') })],
+  ['GET', /^\/api\/forge\/([\w-]+)\/head$/, ([id], _b, url) => forge.fileAtHead(id, url.searchParams.get('path'))],
+  ['GET', /^\/api\/forge\/([\w-]+)\/diff$/, ([id], _b, url) => forge.gitDiff(id, { path: url.searchParams.get('path') || null })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/commit$/, ([id], body) => forge.commitWorkingTree(id, { message: need(body, 'message'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/forge\/([\w-]+)\/discard$/, ([id], body) => forge.discardFile(id, { path: need(body, 'path'), actor: need(body, 'actor') })],
+  ['GET', /^\/api\/forge\/([\w-]+)\/branches$/, ([id]) => forge.branches(id)],
+  ['POST', /^\/api\/forge\/([\w-]+)\/branch$/, ([id], body) => forge.switchBranch(id, { name: need(body, 'name'), create: body.create === true, actor: need(body, 'actor') })],
+  ['GET', /^\/api\/forge\/([\w-]+)\/assist$/, ([id]) => assist.history(id)],
+  ['POST', /^\/api\/forge\/([\w-]+)\/assist$/, ([id], body) => assist.ask({
+    projectId: id, path: body.path || null, selection: body.selection || null, question: body.question || '', mode: body.mode || 'ask', actor: need(body, 'actor'),
+  })],
+
+  // --- The review board ---
+  ['GET', /^\/api\/reviews$/, (_p, _b, url) => ({ overview: reviews.reviewsOverview(), reviews: reviews.listReviews({ projectId: url.searchParams.get('project') ? forge.projectRow(url.searchParams.get('project')).id : null }) })],
+  ['POST', /^\/api\/reviews$/, (_p, body) => reviews.startReview({
+    projectId: need(body, 'project'), dimensions: Array.isArray(body.dimensions) ? body.dimensions : null,
+    agents: body.agents !== false, runTests: body.runTests === true, actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/reviews\/gate\/([\w-]+)$/, ([id]) => reviews.qualityGate(forge.projectRow(id).id)],
+  ['GET', /^\/api\/reviews\/(\d+)$/, ([id]) => reviews.getReview(Number(id))],
+  ['GET', /^\/api\/reviews\/(\d+)\/markdown$/, ([id]) => ({ markdown: reviews.reviewMarkdown(Number(id)) })],
+  ['GET', /^\/api\/reviews\/(\d+)\/sbom$/, ([id]) => {
+    const r = reviews.getReview(Number(id));
+    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = ['ecosystem,name,wanted,installed,kind,licence', ...r.bom.map((d) => [d.ecosystem, d.name, d.wanted, d.installed, d.kind, d.licence].map(cell).join(','))].join('\n');
+    return { __raw: { contentType: 'text/csv; charset=utf-8', filename: `sbom-review-${r.id}.csv`, body: csv } };
+  }],
+  ['POST', /^\/api\/reviews\/(\d+)\/fix$/, ([id], body) => reviews.fixFindings({
+    reviewId: Number(id), ids: Array.isArray(body.ids) ? body.ids : null, severities: Array.isArray(body.severities) ? body.severities : null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/reviews\/(\d+)\/post$/, async ([id], body) => ghub.postReview(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/reviews\/findings\/(\d+)\/dismiss$/, ([id], body) => reviews.dismissFinding(Number(id), { note: body.note || '', actor: need(body, 'actor') })],
+  ['POST', /^\/api\/reviews\/findings\/(\d+)\/reopen$/, ([id], body) => reviews.reopenFinding(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/reviews\/findings\/(\d+)\/issue$/, async ([id], body) => ghub.issueFromFinding(Number(id), { repo: body.repo || null, actor: need(body, 'actor') })],
+
+  // --- The GitHub hub ---
+  ['GET', /^\/api\/github$/, () => ghub.hubOverview()],
+  ['POST', /^\/api\/github\/connect$/, (_p, body) => ghub.connectGitHub({ token: need(body, 'token'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/live$/, (_p, body) => ghub.setGitHubLive({ live: body.live === true, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/webhook-secret$/, (_p, body) => ghub.rotateWebhookSecret({ actor: need(body, 'actor') })],
+  ['GET', /^\/api\/github\/remote$/, async (_p, _b, url) => ghub.remoteRepos({ actor: url.searchParams.get('actor') })],
+  ['POST', /^\/api\/github\/repos$/, async (_p, body) => ghub.addRepo({ repo: need(body, 'repo'), projectId: body.project || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/settings$/, ([id], body) => ghub.updateRepo(Number(id), {
+    autoReview: body.autoReview === undefined ? undefined : body.autoReview === true, projectId: body.project || null, actor: need(body, 'actor'),
+  })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/remove$/, ([id], body) => ghub.removeRepo(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/import$/, async ([id], body) => ghub.importRepo(Number(id), { branch: body.branch || null, actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/pull$/, async ([id], body) => ghub.pullRepo(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/push$/, async ([id], body) => ghub.pushRepo(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/sync$/, async ([id], body) => ghub.syncPulls(Number(id), { actor: need(body, 'actor') })],
+  ['GET', /^\/api\/github\/repos\/(\d+)\/issues$/, async ([id], _b, url) => ghub.issues(Number(id), { actor: url.searchParams.get('actor') })],
+  ['GET', /^\/api\/github\/repos\/(\d+)\/actions$/, async ([id], _b, url) => ghub.actions(Number(id), { actor: url.searchParams.get('actor') })],
+  ['GET', /^\/api\/github\/repos\/(\d+)\/branches$/, async ([id], _b, url) => ghub.branchesOf(Number(id), { actor: url.searchParams.get('actor') })],
+  ['POST', /^\/api\/github\/repos\/(\d+)\/pulls\/(\d+)\/review$/, async ([id, n], body) => ghub.reviewPull(Number(id), Number(n), {
+    dimensions: Array.isArray(body.dimensions) ? body.dimensions : null, actor: need(body, 'actor'),
+  })],
+
+  // --- The app builder ---
+  ['GET', /^\/api\/appbuilder$/, () => ({ overview: builder.buildsOverview(), builds: builder.listBuilds() })],
+  ['POST', /^\/api\/appbuilder$/, (_p, body) => builder.createBuild({
+    name: need(body, 'name'), idea: need(body, 'idea'), audience: body.audience || null, language: body.language || 'en', actor: need(body, 'actor'),
+  })],
+  ['GET', /^\/api\/appbuilder\/(\d+)$/, ([id]) => builder.getBuild(Number(id))],
+  ['POST', /^\/api\/appbuilder\/(\d+)\/approve$/, ([id], body) => builder.approve(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/appbuilder\/(\d+)\/revise$/, ([id], body) => builder.revise(Number(id), { feedback: need(body, 'feedback'), actor: need(body, 'actor') })],
+  ['POST', /^\/api\/appbuilder\/(\d+)\/apply$/, ([id], body) => builder.applyMilestone(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/appbuilder\/(\d+)\/skip$/, ([id], body) => builder.skipMilestone(Number(id), { actor: need(body, 'actor') })],
+  ['POST', /^\/api\/appbuilder\/(\d+)\/cancel$/, ([id], body) => builder.cancelBuild(Number(id), { actor: need(body, 'actor') })],
+
+  // --- Engineering metrics ---
+  ['GET', /^\/api\/engmetrics$/, (_p, _b, url) => engMetrics.engineeringMetrics({ days: Number(url.searchParams.get('days')) || 30 })],
 
   // --- The website builder ---
   ['GET', /^\/api\/sites$/, () => ({ overview: sites.sitesOverview(), sites: sites.listSites() })],
@@ -2263,6 +2345,21 @@ function permFor(m, path) {
   if (path.startsWith('/api/crew/mine')) return null;
   if (path === '/api/crew/autopilot') return 'owner.rule';
   if (path.startsWith('/api/crew')) return m === 'GET' ? 'crew.view' : 'crew.manage';
+  // The engineering floor. Reading a review is not the same reach as asking
+  // for one, deciding that a finding does not matter is a judgement of its
+  // own, and saying anything on GitHub — a review, an issue, a push — is the
+  // company speaking outside, so it is a key nobody gets by accident.
+  if (path.startsWith('/api/reviews')) {
+    if (/\/(post|issue)$/.test(path)) return 'github.post';
+    if (m === 'GET') return 'reviews.view';
+    return /\/(dismiss|reopen|fix)$/.test(path) ? 'reviews.decide' : 'reviews.run';
+  }
+  if (path.startsWith('/api/github')) {
+    if (m === 'GET') return 'github.view';
+    return /\/push$/.test(path) ? 'github.post' : 'github.manage';
+  }
+  if (path.startsWith('/api/appbuilder')) return m === 'GET' ? 'appbuilder.view' : 'appbuilder.manage';
+  if (path === '/api/engmetrics') return 'engmetrics.view';
   if (path.startsWith('/api/forge')) {
     if (m === 'GET') return 'forge.view';
     return /\/(run|push|preview\/start|preview\/stop)$|^\/api\/forge\/commands\/\d+\/kill$/.test(path) ? 'forge.run' : 'forge.manage';

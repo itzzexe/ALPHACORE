@@ -73,7 +73,8 @@ export const ROLE_TEMPLATES = {
     label: 'Security',
     describes: 'The SOC, the constitution, the red team, and the gate that lets things out. Reads the vault register; does not hold the vault.',
     perms: ['*.view', 'security.manage', 'compliance.manage', 'redteam.run', 'constitution.amend',
-      'egress.release', 'scopes.grant', 'connectors.manage', 'provenance.issue', 'timemachine.snapshot'],
+      'egress.release', 'scopes.grant', 'connectors.manage', 'provenance.issue', 'timemachine.snapshot',
+      'reviews.run', 'reviews.decide'],
   },
   marketing: {
     label: 'Marketing',
@@ -85,7 +86,8 @@ export const ROLE_TEMPLATES = {
     label: 'Engineering',
     describes: 'Builds and ships: the software factory, websites, deployments and monitoring. Runs commands on servers only if given servers.exec on top.',
     perms: ['*.view', 'forge.manage', 'forge.run', 'sites.manage', 'deploys.manage', 'monitors.manage', 'servers.manage',
-      'releases.manage', 'lab.manage', 'infra.manage', 'systems.manage'],
+      'releases.manage', 'lab.manage', 'infra.manage', 'systems.manage',
+      'reviews.run', 'reviews.decide', 'github.manage', 'github.post', 'appbuilder.manage'],
   },
   platform: {
     label: 'Platform',

@@ -13,6 +13,54 @@ The full reasoning for any change is in its commit message; this is the index.
 
 ## Unreleased
 
+### The engineering floor: an editor, a review board, GitHub, and an app builder
+
+- **Dev Studio**, an editor for every factory project in the browser: tabs,
+  an explorer with rename and delete, syntax colour for fifteen languages,
+  find and replace, Ctrl+P to open a file and Ctrl+Shift+P for every command,
+  search across the repository, source control with a commit message somebody
+  wrote, branches, diffs against the last commit, a terminal underneath, an
+  outline, and the review board's findings marked in the gutter. Nothing is
+  loaded from anywhere else; the editor is the console's own.
+- **An AI pair programmer** inside the editor — ask, explain, review, write
+  tests, refactor. Its answers are advice; code becomes a file only as a change
+  set a person applies.
+- **The review board.** Every project read along six dimensions — security,
+  tests, quality, performance, accessibility, dependencies. A deterministic
+  scanner goes first (committed keys, eval, SQL built from strings, TLS turned
+  off, images without alt text, unpinned dependencies, missing tests), then one
+  reviewer per dimension on a different model family from the engineers. A
+  finding can be fixed by an engineer in one click, dismissed by a person with
+  a reason, or opened as a GitHub issue. A software bill of materials comes
+  with every review.
+- **A quality gate on production releases**: off, warn (the verdict is written
+  on the release, on the chain), or enforce (an open critical finding or failing
+  tests stop the release).
+- **The GitHub hub.** Connect with a token — in dry-run first, like every
+  connector — then add repositories, clone them into the factory, pull, push,
+  read pull requests, Actions and issues, have the board review a pull request,
+  and post the review in your name. Clone, pull and push go through the egress
+  gate by name. A signed webhook reviews every new pull request on the
+  repositories that ask for it. Merging is not offered at all.
+- **The app builder**: a paragraph becomes a specification (approved by a
+  person), an architecture cut into milestones (approved), one change set per
+  milestone (applied), a test suite written by an engineer who did not write the
+  code, and a review — before anybody calls it ready.
+- **Engineering metrics**: deployment frequency, lead time, change failure rate
+  and time to restore, measured; how often people accept what AI engineers
+  propose; how much of what reviewers find is fixed; and every project's gate.
+- **Four new employees**: Performance Engineer, Accessibility Reviewer, Test
+  Engineer and App Builder.
+- **This repository reviews its own pull requests**: the platform's scanner
+  over the lines a change adds (holding it on a critical finding), dependency
+  review, CodeQL, Dependabot, and — when an `ANTHROPIC_API_KEY` secret is set —
+  an AI code reviewer and an AI security reviewer that comment and never approve.
+- **Fixed:** on Windows, discarding a change in a factory project restored the
+  file with CRLF line endings when git's `core.autocrlf` was on. Factory git
+  now pins it off.
+- **Fixed:** in mock mode, an employee who remembered an earlier change set
+  answered every later task as if it were one.
+
 ### Build and run, workforce command, and a new console
 
 - **The company can build and ship software.** A software factory with real

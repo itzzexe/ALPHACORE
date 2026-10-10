@@ -23,6 +23,8 @@ import { renderAnchors, renderAudit, renderAutopilot, renderBackups, renderBoard
 import { atlasGoTo, atlasStep, atlasZoom, buildMap, buildSystemMap, initAtlas, initMapInteractivity, mapChip, mapEdge, mapNode } from '/views/map.js';
 import { renderHQ } from '/departments/hq.js';
 import { renderForge, renderForgeProject, renderSites } from '/departments/build.js';
+import { renderStudio, renderStudioProject } from '/departments/studio.js';
+import { renderReviews, renderReview, renderGithub, renderAppBuilder, renderAppBuild, renderEngMetrics } from '/departments/engineering.js';
 import { renderServers, renderServer, renderDeploys, renderDeployTarget, renderMonitors } from '/departments/fleet.js';
 import { renderCrew, renderMyWork } from '/departments/crew.js';
 import { renderAcademy, renderAsk, renderDecisionDetail, renderDepartments, renderDesignDoc, renderDisputes, renderGraph, renderJourneyDetail, renderMemory, renderOffices, renderOrg, renderOverview, renderOwner, renderPackageSection, renderPeople, renderRecruiting, renderRequestDetail, renderSkills, renderSociety, renderSurfaceRoute, renderTrust, renderWorkstreamDetail } from '/departments/people.js';
@@ -207,6 +209,15 @@ const ROUTE_TABLE = {
   // Build and run.
   forge: { title: 'Software factory', render: renderForge, poll: 15000 },
   forgeProject: { title: 'Project', render: renderForgeProject },
+  // The engineering floor around the factory.
+  studio: { title: 'Dev Studio', render: renderStudio },
+  studioProject: { title: 'Dev Studio', render: renderStudioProject },
+  reviews: { title: 'Review board', render: renderReviews, poll: 10000 },
+  review: { title: 'Review', render: renderReview, poll: 5000 },
+  github: { title: 'GitHub', render: renderGithub, poll: 30000 },
+  appbuilder: { title: 'App builder', render: renderAppBuilder, poll: 8000 },
+  appBuild: { title: 'App build', render: renderAppBuild, poll: 4000 },
+  engmetrics: { title: 'Engineering metrics', render: renderEngMetrics, poll: 60000 },
   sites: { title: 'Websites', render: renderSites, poll: 20000 },
   servers: { title: 'Servers', render: renderServers, poll: 20000 },
   server: { title: 'Server', render: renderServer },

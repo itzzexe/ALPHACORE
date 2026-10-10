@@ -387,6 +387,14 @@ export function sectionCatalog() {
     // Build and run — the company writing, shipping and watching its own software.
     S('forge', 'Software factory', 'build', '#/forge', soft("SELECT COUNT(*) AS n FROM forge_projects WHERE state = 'active'"), 'Code repositories built by people and AI engineers — edit, run, commit, preview'),
     S('sites', 'Websites', 'build', '#/sites', soft("SELECT COUNT(*) AS n FROM forge_projects WHERE kind = 'website' AND state = 'active'"), 'A business website from a short brief, in English or Arabic, ready to publish'),
+    // The engineering floor around the factory: an editor, a review board, the
+    // repositories that live on GitHub, an app builder, and the numbers that
+    // say whether any of it ships well.
+    S('studio', 'Dev Studio', 'build', '#/studio', soft('SELECT COUNT(*) AS n FROM eng_assist'), 'An editor for every factory project: tabs, search, source control, a terminal, and an AI pair programmer'),
+    S('reviews', 'Review board', 'build', '#/reviews', soft('SELECT COUNT(*) AS n FROM eng_reviews'), 'Security, tests, quality, performance, accessibility and dependencies — a scanner first, then reviewers from another model family'),
+    S('github', 'GitHub', 'build', '#/github', soft('SELECT COUNT(*) AS n FROM gh_repos'), 'Repositories, pull requests, issues and Actions — cloned, reviewed and pushed through the one gate'),
+    S('appbuilder', 'App builder', 'build', '#/appbuilder', soft('SELECT COUNT(*) AS n FROM app_builds'), 'From a paragraph to a running app: specification, architecture, milestones, tests and review, with a person at every gate'),
+    S('engmetrics', 'Engineering metrics', 'build', '#/engmetrics', soft('SELECT COUNT(*) AS n FROM dep_releases'), 'Deployment frequency, lead time, change failure and time to restore — measured, with the quality gate per project'),
     S('servers', 'Servers', 'operate', '#/servers', soft('SELECT COUNT(*) AS n FROM srv_servers'), 'The fleet: VPS and machines over SSH — vital signs, services, commands, provisioning'),
     S('deploys', 'Deployments', 'operate', '#/deploys', soft('SELECT COUNT(*) AS n FROM dep_targets'), 'Ship a project to a server with nginx, HTTPS and one-click rollback'),
     S('monitors', 'Monitoring', 'operate', '#/monitors', soft('SELECT COUNT(*) AS n FROM mon_checks'), 'Uptime, latency, certificates and server thresholds — incidents opened when something falls over'),
@@ -726,11 +734,18 @@ export const SURFACES = [
     ],
   },
   {
+    id: 'engineering',
+    core: 'core1',
+    label: 'Engineering',
+    hint: 'Write code, review it, keep it on GitHub, and build whole apps from a paragraph.',
+    departments: ['forge', 'studio', 'appbuilder', 'reviews', 'github', 'engmetrics', 'sites'],
+  },
+  {
     id: 'ship',
     core: 'core1',
-    label: 'Build & run',
-    hint: 'Write software, build websites, put them on servers and keep them up.',
-    departments: ['forge', 'sites', 'deploys', 'servers', 'monitors'],
+    label: 'Ship & run',
+    hint: 'Put software on servers, keep it up, and know when it falls over.',
+    departments: ['deploys', 'servers', 'monitors'],
   },
   {
     id: 'approvals',
@@ -1050,6 +1065,21 @@ export function relationshipMatrix() {
     edge('sites', 'forge', 'websites built as factory projects', soft("SELECT COUNT(*) AS n FROM forge_projects WHERE kind = 'website'"), '#/sites'),
     edge('sites', 'deploys', 'websites published to a server', soft("SELECT COUNT(*) AS n FROM dep_targets t JOIN forge_projects p ON p.id = t.project_id WHERE p.kind = 'website'"), '#/deploys'),
     edge('forge', 'deploys', 'projects shipped to a server', soft('SELECT COUNT(*) AS n FROM dep_targets'), '#/deploys'),
+    // The engineering floor. Each edge names something the code does.
+    edge('studio', 'forge', 'files edited and committed with a message a person wrote', soft("SELECT COUNT(*) AS n FROM audit_log WHERE action IN ('forge.committed','forge.file_renamed','forge.branch_created')"), '#/studio'),
+    edge('studio', 'runs', 'the pair programmer answers through the run queue', soft('SELECT COUNT(*) AS n FROM eng_assist WHERE run_id IS NOT NULL'), '#/studio'),
+    edge('reviews', 'runs', 'reviewers from another model family read the code', soft('SELECT COUNT(*) AS n FROM eng_review_runs'), '#/reviews', 'review'),
+    edge('reviews', 'forge', 'findings handed back to an engineer as a change set', soft('SELECT COUNT(*) AS n FROM eng_findings WHERE change_id IS NOT NULL'), '#/reviews', 'loop'),
+    edge('reviews', 'deploys', 'the quality gate rides on every production release', soft("SELECT COUNT(*) AS n FROM audit_log WHERE action IN ('deploy.release_started','deploy.release_requested') AND payload LIKE '%\"gate\":{%'"), '#/reviews', 'gate'),
+    edge('github', 'forge', 'repositories cloned into the factory', soft('SELECT COUNT(*) AS n FROM gh_repos WHERE project_id IS NOT NULL'), '#/github'),
+    edge('github', 'reviews', 'pull requests read by the review board', soft('SELECT COUNT(*) AS n FROM gh_pulls WHERE review_id IS NOT NULL'), '#/github', 'review'),
+    edge('github', 'egress', 'every call, clone and push through the one gate', soft("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'github'"), '#/egress', 'gate'),
+    edge('appbuilder', 'runs', 'a product manager and an architect write the plan', soft("SELECT COUNT(*) AS n FROM runs WHERE task_type LIKE 'appbuild:%'"), '#/appbuilder'),
+    edge('appbuilder', 'forge', 'apps built milestone by milestone as change sets', soft('SELECT COUNT(*) AS n FROM app_builds WHERE project_id IS NOT NULL'), '#/appbuilder'),
+    edge('appbuilder', 'reviews', 'a finished app read by the board before it is called ready', soft('SELECT COUNT(*) AS n FROM app_builds WHERE review_id IS NOT NULL'), '#/appbuilder', 'review'),
+    edge('engmetrics', 'deploys', 'release frequency and failure rate measured', soft('SELECT COUNT(*) AS n FROM dep_releases'), '#/engmetrics', 'review'),
+    edge('engmetrics', 'incidents', 'time to restore measured from the incident log', soft('SELECT COUNT(*) AS n FROM incidents WHERE resolved_at IS NOT NULL'), '#/engmetrics', 'review'),
+    edge('engmetrics', 'forge', 'lead time measured from change sets', soft("SELECT COUNT(*) AS n FROM forge_changes WHERE state = 'applied'"), '#/engmetrics', 'review'),
     edge('deploys', 'servers', 'releases landed on a machine', soft('SELECT COUNT(*) AS n FROM dep_releases'), '#/servers'),
     edge('deploys', 'monitors', 'live sites watched without being asked', soft('SELECT COUNT(*) AS n FROM mon_checks WHERE target_ref IS NOT NULL'), '#/monitors'),
     edge('monitors', 'servers', 'machines held to their thresholds', soft("SELECT COUNT(*) AS n FROM mon_checks WHERE kind = 'server'"), '#/monitors', 'review'),
@@ -1644,6 +1674,7 @@ export function relationshipMatrix() {
 // ---------- live activity feed: the map's heartbeat ----------
 const SUBJECT_SECTION = {
   forgeProject: 'forge', forgeCommand: 'forge', fleetServer: 'servers', deployTarget: 'deploys', monitor: 'monitors',
+  engReview: 'reviews', ghRepo: 'github', appBuild: 'appbuilder',
   crewAssignment: 'crew', crewPlan: 'crew',
   run: 'runs', ticket: 'support', incident: 'incidents', decision: 'decisions', task: 'tasks',
   product: 'products', campaign: 'marketing', customer: 'customers', intelQuery: 'intel',
@@ -1661,6 +1692,7 @@ const SUBJECT_SECTION = {
 };
 const ACTION_SECTION = {
   forge: 'forge', sites: 'sites', servers: 'servers', deploy: 'deploys', monitor: 'monitors', crew: 'crew',
+  eng: 'reviews', github: 'github', appbuild: 'appbuilder',
   auth: 'users', server: 'settings', settings: 'settings', security: 'security',
   lab: 'lab', pmo: 'pmo', ir: 'ir', board: 'board', comms: 'comms', brand: 'brand',
   release: 'releases', academy: 'academy', recruiting: 'recruiting', procurement: 'procurement',

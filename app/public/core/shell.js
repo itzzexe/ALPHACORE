@@ -20,14 +20,15 @@ import { t, lang, setLang, applyLang, translateDom, sectionName, divisionName } 
    wrong number for a menu. The sidebar carries what somebody is trying to do;
    every department keeps its page and its route, and sits behind exactly one
    group — checked by the launch audit, because a mapping that can rot will. */
-export const SURFACE_ORDER = ['ask', 'ship', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'];
+export const SURFACE_ORDER = ['ask', 'engineering', 'ship', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'];
 export const CORE2_SURFACE_ORDER = ['e-people', 'e-time', 'e-money', 'e-records', 'e-ops', 'e-seam'];
 const ICON = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/>',
   mywork: '<path d="M8 6h12M8 12h12M8 18h12"/><path d="M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/>',
   waiting: '<path d="M5 4.5h14v15l-7-3.2-7 3.2z"/><path d="M9 10.2l2.2 2.2 4-4.2"/>',
   ask: '<circle cx="12" cy="12" r="8.5"/><path d="M9.4 9.3a2.7 2.7 0 015.2.9c0 1.8-2.6 2.2-2.6 4"/><path d="M12 17.2v.2"/>',
-  ship: '<path d="M8 4l-5 8 5 8"/><path d="M16 4l5 8-5 8"/><path d="M13.5 4.5l-3 15"/>',
+  engineering: '<path d="M8 4l-5 8 5 8"/><path d="M16 4l5 8-5 8"/><path d="M13.5 4.5l-3 15"/>',
+  ship: '<path d="M12 3c3.5 2.5 5 6 5 10l-2.5 3h-5L7 13c0-4 1.5-7.5 5-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M9.5 16l-2 4.5 3-1.5M14.5 16l2 4.5-3-1.5"/>',
   work: '<path d="M3.5 7.5h17v11h-17z"/><path d="M9 7.5V5.6c0-.6.5-1.1 1.1-1.1h3.8c.6 0 1.1.5 1.1 1.1v1.9"/><path d="M3.5 12h17"/>',
   approvals: '<path d="M12 3v18M5 7h14"/><path d="M5 7l-2.5 6h5zM19 7l-2.5 6h5z"/>',
   company: '<path d="M4 20V6.5l7-3 7 3V20"/><path d="M8 20v-4.5h6V20"/><path d="M8 9h2M14 9h2M8 12.5h2M14 12.5h2"/>',
@@ -48,7 +49,7 @@ const ico = (id) => `<svg class="sx-ico" viewBox="0 0 24 24" aria-hidden="true" 
 const CHEV = '<svg class="sx-chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>';
 
 export const SURFACE_LABEL = {
-  ask: 'Ask AlphaCore', ship: 'Build & run', work: 'Work', approvals: 'Decisions & gates', company: 'Company',
+  ask: 'Ask AlphaCore', engineering: 'Engineering', ship: 'Ship & run', work: 'Work', approvals: 'Decisions & gates', company: 'Company',
   intelligence: 'Intelligence', money: 'Money', people: 'People', world: 'World',
   all: 'All departments',
   'e-people': 'People & HR', 'e-time': 'Time & attendance', 'e-money': 'Payroll & spending', 'e-ops': 'Operations',
@@ -73,7 +74,7 @@ const sectionsIn = (surfaceId) => visibleSections().filter((s) => surfaceOfSecti
    Remembered per browser. The group holding the page you are on always opens,
    so following a link never lands you somewhere the menu does not show. */
 const OPEN_KEY = 'alphacore-open-groups';
-const readOpen = () => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '["ship"]')); } catch { return new Set(['ship']); } };
+const readOpen = () => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '["engineering"]')); } catch { return new Set(['engineering']); } };
 let openGroups = readOpen();
 const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openGroups])); } catch { /* private window */ } };
 
@@ -158,7 +159,7 @@ function markActiveNav() {
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   // Detail pages light their department: a project lights the factory.
-  const deptKey = { forgeProject: 'forge', server: 'servers', deployTarget: 'deploys', decision: 'decisions', journey: 'journeys', request: 'requests', workstream: 'workstreams', system: 'systems' }[key] || key;
+  const deptKey = { forgeProject: 'forge', studioProject: 'studio', review: 'reviews', appBuild: 'appbuilder', server: 'servers', deployTarget: 'deploys', decision: 'decisions', journey: 'journeys', request: 'requests', workstream: 'workstreams', system: 'systems' }[key] || key;
   let litGroup = null;
   document.querySelectorAll('#sx-nav .sx-sub a[data-route]').forEach((a) => {
     const on = a.dataset.route === deptKey && !navKey;
@@ -175,7 +176,7 @@ function paintCrumb(key, sec) {
   if (!host) return;
   const surface = sec ? surfaceOfSection(sec.id) : null;
   const core = surface && (CATALOG.surfaces || []).find((s) => s.id === surface)?.core;
-  const parent = { forgeProject: ['#/forge', 'Software factory'], server: ['#/servers', 'Servers'], deployTarget: ['#/deploys', 'Deployments'] }[key];
+  const parent = { forgeProject: ['#/forge', 'Software factory'], server: ['#/servers', 'Servers'], deployTarget: ['#/deploys', 'Deployments'], studioProject: ['#/studio', 'Dev Studio'], review: ['#/reviews', 'Review board'], appBuild: ['#/appbuilder', 'App builder'] }[key];
   host.innerHTML = [
     core ? `<span>${esc(t(core === 'core2' ? 'Enterprise core' : 'AI core'))}</span>` : '',
     surface ? `<a href="#/s/${esc(surface)}">${esc(t(SURFACE_LABEL[surface] || surface))}</a>` : '',
@@ -202,6 +203,9 @@ let palIndex = 0;
 let palHits = [];
 const ACTIONS = [
   { label: 'New software project', href: '#/forge?new=1', kind: 'Create', perm: 'forge.manage' },
+  { label: 'Build an app from an idea', href: '#/appbuilder', kind: 'Create', perm: 'appbuilder.manage' },
+  { label: 'Review a project', href: '#/reviews', kind: 'Create', perm: 'reviews.run' },
+  { label: 'Open Dev Studio', href: '#/studio', kind: 'Go', perm: 'forge.view' },
   { label: 'Build a website', href: '#/sites?new=1', kind: 'Create', perm: 'sites.manage' },
   { label: 'Add a server', href: '#/servers?new=1', kind: 'Create', perm: 'servers.manage' },
   { label: 'Watch a site or server', href: '#/monitors?new=1', kind: 'Create', perm: 'monitors.manage' },
@@ -456,6 +460,9 @@ export function currentRoute() {
   const [seg, arg] = hash.split('/');
   if (seg === 'decisions' && arg) return { key: 'decision', arg };
   if (seg === 'forge' && arg) return { key: 'forgeProject', arg: decodeURIComponent(arg) };
+  if (seg === 'studio' && arg) return { key: 'studioProject', arg: decodeURIComponent(arg) };
+  if (seg === 'reviews' && arg) return { key: 'review', arg };
+  if (seg === 'appbuilder' && arg) return { key: 'appBuild', arg };
   if (seg === 'servers' && arg) return { key: 'server', arg };
   if (seg === 'deploys' && arg) return { key: 'deployTarget', arg };
   if (seg === 'journeys' && arg) return { key: 'journey', arg };
@@ -491,7 +498,7 @@ export async function navigate() {
   if (!currentUser) return;
   const { key, arg } = currentRoute();
   const r = routes[key];
-  const deptKey = { forgeProject: 'forge', server: 'servers', deployTarget: 'deploys' }[key] || key;
+  const deptKey = { forgeProject: 'forge', server: 'servers', deployTarget: 'deploys', studioProject: 'studio', review: 'reviews', appBuild: 'appbuilder' }[key] || key;
   const sec = CATALOG.sections.find((s) => routeOf(s.href) === deptKey);
   $('#page-title').textContent = sec && deptKey === key ? sectionName(sec.id, r.title) : t(r.title);
   paintCrumb(key, sec);

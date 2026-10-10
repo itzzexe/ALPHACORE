@@ -400,7 +400,10 @@ export function gitAvailable() {
   }
   return gitOk;
 }
-const GIT_ID = ['-c', 'user.name=AlphaCore', '-c', 'user.email=forge@alphacore.local', '-c', 'commit.gpgsign=false'];
+// autocrlf off: a machine-wide `core.autocrlf=true` (the Windows installer's
+// default) rewrites line endings on checkout, so restoring a file would hand
+// back different bytes from the ones that were committed.
+const GIT_ID = ['-c', 'user.name=AlphaCore', '-c', 'user.email=forge@alphacore.local', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false'];
 function git(p, args, { timeout = 30_000 } = {}) {
   if (!gitAvailable()) return { ok: false, out: 'git is not installed on this machine' };
   const r = spawnSync('git', [...GIT_ID, ...args], { cwd: projectDir(p), windowsHide: true, timeout, encoding: 'utf8' });
@@ -530,13 +533,164 @@ export function deleteProjectFile(id, { path: rel, actor }) {
   return { path: clean, commit: sha };
 }
 
+// ------------------------------------------------------------- the studio --
+//
+// What an editor needs from a repository beyond reading and writing one file:
+// finding text across it, moving files, seeing what changed, and choosing when
+// a change becomes a commit. Save-and-commit is right for a quick fix from the
+// factory page; it is wrong for a morning of work in an editor, where the
+// commit should be a sentence somebody chose rather than "Edit src/app.js"
+// forty times.
+
+/** Text across every file, as an editor's search panel shows it. */
+export function searchProject(id, { query, regex = false, caseSensitive = false, max = 400 } = {}) {
+  const p = projectRow(id);
+  const needle = String(query || '');
+  if (!needle) return { query: needle, hits: [], files: 0, truncated: false };
+  if (needle.length > 200) refuse('a search is at most 200 characters');
+  let re;
+  try { re = new RegExp(regex ? needle : needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), caseSensitive ? 'g' : 'gi'); } catch (e) { refuse(`not a valid pattern: ${e.message}`); }
+  const hits = [];
+  const files = new Set();
+  for (const f of walk(p)) {
+    if (!f.text || f.size > 1_000_000) continue;
+    let text;
+    try { text = fs.readFileSync(path.join(projectDir(p), f.path), 'utf8'); } catch { continue; }
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      re.lastIndex = 0;
+      const m = re.exec(lines[i]);
+      if (!m) continue;
+      files.add(f.path);
+      hits.push({ path: f.path, line: i + 1, col: m.index + 1, text: lines[i].slice(0, 240), length: m[0].length });
+      if (hits.length >= max) return { query: needle, hits, files: files.size, truncated: true };
+    }
+  }
+  return { query: needle, hits, files: files.size, truncated: false };
+}
+
+export function renameProjectFile(id, { from, to, actor }) {
+  const p = projectRow(id);
+  const a = inside(p, from);
+  const b = inside(p, to);
+  if (!fs.existsSync(a.full)) refuse('no such file', 404);
+  if (fs.existsSync(b.full)) refuse(`${b.rel} already exists`);
+  fs.mkdirSync(path.dirname(b.full), { recursive: true });
+  fs.renameSync(a.full, b.full);
+  touch(p);
+  audit({ actorType: 'human', actorId: actor, action: 'forge.file_renamed', subjectType: 'forgeProject', subjectId: p.id, payload: { from: a.rel, to: b.rel } });
+  return { from: a.rel, to: b.rel };
+}
+
+/** The file as it was at the last commit — the left side of a diff. */
+export function fileAtHead(id, rel) {
+  const p = projectRow(id);
+  const { rel: clean } = inside(p, rel);
+  const r = git(p, ['show', `HEAD:${clean}`]);
+  return { path: clean, exists: r.ok, content: r.ok ? r.out : '' };
+}
+
+export function gitDiff(id, { path: rel = null } = {}) {
+  const p = projectRow(id);
+  const args = ['diff', '--no-color', 'HEAD'];
+  if (rel) args.push('--', inside(p, rel).rel);
+  const r = git(p, args);
+  return { diff: r.ok ? r.out.slice(0, 400_000) : '', ok: r.ok };
+}
+
+/** Commit what is in the working tree, with a message a person wrote. */
+export function commitWorkingTree(id, { message, actor }) {
+  const p = projectRow(id);
+  if (!String(message || '').trim()) refuse('a commit needs a message');
+  if (!gitStatus(p).length) refuse('there is nothing to commit');
+  const sha = commitAll(p, String(message).trim().slice(0, 500), actor);
+  if (!sha) refuse('git refused the commit');
+  touch(p);
+  audit({ actorType: 'human', actorId: actor, action: 'forge.committed', subjectType: 'forgeProject', subjectId: p.id, payload: { commit: sha } });
+  return { commit: sha };
+}
+
+/** Throw away an uncommitted change to one file — or an untracked file itself. */
+export function discardFile(id, { path: rel, actor }) {
+  const p = projectRow(id);
+  const { full, rel: clean } = inside(p, rel);
+  const tracked = git(p, ['ls-files', '--error-unmatch', clean]).ok;
+  if (tracked) git(p, ['checkout', 'HEAD', '--', clean]);
+  else fs.rmSync(full, { force: true });
+  audit({ actorType: 'human', actorId: actor, action: 'forge.change_discarded', subjectType: 'forgeProject', subjectId: p.id, payload: { path: clean, tracked } });
+  return { path: clean, restored: tracked };
+}
+
+const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,80}$/;
+export function branches(id) {
+  const p = projectRow(id);
+  const r = git(p, ['branch', '--format=%(refname:short)\x1f%(HEAD)']);
+  const list = r.ok ? r.out.split('\n').filter(Boolean).map((l) => { const [name, head] = l.split('\x1f'); return { name, current: head === '*' }; }) : [];
+  return { current: list.find((b) => b.current)?.name || null, branches: list };
+}
+
+export function switchBranch(id, { name, create = false, actor }) {
+  const p = projectRow(id);
+  if (!BRANCH.test(String(name || '')) || String(name).includes('..')) refuse('not a valid branch name');
+  if (gitStatus(p).length) refuse('commit or discard the open changes before switching branch');
+  const r = git(p, create ? ['checkout', '-b', name] : ['checkout', name]);
+  if (!r.ok) refuse(r.out.slice(0, 300) || 'git refused');
+  audit({ actorType: 'human', actorId: actor, action: create ? 'forge.branch_created' : 'forge.branch_switched', subjectType: 'forgeProject', subjectId: p.id, payload: { branch: name } });
+  return branches(p.id);
+}
+
+/**
+ * Bring an existing repository into the factory. The token, when there is
+ * one, is in the URL for the length of one process and nowhere after: the
+ * remote is rewritten to the bare address as soon as the clone lands.
+ */
+export function cloneProject({ name, url, branch = null, token = null, description = '', actor }) {
+  if (!gitAvailable()) refuse('git is not installed on this machine');
+  if (!/^https:\/\/[\w.-]+\/[\w.-]+\/[\w.-]+?(\.git)?$/.test(String(url || ''))) refuse('the repository must be an https URL like https://github.com/owner/name');
+  if (branch && !BRANCH.test(branch)) refuse('not a valid branch name');
+  const base = slugify(name || url.split('/').pop().replace(/\.git$/, '')) || `repo-${Date.now().toString(36)}`;
+  let slug = base;
+  for (let i = 2; one('SELECT id FROM forge_projects WHERE slug = ?', slug) || fs.existsSync(path.join(APPS_ROOT, slug)); i++) slug = `${base}-${i}`;
+  fs.mkdirSync(APPS_ROOT, { recursive: true });
+  const authed = token ? url.replace(/^https:\/\//, `https://x-access-token:${token}@`) : url;
+  const dest = path.join(APPS_ROOT, slug);
+  const r = spawnSync('git', [...GIT_ID, 'clone', '--depth', '50', ...(branch ? ['--branch', branch] : []), authed, dest], { windowsHide: true, timeout: 180_000, encoding: 'utf8' });
+  if (r.status !== 0) {
+    fs.rmSync(dest, { recursive: true, force: true });
+    const why = `${r.stderr || r.stdout || 'clone failed'}`.replace(token || '\0', '•••').trim().slice(0, 400);
+    refuse(`git could not clone the repository: ${why}`);
+  }
+  spawnSync('git', ['remote', 'set-url', 'origin', url], { cwd: dest, windowsHide: true });
+  const kind = fs.existsSync(path.join(dest, 'requirements.txt')) ? 'python-api' : fs.existsSync(path.join(dest, 'package.json')) ? 'node-api' : 'blank';
+  exec('INSERT INTO forge_projects (slug, name, kind, description, repo_url, created_by) VALUES (?,?,?,?,?,?)',
+    slug, String(name || base).trim().slice(0, 80), kind, String(description || '').slice(0, 2000), url, actor);
+  const p = one('SELECT * FROM forge_projects WHERE slug = ?', slug);
+  audit({ actorType: actor.startsWith('human') ? 'human' : 'system', actorId: actor, action: 'forge.project_cloned', subjectType: 'forgeProject', subjectId: p.id, payload: { url, branch, kind } });
+  return getProject(p.id);
+}
+
+/** Fetch and fast-forward from the remote; never a merge commit nobody wrote. */
+export function pullProject(id, { token = null, actor }) {
+  const p = projectRow(id);
+  if (!p.repo_url) refuse('this project has no remote repository');
+  if (gitStatus(p).length) refuse('commit or discard the open changes before pulling');
+  const url = token ? p.repo_url.replace(/^https:\/\//, `https://x-access-token:${token}@`) : p.repo_url;
+  const cur = branches(p.id).current || 'main';
+  const r = git(p, ['pull', '--ff-only', url, cur], { timeout: 120_000 });
+  const out = r.out.split(token || '\0').join('•••').slice(0, 2000);
+  if (!r.ok) refuse(`the pull did not fast-forward: ${out.slice(0, 300)}`);
+  touch(p);
+  audit({ actorType: actor.startsWith('human') ? 'human' : 'system', actorId: actor, action: 'forge.pulled', subjectType: 'forgeProject', subjectId: p.id, payload: { branch: cur } });
+  return { ok: true, branch: cur, output: out, head: gitLog(p, 1)[0] || null };
+}
+
 // --------------------------------------------------------- AI change sets --
 
 const MARK = '[FORGE-CHANGE]';
 /** Which employee writes for which kind of project. */
 const ENGINEER = { website: 'AGT-ENG-002', 'static-site': 'AGT-ENG-002', fullstack: 'AGT-ENG-001' };
 
-function contextFor(p, budget = 60_000) {
+export function contextFor(p, budget = 60_000) {
   const tree = walk(p);
   const priority = (f) => (/^(README|package\.json|requirements\.txt)/i.test(f.path) ? 0 : /^(src|app|server|public|index)/.test(f.path) ? 1 : 2);
   let used = 0;

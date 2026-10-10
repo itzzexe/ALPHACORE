@@ -11,6 +11,7 @@
 // (API, DPA, Sprint, RAG, SEV1) stay English on purpose — translating them
 // costs the reader more than it gains.
 import { AR_BUILD } from '/i18n-build.js';
+import { AR_ENG } from '/i18n-eng.js';
 
 export const LANGS = { en: 'English', ar: 'العربية' };
 const KEY = 'alphacore-lang';
@@ -83,6 +84,8 @@ export const SECTION_AR = {
   custody: 'العهد', joining: 'الالتحاق والمغادرة',
   forge: 'مصنع البرمجيات', sites: 'المواقع الإلكترونية', servers: 'الخوادم', deploys: 'النشر',
   monitors: 'المراقبة', crew: 'قيادة القوى العاملة', atlas: 'خريطة الشركة',
+  studio: 'استوديو التطوير', reviews: 'مجلس المراجعة', github: 'GitHub', appbuilder: 'بانِي التطبيقات',
+  engmetrics: 'مؤشرات الهندسة',
 };
 
 // ---------- interface strings ----------
@@ -1110,6 +1113,7 @@ const AR = {
 
 // The build-and-run surfaces carry their own block, kept in a file of its own.
 Object.assign(AR, AR_BUILD);
+Object.assign(AR, AR_ENG);
 
 export function t(s) {
   if (lang !== 'ar' || s == null) return s;

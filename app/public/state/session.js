@@ -65,6 +65,8 @@ export const navPerm = {
   atlas: 'dashboard.view', forge: 'forge.view', forgeProject: 'forge.view', sites: 'sites.view',
   servers: 'servers.view', server: 'servers.view', deploys: 'deploys.view', deployTarget: 'deploys.view',
   monitors: 'monitors.view', crew: 'crew.view',
+  studio: 'forge.view', studioProject: 'forge.view', reviews: 'reviews.view', review: 'reviews.view',
+  github: 'github.view', appbuilder: 'appbuilder.view', appBuild: 'appbuilder.view', engmetrics: 'engmetrics.view',
 };
 
 /**
