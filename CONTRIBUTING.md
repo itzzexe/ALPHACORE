@@ -104,5 +104,6 @@ Do not open an issue. See [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-Contributions are accepted under the MIT licence, the same terms as the rest of
-the project. By opening a pull request you agree that your work ships under it.
+The project is [AGPL-3.0](LICENSE), with a [commercial licence](COMMERCIAL-LICENCE.md)
+beside it. Contributions are accepted under the [contributor licence](CLA.md),
+which is what makes both possible at once. You keep the copyright in what you write.
