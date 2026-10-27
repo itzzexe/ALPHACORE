@@ -26,6 +26,8 @@ import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { PERMS } from './auth.js';
 import { getSetting } from './settings.js';
+import { pendingApprovals } from './inbox.js';
+import { categoryOf, CATEGORIES, EXECUTABLE, NEVER, decideItem, autonomyOverview } from './autonomy.js';
 
 // ------------------------------------------------------------------ roles --
 
@@ -53,7 +55,7 @@ export const ROLE_TEMPLATES = {
     describes: 'Sits at the gates. Decides, rules on quality, and closes what is waiting — but cannot move money or open a door to the outside.',
     perms: ['*.view', 'gate.resolve', 'decisions.decide', 'decisions.evidence', 'decisions.verify',
       'quality.manage', 'pmo.manage', 'requests.create', 'problems.resolve', 'notifications.read',
-      'rituals.complete', 'auditor.request', 'press.approve'],
+      'rituals.complete', 'auditor.request', 'press.approve', 'policies.publish', 'iso.verify'],
   },
   operator: {
     label: 'Operator',
@@ -61,26 +63,30 @@ export const ROLE_TEMPLATES = {
     perms: ['*.view', 'runs.create', 'runs.apply', 'pipelines.create', 'pipelines.cancel',
       'incidents.manage', 'support.manage', 'tasks.manage', 'projects.manage', 'sprints.manage',
       'releases.manage', 'jobs.manage', 'assets.manage', 'notifications.read', 'rituals.complete',
-      'agents.manage', 'workstreams.manage', 'evals.run', 'lab.manage', 'crew.manage'],
+      'agents.manage', 'workstreams.manage', 'evals.run', 'lab.manage', 'crew.manage',
+      'markets.manage', 'news.manage', 'portfolio.propose', 'learning.manage',
+      'policies.manage', 'iso.manage', 'dtx.manage', 'production.manage', 'opscenter.manage', 'strategy.manage'],
   },
   finance: {
     label: 'Finance',
     describes: 'The books, the invoices, and the one permission that releases money — which is here and nowhere else.',
     perms: ['*.view', 'finance.export', 'finreports.manage', 'budgets.freeze', 'revenue.invoice',
-      'procurement.manage', 'vendors.manage', 'treasury.manage', 'treasury.pay', 'money.manage'],
+      'procurement.manage', 'vendors.manage', 'treasury.manage', 'treasury.pay', 'money.manage',
+      'portfolio.propose', 'portfolio.approve', 'portfolio.connect',
+      'insurance.manage', 'remit.manage', 'remit.release'],
   },
   security: {
     label: 'Security',
     describes: 'The SOC, the constitution, the red team, and the gate that lets things out. Reads the vault register; does not hold the vault.',
     perms: ['*.view', 'security.manage', 'compliance.manage', 'redteam.run', 'constitution.amend',
       'egress.release', 'scopes.grant', 'connectors.manage', 'provenance.issue', 'timemachine.snapshot',
-      'reviews.run', 'reviews.decide'],
+      'reviews.run', 'reviews.decide', 'ia.manage', 'ia.close', 'aml.manage', 'aml.decide', 'assurancemap.manage'],
   },
   marketing: {
     label: 'Marketing',
     describes: 'The twenty desks of the marketing district. Can publish; cannot approve a press statement — that stays with an approver.',
     perms: ['*.view', 'marketing.manage', 'content.manage', 'design.manage', 'brand.manage',
-      'social.manage', 'localization.manage', 'marketwatch.manage', 'segments.manage'],
+      'social.manage', 'localization.manage', 'marketwatch.manage', 'segments.manage', 'production.manage'],
   },
   engineering: {
     label: 'Engineering',
@@ -94,7 +100,7 @@ export const ROLE_TEMPLATES = {
     describes: 'Keeps the machine running: keys, webhooks, backups, tenants, packages. Holds the vault, and nothing that spends.',
     perms: ['*.view', 'settings.manage', 'keys.manage', 'webhooks.manage', 'backups.take',
       'backups.restore', 'packages.install', 'tenants.manage', 'observe.run', 'chief.run',
-      'vault.manage', 'mcp.manage', 'web.use', 'graph.manage', 'skills.manage'],
+      'vault.manage', 'mcp.manage', 'web.use', 'graph.manage', 'skills.manage', 'localai.manage', 'learning.upgrade'],
   },
 };
 
@@ -124,7 +130,7 @@ export function roleTemplates() {
       id, label: t.label, describes: t.describes, count: perms.length, perms,
       // Surfaced rather than buried: whoever hands out a template should see
       // which irreversible powers come with it.
-      irreversible: perms.filter((p) => ['treasury.pay', 'egress.release', 'vault.manage', 'owner.rule', 'backups.restore', 'constitution.amend'].includes(p)),
+      irreversible: perms.filter((p) => ['treasury.pay', 'egress.release', 'vault.manage', 'owner.rule', 'backups.restore', 'constitution.amend', 'portfolio.approve', 'remit.release'].includes(p)),
     };
   });
 }
@@ -186,22 +192,30 @@ const slaHours = () => Number(getSetting('APPROVAL_SLA_HOURS') || 24);
  * queue table is a second source of truth that drifts the first time somebody
  * resolves something directly.
  */
+/**
+ * The permission a person needs to decide each kind. Anything unlisted is a
+ * gate verdict, which is what an approver holds.
+ */
+const PERM_OF = {
+  run: 'gate.resolve', decision: 'decisions.decide', payout: 'treasury.pay', egress: 'egress.release',
+  paperOrder: 'portfolio.approve', brokerOrder: 'portfolio.approve', learnNote: 'learning.manage',
+  post: 'marketing.manage', content: 'marketing.manage', campaign: 'marketing.manage', design: 'marketing.manage',
+  ticket: 'support.manage', contract: 'legal.manage', finReport: 'finance.export',
+};
+
 export function waiting({ forUser = null } = {}) {
   const items = [];
 
-  for (const r of q(`SELECT id, agent_id, task_type, failure_reason, created_at
-                     FROM runs WHERE state = 'awaiting_human' ORDER BY created_at ASC`)) {
+  // Everything the inbox knows about — forty-odd kinds, from runs to contracts
+  // to paper orders. This used to be four hand-written queries, so the desk
+  // said "nothing waiting" while documents, posts and replies sat blocked in
+  // the departments that held them.
+  for (const i of pendingApprovals()) {
     items.push({
-      kind: 'run', id: r.id, title: `${r.task_type} — ${r.agent_id}`,
-      because: r.failure_reason || 'stopped for a person',
-      since: r.created_at, route: '#/gate', permission: 'gate.resolve', blocking: 0,
-    });
-  }
-  for (const d of q(`SELECT id, title, status, created_at FROM decisions
-                     WHERE status IN ('proposed','deliberating') ORDER BY created_at ASC`)) {
-    items.push({
-      kind: 'decision', id: d.id, title: d.title, because: d.status,
-      since: d.created_at, route: '#/decisions', permission: 'decisions.decide', blocking: 0,
+      kind: i.kind, id: i.id, title: i.title, because: i.sub || 'waiting for a person',
+      since: i.at, route: i.href, dept: i.dept,
+      permission: PERM_OF[i.kind] || 'gate.resolve', blocking: 0,
+      action: i.action, actionLabel: i.actionLabel, secondary: i.secondary,
     });
   }
   try {
@@ -209,21 +223,20 @@ export function waiting({ forUser = null } = {}) {
       items.push({
         kind: 'payout', id: p.id, title: `${p.amount} ${p.asset || ''} to ${String(p.to_address).slice(0, 16)}…`,
         because: 'money leaves only when a person releases it',
-        since: p.created_at, route: '#/treasury', permission: 'treasury.pay', blocking: 0,
+        since: p.created_at, route: '#/treasury', dept: 'treasury', permission: 'treasury.pay', blocking: 0,
       });
     }
   } catch { /* no treasury yet */ }
   try {
-    // A held call is one the gate stopped for a person and which has not since
-    // produced a result. There is no released_at column, and inventing one in
-    // a query is how a queue quietly shows things that were dealt with days ago.
+    // The gate writes 'gated'. This read 'gate' for months, so nothing it held
+    // ever reached the desk. A held call is one with no result since.
     for (const e of q(`SELECT id, connector, capability, target, created_at FROM egress_log
-                       WHERE verdict = 'gate' AND (result IS NULL OR result = '')
+                       WHERE verdict = 'gated' AND (result IS NULL OR result = '')
                        ORDER BY created_at ASC LIMIT 50`)) {
       items.push({
         kind: 'egress', id: e.id, title: `${e.connector}.${e.capability} → ${e.target || ''}`,
         because: 'the gate held it for a person',
-        since: e.created_at, route: '#/egress', permission: 'egress.release', blocking: 0,
+        since: e.created_at, route: '#/egress', dept: 'egress', permission: 'egress.release', blocking: 0,
       });
     }
   } catch { /* older schema */ }
@@ -232,16 +245,19 @@ export function waiting({ forUser = null } = {}) {
   const sla = slaHours();
   const scored = items.map((item) => {
     const urgency = classify(item);
-    const ageHours = (now - new Date(`${String(item.since).replace(' ', 'T')}Z`)) / 36e5;
+    const ageHours = item.since ? (now - new Date(`${String(item.since).replace(' ', 'T')}Z`)) / 36e5 : 0;
     return {
       ...item,
       urgency: urgency.id,
       whyUrgent: urgency.why,
-      ageHours: Math.round(ageHours * 10) / 10,
+      ageHours: Math.max(0, Math.round(ageHours * 10) / 10),
       overdue: ageHours > sla,
       score: urgency.weight,
+      category: categoryOf(item.kind),
+      decidable: EXECUTABLE.has(item.kind) && !NEVER.has(item.kind),
+      alwaysHuman: NEVER.has(item.kind),
     };
-  }).sort((a, b) => (b.score - a.score) || (b.ageHours - a.ageHours));
+  }).sort((x, y) => (y.score - x.score) || (y.ageHours - x.ageHours));
 
   const mine = forUser
     ? scored.filter((i) => forUser.perms?.includes('*') || forUser.perms?.includes(i.permission))
@@ -254,6 +270,7 @@ export function waiting({ forUser = null } = {}) {
     overdue: scored.filter((i) => i.overdue).length,
     oldestHours: scored.length ? Math.max(...scored.map((i) => i.ageHours)) : 0,
     byUrgency: URGENCY.map((u) => ({ ...u, count: scored.filter((i) => i.urgency === u.id).length })),
+    byCategory: Object.entries(CATEGORIES).map(([id, c]) => ({ id, label: c.label, count: scored.filter((i) => i.category === id).length })),
     groups: groupsOf(mine),
     items: mine.slice(0, 200),
   };
@@ -277,7 +294,7 @@ function groupsOf(items) {
   return [...by.entries()]
     .filter(([, xs]) => xs.length >= 3)
     .map(([key, xs]) => ({
-      key, kind: xs[0].kind, because: xs[0].because, count: xs.length,
+      key, kind: xs[0].kind, because: xs[0].because, count: xs.length, decidable: xs[0].decidable,
       permission: xs[0].permission, oldestHours: Math.max(...xs.map((x) => x.ageHours)),
       ids: xs.map((x) => x.id),
     }))
@@ -304,7 +321,7 @@ export function decideBatch({ key, ids, verdict, note = null, actor, apply }) {
     catch (e) { failed.push({ id, error: String(e.message).slice(0, 120) }); }
   }
 
-  audit({
+  if (ids.length > 1) audit({
     actorType: 'human', actorId: actor, action: 'approvals.batch',
     subjectType: 'batch', subjectId: key || 'ad-hoc',
     payload: {
@@ -375,4 +392,30 @@ export function approvalsOverview(user) {
     },
     roles: roleTemplates().map(({ perms, ...rest }) => rest),
   };
+}
+
+/**
+ * Decide items of one kind from the desk. A person, with the permission for
+ * that kind; kinds the platform keeps for a person on their own page are
+ * refused here rather than half-done.
+ */
+export function decideFromDesk({ kind, ids, verdict, note = null, user }) {
+  if (!user) throw new Error('a decision has to be signed');
+  if (NEVER.has(kind)) { const e = new Error(`${kind} is decided on its own page, by a person, on purpose`); e.status = 409; throw e; }
+  if (!EXECUTABLE.has(kind)) { const e = new Error(`${kind} has to be decided on its own page`); e.status = 409; throw e; }
+  const need = PERM_OF[kind] || 'gate.resolve';
+  if (!(user.perms?.includes('*') || user.perms?.includes(need))) { const e = new Error(`permission required: ${need}`); e.status = 403; throw e; }
+  const actor = `human:${user.username}`;
+  return decideBatch({
+    key: `${kind}:desk`, ids: (ids || []).map(String), verdict, note, actor,
+    apply: (id, v, a) => {
+      const out = decideItem({ kind, id }, v, { actor: a, note: note || '' });
+      if (out === null) throw new Error('this item has to be decided on its own page');
+    },
+  });
+}
+
+/** The desk in one call: the queue, delegation, and who decides. */
+export function deskOverview(user) {
+  return { ...approvalsOverview(user), autonomy: autonomyOverview() };
 }

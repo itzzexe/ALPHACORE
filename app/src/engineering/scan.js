@@ -56,7 +56,7 @@ export const RULES = [
   // ---- dangerous code ----
   { id: 'code.eval', dimension: 'security', severity: 'high', files: /\.(m?[jt]sx?|cjs|py)$/i, re: /(^|[^\w.])eval\s*\(/, title: 'eval() runs a string as code', fix: 'Parse the data instead (JSON.parse, ast.literal_eval) or map the input to a fixed set of functions.' },
   { id: 'code.new-function', dimension: 'security', severity: 'high', files: JS, re: /new\s+Function\s*\(/, title: 'new Function() compiles a string at runtime', fix: 'Replace with a lookup of known functions; never build code from input.' },
-  { id: 'code.command-injection', dimension: 'security', severity: 'high', files: JS, re: /\b(exec|execSync)\s*\(\s*(`[^`]*\$\{|[^)]*\+\s*\w)/, title: 'A shell command is built from a variable', fix: 'Use execFile/spawn with an argument array and no shell, and validate the arguments against an allowlist.' },
+  { id: 'code.command-injection', dimension: 'security', severity: 'high', files: JS, re: /\b(exec|execSync)\s*\(\s*(`[^`]*\$\{|(['"])(?:(?!\3)[^\\]|\\.)*\3\s*\+|[A-Za-z_$][^)'"]*\+\s*\w)/, title: 'A shell command is built from a variable', fix: 'Use execFile/spawn with an argument array and no shell, and validate the arguments against an allowlist.' },
   { id: 'code.shell-true', dimension: 'security', severity: 'high', files: PY, re: /\bshell\s*=\s*True\b/, title: 'subprocess runs through a shell', fix: 'Pass a list of arguments with shell=False.' },
   { id: 'code.os-system', dimension: 'security', severity: 'medium', files: PY, re: /\bos\.system\s*\(/, title: 'os.system() passes a string to the shell', fix: 'Use subprocess.run([...]) with an argument list.' },
   {

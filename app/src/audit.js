@@ -66,6 +66,15 @@ export function verifyChain() {
 }
 
 /**
+ * The same walk over rows read from somewhere else — a backup being drilled —
+ * without touching what this process has proved about its own chain.
+ */
+export function verifyRows(rows) {
+  const w = walkFrom(rows, GENESIS);
+  return { ok: w.brokenAt === null, checked: rows.length, brokenAt: w.brokenAt, tip: rows.at(-1)?.seq || 0 };
+}
+
+/**
  * The same answer for the badge on every page, at the cost of what was added
  * since it was last asked.
  *

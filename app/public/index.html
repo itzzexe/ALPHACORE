@@ -31,6 +31,7 @@
 <link rel="stylesheet" href="/styles.css">
 <link rel="stylesheet" href="/ui.css">
 <link rel="stylesheet" href="/eng.css">
+<link rel="stylesheet" href="/markets.css">
 </head>
 <body>
 <a class="skip-link" href="#view">Skip to the page</a>
@@ -176,6 +177,8 @@
       <input type="password" id="pw-again" name="confirm-password" autocomplete="new-password" minlength="10" required>
       <button class="btn btn-primary login-go" id="pw-go" type="submit" data-i18n="Set the password">Set the password</button>
     </form>
+
+    <div id="totp-enrol" class="login-form" hidden></div>
 
     <div id="login-err" class="login-err" role="alert" aria-live="polite"></div>
 

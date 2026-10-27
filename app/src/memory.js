@@ -29,7 +29,11 @@ import { openPii } from './erasure.js';
 // workflow.js pulls recall() from here, so the run queue is loaded lazily
 // inside startReflection rather than creating an import cycle at module load.
 
-const MEM_DIR = path.join(ROOT, 'workspace', '_memory');
+// Nameable for the same reason the database is: a test that corrects an
+// employee must not write its correction into the real playbook on this disk.
+const MEM_DIR = process.env.ALPHACORE_MEMORY_DIR
+  ? path.resolve(ROOT, process.env.ALPHACORE_MEMORY_DIR)
+  : path.join(ROOT, 'workspace', '_memory');
 const lastId = () => one('SELECT last_insert_rowid() AS id').id;
 
 // ---------- tokenizer (Arabic + English) ----------

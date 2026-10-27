@@ -3,11 +3,13 @@
 // reviewer), sensitivity ceilings, reservation-first budgets, fail-closed
 // semantics for review roles, and full metering into model_calls.
 import { providersConfig } from './env.js';
-import { getSecret, isProviderAvailable as providerAvailable, isMockMode as mockMode } from './settings.js';
+import { getSecret, isProviderAvailable as providerAvailable, isMockMode as mockMode, localOnly } from './settings.js';
 import * as anthropic from './providers/anthropic.js';
 import * as claudeCli from './providers/claude-cli.js';
 import * as openaiCompat from './providers/openai-compat.js';
 import * as gemini from './providers/gemini.js';
+import * as ollama from './providers/ollama.js';
+import * as engine from './providers/engine.js';
 import * as mock from './providers/mock.js';
 import { reserve, settle, release, providerAllowedFor, perTaskCap, BudgetExceeded } from './policy.js';
 import { exec } from './db.js';
@@ -27,6 +29,8 @@ const adapters = {
   'claude-cli': claudeCli.call,
   'openai-compat': openaiCompat.call,
   gemini: gemini.call,
+  ollama: ollama.call,
+  engine: engine.call,
   mock: mock.call,
 };
 
@@ -44,12 +48,63 @@ function costOf(providerName, model, tokensIn, tokensOut) {
   return (tokensIn / 1e6) * price.priceIn + (tokensOut / 1e6) * price.priceOut;
 }
 
+/**
+ * Local-first: the server's own model goes to the head of every chain.
+ *
+ * This is the switch that makes the VPS the company's brain rather than its
+ * last resort. Hosted providers stay behind it, so a question the small model
+ * cannot answer in time still gets answered — and the serving model is on
+ * every run, so which one actually did the work is never a guess. A canary's
+ * chain is left alone: it exists to test exactly the chain it names.
+ */
+export const localFirst = () => localOnly() || String(getSecret('LOCAL_FIRST') || '').toLowerCase() === 'true';
+
+/**
+ * Which family a local model belongs to — Qwen, Llama, Gemma — rather than
+ * "local". Two Qwens on one machine are one opinion asked twice; a Llama
+ * checking a Qwen is a second opinion, even on the same hardware. This is what
+ * keeps reviewer independence honest when every provider is local.
+ */
+export function lineage(model) {
+  const m = String(model || '').toLowerCase().split('/').pop();
+  const hit = m.match(/^(qwen|llama|gemma|mistral|mixtral|phi|deepseek|granite|smollm|olmo|falcon|command|yi|nemotron|hermes)/);
+  return hit ? (hit[1] === 'mixtral' ? 'mistral' : hit[1]) : (m.split(/[:.\-_\d]/)[0] || 'unknown');
+}
+const familyOf = (provider, model) => (providersConfig.providers[provider]?.family === 'local' ? `local:${lineage(model)}` : providersConfig.providers[provider]?.family);
+
+/** The model a reviewer runs on when everything is local: a different family from the author's, if one is installed. */
+export const reviewModel = () => getSecret('LOCAL_REVIEW_MODEL') || null;
+
+/**
+ * Which local runtime answers: the built-in engine when it is switched on,
+ * Ollama otherwise. LOCAL_RUNTIME pins it when both are present.
+ */
+export function localRuntime() {
+  const pinned = String(getSecret('LOCAL_RUNTIME') || '');
+  if (pinned === 'engine' || pinned === 'ollama') return pinned;
+  return String(getSecret('ENGINE_ENABLED') || '').toLowerCase() === 'true' ? 'engine' : 'ollama';
+}
+
+export function localModelFor(tier) {
+  return getSecret(`LOCAL_MODEL_${tier}`) || getSecret('LOCAL_MODEL')
+    || (tier === 'T3' || tier === 'TL' ? 'qwen2.5:7b' : 'qwen2.5:3b');
+}
+
 function eligibleChain(tier, { sensitivity = 'internal', familyNot = null, chainOverride = null } = {}) {
   if (mockMode()) return [{ provider: 'mock', model: 'mock-large' }];
   // A promoted chain beats the file. Editing providers.json to change a tier is
   // a change that the next `git pull` silently reverts, so a decision that was
   // canaried and signed lives in settings instead.
-  const chain = chainOverride || tierChain(tier) || providersConfig.tiers[tier]?.chain || [];
+  let chain = chainOverride || tierChain(tier) || providersConfig.tiers[tier]?.chain || [];
+  if (!chainOverride && (tier === 'TL' || localFirst())) {
+    // A reviewer (an employee that must not share its author's family) gets
+    // the review model on Ollama, which can hold more than one model; the
+    // engine serves one, so there a review is the same model and is flagged.
+    const local = localRuntime() === 'engine'
+      ? { provider: 'engine', model: 'loaded' }
+      : { provider: 'ollama', model: (familyNot && reviewModel()) || localModelFor(tier) };
+    chain = [local, ...(tier === 'TL' ? [] : chain.filter((s) => s.provider !== 'ollama' && s.provider !== 'engine'))];
+  }
   return chain.filter((step) => {
     const p = providersConfig.providers[step.provider];
     if (!p || !providerAvailable(step.provider)) return false;
@@ -75,7 +130,7 @@ async function callStep(step, { system, prompt, maxTokens, runId }) {
     });
     const costUsd = result.subscription ? 0 : costOf(step.provider, step.model, result.tokensIn, result.tokensOut);
     meter({ runId, provider: step.provider, model: step.model, tokensIn: result.tokensIn, tokensOut: result.tokensOut, costUsd, latencyMs: result.latencyMs });
-    return { ...result, provider: step.provider, model: step.model, costUsd, family: p.family };
+    return { ...result, provider: step.provider, model: step.model, costUsd, family: familyOf(step.provider, step.model) };
   } catch (err) {
     meter({ runId, provider: step.provider, model: step.model, latencyMs: Date.now() - t0, ok: false, error: String(err.message).slice(0, 300) });
     throw err;
@@ -139,6 +194,29 @@ export async function routePair({ agentId, decisionId = null, sensitivity = 'int
   if (mockMode()) {
     const a = await route({ tier: 'T1', agentId, decisionId, sensitivity, system, prompt, maxTokens, runId });
     return { a, b: a, agreement: true, mock: true };
+  }
+  // Everything local: the pair is the reasoning model and the review model,
+  // and only if they come from different families. Otherwise the check fails
+  // closed and a person decides — the same answer as with no second provider.
+  if (localOnly()) {
+    const a = localModelFor('T3'); const b = reviewModel();
+    if (localRuntime() === 'engine' || !b || lineage(a) === lineage(b)) {
+      throw new RouterExhausted('T4', 'fail-closed', [`local cross-check needs two model families (have ${lineage(a)}${b ? ` and ${lineage(b)}` : ' only'})`]);
+    }
+    const reservation = reserve({ agentId, decisionId, estUsd: 0 });
+    try {
+      const [ra, rb] = await Promise.all([{ provider: 'ollama', model: a }, { provider: 'ollama', model: b }].map((st) => callStep(st, { system, prompt, maxTokens, runId })));
+      settle(reservation, 0);
+      let agreement = null;
+      try {
+        const ja = parseAgentJson(ra.text); const jb = parseAgentJson(rb.text);
+        if (ja?.verdict && jb?.verdict) agreement = ja.verdict === jb.verdict;
+      } catch { /* leave null — humans compare */ }
+      return { a: ra, b: rb, agreement, local: true };
+    } catch (err) {
+      release(reservation);
+      throw err;
+    }
   }
   const pairs = [providersConfig.tiers.T4.pair, providersConfig.tiers.T4.pairFallback];
   for (const pair of pairs) {

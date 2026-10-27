@@ -210,6 +210,8 @@ app/src/
     bank.js         accounts as children of 1000, reconciliation, transfers, cheques, batches
     ops.js          stock as a sum of moves, work orders, fleet, rooms, the help desk
     admin.js        correspondence, committees, cases, the regulatory calendar, my workspace
+    remit.js        approved external transfers as MT103 / pacs.008, screened, four-eyes, released as a file — never sent
+    statements.js   bank statement files (CSV, MT940, camt.053) read into lines for a person to check; pure
   engineering/      the floor around the factory
     scan.js         the deterministic reviewer: rules per dimension, the SBOM, the score
     reviews.js      the review board: scanner, then one reviewer per dimension; findings; the quality gate
@@ -218,7 +220,26 @@ app/src/
     assist.js       the pair programmer in the editor — advice, never an edit
     metrics.js      DORA and the AI-engineering numbers, measured
   offices.js        the workforce in a building — rooms, encounters, learning
-  …                 and one module per department
+  localai.js        the model on the company's own server; providers/ollama.js speaks to it, one answer at a time
+  markets.js        the watchlist, the daily pass, the brief; markets/quant.js is the arithmetic, never a prompt
+  portfolio.js      paper and broker books; an order fills only after a person approves it
+  newsroom.js       RSS and Atom from the outlets, tagged, scored for tone, briefed daily
+  engine.js         llama.cpp downloaded and supervised as a child process; engine/archive.js unpacks it
+  learning.js       lessons from mistakes, corrections, web research and the guarded model upgrade
+  guards.js         rules checked on every answer at the run queue; a repeat stops at a person
+  drafts.js         one way for the governance floor to ask an employee to write, and to fold the answer back
+  policies.js       laws, policies, procedures, processes, work instructions — versioned, published by a person
+  iso.js            five ISO management systems clause by clause, NCRs and corrective action, management review
+  internalaudit.js  the risk-based plan, engagements and findings, and the tests over every posted journal entry
+  screening.js      name folding and matching, pure — shared by aml.js (Core 1) and core2/remit.js
+  sanctions.js      the UN and OFAC lists as reference data both cores screen against; connectors/sanctions.js fetches them
+  documents.js      official copies: a final record frozen, hashed and coded; /verify/<code> is public
+  assurance.js      the governance map: the heat map, and proposed links between departments a person accepts
+  nightshift.js     drafts wait for the quiet hours and a larger model; context.js hands writers the company's own rules
+  reach.js          a person's own Telegram chat: what waits for them, and a morning digest — links, never buttons
+  backupcrypt.js    AES-256-GCM for backups leaving the machine; pure, so scripts/decrypt-backup.mjs runs anywhere
+  …                 and one module per department: transformation, studio-production, opscenter,
+                    strategy, insurance, aml among the newest
 app/public/         the console: vanilla JS, no build step, no external requests
 app/test/           207 tests across eighteen files
 app/scripts/        the generators and the verifiers

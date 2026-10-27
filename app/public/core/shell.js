@@ -21,7 +21,7 @@ import { t, lang, setLang, applyLang, translateDom, sectionName, divisionName } 
    wrong number for a menu. The sidebar carries what somebody is trying to do;
    every department keeps its page and its route, and sits behind exactly one
    group — checked by the launch audit, because a mapping that can rot will. */
-export const SURFACE_ORDER = ['ask', 'engineering', 'ship', 'work', 'approvals', 'company', 'intelligence', 'money', 'people', 'world'];
+export const SURFACE_ORDER = ['ask', 'engineering', 'ship', 'work', 'approvals', 'company', 'intelligence', 'money', 'markets', 'assurance', 'people', 'world'];
 export const CORE2_SURFACE_ORDER = ['e-people', 'e-time', 'e-money', 'e-records', 'e-ops', 'e-seam'];
 const ICON = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/>',
@@ -35,6 +35,8 @@ const ICON = {
   company: '<path d="M4 20V6.5l7-3 7 3V20"/><path d="M8 20v-4.5h6V20"/><path d="M8 9h2M14 9h2M8 12.5h2M14 12.5h2"/>',
   intelligence: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4L20.5 20.5"/><path d="M7.6 10.5h5.8M10.5 7.6v5.8"/>',
   money: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 2-2.5.8-2.5 2 1.1 2 2.5 2 2.5-.8 2.5-2"/>',
+  assurance: '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 9.5-4-1.2-7-5-7-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/>',
+  markets: '<path d="M3.5 20.5h17"/><path d="M7 6v11M12 4v9M17 8v8"/><path d="M5.5 9h3v5h-3zM10.5 6.5h3v4h-3zM15.5 10h3v4h-3z"/>',
   people: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.5a3 3 0 010 5.6M18 20c0-2.4-1-4.2-2.6-5.2"/>',
   world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.8 5.4 3.8 8.5S14.5 18.4 12 20.5c-2.5-2.1-3.8-5.4-3.8-8.5S9.5 6.1 12 3.5z"/>',
   'e-people': '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>',
@@ -51,7 +53,7 @@ const CHEV = '<svg class="sx-chev" viewBox="0 0 24 24" aria-hidden="true" focusa
 
 export const SURFACE_LABEL = {
   ask: 'Ask AlphaCore', engineering: 'Engineering', ship: 'Ship & run', work: 'Work', approvals: 'Decisions & gates', company: 'Company',
-  intelligence: 'Intelligence', money: 'Money', people: 'People', world: 'World',
+  intelligence: 'Intelligence', money: 'Money', markets: 'Markets', assurance: 'Governance & assurance', people: 'People', world: 'World',
   all: 'All departments',
   'e-people': 'People & HR', 'e-time': 'Time & attendance', 'e-money': 'Payroll & spending', 'e-ops': 'Operations',
   'e-records': 'Documents & records', 'e-seam': 'The seam',
@@ -469,6 +471,7 @@ export function currentRoute() {
   if (seg === 'appbuilder' && arg) return { key: 'appBuild', arg };
   if (seg === 'servers' && arg) return { key: 'server', arg };
   if (seg === 'deploys' && arg) return { key: 'deployTarget', arg };
+  if (seg === 'markets' && arg) return { key: 'symbol', arg: decodeURIComponent(arg) };
   if (seg === 'journeys' && arg) return { key: 'journey', arg };
   if (seg === 'systems' && arg) return { key: 'system', arg: hash.split('/').slice(1).join('/') };
   if (seg === 'requests' && arg) return { key: 'request', arg };

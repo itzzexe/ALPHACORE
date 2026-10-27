@@ -51,7 +51,7 @@ export function situation() {
       running: n("SELECT COUNT(*) AS n FROM runs WHERE state = 'running'"),
       awaitingHuman: n("SELECT COUNT(*) AS n FROM runs WHERE state = 'awaiting_human'"),
       failedToday: n("SELECT COUNT(*) AS n FROM runs WHERE state = 'failed' AND date(created_at) = date('now')"),
-      stuck: n("SELECT COUNT(*) AS n FROM runs WHERE state = 'running' AND created_at < datetime('now','-30 minutes')"),
+      stuck: n("SELECT COUNT(*) AS n FROM runs WHERE state = 'running' AND COALESCE(lease_until, datetime(created_at, '+30 minutes')) < datetime('now')"),
     },
     money: {
       monthUsd: one("SELECT COALESCE(ROUND(SUM(cost_usd),4),0) AS n FROM model_calls WHERE created_at >= date('now','start of month')").n,
@@ -97,7 +97,7 @@ function dailyTurn(s) {
   const moves = [];
 
   // A run that has been "running" for half an hour is not running.
-  const stuck = q("SELECT id, agent_id FROM runs WHERE state = 'running' AND created_at < datetime('now','-30 minutes') LIMIT 10");
+  const stuck = q("SELECT id, agent_id FROM runs WHERE state = 'running' AND COALESCE(lease_until, datetime(created_at, '+30 minutes')) < datetime('now') LIMIT 10");
   for (const r of stuck) {
     exec("UPDATE runs SET state = 'queued' WHERE id = ?", r.id);
     moves.push(`requeued a run that stalled on ${r.agent_id}`);

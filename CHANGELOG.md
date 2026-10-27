@@ -13,6 +13,164 @@ The full reasoning for any change is in its commit message; this is the index.
 
 ## Unreleased
 
+### Paper you can check, lists that are real, and a server that is safe to run
+
+- **Official copies.** A published policy, a closed audit report, a management
+  review or a released payment prints as the company's own document, with a
+  code and a QR code (drawn in the console, no library). `/verify/<code>`
+  answers anyone without an account: genuine or not, who approved it, and
+  whether it is still the version in force. A copy can be withdrawn.
+- **Sanctions lists.** Once a person switches them on, the UN consolidated list
+  and OFAC's SDN list are downloaded daily through the gate. New parties and
+  payment messages are screened against them, and everyone already on the
+  books is rescreened when the lists change: one alert per match, never a
+  daily repeat. A payment approved but not yet released to a name that becomes
+  listed is held again and needs a new approval. A download that comes back
+  less than half its previous size is refused.
+- **Bank statement files.** CSV (Arabic or English headers, one amount column
+  or debit and credit), SWIFT MT940 and camt.053 are read into lines for a
+  person to check before importing.
+- **The night shift.** Drafts wait for the quiet hours and a larger model;
+  questions are still answered at once. "Write it now" brings one forward.
+  Drafts are handed the company's own published rules, closed nonconformities
+  and open findings, and cite them by code.
+- **The governance map.** The assurance departments on one sheet, each green,
+  amber or red from its own figures, with proposed links between them: a
+  finding should revise a rule, a red KPI is a nonconformity, a large risk has
+  no insurance behind it, a high-risk party has no due-diligence memo. Nothing
+  happens until a person with that department's permission accepts.
+- **Reach me on my phone.** A person links their own Telegram chat with a code
+  and hears within a minute that something they can decide has arrived, plus a
+  morning summary limited to what they may see. Kinds and counts only, never
+  names or amounts, and a link rather than a button: deciding stays in the
+  console.
+- **Two-factor login can be required**: of everyone, or of the accounts that
+  can move money, let things out or give access. Such an account can do
+  nothing else until it has set up a code (with a QR code to scan).
+- **Restore drills and encrypted offsite copies.** Once a month the newest
+  backup is opened read-only and its chain walked to the end. With a passphrase
+  set, a backup is encrypted (AES-256-GCM) before it leaves the machine;
+  `scripts/decrypt-backup.mjs` opens it anywhere.
+- **Fixed: backups taken from the console could be missing their last
+  minutes.** While anything else was reading, the checkpoint could not finish
+  and only the main file was copied. The first restore drill found a copy
+  eleven records short. The log is now copied and folded in, a copy that does
+  not reach the chain tip is refused rather than recorded, and two copies in
+  the same second no longer overwrite each other.
+- **Fixed: a run that waited in the queue was treated as stuck** from when it
+  was created, not when it started, and could be requeued while still
+  running. A run now carries its own deadline from the moment it starts.
+- `deploy/vps/https-nginx.sh` adds HTTPS through an nginx that already serves
+  other sites; `deploy/vps/harden-ssh.sh` switches SSH to keys only, and
+  refuses if no key is installed yet.
+
+### Governance and assurance, and the departments a large company has
+
+- **Policies & procedures.** Laws, policies, procedures, processes (as steps
+  with a role and a control each) and work instructions, coded and versioned.
+  Publishing is a person's act and not the author's straight from draft;
+  editing a published rule starts the next version and keeps the old text;
+  people acknowledge the version in force. The policy writer drafts on request.
+- **Quality & ISO.** ISO 9001, 27001, 14001, 45001 and 22301 clause by clause,
+  with the evidence the platform already holds beside each. A clause is
+  verified only by a person, with evidence. A nonconformity needs a root cause
+  before action and closes only when a person says the action worked.
+  Management reviews are recorded with their decisions.
+- **Internal & financial audit.** A plan that puts high-risk areas unaudited
+  longest first, engagements with an opinion, and findings that are never
+  verified by their owner. The financial tests read every posted journal
+  entry: unbalanced, duplicates, manual postings on rest days, round amounts,
+  amounts just under the approval limit, self-posted — and Benford's law,
+  which says when there are too few amounts to mean anything.
+- **Digital transformation.** A six-dimension maturity assessment, initiatives
+  placed by value and effort, and whether each one moved its number.
+- **Production studio.** Films, adverts and podcasts from development to
+  delivery. Scripts in Fountain (Arabic scene headings too) are broken down into
+  scenes, locations, characters and running time; delivery files the work in
+  the archive. The copy desk asks for five variants and a person chooses.
+- **Operations center.** Process KPIs against a target and a warning line; a
+  reading past the line opens one issue with an owner.
+- **Strategy & M&A, Insurance.** SWOT and themes with a drafted brief, and the
+  acquisition pipeline with implied value. Insurance cover, renewals inside
+  sixty days, the lines with no cover, and claims checked against the policy
+  period.
+- **AML & KYC.** Parties scored on recognised risk factors, screened against
+  the watchlist with Arabic and Latin spelling folded together; adding a name
+  rescreens everyone. An alert is cleared or reported by a person, and a report
+  needs the FIU's reference.
+- **Remittances & SWIFT.** A bank-approved external transfer becomes an MT103
+  or pacs.008 message with a UETR, after the IBAN checksum and BIC check. A
+  screening hit holds it until a person says why it is a different party; a
+  second person approves; release produces the file for the bank's portal.
+  Nothing connects to SWIFT.
+- A **Governance & assurance** door holds policies, ISO, internal audit, AML
+  and insurance. Every new page is in Arabic.
+
+### The model runs inside AlphaCore's own care, and the company learns from its mistakes
+
+- **A built-in engine.** AlphaCore downloads llama.cpp for the machine and GGUF
+  models from Hugging Face (through the gate, on a person's say-so), and runs
+  the model itself on 127.0.0.1 as a supervised child process: one model in
+  memory, restarted with backoff if it dies, stopped with AlphaCore. Nothing
+  else has to be installed; Ollama becomes optional. The archive is unpacked
+  with zlib alone and refuses any entry that escapes its folder. The VPS
+  installer now uses the engine by default (`RUNTIME=ollama` for the old way).
+- **Lessons from mistakes.** An order a person turned down, a forecast that
+  keeps missing, an employee that keeps breaking its output format, a guard
+  that tripped — each becomes a lesson in the memory every run recalls.
+- **Corrections.** "Correct this" under every brief, digest and operator
+  answer: the correction is verified at once and written into that employee's
+  playbook, and can carry a guard.
+- **Guards.** Rules checked against every answer at the run queue. A repeat of
+  a known mistake stops at a person with the reason, instead of reaching
+  whoever reads it.
+- **Learning from the web.** A research loop reads Wikipedia (and a search
+  engine when one is configured) about the company's own topics, scans for
+  injected instructions, and writes notes with sources and a trust score.
+  Trusted notes become knowledge; the rest wait for a person.
+- **Self-upgrade, with an undo.** When a person allows it, installed
+  alternatives sit the same ten-question exam (graded by code) as the current
+  model, and one replaces it only if it scores higher. Every promotion can be
+  rolled back.
+- **Tests no longer write into real playbooks.** The memory folder is now
+  `ALPHACORE_MEMORY_DIR` when set, and the test files set it.
+
+### The company gets its own model, a markets desk, a portfolio and a newsroom
+
+- **Local AI.** The model that runs on the company's own server, with a page to
+  see whether it is up, what is installed and loaded, and how fast this machine
+  really is (a benchmark, measured here). A native Ollama adapter keeps the
+  model in memory, bounds its context window and answers one question at a
+  time — on two cores, two at once is slower than one after the other.
+  **Local-first** puts it at the head of every tier; hosted providers stay
+  behind it, and every run records which model served it. A new **TL** tier is
+  local-only with no fallback. The **local operator** answers questions about
+  the company from a snapshot and proposes requests a person files.
+- **One-command VPS install** (`app/deploy/vps/install.sh`, docs/VPS.md) for a
+  2 vCPU / 8 GB server: swap, Node, Ollama on loopback, the models that fit,
+  the service, a firewall, and HTTPS with a domain.
+- **Markets desk.** A watchlist of shares, indices, crypto, currencies and
+  commodities that refreshes on its own clock (Yahoo Finance with no key;
+  Twelve Data or Finnhub with one), pushed to the page as it changes.
+  Indicators, a forecast with 80% and 95% ranges, a walk-forward backtest
+  beside its baseline, a signal score that shows its parts, volatility-sized
+  positions with stops, price alerts, and a daily brief from a new Market
+  Analyst. Every forecast is written down and graded when it falls due. A fresh
+  install runs on a simulated feed that says so on every price.
+- **Portfolio.** A paper book by default. Orders are proposed by people or by
+  the analyst's ideas, checked (no shorting, cash, order size, concentration,
+  daily count, and no real order on a simulated price), and approved only by a
+  person, with the checks run again at approval. An Alpaca broker account
+  sends through the egress gate; `order.place` is now always gated.
+- **Newsroom.** Technology, politics, economy, markets, world and Arabic news
+  from the outlets' own RSS feeds, robots.txt first, de-duplicated, tagged to
+  watchlist symbols, scored for tone, scanned for injected instructions, and
+  briefed daily by a new News Editor. Headlines feed the markets score.
+- **Thirty-seven routes recorded a person called nothing.** Handlers that named
+  the URL argument `user` wrote `human:` onto the chain for every status
+  notice, tax line, erasure backfill and the rest. Fixed, and a test now reads
+  the route table for it.
+
 ### The engineering floor: an editor, a review board, GitHub, and an app builder
 
 - **Dev Studio**, an editor for every factory project in the browser: tabs,

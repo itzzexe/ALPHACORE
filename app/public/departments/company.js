@@ -812,6 +812,11 @@ export async function renderSettings() {
       useless on its own. Recovery codes are shown once, when it is switched on: a lost phone must not
       mean a lost company.</div>
     <div id="sec-body" class="sub" style="margin-top:10px">…</div>
+    <form id="tf-rule" class="form-inline" style="margin-top:14px">
+      <label class="fl" for="tf-mode">${esc(t('Require a one-time code of'))}</label>
+      <select id="tf-mode">${[['off', 'nobody'], ['admins', 'accounts that can move money, let things out or give access'], ['all', 'everyone']].map(([v, l]) => `<option value="${v}" ${s.twoFactor === v ? 'selected' : ''}>${esc(t(l))}</option>`).join('')}</select>
+      <button class="btn btn-sm btn-human" type="submit">${esc(t('Save'))}</button>
+    </form>
   </div>
   <div class="panel" style="margin-top:16px">
     <div class="panel-title">Being told — notifications on this device</div>
@@ -915,7 +920,7 @@ export async function renderSettings() {
     </p>
     <label style="display:block;margin:4px 0"><input type="checkbox" id="wipe-full">
       Full factory reset — also delete user accounts, sessions, and provider settings
-      (you will be signed out; a fresh owner account is created and its password printed once to the server console)</label>
+      (you will be signed out; sign back in with your same username and password — every other account is gone)</label>
     <label style="display:block;margin:4px 0 12px"><input type="checkbox" id="wipe-ws">
       Also delete produced workspace files (blueprints, designs, exports…)</label>
     <div class="form-inline">
@@ -967,6 +972,13 @@ export async function renderSettings() {
   });
   $('#o-reset')?.addEventListener('click', async () => {
     try { await api('/api/oracle', { method: 'POST', body: { persona: '' } }); renderSettings(); } catch (e) { toast(e.message, true); }
+  });
+  $('#tf-rule')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/api/settings/two-factor', { method: 'POST', body: { mode: $('#tf-mode').value } });
+      toast(r.mustEnrol ? `${t('Saved')} — ${r.mustEnrol} ${t('account(s) will be asked to set one up at their next request')}` : t('Saved'));
+    } catch (err) { toast(err.message, true); }
   });
   (async () => {
     const box = $('#sec-body');
@@ -1087,6 +1099,7 @@ export async function renderSettings() {
   });
   $('#wipe-go')?.addEventListener('click', async (e) => {
     const full = $('#wipe-full').checked;
+    if (!window.confirm(full ? 'Erase everything, including every other account and all settings? This cannot be undone.' : 'Erase every record in the company? This cannot be undone.')) return;
     e.target.disabled = true; $('#wipe-out').textContent = 'wiping…';
     try {
       const r = await api('/api/system/wipe', { method: 'POST', body: {
@@ -1814,6 +1827,27 @@ export async function renderBackups() {
     <div class="map-legend">Every copy is taken from a checkpointed database, so it is a whole file rather than a file plus whatever was still in the write-ahead log. Each records the chain entry it was taken at, so "which backup is this" has an answer that cannot drift. Verifying re-opens the file and reads its chain — a copy nobody has checked is a hope, not a backup.</div>
   </div>
 
+  <div class="split2">
+    <div class="panel">
+      <div class="panel-title">${esc(t('Restore drills'))}</div>
+      <p class="hint">${esc(t('Once a month the newest copy is opened as if this server were gone: its integrity is checked and its chain walked to the end. A copy nobody has opened is a hope, not a backup.'))}</p>
+      ${d.drillDue ? `<div class="sub" style="color:var(--ember)">${esc(t('A drill is due.'))}</div>` : ''}
+      <table class="tbl"><tbody>${d.drills.map((x) => `<tr><td>${x.ok ? `<span class="chip chip-ok">${esc(t('passed'))}</span>` : `<span class="chip chip-bad">${esc(t('failed'))}</span>`}</td>
+        <td class="sub">#${x.backup_id} · ${esc(t('chain'))} ${x.chain_tip ?? '—'} · ${x.tables} ${esc(t('tables'))} · ${(x.took_ms / 1000).toFixed(1)}s</td>
+        <td class="mono sub">${esc(String(x.created_at).slice(0, 16))}</td></tr>`).join('') || `<tr><td class="empty">${esc(t('No drill yet.'))}</td></tr>`}</tbody></table>
+      ${canTake ? `<button class="btn btn-sm" id="bk-drill" style="margin-top:8px">${esc(t('Run a drill now'))}</button>` : ''}
+    </div>
+    <div class="panel">
+      <div class="panel-title">${esc(t('Off this machine'))}</div>
+      <div class="inline"><span class="chip ${d.offsite.command ? 'chip-ok' : 'chip-warn'}">${esc(t(d.offsite.command ? 'shipping is set' : 'not shipped anywhere'))}</span>
+        <span class="chip ${d.offsite.encrypted ? 'chip-ok' : 'chip-warn'}">${esc(t(d.offsite.encrypted ? 'encrypted before it leaves' : 'leaves unencrypted'))}</span></div>
+      <p class="hint">${esc(t('With a passphrase set, each copy is encrypted (AES-256-GCM) before it leaves, and only scripts/decrypt-backup.mjs with the passphrase opens it. Keep the passphrase somewhere other than this server — without it the offsite copies cannot be opened by anyone.'))}</p>
+      ${hasPermC('vault.manage') ? `<form id="bk-pass" class="form-inline"><label class="sr-only" for="bk-pp">${esc(t('Backup passphrase'))}</label>
+        <input type="password" id="bk-pp" minlength="12" autocomplete="new-password" placeholder="${esc(t('Backup passphrase'))}" required>
+        <button class="btn btn-sm btn-human" type="submit">${esc(t(d.offsite.encrypted ? 'Replace the passphrase' : 'Set the passphrase'))}</button></form>` : ''}
+    </div>
+  </div>
+
   <div class="panel">
     <div class="panel-title">Take it somewhere that is not SQLite</div>
     <button class="btn btn-sm" id="bk-export">Export everything as JSON</button>
@@ -1822,6 +1856,16 @@ export async function renderBackups() {
 
   wireXact(renderBackups);
   $('#bk-export')?.addEventListener('click', () => downloadFile('/api/backups/export', 'alphacore-export.json'));
+  $('#bk-drill')?.addEventListener('click', async () => {
+    try { const r = await api('/api/backups/drill', { method: 'POST', body: {} }); toast(t(r.ok ? 'The drill passed' : 'The drill failed — see the table'), !r.ok); renderBackups(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#bk-pass')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!window.confirm(t('Have you written the passphrase down somewhere other than this server? Without it the offsite copies cannot be opened.'))) return;
+    try { await api('/api/backups/passphrase', { method: 'POST', body: { passphrase: $('#bk-pp').value } }); toast(t('Saved')); renderBackups(); }
+    catch (err) { toast(err.message, true); }
+  });
   view.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', async () => {
     const typed = prompt('Restoring replaces the live database with this copy.\nA backup of the present is taken first.\n\nType RESTORE to continue:');
     if (!typed) return;

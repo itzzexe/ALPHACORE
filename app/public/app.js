@@ -8,6 +8,7 @@ import { renderWorkforce2, renderOrgChart, renderBridges, renderDocs, renderTime
 import { renderHrOps, renderComp, renderBudgets2, renderPayables, renderReceivables, renderFixedAssets, renderBank, renderInventory, renderFacilities, renderHelpdesk, renderSecretariat, renderLegalCases, renderRegulatory, renderMe } from '/departments/core2b.js';
 import { CATALOG, SURFACE_LABEL, SURFACE_ORDER, afterRender, currentRoute, holdPoll, initShell, loadCatalog, navGeneration, navigate, pollPaused, routeOf } from '/core/shell.js';
 import { tile } from '/components/tile.js';
+import { qrSvg } from '/components/qr.js';
 import { CHAT_EMOJI, REQ_STATE_CLS, bubble, chatState, connBtn, renderConnections, wireConnections, wireDownloads } from '/components/common.js';
 import { DEPT_LABEL, disablePush, enablePush, paintUser, preBody, pushState, refreshShell, scoreChip, wireXact, xbtn } from '/components/chrome.js';
 import { DEPT_COLORS, DS_SOURCE_ICON, ENRICH_CHIP, GROUP_COLOR, METHOD_HINT, MOOD, contactCell, figure, initials, peopleBlock } from '/components/bits.js';
@@ -27,6 +28,10 @@ import { renderStudio, renderStudioProject } from '/departments/studio.js';
 import { renderReviews, renderReview, renderGithub, renderAppBuilder, renderAppBuild, renderEngMetrics } from '/departments/engineering.js';
 import { renderServers, renderServer, renderDeploys, renderDeployTarget, renderMonitors } from '/departments/fleet.js';
 import { renderCrew, renderMyWork } from '/departments/crew.js';
+import { renderMarkets, renderSymbol, renderPortfolio, renderNewsroom, renderLocalAI } from '/departments/markets.js';
+import { renderLearning } from '/departments/learning.js';
+import { renderDocument, renderAssuranceMap } from '/departments/assurance.js';
+import { renderPolicies, renderIso, renderInternalAudit, renderTransformation, renderProduction, renderOpscenter, renderStrategy, renderInsurance, renderAml, renderRemit } from '/departments/enterprise.js';
 import { renderAcademy, renderAsk, renderDecisionDetail, renderDepartments, renderDesignDoc, renderDisputes, renderGraph, renderJourneyDetail, renderMemory, renderOffices, renderOrg, renderOverview, renderOwner, renderPackageSection, renderPeople, renderRecruiting, renderRequestDetail, renderSkills, renderSociety, renderSurfaceRoute, renderTrust, renderWorkstreamDetail } from '/departments/people.js';
 
 
@@ -47,6 +52,43 @@ function showLogin() {
 // everywhere after it.
 setUnauthorizedHandler(showLogin);
 
+
+/**
+ * The company requires a one-time code of this account and it has none: set
+ * one up here, before the console opens. The server refuses everything else
+ * meanwhile, so this is the only way forward rather than a suggestion.
+ */
+function showTotpEnrol() {
+  $('#login').hidden = false;
+  $('#login-form').hidden = true;
+  $('#pw-form').hidden = true;
+  const box = $('#totp-enrol');
+  box.hidden = false;
+  $('#login-err').textContent = '';
+  box.innerHTML = `<p class="login-note">${esc(t('This company requires a one-time code for your account. Set it up now with an authenticator app on your phone.'))}</p>
+    <button class="btn btn-primary login-go" type="button" id="te-begin">${esc(t('Set up a one-time code'))}</button>`;
+  $('#te-begin').addEventListener('click', async () => {
+    try {
+      const b = await api('/api/account/totp/begin', { method: 'POST', body: {} });
+      box.innerHTML = `<p class="login-note">${esc(t('Scan this with your authenticator, then type the six digits it shows.'))}</p>
+        <div class="te-qr">${qrSvg(b.otpauth, { size: 184, label: t('Authenticator setup code') })}</div>
+        <label class="fl" for="te-secret">${esc(t('Or type this key'))}</label><input id="te-secret" class="mono" value="${esc(b.secret)}" readonly>
+        <label class="fl login-gap" for="te-code">${esc(t('Code'))}</label>
+        <input id="te-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
+        <button class="btn btn-primary login-go" type="button" id="te-confirm">${esc(t('Confirm'))}</button>`;
+      $('#te-code').focus();
+      $('#te-confirm').addEventListener('click', async () => {
+        try {
+          const c = await api('/api/account/totp/confirm', { method: 'POST', body: { code: $('#te-code').value.trim() } });
+          box.innerHTML = `<p class="login-note"><b>${esc(t('Write these down now.'))}</b> ${esc(c.note || '')}</p>
+            <div class="mono" style="line-height:2">${c.recoveryCodes.map(esc).join('<br>')}</div>
+            <button class="btn btn-primary login-go" type="button" id="te-done">${esc(t('I have written them down'))}</button>`;
+          $('#te-done').addEventListener('click', () => location.reload());
+        } catch (e) { $('#login-err').textContent = e.message; }
+      });
+    } catch (e) { $('#login-err').textContent = e.message; }
+  });
+}
 
 /** Show the choose-a-password form instead of the sign-in one. */
 function showPasswordChange() {
@@ -94,6 +136,7 @@ async function doLogin() {
       showPasswordChange();
       return;
     }
+    if (r.user?.mustEnrolTotp) { showTotpEnrol(); return; }
     location.reload();
   } catch (e) {
     failedLogins++;
@@ -423,6 +466,26 @@ const ROUTE_TABLE = {
   calendar: { title: 'Editorial calendar — what goes out, and when', render: renderCalendar, poll: 15000 },
   personas: { title: 'Personas — who we are actually talking to', render: renderPersonas },
   positioning: { title: 'Positioning — the promise, in one line', render: renderPositioning },
+  // The markets door, and the local brain behind the Work door.
+  markets: { title: 'Markets desk — the numbers, the forecast and its track record', render: renderMarkets, poll: 10000 },
+  symbol: { title: 'Symbol', render: renderSymbol, poll: 15000 },
+  portfolio: { title: 'Portfolio — where only a person trades', render: renderPortfolio, poll: 10000 },
+  newsroom: { title: 'Newsroom — technology, politics, the economy and the markets', render: renderNewsroom, poll: 30000 },
+  localai: { title: 'Local AI — the model on the company’s own server', render: renderLocalAI, poll: 10000 },
+  learning: { title: 'Learning — what it learned, and what stops a repeat', render: renderLearning, poll: 30000 },
+  // Governance, assurance and the departments a large company has.
+  policies: { title: 'Policies & procedures — the rules, versioned and owned', render: renderPolicies },
+  iso: { title: 'Quality & ISO — clause by clause, with evidence', render: renderIso },
+  internalaudit: { title: 'Internal & financial audit — the third line', render: renderInternalAudit },
+  transformation: { title: 'Digital transformation — where it stands and what is changing', render: renderTransformation },
+  production: { title: 'Production studio — script to delivery, and the copy desk', render: renderProduction },
+  opscenter: { title: 'Operations center — processes against their numbers', render: renderOpscenter, poll: 30000 },
+  strategy: { title: 'Strategy & M&A', render: renderStrategy },
+  insurance: { title: 'Insurance — cover, renewals and claims', render: renderInsurance },
+  aml: { title: 'AML & KYC — who the company deals with', render: renderAml },
+  remit: { title: 'Remittances & SWIFT — payment messages for the bank', render: renderRemit },
+  document: { title: 'Official copy', render: renderDocument },
+  assurancemap: { title: 'Governance map — the assurance departments on one sheet', render: renderAssuranceMap },
 };
 
 registerRoutes(ROUTE_TABLE);
@@ -892,6 +955,15 @@ function connectLive() {
   live.addEventListener('message', (ev) => {
     let msg; try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === 'hello' || msg.type === 'presence') { liveWho = msg.who || []; paintLive('on'); }
+    // A department that changed without writing to the chain — a price moving —
+    // says so directly, and the page showing it redraws without waiting.
+    if (msg.type === 'refresh' && Array.isArray(msg.keys)) {
+      const key = currentRoute().key;
+      if ((msg.keys.includes(key) || (key === 'symbol' && msg.keys.includes('markets'))) && routes[key]?.poll && !pollPaused()) {
+        const gen = navGeneration;
+        routes[key].render(currentRoute().arg).then(() => { if (gen === navGeneration) afterRender(); }).catch(() => {});
+      }
+    }
     if (msg.type === 'chain') {
       paintLive('on', msg.entries);
       // A page showing a list of things that just changed should not wait for
@@ -935,6 +1007,7 @@ async function boot() {
     // A live session on an account that never chose its own password gets the
     // same treatment as a fresh sign-in: nothing else opens until it does.
     if (me.user?.mustChangePassword) { showPasswordChange(); return; }
+    if (me.user?.mustEnrolTotp) { showTotpEnrol(); return; }
     setCurrentUser(me.user);
     paintUser();
     await loadCatalog();

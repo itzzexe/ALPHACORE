@@ -46,7 +46,16 @@ app/src/deploy.js        releases to servers; app/src/servers.js the fleet
 app/src/connectors/      github, slack, gmail, stripe… each op passes egress
 app/src/engineering/     the engineering floor: scan.js (deterministic reviewer), reviews.js (review board +
                          quality gate), github.js (hub + webhook), builder.js (app builder), assist.js, metrics.js
-app/src/core2/           the enterprise core (HR, finance, bank, ops) — held apart by rules in ARCHITECTURE
+app/src/localai.js       the local model: Ollama status, local-first switch, the operator; engine.js runs llama.cpp itself
+app/src/learning.js      lessons, corrections, guards (guards.js), web research, model upgrades — writes into memory.js
+app/src/markets.js       markets desk (markets/quant.js is the arithmetic); portfolio.js, newsroom.js beside it
+app/src/core2/           the enterprise core (HR, finance, bank, ops, remit) — held apart by rules in ARCHITECTURE
+app/src/policies.js      governance floor: policies, iso, internalaudit, aml, insurance, transformation, opscenter,
+                         strategy, studio-production; drafts.js is how they all ask an employee to write ([DRAFT:<kind>])
+app/public/departments/enterprise.js   their pages; Arabic in i18n-enterprise.js
+app/src/assurance.js     the governance map; documents.js official copies (+ /verify/<code>, public); sanctions.js the UN/OFAC lists
+app/src/nightshift.js    runs.lane / runs.not_before: drafts wait for the night model; reach.js Telegram for a person's own phone
+app/public/components/qr.js            QR codes drawn in the console (no library); verified by decoding, versions 1–10
 app/public/app.js        the route table for the console (key → { title, render, poll })
 app/public/departments/  page renderers, grouped by area (build.js = forge, sites, deploys)
 app/public/departments/studio.js       Dev Studio (the IDE); engineering.js: reviews, GitHub, app builder, metrics
@@ -105,7 +114,9 @@ app/test/                node:test files, one per area
 ## Traps
 
 - `npm test` without `npm ci` fails with ERR_MODULE_NOT_FOUND on `@anthropic-ai/sdk` — install first.
-- Tests set their own DB and `ALPHACORE_APPS_ROOT`; never import modules in a way that touches `data/alphacore.db`.
+- Tests set their own DB, `ALPHACORE_APPS_ROOT` and `ALPHACORE_MEMORY_DIR` (playbooks); never import modules in a way that touches `data/alphacore.db`.
 - Windows: package managers are `.cmd` and go through cmd.exe in forge; arguments with cmd metacharacters are refused on purpose.
 - Two pages claiming the same hash throw at import (`registerRoutes`).
 - The README carries measured numbers; edit counts with `npm run readme`, not by hand.
+- A run that is `running` is stalled when its `lease_until` passes (set when it starts), not by its age: night-shift runs are hours old when they begin.
+- A table a catalogue count (`links.js` `n(...)`) reads must be created in `db.js`, not at a module's top — the catalogue may load first.

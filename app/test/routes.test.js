@@ -39,6 +39,15 @@ const routeEntries = routeLines.map(({ n, text }) => {
   return { n, text, whole: parts.join('\n') };
 });
 
+// The same convention, one argument further along. Thirty-seven handlers named
+// the third parameter `user`, which is the URL: `url.username` is the empty
+// string, so every act they recorded went onto the chain as a person called
+// nothing. Again nothing threw.
+test('no handler takes the url for the person', () => {
+  const bad = routeLines.filter((l) => /=>|function/.test(l.text) && /,\s*\(\s*(?:\[[^\]]*\]|\w+)\s*,\s*\w+\s*,\s*user\s*\)\s*=>/.test(l.text));
+  assert.deepEqual(bad.map((l) => `api.js:${l.n}`), [], 'the third argument is the url; the user is the fourth');
+});
+
 test('the route table is found, and it is the real one', () => {
   assert.ok(routeLines.length > 100, `only found ${routeLines.length} route lines — the parser has drifted`);
   assert.ok(api.includes('handler(m.slice(1)'), 'the calling convention this test is built on still holds');

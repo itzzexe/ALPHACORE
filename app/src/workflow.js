@@ -5,6 +5,7 @@
 // Logic failures never retry — retrying a wrong answer produces a confident
 // wrong answer; only transport failures requeue, capped by MAX_ATTEMPTS.
 import { q, one, exec, uuid } from './db.js';
+import { checkGuards, recordCatch } from './guards.js';
 import { agentsConfig } from './env.js';
 import { audit } from './audit.js';
 import { companyName } from './settings.js';
@@ -13,6 +14,7 @@ import { personaPrompt } from './org.js';
 import { recall, captureEpisode } from './memory.js';
 import { sealPii, sealForRef, openPii, refFor } from './erasure.js';
 import { promptVersion } from './canary.js';
+import { nightChain } from './nightshift.js';
 
 const MAX_ATTEMPTS = 3;
 const LEASE_MINUTES = 10;
@@ -66,7 +68,7 @@ export function getAgentSpec(agentId) {
  * under their key and puts their reference on the run, so the answer can be
  * sealed too and an erasure can find both.
  */
-export function enqueueRun({ agentId, taskType, input, decisionId = null, parentRunId = null, pipelineId = null, subject = null, actor = 'human:admin' }) {
+export function enqueueRun({ agentId, taskType, input, decisionId = null, parentRunId = null, pipelineId = null, subject = null, actor = 'human:admin', lane = null, notBefore = null }) {
   const spec = getAgentSpec(agentId);
   if (!spec) throw new Error(`unknown agent ${agentId}`);
   if (spec.status !== 'active') throw new Error(`agent ${agentId} is ${spec.status}`);
@@ -76,10 +78,10 @@ export function enqueueRun({ agentId, taskType, input, decisionId = null, parent
     ? sealPii(JSON.stringify(input), { kind: 'contact', identifier: subject })
     : JSON.stringify(input);
   exec(
-    'INSERT INTO runs (id, agent_id, parent_run_id, decision_id, task_type, input, pipeline_id, subject_ref) VALUES (?,?,?,?,?,?,?,?)',
-    id, agentId, parentRunId, decisionId, taskType, payload, pipelineId, ref,
+    'INSERT INTO runs (id, agent_id, parent_run_id, decision_id, task_type, input, pipeline_id, subject_ref, lane, not_before) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    id, agentId, parentRunId, decisionId, taskType, payload, pipelineId, ref, lane, notBefore,
   );
-  audit({ actorType: actor.startsWith('human') ? 'human' : 'system', actorId: actor, action: 'run.enqueued', subjectType: 'run', subjectId: id, payload: { agentId, taskType } });
+  audit({ actorType: actor.startsWith('human') ? 'human' : 'system', actorId: actor, action: 'run.enqueued', subjectType: 'run', subjectId: id, payload: { agentId, taskType, ...(lane ? { lane, notBefore } : {}) } });
   return id;
 }
 
@@ -110,7 +112,8 @@ function setState(runId, state, extra = {}) {
 export function leaseNext() {
   const row = one(
     `SELECT * FROM runs
-     WHERE state = 'queued' OR (state = 'leased' AND lease_until < datetime('now'))
+     WHERE (state = 'queued' AND (not_before IS NULL OR not_before <= datetime('now')))
+        OR (state = 'leased' AND lease_until < datetime('now'))
      ORDER BY created_at ASC LIMIT 1`,
   );
   if (!row) return null;
@@ -165,6 +168,10 @@ export async function executeRun(run) {
   // point is that the disk cannot.
   const input = run.input ? JSON.parse(openPii(run.input)) : {};
   setState(run.id, 'running');
+  // How long this run may take before it counts as stalled, from when it
+  // started rather than when it was asked for: a draft queued for the night
+  // shift is hours old when it begins, and is not stuck for being so.
+  exec('UPDATE runs SET lease_until = datetime(\'now\', ?) WHERE id = ?', run.lane === 'night' ? '+45 minutes' : '+30 minutes', run.id);
   audit({ actorType: 'agent', actorId: run.agent_id, action: 'run.started', subjectType: 'run', subjectId: run.id });
 
   const taskText = input.prompt || input.task || JSON.stringify(input);
@@ -209,7 +216,9 @@ export async function executeRun(run) {
       // the point of it is the key the owner pasted rather than whichever tier
       // chain is cheapest today. The pin is still filtered by availability and
       // by the sensitivity ceiling; it can narrow the chain, never widen it.
-      chainOverride: Array.isArray(spec.chain) && spec.chain.length ? spec.chain : null,
+      // A run on the night shift goes to the night model, unless the employee
+      // is pinned — a pin is a decision about who answers, the shift only when.
+      chainOverride: Array.isArray(spec.chain) && spec.chain.length ? spec.chain : nightChain(run),
     };
     let result;
     let forceHumanReason = null;
@@ -232,6 +241,17 @@ export async function executeRun(run) {
 
     const parsed = parseAgentJson(result.text);
     const output = { raw: result.text, parsed, provider: result.provider, model: result.model };
+    // A mistake the company has already been bitten by stops here, at a
+    // person, rather than reaching whoever reads the answer. See guards.js.
+    if (!forceHumanReason) {
+      let tripped = null;
+      try { tripped = checkGuards(run.agent_id, result.text); } catch { /* a guard table problem never fails a run */ }
+      if (tripped) {
+        forceHumanReason = `repeat of a known mistake (guard #${tripped.id}): ${tripped.why}`;
+        result.flags = [...(result.flags || []), 'guard-tripped'];
+        recordCatch(tripped, run.id, run.agent_id);
+      }
+    }
     const floor = spec.confidenceFloor ?? 0;
     const confidence = parsed?.confidence;
 

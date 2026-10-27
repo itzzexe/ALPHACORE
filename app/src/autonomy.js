@@ -44,6 +44,7 @@ import { setRiskState } from './pm.js';
 import { setContractState } from './corporate.js';
 import { decideDecision } from './registry.js';
 import { advanceGate } from './products.js';
+import { approve as portfolioApprove, reject as portfolioReject } from './portfolio.js';
 import { openPii } from './erasure.js';
 
 const ACTOR = 'system:autonomy';
@@ -95,70 +96,70 @@ export function setAutonomy(level, actor) {
 
 // ---------- executing a verdict ----------
 /** Map an inbox item + verdict to the real action. Returns a description. */
-function execute(item, verdict, reason) {
-  const note = `Decided by the Acting Executive in autonomy mode: ${reason}`;
+function execute(item, verdict, reason, actor = ACTOR) {
+  const note = actor === ACTOR ? `Decided by the Acting Executive in autonomy mode: ${reason}` : `${reason}`;
   const id = item.id;
   switch (item.kind) {
     case 'run':
-      resolveRun(id, verdict === 'approve' ? 'approved' : 'rejected', ACTOR, note);
+      resolveRun(id, verdict === 'approve' ? 'approved' : 'rejected', actor, note);
       return `run ${verdict === 'approve' ? 'approved' : 'rejected'}`;
     case 'designDoc':
-      if (verdict === 'approve') { approveDoc(Number(id), { actor: ACTOR }); return 'document approved'; }
-      redoDoc(Number(id), { note, actor: ACTOR }); return 'document sent back for a rewrite';
+      if (verdict === 'approve') { approveDoc(Number(id), { actor: actor }); return 'document approved'; }
+      redoDoc(Number(id), { note, actor: actor }); return 'document sent back for a rewrite';
     case 'post':
       if (verdict !== 'approve') return 'left unpublished';
-      publishPost(Number(id), { actor: ACTOR }); return 'post published';
+      publishPost(Number(id), { actor: actor }); return 'post published';
     case 'content':
-      approveContent(Number(id), { verdict: verdict === 'approve' ? 'approved' : 'cancelled', actor: ACTOR });
+      approveContent(Number(id), { verdict: verdict === 'approve' ? 'approved' : 'cancelled', actor: actor });
       return `content ${verdict === 'approve' ? 'approved' : 'cancelled'}`;
     case 'design':
       if (verdict !== 'approve') return 'design left in draft';
-      approveDesign(Number(id), { actor: ACTOR }); return 'design approved';
+      approveDesign(Number(id), { actor: actor }); return 'design approved';
     case 'campaign':
       if (verdict !== 'approve') return 'campaign left pending';
-      approveCampaign(Number(id), { actor: ACTOR }); return 'campaign approved and live';
+      approveCampaign(Number(id), { actor: actor }); return 'campaign approved and live';
     case 'partner':
       if (verdict !== 'approve') return 'outreach not sent';
-      markOutreachSent(Number(id), { actor: ACTOR }); return 'outreach recorded as sent';
+      markOutreachSent(Number(id), { actor: actor }); return 'outreach recorded as sent';
     case 'ticket':
       if (verdict !== 'approve') return 'reply not sent';
-      sendTicket(Number(id), { actor: ACTOR }); return 'support reply sent';
+      sendTicket(Number(id), { actor: actor }); return 'support reply sent';
     case 'journey':
       if (verdict !== 'approve') return 'journey stage left waiting';
-      completeStage(Number(id), { note, actor: ACTOR }); return 'journey stage signed off';
+      completeStage(Number(id), { note, actor: actor }); return 'journey stage signed off';
     case 'request':
       if (verdict !== 'approve') return 'request step left waiting';
-      signOffStep(Number(id), { note, actor: ACTOR }); return 'request step signed off';
+      signOffStep(Number(id), { note, actor: actor }); return 'request step signed off';
     case 'finReport':
       if (verdict !== 'approve') return 'report left unapproved';
-      approveFinReport(Number(id), { actor: ACTOR }); return 'financial report approved';
+      approveFinReport(Number(id), { actor: actor }); return 'financial report approved';
     case 'pricing':
-      setPricingState(Number(id), { state: verdict === 'approve' ? 'approved' : 'retired', actor: ACTOR });
+      setPricingState(Number(id), { state: verdict === 'approve' ? 'approved' : 'retired', actor: actor });
       return `pricing ${verdict === 'approve' ? 'approved — agents may now quote it' : 'retired'}`;
     case 'localization':
       if (verdict !== 'approve') return 'translation left for review';
-      approveLocalization(Number(id), { actor: ACTOR }); return 'translation approved';
+      approveLocalization(Number(id), { actor: actor }); return 'translation approved';
     case 'enablement':
-      setEnablementState(Number(id), { state: verdict === 'approve' ? 'applied' : 'dismissed', actor: ACTOR });
+      setEnablementState(Number(id), { state: verdict === 'approve' ? 'applied' : 'dismissed', actor: actor });
       return `improvement plan ${verdict === 'approve' ? 'marked applied' : 'dismissed'}`;
     case 'dispute':
-      ruleDispute(Number(id), { ruling: reason, favours: null, precedent: false, actor: ACTOR });
+      ruleDispute(Number(id), { ruling: reason, favours: null, precedent: false, actor: actor });
       return 'dispute ruled by the AI (the owner can re-open it)';
     case 'problem':
-      resolveProblem(Number(id), { note, actor: ACTOR }); return 'problem resolved';
+      resolveProblem(Number(id), { note, actor: actor }); return 'problem resolved';
     case 'ritual':
-      completeRitual(id, { note, actor: ACTOR }); return 'ritual completed';
+      completeRitual(id, { note, actor: actor }); return 'ritual completed';
     case 'risk':
-      setRiskState(Number(id), { state: verdict === 'approve' ? 'accepted' : 'mitigated', actor: ACTOR });
+      setRiskState(Number(id), { state: verdict === 'approve' ? 'accepted' : 'mitigated', actor: actor });
       return `risk marked ${verdict === 'approve' ? 'accepted' : 'mitigated'}`;
     case 'contract':
       if (verdict !== 'approve') return 'contract left unsigned';
-      setContractState(Number(id), { state: 'signed', actor: ACTOR }); return 'contract signed';
+      setContractState(Number(id), { state: 'signed', actor: actor }); return 'contract signed';
     case 'intelBatch': {
       if (verdict !== 'approve') return 'records left unverified, as decided';
       let n = 0;
       for (const r of q("SELECT id FROM intel_records WHERE verification = 'unverified' AND (email IS NOT NULL OR phone IS NOT NULL) LIMIT 25")) {
-        try { verifyIntelRecord(r.id, ACTOR); n += 1; } catch { /* skip */ }
+        try { verifyIntelRecord(r.id, actor); n += 1; } catch { /* skip */ }
       }
       return `${n} intel record(s) verified`;
     }
@@ -172,17 +173,97 @@ function execute(item, verdict, reason) {
     // registered decision and a gate that commits the company to a product.
     // They stay unreachable in "full" mode, where a person is still available.
     case 'decision':
-      if (!isUnattended()) return null;
-      decideDecision(id, { verdict: verdict === 'approve' ? 'approved' : 'rejected', approver: ACTOR, note });
+      if (actor === ACTOR && !isUnattended()) return null;
+      decideDecision(id, { verdict: verdict === 'approve' ? 'approved' : 'rejected', approver: actor, note });
       return `decision ${id} ${verdict === 'approve' ? 'approved' : 'rejected'} without a human`;
     case 'productGate':
-      if (!isUnattended()) return null;
+      if (actor === ACTOR && !isUnattended()) return null;
       if (verdict !== 'approve') return 'gate not crossed';
-      advanceGate(id, { note, actor: ACTOR });
+      advanceGate(id, { note, actor: actor });
       return `product ${id} advanced through its gate`;
+    // A paper order spends nothing: delegable. A broker order is money and
+    // never reaches this switch — it is not a kind the AI is offered.
+    case 'paperOrder': {
+      const fn = verdict === 'approve' ? portfolioApprove : portfolioReject;
+      const out = fn({ id: Number(id), note, actor });
+      if (out && typeof out.catch === 'function') out.catch(() => { /* the order page shows why */ });
+      return `paper order ${verdict === 'approve' ? 'approved' : 'rejected'}`;
+    }
     default:
       return null;
   }
+}
+
+/**
+ * Decide one waiting item, by a person on the desk or by the executive.
+ * Returns what happened, or null when this kind has no executor and has to be
+ * decided on its own page.
+ */
+export function decideItem(item, verdict, { actor = ACTOR, note = '' } = {}) {
+  if (!['approve', 'reject'].includes(verdict)) throw new Error('approve or reject');
+  if (NEVER.has(item.kind)) throw new Error(`${item.kind} is always decided by a person on its own page`);
+  return execute(item, verdict, note || (verdict === 'approve' ? 'approved from the desk' : 'rejected from the desk'), actor);
+}
+
+/** Kinds the executor can carry out. Anything else is decided on its own page. */
+export const EXECUTABLE = new Set(['run', 'designDoc', 'post', 'content', 'design', 'campaign', 'partner', 'ticket', 'journey',
+  'request', 'finReport', 'pricing', 'localization', 'enablement', 'dispute', 'problem', 'ritual', 'risk', 'contract',
+  'intelBatch', 'knowledgeBatch', 'decision', 'productGate', 'paperOrder']);
+
+/**
+ * What the AI is never offered, whatever the switch says. Money leaving,
+ * a trade with a broker, anything the egress gate held, a command on a server,
+ * a reply to a data-subject request and a tax filing are the acts this
+ * platform keeps for a person by rule rather than by setting.
+ */
+export const NEVER = new Set(['payout', 'egress', 'brokerOrder', 'serverCommand', 'dsr', 'taxLine']);
+
+/** Categories the owner can hand over one at a time. */
+export const CATEGORIES = {
+  work: { label: 'Work and runs', kinds: ['run', 'request', 'journey', 'ritual', 'problem', 'enablement', 'risk', 'crewPlan', 'crewReview', 'forgeChange', 'experiment'] },
+  documents: { label: 'Documents and records', kinds: ['designDoc', 'finReport', 'knowledgeBatch', 'intelBatch', 'localization', 'pricing', 'helpArticle', 'release', 'learnNote'] },
+  publishing: { label: 'Publishing', kinds: ['post', 'content', 'design', 'campaign'] },
+  customers: { label: 'Customers and partners', kinds: ['ticket', 'partner', 'customerHealth'] },
+  legal: { label: 'Contracts and disputes', kinds: ['contract', 'dispute', 'ipRenewal', 'privacyFlow', 'datagovGap'] },
+  governance: { label: 'Decisions and product gates', kinds: ['decision', 'productGate', 'maestroFlag', 'unannounced'] },
+  trading: { label: 'Paper trading', kinds: ['paperOrder'] },
+};
+export const categoryOf = (kind) => Object.entries(CATEGORIES).find(([, c]) => c.kinds.includes(kind))?.[0] || 'work';
+
+export function policy() {
+  let scope = null;
+  try { scope = JSON.parse(getSetting('AUTONOMY_SCOPE') || 'null'); } catch { scope = null; }
+  if (!Array.isArray(scope)) scope = Object.keys(CATEGORIES);
+  const n = (k, d) => { const v = getSetting(k); return v == null || v === '' || !Number.isFinite(Number(v)) ? d : Number(v); };
+  return {
+    scope: scope.filter((c) => CATEGORIES[c]),
+    minConfidence: Math.min(1, Math.max(0, n('AUTONOMY_MIN_CONFIDENCE', 0.7))),
+    maxPerDay: Math.max(0, n('AUTONOMY_MAX_DAY', 40)),
+    decidedToday: one("SELECT COUNT(*) AS n FROM autonomy_log WHERE verdict IN ('approve','reject') AND ok = 1 AND created_at >= date('now')").n,
+  };
+}
+
+/** The owner narrows or widens what the AI may decide. Recorded like the switch itself. */
+export function setPolicy({ scope = null, minConfidence = null, maxPerDay = null, actor }) {
+  if (!actor || !String(actor).startsWith('human')) throw new Error('the owner sets what the AI may decide');
+  const changed = {};
+  if (scope != null) {
+    if (!Array.isArray(scope)) throw new Error('scope is a list of categories');
+    const clean = scope.filter((c) => CATEGORIES[c]);
+    setSetting('AUTONOMY_SCOPE', JSON.stringify(clean)); changed.scope = clean;
+  }
+  if (minConfidence != null) {
+    const v = Number(minConfidence);
+    if (!(v >= 0 && v <= 1)) throw new Error('confidence is between 0 and 1');
+    setSetting('AUTONOMY_MIN_CONFIDENCE', v); changed.minConfidence = v;
+  }
+  if (maxPerDay != null) {
+    const v = Number(maxPerDay);
+    if (!(Number.isInteger(v) && v >= 0 && v <= 1000)) throw new Error('0 to 1000 decisions a day');
+    setSetting('AUTONOMY_MAX_DAY', v); changed.maxPerDay = v;
+  }
+  audit({ actorType: 'human', actorId: actor, action: 'autonomy.policy_set', subjectType: 'settings', subjectId: 'AUTONOMY_SCOPE', payload: changed });
+  return policy();
 }
 
 // ---------- the unattended sweep ----------
@@ -308,7 +389,9 @@ export async function autonomyTick() {
   if (isUnattended()) {
     // Deterministic work first: it costs nothing and clears most of the queue
     // before the executive is asked to think about the rest.
-    try { await sweepUnattended(); } catch { /* the model batch below still runs */ }
+    if (policy().scope.length === Object.keys(CATEGORIES).length) {
+      try { await sweepUnattended(); } catch { /* the model batch below still runs */ }
+    }
     try { releaseHolds(); } catch { /* retried next tick */ }
   }
 
@@ -329,6 +412,18 @@ export async function autonomyTick() {
       }
       if (d.verdict === 'hold') {
         exec("UPDATE autonomy_log SET verdict = 'hold', reason = ?, outcome = 'held for the owner on purpose' WHERE id = ?", d.reason || null, row.id);
+        continue;
+      }
+      // A verdict the executive itself was unsure of is not acted on: a small
+      // model's guess is held for the owner instead of committed. Unattended
+      // mode has no owner to hold for, so there the floor does not apply.
+      const conf = Number(d.confidence);
+      if (!isUnattended() && Number.isFinite(conf) && conf < policy().minConfidence) {
+        exec("UPDATE autonomy_log SET verdict = 'hold', reason = ?, outcome = ? WHERE id = ?", d.reason || null, `held: confidence ${conf} is under the floor of ${policy().minConfidence}`, row.id);
+        continue;
+      }
+      if (policy().decidedToday >= policy().maxPerDay) {
+        exec("UPDATE autonomy_log SET verdict = 'hold', reason = ?, outcome = 'held: the daily limit of AI decisions was reached' WHERE id = ?", d.reason || null, row.id);
         continue;
       }
       try {
@@ -366,8 +461,12 @@ export async function autonomyTick() {
   // Unattended mode also takes the kinds the executive is normally not allowed
   // to touch — registered decisions and the gates that commit the company.
   const OFF_LIMITS = isUnattended() ? ['maestroFlag'] : ['decision', 'productGate', 'maestroFlag', 'customerHealth'];
+  const pol = policy();
+  if (pol.decidedToday >= pol.maxPerDay) return;
   const items = pendingApprovals()
     .filter((i) => !OFF_LIMITS.includes(i.kind))
+    .filter((i) => !NEVER.has(i.kind) && EXECUTABLE.has(i.kind))
+    .filter((i) => pol.scope.includes(categoryOf(i.kind)))
     .filter((i) => !one("SELECT id FROM autonomy_log WHERE kind = ? AND subject_id = ? AND created_at >= datetime('now','-2 hours')", i.kind, String(i.id)))
     .slice(0, MAX_PER_CYCLE);
   if (!items.length) return;
@@ -383,7 +482,8 @@ export async function autonomyTick() {
 
 ${listing}
 
-For each, return the ref exactly as given, a verdict (approve, reject, or hold), and a one-sentence reason.
+For each, return the ref exactly as given, a verdict (approve, reject, or hold), a one-sentence reason, and your confidence from 0 to 1.
+Output JSON: {"decisions":[{"ref":"","verdict":"approve|reject|hold","reason":"","confidence":0.0}]}
 
 ${isUnattended()
   ? 'The company is running unattended: there is no owner to defer to and "hold" is not available to you. Decide every item on its merits — approve what is ready and defensible, reject what is wrong, unfinished or not worth doing. Where you are unsure, prefer the reversible option and say so in your reason.'
@@ -421,6 +521,9 @@ export function autonomyOverview() {
     unattended: isUnattended(),
     since: autonomySince(),
     highStakes: HIGH_STAKES,
+    policy: policy(),
+    categories: Object.entries(CATEGORIES).map(([id, c]) => ({ id, label: c.label, kinds: c.kinds })),
+    never: [...NEVER],
     stats: {
       total: one('SELECT COUNT(*) AS n FROM autonomy_log').n,
       decided: one("SELECT COUNT(*) AS n FROM autonomy_log WHERE verdict IN ('approve','reject') AND ok = 1").n,

@@ -113,6 +113,17 @@ test('what the scanner found in this repository and was wrong about stays unflag
   assert.ok(scan.scanFiles([{ path: 'src/q.js', content: 'db.all(`SELECT * FROM t WHERE name = ${name}`);\n' }]).some((f) => f.rule === 'code.sql-concat'));
 });
 
+test('a plus sign inside an SQL string is arithmetic, not a shell command built from a variable', () => {
+  // The database helper is also called exec, and "hits = hits + 1" read as
+  // concatenation. The + has to sit outside a string literal to count.
+  const quiet = scan.scanFiles([{ path: 'src/g.js', content: "exec(\"UPDATE g SET hits = hits + 1 WHERE id = ?\", id);\nexec('UPDATE t SET n = n + 1 WHERE id = ?', t.id);\n" }]);
+  assert.deepEqual(quiet.filter((f) => f.rule === 'code.command-injection'), []);
+  // …and every shape of the real thing is still caught.
+  for (const line of ["exec('ls ' + dir);", 'execSync(cmd + userInput);', 'exec(`rm -rf ${path}`);']) {
+    assert.ok(scan.scanFiles([{ path: 'src/c.js', content: `${line}\n` }]).some((f) => f.rule === 'code.command-injection'), line);
+  }
+});
+
 test('a pull request is scanned on the lines it adds, at their new line numbers', () => {
   const patch = '@@ -10,3 +10,4 @@ function x() {\n context\n-removed(line)\n+eval(userInput)\n+ok()\n context';
   const found = scan.scanPatches([{ filename: 'src/x.js', status: 'modified', patch }, { filename: '.env', status: 'added', patch: '+A=1' }]);

@@ -12,6 +12,8 @@
 // costs the reader more than it gains.
 import { AR_BUILD } from '/i18n-build.js';
 import { AR_ENG } from '/i18n-eng.js';
+import { AR_MKT } from '/i18n-markets.js';
+import { AR_ENT } from '/i18n-enterprise.js';
 
 export const LANGS = { en: 'English', ar: 'العربية' };
 const KEY = 'alphacore-lang';
@@ -86,6 +88,9 @@ export const SECTION_AR = {
   monitors: 'المراقبة', crew: 'قيادة القوى العاملة', atlas: 'خريطة الشركة',
   studio: 'استوديو التطوير', reviews: 'مجلس المراجعة', github: 'GitHub', appbuilder: 'بانِي التطبيقات',
   engmetrics: 'مؤشرات الهندسة',
+  localai: 'الذكاء المحلي', learning: 'التعلّم',
+  policies: 'السياسات والإجراءات', iso: 'الجودة والآيزو', internalaudit: 'التدقيق الداخلي والمالي', transformation: 'التحول الرقمي',
+  assurancemap: 'خريطة الحوكمة', production: 'استوديو الإنتاج', opscenter: 'مركز العمليات', strategy: 'الاستراتيجية والاستحواذ', insurance: 'التأمين', aml: 'مكافحة غسل الأموال', remit: 'الحوالات وسويفت', markets: 'مكتب الأسواق', portfolio: 'المحفظة', newsroom: 'غرفة الأخبار',
 };
 
 // ---------- interface strings ----------
@@ -1114,6 +1119,8 @@ const AR = {
 // The build-and-run surfaces carry their own block, kept in a file of its own.
 Object.assign(AR, AR_BUILD);
 Object.assign(AR, AR_ENG);
+Object.assign(AR, AR_MKT);
+Object.assign(AR, AR_ENT);
 
 export function t(s) {
   if (lang !== 'ar' || s == null) return s;

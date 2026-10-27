@@ -83,7 +83,7 @@ import { webhookTick } from './webhooks.js';
 import { seedPackages } from './packages.js';
 import { chiefTick } from './chief.js';
 import { seedSlos, observeTick, trimMetrics } from './observe.js';
-import { takeBackup } from './backup.js';
+import { takeBackup, drillRestore, drillDue } from './backup.js';
 import { anchorNow } from './anchor.js';
 import { handleSignals, alert, shipOffsite, archiveWal, lifecycleOverview } from './lifecycle.js';
 import { metricsText, watchEventLoop, applyRetention, observabilityOverview } from './observability.js';
@@ -124,6 +124,20 @@ import { syncSites } from './sites.js';
 import { serversTick } from './servers.js';
 import { monitorTick } from './monitor.js';
 import { syncCrew, crewSweep } from './crew.js';
+import { marketsTick, seedWatchlist } from './markets.js';
+import { newsTick, seedFeeds } from './newsroom.js';
+import { portfolioTick } from './portfolio.js';
+import { syncAsks, operatorTick } from './localai.js';
+import { bootEngine, stopAll as stopEngine } from './engine.js';
+import { learningTick, seedGuards } from './learning.js';
+import { syncDraftJobs } from './drafts.js';
+import { verifyPage } from './documents.js';
+import { renewalSweep as insuranceRenewals } from './insurance.js';
+import { due as sanctionsDue, refresh as refreshSanctions } from './sanctions.js';
+import { rescreenSanctions as rescreenParties } from './aml.js';
+import { rescreenOpen as rescreenPayments } from './core2/remit.js';
+import { tick as reachTick } from './reach.js';
+import { sweep as assuranceSweep } from './assurance.js';
 import './deploy.js';
 
 seedAgents();
@@ -330,6 +344,46 @@ setInterval(() => {
 }, 3000).unref?.();
 try { ensureHubScopes(); } catch { /* the connector catalogue is seeded later on a first boot */ }
 setInterval(() => { monitorTick().catch(() => { /* next tick */ }); }, 15_000).unref?.();
+// The markets desk and the newsroom. Each clock checks its own interval, so
+// the timers are cheap; the work happens when a quote or a feed is due, and
+// the daily pass once a day after the configured hour. Nothing on these
+// clocks can buy anything — an order still waits for a person.
+try { seedWatchlist(); seedFeeds(); } catch { /* a first boot seeds on the next start */ }
+setInterval(() => { marketsTick().catch(() => { /* next tick */ }); }, 15_000).unref?.();
+setInterval(() => { newsTick().catch(() => { /* next tick */ }); }, 60_000).unref?.();
+setInterval(() => { try { portfolioTick(); operatorTick(); } catch { /* next tick */ } }, 20_000).unref?.();
+// The built-in engine comes back with the process, and goes with it: a
+// llama.cpp server left running after AlphaCore stops is two gigabytes of
+// memory that nothing is using.
+try { bootEngine(); } catch { /* the Local AI page says why */ }
+for (const sig of ['SIGINT', 'SIGTERM', 'exit']) process.once(sig, () => { try { stopEngine(); } catch { /* exiting */ } });
+// Learning: lessons from what went wrong, the research loop, the weekly exam.
+try { seedGuards(); } catch { /* next boot */ }
+setInterval(() => { learningTick().catch(() => { /* next tick */ }); }, 5 * 60_000).unref?.();
+// Governance drafts land as soon as the employee finishes; cover that is about
+// to lapse is announced once per policy.
+setInterval(() => { try { syncDraftJobs(); } catch { /* next tick */ } }, 5000).unref?.();
+setInterval(() => { try { insuranceRenewals(); } catch { /* next hour */ } }, 60 * 60_000).unref?.();
+// The sanctions lists, once a day when switched on; whoever is on the books and
+// every payment not yet released is screened again against what changed.
+setInterval(() => {
+  if (!sanctionsDue()) return;
+  refreshSanctions().then(() => { rescreenParties(); rescreenPayments(); }).catch(() => { /* the AML page shows the error */ });
+}, 60 * 60_000).unref?.();
+// Once a month the newest backup is opened as if the server were gone; a
+// failure is an alert, because a backup that does not open is not one.
+setInterval(() => {
+  try {
+    if (!drillDue()) return;
+    const d = drillRestore({ actor: 'system:backup' });
+    if (!d.ok) alert({ level: 'error', subject: 'A restore drill failed', text: `The newest backup did not open cleanly: ${d.error || d.integrity || 'chain broken'}` }).catch(() => {});
+  } catch { /* tomorrow */ }
+}, 6 * 3600_000).unref?.();
+// The governance map looks across the assurance departments for the links a
+// person should make; hourly is fresh enough for findings and risks.
+setInterval(() => { try { assuranceSweep(); } catch { /* next hour */ } }, 60 * 60_000).unref?.();
+// Whoever linked a phone hears within a minute that something waits for them.
+setInterval(() => { reachTick().catch(() => { /* the gate's log says why */ }); }, 60_000).unref?.();
 setInterval(() => { serversTick().catch(() => { /* next sweep */ }); }, 5 * 60_000).unref?.();
 setInterval(() => { try { crewSweep(); } catch { /* next sweep */ } }, 60 * 60_000).unref?.();
 for (const sig of ['SIGINT', 'SIGTERM', 'exit']) process.once(sig, () => { try { stopAllPreviews(); } catch { /* exiting */ } if (sig !== 'exit') process.exit(0); });
@@ -570,6 +624,14 @@ const server = http.createServer(async (req, res) => {
     // link rather than the console header, because an iframe cannot send one.
     if (url.pathname.startsWith('/preview/')) { servePreview(req, res, url); return; }
 
+    // Whoever holds a printed document can check it without an account: the
+    // code is the credential, and the page shows the record, never the text.
+    if (url.pathname.startsWith('/verify/') && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
+      res.end(verifyPage(decodeURIComponent(url.pathname.slice('/verify/'.length))));
+      return;
+    }
+
     if (url.pathname.startsWith('/api/')) {
       let body = null;
       if (req.method === 'POST' || req.method === 'PUT') {
@@ -658,6 +720,14 @@ const server = http.createServer(async (req, res) => {
         return json(403, {
           error: 'this account is still using the password generated at first run — change it before anything else',
           mustChangePassword: true,
+        });
+      }
+      // The same for a required one-time code: until it is set up, the account
+      // can do what setting it up takes, and nothing else.
+      if (user.mustEnrolTotp && !['/api/auth/password', '/api/account/security', '/api/account/totp/begin', '/api/account/totp/confirm'].includes(url.pathname)) {
+        return json(403, {
+          error: 'this company requires a one-time code for this account — set one up before anything else',
+          mustEnrolTotp: true,
         });
       }
       if (url.pathname === '/api/auth/password' && req.method === 'POST') {

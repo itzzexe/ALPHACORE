@@ -10,7 +10,7 @@
 //
 // Nothing under /api is cached, ever. A stale run count or a cached approval
 // queue is worse than an error message — it looks like the truth.
-const VERSION = 'alphacore-v6';
+const VERSION = 'alphacore-v9';
 
 // Enough to paint the shell and reach the login screen offline.
 //
@@ -30,6 +30,7 @@ const SHELL = [
   '/styles.css',
   '/ui.css',
   '/eng.css',
+  '/markets.css',
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
@@ -37,6 +38,8 @@ const SHELL = [
   '/i18n.js',
   '/i18n-build.js',
   '/i18n-eng.js',
+  '/i18n-markets.js',
+  '/i18n-enterprise.js',
   '/core/dom.js',
   '/core/shell.js',
   '/state/session.js',

@@ -17,25 +17,30 @@
 // confidence, which is worse than the trigrams alone.
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
-import { getSetting } from './settings.js';
+import { getSecret } from './settings.js';
 import { providersConfig } from './env.js';
+import { ollamaBase } from './providers/ollama.js';
+import { embedBase } from './engine.js';
 
 const TRIGRAM_DIM = 256;
 
 /** The local model, if the operator has said which one. */
 export function embeddingModel() {
-  const model = getSetting('EMBEDDING_MODEL');
+  // The built-in engine's embedding server wins when it is up: it is the
+  // runtime nobody had to install.
+  const eng = embedBase();
+  if (eng && getSecret('ENGINE_EMBED_MODEL')) return { model: getSecret('ENGINE_EMBED_MODEL'), base: eng, engine: true };
+  const model = getSecret('EMBEDDING_MODEL');
   if (!model) return null;
-  const base = getSetting('OLLAMA_URL')
-    || providersConfig.providers?.ollama?.baseUrl
-    || 'http://127.0.0.1:11434';
-  return { model, base: base.replace(/\/$/, '') };
+  // One address for the chat model and the embedding model: they are the same
+  // server, and two settings for it is how one of them ends up pointing nowhere.
+  return { model, base: ollamaBase(providersConfig.providers?.ollama?.baseUrl || 'http://127.0.0.1:11434') };
 }
 
 /** A short name for whichever space a vector belongs to. */
 export const spaceOf = () => {
   const m = embeddingModel();
-  return m ? `ollama:${m.model}` : 'trigram:v1';
+  return m ? `${m.engine ? 'engine' : 'ollama'}:${m.model}` : 'trigram:v1';
 };
 
 // ------------------------------------------------------------- trigrams --
@@ -65,15 +70,15 @@ function trigram(text) {
 async function fromOllama(text, { timeoutMs = 4000 } = {}) {
   const cfg = embeddingModel();
   if (!cfg) return null;
-  const res = await fetch(`${cfg.base}/api/embeddings`, {
+  const res = await fetch(cfg.engine ? `${cfg.base}/v1/embeddings` : `${cfg.base}/api/embeddings`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: cfg.model, prompt: String(text || '').slice(0, 8000) }),
+    body: JSON.stringify(cfg.engine ? { input: String(text || '').slice(0, 8000) } : { model: cfg.model, prompt: String(text || '').slice(0, 8000) }),
     signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new Error(`ollama answered ${res.status}`);
+  if (!res.ok) throw new Error(`the embedding model answered ${res.status}`);
   const json = await res.json();
-  const v = json.embedding;
+  const v = cfg.engine ? json.data?.[0]?.embedding : json.embedding;
   if (!Array.isArray(v) || !v.length) throw new Error('ollama returned no embedding');
   const norm = Math.sqrt(v.reduce((a, x) => a + x * x, 0)) || 1;
   return v.map((x) => x / norm);
@@ -90,7 +95,7 @@ export async function embedText(text) {
   if (!cfg) return { vector: trigram(text), space: 'trigram:v1', local: false };
   try {
     const vector = await fromOllama(text);
-    return { vector, space: `ollama:${cfg.model}`, local: true };
+    return { vector, space: `${cfg.engine ? 'engine' : 'ollama'}:${cfg.model}`, local: true };
   } catch (e) {
     // Recorded once per hour rather than per call: a failing local model on a
     // busy page would otherwise write a thousand identical rows.

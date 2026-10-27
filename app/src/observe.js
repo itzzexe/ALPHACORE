@@ -70,7 +70,7 @@ export function seedSlos() {
 
 const REMEDIES = {
   'requeue-stuck'() {
-    const r = exec("UPDATE runs SET state = 'queued' WHERE state = 'running' AND created_at < datetime('now','-30 minutes')");
+    const r = exec("UPDATE runs SET state = 'queued' WHERE state = 'running' AND COALESCE(lease_until, datetime(created_at, '+30 minutes')) < datetime('now')");
     return { action: 'requeue-stuck', detail: `${r.changes} stalled item(s) put back in the queue`, ok: r.changes > 0 };
   },
   'spread-load'() {

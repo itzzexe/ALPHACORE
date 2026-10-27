@@ -6,6 +6,7 @@ import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypt
 import { q, one, exec } from './db.js';
 import { audit } from './audit.js';
 import { newSecret, verifyCode, otpauthUrl, newRecoveryCodes, hashRecovery, checkRecovery } from './totp.js';
+import { getSetting } from './settings.js';
 
 // The permission catalog — section.action, grantable individually.
 export const PERMS = [
@@ -181,6 +182,30 @@ export const PERMS = [
   'partners.view', 'partners.manage',
   'growth.view', 'growth.run',
   'sim.view', 'sim.run',
+  // The local brain, the markets desk, the portfolio and the newsroom. Reading
+  // a quote is not adding a feed; proposing an order is not approving one; and
+  // approving one — the act that can spend money — is its own key, held apart.
+  'localai.view', 'localai.manage',
+  'markets.view', 'markets.manage',
+  'news.view', 'news.manage',
+  'portfolio.view', 'portfolio.propose', 'portfolio.approve', 'portfolio.connect',
+  // Learning. Correcting an answer and setting a guard is everyday work;
+  // letting the model replace itself is a different power, held apart.
+  'learning.view', 'learning.manage', 'learning.upgrade',
+  // Governance, assurance and the departments a large company has. Writing a
+  // rule is not issuing it; auditing is not closing the audit; preparing a
+  // payment message is not releasing it.
+  'policies.view', 'policies.manage', 'policies.publish',
+  'iso.view', 'iso.manage', 'iso.verify',
+  'ia.view', 'ia.manage', 'ia.close',
+  'dtx.view', 'dtx.manage',
+  'production.view', 'production.manage',
+  'opscenter.view', 'opscenter.manage',
+  'strategy.view', 'strategy.manage',
+  'insurance.view', 'insurance.manage',
+  'aml.view', 'aml.manage', 'aml.decide',
+  'remit.view', 'remit.manage', 'remit.release',
+  'assurancemap.view', 'assurancemap.manage',
 ];
 
 export const hashPassword = (pw) => {
@@ -324,6 +349,36 @@ export class SecondFactorRequired extends Error {
 export function totpEnabled(userId) {
   return Boolean(one('SELECT user_id FROM user_totp WHERE user_id = ? AND confirmed_at IS NOT NULL', userId));
 }
+
+// The powers that make an account worth stealing: whoever holds one of these
+// can move money, let something out, restore over the company or hand out
+// access. REQUIRE_2FA=admins means exactly these accounts.
+const POWERFUL = ['users.manage', 'settings.manage', 'vault.manage', 'treasury.pay', 'remit.release', 'backups.restore',
+  'owner.rule', 'egress.release', 'portfolio.approve', 'constitution.amend'];
+export const TWO_FACTOR_MODES = ['off', 'admins', 'all'];
+
+/** Does this account have to use a one-time code? `u` carries role and perms. */
+export function requiresTwoFactor(u, mode = getSetting('REQUIRE_2FA') || 'off') {
+  if (mode === 'all') return true;
+  if (mode !== 'admins') return false;
+  const perms = Array.isArray(u.perms) ? u.perms : JSON.parse(u.perms || '[]');
+  return u.role === 'superadmin' || perms.includes('*') || POWERFUL.some((p) => perms.includes(p));
+}
+
+/**
+ * Who must set up a code, and from when. Refused if it would demand one of the
+ * person setting it before they have their own — they would be the first one
+ * stopped, halfway through the page they set it from.
+ */
+export function setTwoFactorRule({ mode, user }) {
+  if (!TWO_FACTOR_MODES.includes(mode)) refuseAuth(`one of: ${TWO_FACTOR_MODES.join(', ')}`);
+  if (mode !== 'off' && requiresTwoFactor(user, mode) && !totpEnabled(user.id)) refuseAuth('set up your own one-time code first — under Settings, Security — then require it of others');
+  exec("INSERT INTO settings (k, v) VALUES ('REQUIRE_2FA', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", mode);
+  audit({ actorType: 'human', actorId: `human:${user.username}`, action: 'auth.two_factor_rule', subjectType: 'settings', subjectId: 'REQUIRE_2FA', payload: { mode } });
+  const affected = q("SELECT id, role, perms FROM users WHERE status = 'active'").filter((u) => requiresTwoFactor(u, mode) && !totpEnabled(u.id)).length;
+  return { mode, mustEnrol: affected };
+}
+function refuseAuth(m) { const e = new Error(m); e.status = 400; throw e; }
 
 export function login(username, password, { code = null, ip = null } = {}) {
   const name = String(username || '').toLowerCase().trim();
@@ -574,6 +629,8 @@ function publicUser(u) {
     // The interface asks for a new password on sight of this rather than
     // trusting the account to get round to it.
     mustChangePassword: Boolean(u.must_change),
+    // Likewise a one-time code, where the company requires one of this account.
+    mustEnrolTotp: requiresTwoFactor({ role: u.role, perms }) && !totpEnabled(u.id),
   };
 }
 

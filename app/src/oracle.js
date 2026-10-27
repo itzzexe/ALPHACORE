@@ -49,7 +49,7 @@ const PROVIDERS = Object.entries(providersConfig.providers)
     // The wire format takes whatever model string it is handed, so a local
     // model you pulled yourself is a name you type rather than a list to
     // choose from. Anthropic and Gemini pin their own model ids.
-    anyModel: p.kind === 'openai-compat',
+    anyModel: p.kind === 'openai-compat' || p.kind === 'ollama',
     dpa: Boolean(p.dpa),
     noTraining: Boolean(p.noTraining),
     local: p.family === 'local',

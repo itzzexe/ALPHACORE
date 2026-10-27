@@ -8,49 +8,201 @@ import { DEPT_LABEL, refreshShell, scoreChip, wireXact, xbtn } from '../componen
 import { actor, currentUser, hasPermC } from '../state/session.js';
 import { api } from '../services/api.js';
 import { tile } from '../components/tile.js';
+import { t } from '/i18n.js';
+import { kpi, tabs, emptyCta, ago } from '../components/ui.js';
+
+// The desk: everything in the company waiting on a decision, in one list, and
+// the switch that decides who makes those decisions — people, or the AI.
+//
+// Two things the old desk did not do and this one does. It shows every kind of
+// waiting item the inbox knows, not four of them; and it lets a person decide
+// from here, one item or a group of alike items at once. The AI panel is the
+// existing autonomy mode, made usable: which categories it may decide, how sure
+// it must be, how many decisions a day, and what it is never offered.
+const DESK_LEVELS = [
+  ['off', 'People decide', 'Nothing is decided without a person. The AI may still prepare the work.'],
+  ['full', 'AI decides routine', 'The AI decides what it is sure of in the categories you allow, and holds anything consequential or uncertain for you.'],
+  ['unattended', 'AI decides everything', 'The AI decides every delegable item, holds nothing back, and runs the company-wide sweep. Its mistakes are committed, not caught.'],
+];
+const URGENCY_CLS = { money: 'chip-bad', incident: 'chip-warn', customer: 'chip-warn', blocking: 'chip-dim', routine: 'chip-dim' };
+const VERDICT_CLS = { approve: 'chip-ok', reject: 'chip-bad', hold: 'chip-warn', pending: 'chip-dim' };
+// Their own words: 'hold' already means keeping a position on the markets desk.
+const VERDICT_LABEL = { approve: 'approved', reject: 'rejected', hold: 'held for you', pending: 'pending' };
 
 export async function renderApprovals() {
   const d = await api('/api/approvals');
+  const au = d.autonomy || { mode: 'off', policy: { scope: [], minConfidence: 0.7, maxPerDay: 40, decidedToday: 0 }, categories: [], never: [], log: [] };
+  const isOwner = Boolean(currentUser?.isOwner) || hasPermC('owner.rule');
+  const cat = new URLSearchParams(location.hash.split('?')[1] || '').get('category') || 'all';
+  const items = cat === 'all' ? d.items : d.items.filter((i) => i.category === cat);
+  const catLabel = Object.fromEntries((au.categories || []).map((c) => [c.id, c.label]));
+  const pol = au.policy;
+
   view.innerHTML = `
-  <div class="grid grid-4">
-    ${tile('Waiting on you', d.yours, 'that you personally can act on')}
-    ${tile('Waiting on somebody', d.total, 'across the whole company')}
-    ${tile('Overdue', d.overdue, `past the ${d.slaHours}h promise`, d.overdue ? 'tile-warn' : '')}
-    ${tile('Oldest', `${Math.round(d.oldestHours)}h`, 'the longest anything has waited')}
+  <div class="pg-head">
+    <p>${esc(t('Everything in the company waiting on a decision, ordered by what it blocks rather than by who asked. Decide here — one item, or a group of alike items at once — or hand categories of decisions to the AI below.'))}</p>
   </div>
-  <div class="panel" style="margin-top:16px">
-    <div class="panel-title">Ordered by what it blocks, not by who asked</div>
-    <div class="map-legend">Self-declared priority is always high, so this reads the consequence instead. Urgency
-      strictly outranks age; age only breaks ties inside a band, because a queue whose order can be gamed by
-      waiting is a queue that teaches people to wait.</div>
-    <div class="form-inline" style="margin-top:8px">
-      ${d.byUrgency.filter((u) => u.count).map((u) => `<span class="chip ${u.id === 'money' ? 'chip-bad' : u.id === 'incident' ? 'chip-warn' : 'chip-dim'}" title="${esc(u.why)}">${esc(u.id)} ${u.count}</span>`).join('') || '<span class="chip chip-ok">nothing is waiting</span>'}
+  <div class="kpis">
+    ${kpi('Waiting on you', d.yours, esc(t('that you personally can decide')), d.yours ? 'human' : 'ok')}
+    ${kpi('Across the company', d.total, esc(t('waiting on somebody')))}
+    ${kpi('Overdue', d.overdue, `${esc(t('past the promise of'))} ${d.slaHours}h`, d.overdue ? 'bad' : '')}
+    ${kpi('Oldest', `${Math.round(d.oldestHours)}h`, esc(t('the longest anything has waited')))}
+    ${kpi('AI decisions today', `${pol.decidedToday}/${pol.maxPerDay}`, esc(t(au.mode === 'off' ? 'the AI is not deciding' : 'within the daily limit')), au.mode === 'off' ? '' : 'ai')}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Who decides'))}</div>
+    <div class="dk-levels" role="radiogroup" aria-label="${esc(t('Who decides'))}">
+      ${DESK_LEVELS.map(([id, label, why]) => `<button type="button" class="dk-level ${au.mode === id ? 'on' : ''}" role="radio" aria-checked="${au.mode === id}" data-level="${id}" ${isOwner ? '' : 'disabled'}>
+        <b>${esc(t(label))}</b><span>${esc(t(why))}</span></button>`).join('')}
     </div>
+    ${isOwner ? '' : `<p class="hint">${esc(t('Only the owner can hand decisions to the AI.'))}</p>`}
+    <form id="dk-policy" class="fields" style="margin-top:12px">
+      <div class="wide"><span class="fl">${esc(t('What the AI may decide'))}</span>
+        <div class="inline">${(au.categories || []).map((c) => `<label class="eng-chk"><input type="checkbox" name="dk-cat" value="${esc(c.id)}" ${pol.scope.includes(c.id) ? 'checked' : ''} ${isOwner ? '' : 'disabled'}> ${esc(t(c.label))}
+          <span class="sub">${(d.byCategory.find((x) => x.id === c.id) || {}).count || 0}</span></label>`).join('')}</div></div>
+      <div><label class="fl" for="dk-conf">${esc(t('Hold anything it is less sure of than'))}</label>
+        <input id="dk-conf" type="number" min="0" max="1" step="0.05" value="${pol.minConfidence}" ${isOwner ? '' : 'disabled'}></div>
+      <div><label class="fl" for="dk-max">${esc(t('Most AI decisions a day'))}</label>
+        <input id="dk-max" type="number" min="0" max="1000" value="${pol.maxPerDay}" ${isOwner ? '' : 'disabled'}></div>
+      ${isOwner ? `<div class="wide"><button class="btn" type="submit">${esc(t('Save'))}</button></div>` : ''}
+    </form>
+    <div class="callout" style="margin-top:12px"><b>${esc(t('Always a person, whatever the switch says:'))}</b>
+      ${esc(t('money leaving the company, orders to a real broker, anything the egress gate held, commands on servers, answers to personal-data requests and tax filings. These are the platform’s rules, not a setting.'))}</div>
   </div>
-  ${d.groups.length ? `<div class="panel" style="margin-top:16px">
-    <div class="panel-title">Alike enough to decide together</div>
-    <div class="map-legend">A batch is recorded as <b>one act naming every item</b>, never as a dozen entries that
-      read like a dozen separate judgements. Somebody looking back must be able to tell considered from batched.</div>
-    <table><thead><tr><th>Kind</th><th>Because</th><th>Count</th><th>Oldest</th></tr></thead><tbody>
-    ${d.groups.map((g) => `<tr><td>${esc(g.kind)}</td><td class="sub">${esc(g.because)}</td><td class="mono">${g.count}</td><td class="mono">${Math.round(g.oldestHours)}h</td></tr>`).join('')}
-    </tbody></table></div>` : ''}
-  <div class="panel" style="margin-top:16px">
-    <div class="panel-title">The queue</div>
-    <table><thead><tr><th>Urgency</th><th>Kind</th><th>What</th><th>Because</th><th>Waiting</th><th></th></tr></thead><tbody>
-    ${d.items.map((i) => `<tr>
-      <td><span class="chip ${i.urgency === 'money' ? 'chip-bad' : i.urgency === 'incident' ? 'chip-warn' : 'chip-dim'}" title="${esc(i.whyUrgent)}">${esc(i.urgency)}</span></td>
-      <td>${esc(i.kind)}</td><td>${esc(i.title)}</td><td class="sub">${esc(i.because)}</td>
-      <td class="mono">${i.ageHours}h ${i.overdue ? '<span style="color:var(--bad)">overdue</span>' : ''}</td>
-      <td><a class="btn btn-sm" href="${esc(i.route)}">Open</a></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing is waiting on anybody.</td></tr>'}
-    </tbody></table>
+
+  ${tabs([['all', 'All', d.total], ...d.byCategory.filter((c) => c.count).map((c) => [c.id, c.label, c.count])], cat)}
+
+  ${d.groups.filter((g) => g.decidable).length ? `<div class="panel">
+    <div class="panel-title">${esc(t('Alike enough to decide together'))}</div>
+    <p class="hint">${esc(t('A group is recorded as one act that names every item — never as separate entries that read like separate judgements.'))}</p>
+    <table class="tbl"><tbody>${d.groups.filter((g) => g.decidable).map((g) => `<tr>
+      <td><b>${esc(g.kind)}</b> × ${g.count}<div class="sub">${esc(g.because)}</div></td>
+      <td class="sub">${esc(t('oldest'))} ${Math.round(g.oldestHours)}h</td>
+      <td class="inline"><button class="btn btn-sm btn-ok" data-decide='${esc(JSON.stringify({ kind: g.kind, ids: g.ids, verdict: 'approve' }))}'>${esc(t('Approve all'))}</button>
+        <button class="btn btn-sm btn-ghost" data-decide='${esc(JSON.stringify({ kind: g.kind, ids: g.ids, verdict: 'reject' }))}'>${esc(t('Reject all'))}</button></td></tr>`).join('')}</tbody></table>
+  </div>` : ''}
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('The queue'))} ${cat !== 'all' ? `<span class="hint">${esc(t(catLabel[cat] || cat))}</span>` : ''}</div>
+    ${items.length ? `<div class="mk-scroll"><table class="tbl"><thead><tr><th>${esc(t('Urgency'))}</th><th>${esc(t('What'))}</th><th>${esc(t('Waiting'))}</th><th></th></tr></thead><tbody>
+    ${items.map((i) => `<tr class="${i.overdue ? 'row-bad' : ''}">
+      <td><span class="chip ${URGENCY_CLS[i.urgency] || ''}" title="${esc(t(i.whyUrgent))}">${esc(t(i.urgency))}</span></td>
+      <td><b>${esc(i.title)}</b><div class="sub">${esc(t(catLabel[i.category] || i.category))} · ${esc(i.kind)} — ${esc(i.because)}</div></td>
+      <td class="sub">${i.ageHours}h${i.overdue ? ` · <b>${esc(t('overdue'))}</b>` : ''}</td>
+      <td class="inline">${i.decidable
+    ? `<button class="btn btn-sm btn-ok" data-decide='${esc(JSON.stringify({ kind: i.kind, ids: [i.id], verdict: 'approve' }))}'>${esc(t('Approve'))}</button>
+           <button class="btn btn-sm btn-ghost" data-decide='${esc(JSON.stringify({ kind: i.kind, ids: [i.id], verdict: 'reject' }))}'>${esc(t('Reject'))}</button>`
+    : i.action && !i.alwaysHuman
+      ? `<button class="btn btn-sm btn-ok" data-post='${esc(JSON.stringify(i.action))}'>${esc(t(i.actionLabel || 'Approve'))}</button>
+           ${i.secondary ? `<button class="btn btn-sm btn-ghost" data-post='${esc(JSON.stringify(i.secondary))}'>${esc(t(i.secondary.label || 'Reject'))}</button>` : ''}`
+      : ''}
+        ${i.alwaysHuman ? `<span class="chip chip-warn">${esc(t('always a person'))}</span>` : ''}
+        <a class="btn btn-sm btn-ghost" href="${esc(i.route || '#/approvals')}">${esc(t('Open'))}</a></td></tr>`).join('')}
+    </tbody></table></div>` : emptyCta('Nothing is waiting', 'Every gate in the company is clear.')}
   </div>
-  <div class="panel" style="margin-top:16px">
-    <div class="panel-title">Delegation — because somebody is always on holiday</div>
-    <div class="map-legend">Bounded in time, always. A delegation with no end is a permission grant with extra
-      paperwork, and both names go on the chain: who acted, and whose authority they were carrying.</div>
-    <div style="margin-top:8px">${[...d.delegations.toMe.map((x) => `<div>carrying <b>${esc(x.from_username)}</b>'s authority until ${esc(x.expires_at)}</div>`),
-      ...d.delegations.fromMe.map((x) => `<div>lent to <b>${esc(x.to_username)}</b> until ${esc(x.expires_at)}</div>`)].join('') || '<div class="sub">nobody is standing in for anybody</div>'}</div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('What the AI decided'))}</div>
+    ${au.log?.length ? `<div class="mk-scroll"><table class="tbl"><tbody>${au.log.slice(0, 20).map((l) => `<tr class="${l.reverted ? 'muted' : ''}">
+      <td><span class="chip ${VERDICT_CLS[l.verdict] || ''}">${esc(t(VERDICT_LABEL[l.verdict] || l.verdict))}</span></td>
+      <td><b>${esc(l.title)}</b><div class="sub">${esc(l.reason || '')}${l.outcome ? ` → ${esc(l.outcome)}` : ''}</div></td>
+      <td class="sub">${ago(l.created_at)}</td>
+      <td>${isOwner && !l.reverted && ['approve', 'reject'].includes(l.verdict) ? `<button class="btn btn-sm btn-ghost" data-revert="${l.id}">${esc(t('Disagree'))}</button>` : l.reverted ? `<span class="chip">${esc(t('disagreed'))}</span>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>` : `<div class="empty">${esc(t('The AI has not decided anything yet.'))}</div>`}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">${esc(t('Delegation'))}</div>
+    <p class="hint">${esc(t('Bounded in time, always. Both names go on the chain: who acted, and whose authority they were carrying.'))}</p>
+    ${[...d.delegations.toMe.map((x) => `<div>${esc(t('carrying the authority of'))} <b>${esc(x.from_username)}</b> — ${esc(x.expires_at)}</div>`),
+    ...d.delegations.fromMe.map((x) => `<div>${esc(t('lent to'))} <b>${esc(x.to_username)}</b> — ${esc(x.expires_at)}</div>`)].join('') || `<div class="sub">${esc(t('Nobody is standing in for anybody.'))}</div>`}
   </div>`;
+
+  view.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
+    location.hash = b.dataset.tab === 'all' ? '#/approvals' : `#/approvals?category=${encodeURIComponent(b.dataset.tab)}`;
+  }));
+  view.querySelectorAll('[data-decide]').forEach((b) => b.addEventListener('click', async () => {
+    const spec = JSON.parse(b.dataset.decide);
+    if (spec.ids.length > 1 && !window.confirm(`${t(spec.verdict === 'approve' ? 'Approve' : 'Reject')} ${spec.ids.length}?`)) return;
+    b.disabled = true;
+    try {
+      const r = await api('/api/approvals/decide', { method: 'POST', body: spec });
+      toast(r.failed?.length ? `${r.decided} ✓ · ${r.failed.length} ✗ — ${r.failed[0].error}` : t('Decided'), Boolean(r.failed?.length));
+      renderApprovals(); refreshShell();
+    } catch (e) { toast(e.message, true); b.disabled = false; }
+  }));
+  view.querySelectorAll('[data-post]').forEach((b) => b.addEventListener('click', async () => {
+    const spec = JSON.parse(b.dataset.post);
+    b.disabled = true;
+    try { await api(spec.path, { method: spec.method || 'POST', body: spec.body || {} }); toast(t('Decided')); renderApprovals(); refreshShell(); }
+    catch (e) { toast(e.message, true); b.disabled = false; }
+  }));
+  view.querySelectorAll('[data-level]').forEach((b) => b.addEventListener('click', async () => {
+    const level = b.dataset.level;
+    if (level === au.mode) return;
+    if (level !== 'off' && !window.confirm(t(level === 'unattended'
+      ? 'Let the AI decide everything it is allowed to, holding nothing back? Its mistakes will be committed, not caught. You can switch back at any moment.'
+      : 'Let the AI decide routine items in the categories you allow? It holds anything consequential or uncertain for you.'))) return;
+    try { await api('/api/autonomy/toggle', { method: 'POST', body: { level } }); toast(t('Saved')); renderApprovals(); refreshShell(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  $('#dk-policy')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/api/autonomy/policy', { method: 'POST', body: {
+        scope: [...view.querySelectorAll('[name="dk-cat"]:checked')].map((x) => x.value),
+        minConfidence: Number($('#dk-conf').value), maxPerDay: Number($('#dk-max').value),
+      } });
+      toast(t('Saved')); renderApprovals();
+    } catch (err) { toast(err.message, true); }
+  });
+  view.querySelectorAll('[data-revert]').forEach((b) => b.addEventListener('click', async () => {
+    const note = window.prompt(t('What was wrong with this decision?'));
+    if (note === null) return;
+    try { await api(`/api/autonomy/${b.dataset.revert}/revert`, { method: 'POST', body: { note } }); toast(t('Recorded — undo its effect on its own page')); renderApprovals(); }
+    catch (e) { toast(e.message, true); }
+  }));
+  reachPanel().catch(() => { /* the desk stands without it */ });
+}
+
+/**
+ * Your own phone: a Telegram chat linked to this account hears within a minute
+ * that something waits for you, and once a morning what is waiting. A link to
+ * the desk, never a button that decides.
+ */
+async function reachPanel() {
+  const r = await api('/api/account/reach');
+  const off = Math.round(new Date().getTimezoneOffset() / -60);
+  const toLocal = (h) => ((h + off) % 24 + 24) % 24;
+  const toUtc = (h) => ((h - off) % 24 + 24) % 24;
+  const box = document.createElement('div');
+  box.className = 'panel';
+  box.innerHTML = `<div class="panel-title">${esc(t('Reach me on my phone'))}</div>
+    <p class="hint">${esc(t('A Telegram message when something you can decide arrives, and a morning summary. It carries a link to this desk — deciding still happens here, behind your password and code.'))}</p>
+    ${!r.ready ? `<p class="sub">${esc(t('Telegram is not connected yet — an administrator connects the company bot under Integrations.'))}</p>`
+    : r.linked ? `<form id="rc-prefs" class="fields">
+        <div class="wide"><span class="chip chip-ok">${esc(t('linked'))}</span></div>
+        <div class="wide"><label class="eng-chk"><input type="checkbox" id="rc-instant" ${r.instant ? 'checked' : ''}> ${esc(t('Tell me as soon as something arrives'))}</label></div>
+        <div><label class="fl" for="rc-hour">${esc(t('Morning summary at'))}</label><select id="rc-hour"><option value="-1">${esc(t('none'))}</option>${Array.from({ length: 24 }, (_, h) => `<option value="${toUtc(h)}" ${r.digestHour >= 0 && toLocal(r.digestHour) === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></div>
+        <div class="wide inline"><button class="btn btn-primary" type="submit">${esc(t('Save'))}</button><button class="btn btn-sm btn-ghost" type="button" id="rc-unlink">${esc(t('Unlink'))}</button></div></form>`
+      : `<form id="rc-link" class="fields">
+        <div><label class="fl" for="rc-chat">${esc(t('Telegram chat id'))}</label><input id="rc-chat" inputmode="numeric" required value="${esc(r.chatId || '')}"></div>
+        <div class="wide"><button class="btn btn-primary" type="submit">${esc(t('Send me a code'))}</button></div></form>
+        ${r.pending ? `<form id="rc-confirm" class="fields"><div><label class="fl" for="rc-code">${esc(t('Code'))}</label><input id="rc-code" inputmode="numeric" maxlength="6" required></div>
+          <div class="wide"><button class="btn btn-primary" type="submit">${esc(t('Confirm'))}</button></div></form>` : ''}`}`;
+  view.appendChild(box);
+  const post = async (path, body, okText) => {
+    try { const x = await api(path, { method: 'POST', body }); if (okText) toast(t(okText)); renderApprovals(); return x; } catch (e) { toast(e.message, true); return null; }
+  };
+  box.querySelector('#rc-link')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const x = await post('/api/account/reach/link', { chatId: $('#rc-chat').value });
+    if (x && !x.sent) toast(`${t('The gate did not send it')}: ${x.why || x.verdict}`, true);
+  });
+  box.querySelector('#rc-confirm')?.addEventListener('submit', (e) => { e.preventDefault(); post('/api/account/reach/confirm', { code: $('#rc-code').value }, 'Linked'); });
+  box.querySelector('#rc-prefs')?.addEventListener('submit', (e) => { e.preventDefault(); post('/api/account/reach/prefs', { instant: $('#rc-instant').checked, digestHour: Number($('#rc-hour').value) }, 'Saved'); });
+  box.querySelector('#rc-unlink')?.addEventListener('click', () => post('/api/account/reach/unlink', {}, 'Unlinked'));
 }
 export async function renderGate() {
   const [box, runs] = await Promise.all([

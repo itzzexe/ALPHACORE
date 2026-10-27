@@ -59,6 +59,7 @@ import {
 import * as hrplus from './core2/hrplus.js';
 import * as fin2 from './core2/finance.js';
 import * as bank from './core2/bank.js';
+import { parseStatement } from './core2/statements.js';
 import * as ops from './core2/ops.js';
 import * as adm from './core2/admin.js';
 import {
@@ -83,6 +84,29 @@ import {
 import {
   overview as statusOverview, seedComponents, setComponent, postNotice, updateNotice, addTerm as addSlaTerm,
 } from './statuspage.js';
+import * as LocalAI from './localai.js';
+import * as Night from './nightshift.js';
+import * as Reach from './reach.js';
+import * as Assurance from './assurance.js';
+import { draftNow } from './drafts.js';
+import * as Markets from './markets.js';
+import * as Portfolio from './portfolio.js';
+import * as Newsroom from './newsroom.js';
+import * as Engine from './engine.js';
+import * as Learning from './learning.js';
+import * as Policies from './policies.js';
+import * as Iso from './iso.js';
+import * as IA from './internalaudit.js';
+import * as Dtx from './transformation.js';
+import * as Prod from './studio-production.js';
+import * as Ops from './opscenter.js';
+import * as Strat from './strategy.js';
+import * as Ins from './insurance.js';
+import * as Aml from './aml.js';
+import * as Remit from './core2/remit.js';
+import * as Docs from './documents.js';
+import * as Sanctions from './sanctions.js';
+import { verifyLesson as memVerifyLesson, forget as memForget } from './memory.js';
 import { overview as partnershipsOverview, setIntegration } from './partnerships.js';
 import {
   overview as officesOverview, setOn as setOfficesOn, playOne as officesPlay,
@@ -97,7 +121,7 @@ import {
 import {
   securityOverview as accountSecurity, beginTotp, confirmTotp, disableTotp, endOtherSessions,
 } from './auth.js';
-import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword } from './auth.js';
+import { PERMS, hasPerm, listUsers, createUser, updateUser, verifyPassword, setTwoFactorRule } from './auth.js';
 import { wipeSystem } from './wipe.js';
 import { activityFeed } from './links.js';
 import {
@@ -164,7 +188,7 @@ import { listSecrets, putSecret, dropSecret, getSecret as vaultGet, keyHealth } 
 import { lifecycleOverview, alert } from './lifecycle.js';
 import { observabilityOverview, applyRetention } from './observability.js';
 import { canaryOverview, promptHistory, proposeChain, runCanary, promoteChain, revertChain } from './canary.js';
-import { approvalsOverview, roleTemplates, applyTemplate, delegate, endDelegation } from './approvals.js';
+import { approvalsOverview, deskOverview, decideFromDesk, roleTemplates, applyTemplate, delegate, endDelegation } from './approvals.js';
 import { embeddingsOverview, reindex } from './embeddings.js';
 import { deliverabilityOverview, preflight, recordingRule } from './deliverability.js';
 import {
@@ -193,7 +217,7 @@ import { webhooksOverview, addWebhook, setWebhookState, removeWebhook } from './
 import { packagesOverview, getPackage, addPackage, validateManifest, installPackage, uninstallPackage } from './packages.js';
 import { chiefOverview, chiefTick } from './chief.js';
 import { observeOverview, observeTick } from './observe.js';
-import { backupsOverview, takeBackup, verifyBackup, restoreBackup, exportAll } from './backup.js';
+import { backupsOverview, takeBackup, verifyBackup, restoreBackup, exportAll, drillRestore } from './backup.js';
 import { enqueueRun, resolveRun, queueStats, getAgentSpec } from './workflow.js';
 import {
   createDecision, listDecisions, getDecision, addEvidence, verifyEvidence,
@@ -255,7 +279,7 @@ import { orgDirectory, updateAgentProfile } from './org.js';
 import { raiseDispute, listDisputes, getDispute, ruleDispute, withdrawDispute, disputesOverview } from './disputes.js';
 import { societyOverview, feed as societyFeed, relations as societyRelations, relationsFor, setSociety, forceScene, CHANNELS } from './society.js';
 import { inboxSummary, inboxCount } from './inbox.js';
-import { autonomyOverview, setAutonomy, revertDecision } from './autonomy.js';
+import { autonomyOverview, setAutonomy, revertDecision, setPolicy as setAutonomyPolicy } from './autonomy.js';
 import { DEPARTMENTS, createRequest, listRequests, getRequest, cancelRequest, signOffStep, requestDeliverable, requestsOverview } from './requests.js';
 import {
   createIntelQuery, listIntelQueries, getIntelQuery, getIntelRecord, listIntelRecords,
@@ -601,6 +625,12 @@ const routes = [
   // and sharing the prefix shadowed its overview route and would have dragged
   // its permission rule down with these.
   ['GET', /^\/api\/account\/security$/, (_p, _b, _u, user) => accountSecurity(user.id)],
+  // Your own phone, linked to your own account: what waits for you, as it arrives and each morning.
+  ['GET', /^\/api\/account\/reach$/, (_p, _b, _u, user) => Reach.mine({ user })],
+  ['POST', /^\/api\/account\/reach\/link$/, async (_p, body, _u, user) => Reach.link({ user, chatId: need(body, 'chatId') })],
+  ['POST', /^\/api\/account\/reach\/confirm$/, (_p, body, _u, user) => Reach.confirm({ user, code: need(body, 'code') })],
+  ['POST', /^\/api\/account\/reach\/prefs$/, (_p, body, _u, user) => Reach.setPrefs({ user, instant: body.instant ?? null, digestHour: body.digestHour ?? null })],
+  ['POST', /^\/api\/account\/reach\/unlink$/, (_p, _b, _u, user) => Reach.unlink({ user })],
   ['POST', /^\/api\/account\/totp\/begin$/, (_p, _b, _u, user) => beginTotp(user.id)],
   ['POST', /^\/api\/account\/totp\/confirm$/, (_p, body, _u, user) => confirmTotp(user.id, need(body, 'code'))],
   ['POST', /^\/api\/account\/totp\/disable$/, (_p, body, _u, user) => disableTotp(user.id, need(body, 'password'))],
@@ -618,7 +648,10 @@ const routes = [
   ['POST', /^\/api\/embeddings\/reindex$/, () => reindex()],
 
   // Everything waiting on a person, and who may sit at that desk.
-  ['GET', /^\/api\/approvals$/, (_p, _b, _u, user) => approvalsOverview(user)],
+  ['GET', /^\/api\/approvals$/, (_p, _b, _u, user) => deskOverview(user)],
+  // Each kind's own permission is checked inside: approving a post needs what
+  // publishing needs, wherever the button is.
+  ['POST', /^\/api\/approvals\/decide$/, (_p, body, _u, user) => decideFromDesk({ kind: need(body, 'kind'), ids: need(body, 'ids'), verdict: need(body, 'verdict'), note: body.note || null, user })],
   ['GET', /^\/api\/roles$/, () => ({ templates: roleTemplates() })],
   ['POST', /^\/api\/roles\/(\d+)$/, ([userId], body) => applyTemplate({
     userId: Number(userId), template: need(body, 'template'),
@@ -774,6 +807,8 @@ const routes = [
   ['POST', /^\/api\/core2\/bank\/accounts$/, (_p, body, _u, user) => bank.createBankAccount({ name: need(body, 'name'), bank: body.bank, kind: body.kind, currency: body.currency, iban: body.iban, openingBalance: body.openingBalance, actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/bank\/accounts\/(\d+)\/close$/, ([id], _b, _u, user) => bank.closeBankAccount(Number(id), { actor: `human:${user.username}` })],
   ['GET', /^\/api\/core2\/bank\/accounts\/(\d+)\/reconcile$/, ([id]) => bank.reconciliation(Number(id))],
+  // Read a statement file into lines for a person to check. Nothing is imported here.
+  ['POST', /^\/api\/core2\/bank\/statement\/parse$/, (_p, body) => parseStatement(need(body, 'text'), body.format || null)],
   ['POST', /^\/api\/core2\/bank\/accounts\/(\d+)\/statement$/, ([id], body, _u, user) => bank.importStatement({ accountId: Number(id), label: body.label, lines: need(body, 'lines'), actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/bank\/accounts\/(\d+)\/automatch$/, ([id], _b, _u, user) => bank.autoMatch(Number(id), { actor: `human:${user.username}` })],
   ['POST', /^\/api\/core2\/bank\/lines\/(\d+)\/match$/, ([id], body, _u, user) => bank.matchLine(Number(id), { journalLineId: need(body, 'journalLineId'), actor: `human:${user.username}` })],
@@ -1129,7 +1164,7 @@ const routes = [
   // Sealing what was written before there was sealing. A queue job rather than
   // a script, so it resumes where it stopped and says so on the chain.
   ['GET', /^\/api\/erasure\/backfill$/, () => backfillOverview()],
-  ['POST', /^\/api\/erasure\/backfill$/, (_p, _b, user) => startBackfill({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/erasure\/backfill$/, (_p, _b, _u, user) => startBackfill({ actor: `human:${user.username}` })],
 
   // --- Anchoring: the record answering to something other than itself ---
   ['GET', /^\/api\/anchors$/, () => anchorsOverview()],
@@ -1357,11 +1392,17 @@ const routes = [
   ['POST', /^\/api\/comms\/(\d+)\/publish$/, ([id], body) => { publishBulletin(Number(id), { actor: need(body, 'actor') }); return { ok: true }; }],
 
   // Factory reset — superadmin only, re-authenticated, typed confirmation.
-  ['POST', /^\/api\/system\/wipe$/, (_p, body, _url, user) => {
+  // Async on purpose: the route table holds synchronous writes in a
+  // transaction, and the wipe has to switch foreign keys off, which SQLite
+  // only honours outside one. wipe.js runs its own.
+  ['POST', /^\/api\/system\/wipe$/, async (_p, body, _url, user) => {
     if (user?.role !== 'superadmin') { const e = new Error('superadmin only'); e.status = 403; throw e; }
     if (body?.confirm !== 'WIPE ALL DATA') { const e = new Error('type the exact phrase: WIPE ALL DATA'); e.status = 400; throw e; }
     if (!verifyPassword(user.id, body.password)) { const e = new Error('password incorrect'); e.status = 403; throw e; }
-    return wipeSystem({ actor: body.actor, full: Boolean(body.full), workspace: Boolean(body.workspace) });
+    return wipeSystem({
+      actor: `human:${user.username}`, full: Boolean(body.full), workspace: Boolean(body.workspace),
+      keepLogin: { username: user.username, password: body.password },
+    });
   }],
 
   ['GET', /^\/api\/settings$/, () => settingsOverview()],
@@ -1373,6 +1414,8 @@ const routes = [
     enabled: body.enabled, provider: body.provider, model: body.model, persona: body.persona, name: body.name,
     apiKey: body.apiKey, baseUrl: body.baseUrl, actor: `human:${user.username}`,
   })],
+  // Who must use a one-time code: off, accounts holding irreversible powers, or everyone.
+  ['POST', /^\/api\/settings\/two-factor$/, (_p, body, _u, user) => setTwoFactorRule({ mode: need(body, 'mode'), user })],
   ['POST', /^\/api\/settings$/, (_p, body) => {
     setSetting(need(body, 'key'), body.value ?? null);
     audit({ actorType: 'human', actorId: need(body, 'actor'), action: 'settings.updated', subjectType: 'settings', subjectId: body.key, payload: { cleared: !body.value } });
@@ -1540,6 +1583,7 @@ const routes = [
   ['POST', /^\/api\/autonomy\/toggle$/, (_p, body) => setAutonomy(
     body.level !== undefined ? body.level : Boolean(body.enabled), need(body, 'actor'),
   )],
+  ['POST', /^\/api\/autonomy\/policy$/, (_p, body, _u, user) => setAutonomyPolicy({ scope: body.scope ?? null, minConfidence: body.minConfidence ?? null, maxPerDay: body.maxPerDay ?? null, actor: `human:${user.username}` })],
   ['POST', /^\/api\/autonomy\/(\d+)\/revert$/, ([id], body) => revertDecision(Number(id), { note: body.note || null, actor: need(body, 'actor') })],
 
   ['GET', /^\/api\/harmony\/remediations$/, () => remediations()],
@@ -2155,6 +2199,15 @@ const routes = [
   ['GET', /^\/api\/backups$/, () => backupsOverview()],
   ['POST', /^\/api\/backups$/, (_p, body) => takeBackup({ kind: 'manual', actor: body.actor })],
   ['POST', /^\/api\/backups\/(\d+)\/verify$/, ([id]) => verifyBackup(Number(id))],
+  // Open the newest backup as if the server were gone, and check it is whole.
+  ['POST', /^\/api\/backups\/drill$/, (_p, _b, _u, user) => drillRestore({ actor: `human:${user.username}` })],
+  // The passphrase offsite copies are encrypted with — kept in the vault, and somewhere off this server by the owner.
+  ['POST', /^\/api\/backups\/passphrase$/, (_p, body, _u, user) => {
+    const pass = String(body.passphrase || '');
+    if (pass.length < 12) throw new HttpError(400, 'a backup passphrase is at least 12 characters — a sentence is easier to keep than a code');
+    putSecret('BACKUP_PASSPHRASE', pass, { kind: 'passphrase', note: 'encrypts backups before they leave the machine', actor: `human:${user.username}` });
+    return backupsOverview();
+  }],
   ['POST', /^\/api\/backups\/(\d+)\/restore$/, ([id], body) => restoreBackup(Number(id), { confirm: body.confirm, actor: body.actor })],
   // ==========================================================================
   // Marketing, department by department.
@@ -2228,40 +2281,40 @@ const routes = [
 
   // ---- Tax --------------------------------------------------------------
   ['GET', /^\/api\/tax$/, () => taxOverview()],
-  ['POST', /^\/api\/tax\/jurisdiction$/, (_p, body, user) => addJurisdiction({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/jurisdiction$/, (_p, body, _u, user) => addJurisdiction({ ...body, actor: `human:${user.username}` })],
   ['POST', /^\/api\/tax\/classify$/, (_p, body) => taxClassify({
     jurisdiction: need(body, 'jurisdiction'), basis: Number(body.basis) || 0, kind: body.kind || 'invoice',
   })],
-  ['POST', /^\/api\/tax\/line$/, (_p, body, user) => recordTaxLine({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/tax\/sweep$/, (_p, _b, user) => taxSweep({ actor: `human:${user.username}` })],
-  ['POST', /^\/api\/tax\/return$/, (_p, body, user) => buildReturn({
+  ['POST', /^\/api\/tax\/line$/, (_p, body, _u, user) => recordTaxLine({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/sweep$/, (_p, _b, _u, user) => taxSweep({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/return$/, (_p, body, _u, user) => buildReturn({
     jurisdiction: need(body, 'jurisdiction'), periodStart: need(body, 'periodStart'),
     periodEnd: need(body, 'periodEnd'), actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/tax\/return\/(\d+)\/file$/, (p, _b, user) => fileReturn({ id: Number(p[0]), actor: `human:${user.username}` })],
-  ['POST', /^\/api\/tax\/line\/(\d+)\/post$/, (p, _b, user) => postTaxDraft({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/return\/(\d+)\/file$/, (p, _b, _u, user) => fileReturn({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/tax\/line\/(\d+)\/post$/, (p, _b, _u, user) => postTaxDraft({ id: Number(p[0]), actor: `human:${user.username}` })],
 
   // ---- Privacy ----------------------------------------------------------
   ['GET', /^\/api\/privacy$/, () => privacyOverview()],
-  ['POST', /^\/api\/privacy\/flow$/, (_p, body, user) => proposeFlow({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/privacy\/flow\/(\d+)\/decide$/, (p, body, user) => decideFlow({
+  ['POST', /^\/api\/privacy\/flow$/, (_p, body, _u, user) => proposeFlow({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/privacy\/flow\/(\d+)\/decide$/, (p, body, _u, user) => decideFlow({
     id: Number(p[0]), verdict: need(body, 'verdict'), assessment: need(body, 'assessment'), actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/privacy\/request$/, (_p, body, user) => logRequest({
+  ['POST', /^\/api\/privacy\/request$/, (_p, body, _u, user) => logRequest({
     kind: need(body, 'kind'), identifier: need(body, 'identifier'),
     channel: body.channel, note: body.note, actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/privacy\/request\/(\d+)\/export$/, (p, body, user) => buildExport({
+  ['POST', /^\/api\/privacy\/request\/(\d+)\/export$/, (p, body, _u, user) => buildExport({
     id: Number(p[0]), identifier: need(body, 'identifier'), format: body.format || 'json', actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/privacy\/request\/(\d+)\/answer$/, (p, body, user) => answerRequest({
+  ['POST', /^\/api\/privacy\/request\/(\d+)\/answer$/, (p, body, _u, user) => answerRequest({
     id: Number(p[0]), identifier: body.identifier || null, outcome: need(body, 'outcome'), actor: `human:${user.username}`,
   })],
 
   // ---- Intellectual property --------------------------------------------
   ['GET', /^\/api\/ip$/, () => ipOverview()],
-  ['POST', /^\/api\/ip$/, (_p, body, user) => registerIp({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/ip\/(\d+)\/advance$/, (p, body, user) => advanceIp({
+  ['POST', /^\/api\/ip$/, (_p, body, _u, user) => registerIp({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/ip\/(\d+)\/advance$/, (p, body, _u, user) => advanceIp({
     id: Number(p[0]), state: need(body, 'state'), reference: body.reference,
     renewalAt: body.renewalAt, note: body.note, actor: `human:${user.username}`,
   })],
@@ -2269,62 +2322,246 @@ const routes = [
   // ---- Help centre ------------------------------------------------------
   ['GET', /^\/api\/help$/, () => helpOverview()],
   ['POST', /^\/api\/help\/sweep$/, () => sweepTickets()],
-  ['POST', /^\/api\/help\/gap\/(\d+)\/draft$/, (p, _b, user) => draftForGap({ id: Number(p[0]), actor: `human:${user.username}` })],
-  ['POST', /^\/api\/help\/article$/, (_p, body, user) => writeArticle({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/help\/article\/(\d+)\/publish$/, (p, _b, user) => publishArticle({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/gap\/(\d+)\/draft$/, (p, _b, _u, user) => draftForGap({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/article$/, (_p, body, _u, user) => writeArticle({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/help\/article\/(\d+)\/publish$/, (p, _b, _u, user) => publishArticle({ id: Number(p[0]), actor: `human:${user.username}` })],
 
   // ---- Data governance --------------------------------------------------
   ['GET', /^\/api\/datagov$/, () => datagovOverview()],
-  ['POST', /^\/api\/datagov\/rebuild$/, (_p, _b, user) => rebuildInventory({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/datagov\/rebuild$/, (_p, _b, _u, user) => rebuildInventory({ actor: `human:${user.username}` })],
   // Which columns are sealed at write, and the signature under that decision.
   ['GET', /^\/api\/datagov\/tiering$/, () => tiering()],
-  ['POST', /^\/api\/datagov\/tiering$/, (_p, body, user) => recordTiering({ actor: `human:${user.username}`, basis: body.basis })],
-  ['POST', /^\/api\/datagov\/class$/, (_p, body, user) => defineClass({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/datagov\/classify$/, (_p, body, user) => classifyColumn({
+  ['POST', /^\/api\/datagov\/tiering$/, (_p, body, _u, user) => recordTiering({ actor: `human:${user.username}`, basis: body.basis })],
+  ['POST', /^\/api\/datagov\/class$/, (_p, body, _u, user) => defineClass({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/datagov\/classify$/, (_p, body, _u, user) => classifyColumn({
     table: need(body, 'table'), column: need(body, 'column'), className: body.className,
     personal: body.personal, note: body.note, actor: `human:${user.username}`,
   })],
 
   // ---- Trust centre -----------------------------------------------------
   ['GET', /^\/api\/trust$/, () => trustOverview()],
-  ['POST', /^\/api\/trust\/document$/, (_p, body, user) => publishTrustDocument({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/trust\/document\/(\d+)\/retire$/, (p, _b, user) => retireTrustDocument({ id: Number(p[0]), actor: `human:${user.username}` })],
-  ['POST', /^\/api\/trust\/subprocessor$/, (_p, body, user) => addSubprocessor({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trust\/document$/, (_p, body, _u, user) => publishTrustDocument({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trust\/document\/(\d+)\/retire$/, (p, _b, _u, user) => retireTrustDocument({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trust\/subprocessor$/, (_p, body, _u, user) => addSubprocessor({ ...body, actor: `human:${user.username}` })],
 
   // ---- Status and SLA ---------------------------------------------------
   ['GET', /^\/api\/status$/, () => statusOverview()],
-  ['POST', /^\/api\/status\/seed$/, (_p, _b, user) => seedComponents({ actor: `human:${user.username}` })],
-  ['POST', /^\/api\/status\/component$/, (_p, body, user) => setComponent({
+  ['POST', /^\/api\/status\/seed$/, (_p, _b, _u, user) => seedComponents({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/status\/component$/, (_p, body, _u, user) => setComponent({
     name: need(body, 'name'), state: need(body, 'state'), objective: body.objective, actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/status\/notice$/, (_p, body, user) => postNotice({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/status\/notice\/(\d+)$/, (p, body, user) => updateNotice({
+  ['POST', /^\/api\/status\/notice$/, (_p, body, _u, user) => postNotice({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/status\/notice\/(\d+)$/, (p, body, _u, user) => updateNotice({
     id: Number(p[0]), state: need(body, 'state'), body: need(body, 'body'), actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/status\/sla$/, (_p, body, user) => addSlaTerm({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/status\/sla$/, (_p, body, _u, user) => addSlaTerm({ ...body, actor: `human:${user.username}` })],
+
+  // ---- Local AI: the model on the company's own server ------------------
+  ['GET', /^\/api\/localai$/, () => LocalAI.status()],
+  // The night shift: heavy drafting waits for the larger model and the quiet hours.
+  ['GET', /^\/api\/localai\/night$/, () => Night.nightOverview()],
+  ['POST', /^\/api\/localai\/night$/, (_p, body, _u, user) => Night.configure({ on: body.on ?? null, model: body.model ?? null, start: body.start ?? null, end: body.end ?? null, actor: `human:${user.username}` })],
+  // Bringing a waiting draft forward is the asking department's call.
+  ['POST', /^\/api\/drafts\/(\d+)\/now$/, (p, _b, _u, user) => {
+    const job = one('SELECT dept FROM draft_jobs WHERE id = ?', Number(p[0]));
+    const perm = { policies: 'policies.manage', iso: 'iso.manage', internalaudit: 'ia.manage', transformation: 'dtx.manage', production: 'production.manage', strategy: 'strategy.manage', aml: 'aml.manage' }[job?.dept];
+    if (!job) throw new HttpError(404, 'no such draft');
+    if (!perm || !hasPerm(user, perm)) throw new HttpError(403, `bringing this draft forward needs ${perm || 'the department'}`);
+    return draftNow(Number(p[0]), { actor: `human:${user.username}` });
+  }],
+  ['POST', /^\/api\/localai\/config$/, (_p, body, _u, user) => LocalAI.configure({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/pull$/, (_p, body, _u, user) => LocalAI.pull({ model: need(body, 'model'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/remove$/, async (_p, body, _u, user) => LocalAI.remove({ model: need(body, 'model'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/warm$/, async (_p, body, _u, user) => LocalAI.warm({ model: need(body, 'model'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/bench$/, async (_p, body, _u, user) => LocalAI.benchmark({ model: need(body, 'model'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/ask$/, (_p, body, _u, user) => LocalAI.ask({ question: need(body, 'question'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/ask\/(\d+)\/file$/, (p, body, _u, user) => LocalAI.fileProposal({ askId: Number(p[0]), index: Number(body.index ?? 0), actor: `human:${user.username}` })],
+
+  // ---- The built-in engine (llama.cpp, run by AlphaCore itself) -------
+  ['GET', /^\/api\/localai\/engine$/, () => Engine.status()],
+  ['POST', /^\/api\/localai\/engine\/install$/, async (_p, _b, _u, user) => Engine.installBinary({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/engine\/model$/, (_p, body, _u, user) => Engine.downloadModel({ name: body.name || null, url: body.url || null, role: body.role || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/engine\/model\/remove$/, (_p, body, _u, user) => Engine.removeModel({ name: need(body, 'name'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/engine\/start$/, (_p, body, _u, user) => Engine.start({ name: need(body, 'name'), role: body.role === 'embed' ? 'embed' : 'chat', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/localai\/engine\/stop$/, (_p, body, _u, user) => { Engine.stop(body.role === 'embed' ? 'embed' : 'chat', { actor: `human:${user.username}` }); return Engine.status(); }],
+  ['POST', /^\/api\/localai\/engine\/disable$/, (_p, _b, _u, user) => Engine.disable({ actor: `human:${user.username}` })],
+
+  // ---- Learning: lessons, guards, research, upgrades ------------------
+  ['GET', /^\/api\/learning$/, () => Learning.overview()],
+  ['POST', /^\/api\/learning\/correct$/, (_p, body, _u, user) => Learning.correct({
+    subjectType: need(body, 'subjectType'), subjectId: need(body, 'subjectId'), correction: need(body, 'correction'), guard: body.guard || null, actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/learning\/guard$/, (_p, body, _u, user) => Learning.addGuard({ agentId: body.agentId || null, kind: body.kind || 'must_not', pattern: need(body, 'pattern'), why: need(body, 'why'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/guard\/(\d+)\/state$/, (p, body, _u, user) => Learning.setGuard({ id: Number(p[0]), state: need(body, 'state'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/topic$/, (_p, body, _u, user) => Learning.addTopic({ topic: need(body, 'topic'), lang: body.lang || null, everyHours: body.everyHours || 24, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/topic\/(\d+)\/toggle$/, (p, body, _u, user) => Learning.setTopic({ id: Number(p[0]), enabled: Boolean(body.enabled), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/topic\/(\d+)\/research$/, async (p, _b, _u, user) => Learning.research(Number(p[0]), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/note\/(\d+)\/accept$/, (p, _b, _u, user) => Learning.accept({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/note\/(\d+)\/reject$/, (p, _b, _u, user) => Learning.reject({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/lesson\/(\d+)\/verify$/, (p, _b, _u, user) => { memVerifyLesson(Number(p[0]), { verdict: 'verified', actor: `human:${user.username}` }); return { ok: true }; }],
+  ['POST', /^\/api\/learning\/lesson\/(\d+)\/retract$/, (p, _b, _u, user) => { memForget(Number(p[0]), { actor: `human:${user.username}` }); return { ok: true }; }],
+  ['POST', /^\/api\/learning\/web\/on$/, (_p, _b, _u, user) => Learning.enableWeb({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/web\/off$/, (_p, _b, _u, user) => Learning.disableWeb({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/exam$/, async (_p, body, _u, user) => {
+    const inc = Learning.incumbent();
+    return Learning.examine({ runtime: body.runtime || inc.runtime, model: body.model || inc.model, actor: `human:${user.username}` });
+  }],
+  ['POST', /^\/api\/learning\/upgrade\/auto$/, (_p, body, _u, user) => Learning.setAutoUpgrade({ enabled: Boolean(body.enabled), candidates: body.candidates || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/upgrade\/check$/, async (_p, _b, _u, user) => Learning.upgradeCheck({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/learning\/upgrade\/(\d+)\/rollback$/, (p, _b, _u, user) => Learning.rollback({ id: Number(p[0]), actor: `human:${user.username}` })],
+
+  // ---- Policies, procedures, processes and laws ----------------------
+  ['GET', /^\/api\/policies$/, (_p, _b, url) => Policies.overview({ kind: url.searchParams.get('kind') })],
+  ['GET', /^\/api\/policies\/(\d+)$/, (p) => Policies.getDoc(Number(p[0]))],
+  ['POST', /^\/api\/policies$/, (_p, body, _u, user) => Policies.createDoc({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/policies\/(\d+)\/edit$/, (p, body, _u, user) => Policies.editDoc({ id: Number(p[0]), ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/policies\/(\d+)\/state$/, (p, body, _u, user) => Policies.setState({ id: Number(p[0]), state: need(body, 'state'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/policies\/(\d+)\/ack$/, (p, _b, _u, user) => Policies.acknowledge({ id: Number(p[0]), user })],
+  ['POST', /^\/api\/policies\/(\d+)\/draft$/, (p, body, _u, user) => Policies.draft({ id: Number(p[0]), instructions: body.instructions || '', lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  // ---- Quality and ISO --------------------------------------------------
+  ['GET', /^\/api\/iso$/, (_p, _b, url) => Iso.overview({ standard: url.searchParams.get('standard') || 'ISO 9001' })],
+  ['POST', /^\/api\/iso\/clause\/(\d+)$/, (p, body, _u, user) => Iso.setClause({ id: Number(p[0]), status: body.status || null, owner: body.owner || null, evidence: body.evidence ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/iso\/ncr$/, (_p, body, _u, user) => Iso.raiseNcr({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/iso\/ncr\/(\d+)$/, (p, body, _u, user) => Iso.advanceNcr({ id: Number(p[0]), to: need(body, 'to'), rootCause: body.rootCause || null, correction: body.correction || null, correctiveAction: body.correctiveAction || null, effective: body.effective ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/iso\/review$/, (_p, body, _u, user) => Iso.holdReview({ standard: need(body, 'standard'), attendees: body.attendees || '', decisions: need(body, 'decisions'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/iso\/gap$/, (_p, body, _u, user) => Iso.gapAnalysis({ standard: need(body, 'standard'), lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  // ---- Internal and financial audit -------------------------------------
+  ['GET', /^\/api\/internalaudit$/, () => IA.overview()],
+  ['POST', /^\/api\/internalaudit\/entity\/(\d+)\/risk$/, (p, body, _u, user) => IA.rateEntity({ id: Number(p[0]), risk: need(body, 'risk'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/engagement$/, (_p, body, _u, user) => IA.openEngagement({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/engagement\/(\d+)\/advance$/, (p, body, _u, user) => IA.advanceEngagement({ id: Number(p[0]), to: need(body, 'to'), opinion: body.opinion || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/engagement\/(\d+)\/programme$/, (p, body, _u, user) => IA.programme({ id: Number(p[0]), lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/finding$/, (_p, body, _u, user) => IA.addFinding({ ...body, source: 'manual', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/finding\/(\d+)$/, (p, body, _u, user) => IA.advanceFinding({ id: Number(p[0]), to: need(body, 'to'), actionPlan: body.actionPlan || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/analytics$/, (_p, body, _u, user) => IA.runAnalytics({ from: body.from || null, to: body.to || null, limit: body.limit ? Number(body.limit) : undefined, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/internalaudit\/analytics\/(\d+)\/raise$/, (p, body, _u, user) => IA.raiseFromAnalytics({ runId: Number(p[0]), test: need(body, 'test'), actor: `human:${user.username}` })],
+  // ---- Digital transformation -------------------------------------------
+  ['GET', /^\/api\/transformation$/, () => Dtx.overview()],
+  ['POST', /^\/api\/transformation\/assess$/, (_p, body, _u, user) => Dtx.assess({ scores: need(body, 'scores'), notes: body.notes || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/transformation\/initiative$/, (_p, body, _u, user) => Dtx.addInitiative({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/transformation\/initiative\/(\d+)$/, (p, body, _u, user) => Dtx.updateInitiative({ id: Number(p[0]), stage: body.stage || null, current: body.current ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/transformation\/roadmap$/, (_p, body, _u, user) => Dtx.roadmap({ lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  // ---- Production studio and copywriting --------------------------------
+  ['GET', /^\/api\/production$/, () => Prod.overview()],
+  ['GET', /^\/api\/production\/(\d+)$/, (p) => Prod.getProduction(Number(p[0]))],
+  ['POST', /^\/api\/production$/, (_p, body, _u, user) => Prod.createProduction({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/production\/(\d+)\/script$/, (p, body, _u, user) => Prod.saveScript({ id: Number(p[0]), script: body.script ?? '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/production\/(\d+)\/advance$/, (p, body, _u, user) => Prod.advance({ id: Number(p[0]), spent: body.spent ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/production\/(\d+)\/write$/, (p, body, _u, user) => Prod.writeScenes({ id: Number(p[0]), instructions: body.instructions || '', lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/production\/copy$/, (_p, body, _u, user) => Prod.addBrief({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/production\/copy\/(\d+)\/choose$/, (p, body, _u, user) => Prod.chooseCopy({ id: Number(p[0]), text: need(body, 'text'), actor: `human:${user.username}` })],
+  // ---- Operations center -------------------------------------------------
+  ['GET', /^\/api\/opscenter$/, () => Ops.overview()],
+  ['POST', /^\/api\/opscenter\/kpi$/, (_p, body, _u, user) => Ops.addKpi({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/opscenter\/kpi\/(\d+)\/reading$/, (p, body, _u, user) => Ops.record({ kpiId: Number(p[0]), value: need(body, 'value'), note: body.note || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/opscenter\/issue$/, (_p, body, _u, user) => Ops.addIssue({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/opscenter\/issue\/(\d+)\/close$/, (p, body, _u, user) => Ops.closeIssue({ id: Number(p[0]), resolution: need(body, 'resolution'), actor: `human:${user.username}` })],
+  // ---- Strategy and M&A --------------------------------------------------
+  ['GET', /^\/api\/strategy$/, () => Strat.overview()],
+  ['POST', /^\/api\/strategy\/item$/, (_p, body, _u, user) => Strat.addItem({ kind: need(body, 'kind'), text: need(body, 'text'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/strategy\/item\/(\d+)\/remove$/, (p, _b, _u, user) => Strat.removeItem({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/strategy\/deal$/, (_p, body, _u, user) => Strat.addDeal({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/strategy\/deal\/(\d+)$/, (p, body, _u, user) => Strat.moveDeal({ id: Number(p[0]), stage: need(body, 'stage'), notes: body.notes || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/strategy\/brief$/, (_p, body, _u, user) => Strat.brief({ lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  // ---- Insurance ---------------------------------------------------------
+  ['GET', /^\/api\/insurance$/, () => Ins.overview()],
+  ['POST', /^\/api\/insurance\/policy$/, (_p, body, _u, user) => Ins.addPolicy({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/insurance\/policy\/(\d+)\/cancel$/, (p, _b, _u, user) => Ins.cancelPolicy({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/insurance\/claim$/, (_p, body, _u, user) => Ins.fileClaim({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/insurance\/claim\/(\d+)$/, (p, body, _u, user) => Ins.moveClaim({ id: Number(p[0]), to: need(body, 'to'), paid: body.paid ?? null, actor: `human:${user.username}` })],
+  // ---- AML and KYC -------------------------------------------------------
+  ['GET', /^\/api\/aml$/, () => Aml.overview()],
+  ['POST', /^\/api\/aml\/party$/, (_p, body, _u, user) => Aml.addParty({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/aml\/party\/(\d+)\/review$/, (p, body, _u, user) => Aml.review({ partyId: Number(p[0]), lang: body.lang || 'ar', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/aml\/sanctions\/live$/, (_p, body, _u, user) => (body.on === false ? Sanctions.goQuiet : Sanctions.goLive)({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/aml\/sanctions\/refresh$/, async (_p, _b, _u, user) => {
+    const lists = await Sanctions.refresh({ actor: `human:${user.username}` });
+    return { lists, aml: Aml.rescreenSanctions(), remit: Remit.rescreenOpen() };
+  }],
+  ['POST', /^\/api\/aml\/watchlist$/, (_p, body, _u, user) => Aml.addToWatchlist({ name: need(body, 'name'), list: body.list || 'internal', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/aml\/alert$/, (_p, body, _u, user) => Aml.raiseAlert({ partyId: need(body, 'partyId'), reason: need(body, 'reason'), amount: body.amount ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/aml\/alert\/(\d+)$/, (p, body, _u, user) => Aml.decideAlert({ id: Number(p[0]), to: need(body, 'to'), note: body.note || '', reportRef: body.reportRef || null, actor: `human:${user.username}` })],
+  // ---- Remittances and SWIFT (Core 2, beside the bank) -------------------
+  ['GET', /^\/api\/remit$/, () => Remit.remitOverview()],
+  ['POST', /^\/api\/remit\/beneficiary$/, (_p, body, _u, user) => Remit.addBeneficiary({ ...body, actor: `human:${user.username}` })],
+  // --- The governance map: the assurance departments on one sheet, and the links between them ---
+  ['GET', /^\/api\/assurancemap$/, () => Assurance.overview()],
+  ['POST', /^\/api\/assurancemap\/(\d+)$/, (p, body, _u, user) => Assurance.decide({ id: Number(p[0]), verdict: need(body, 'verdict'), reason: body.reason || '', user })],
+  // --- Official documents: issued from a final record, printed, verifiable by code ---
+  ['POST', /^\/api\/documents\/issue$/, (_p, body, _u, user) => Docs.issue({ type: need(body, 'type'), id: need(body, 'id'), user })],
+  ['GET', /^\/api\/documents\/for\/([a-z]+)\/([\w-]+)$/, (p, _b, _u, user) => Docs.issuesFor(p[0], p[1], user)],
+  ['GET', /^\/api\/documents\/([0-9A-Za-z]{4}-[0-9A-Za-z]{4}-[0-9A-Za-z]{4})$/, (p, _b, _u, user) => Docs.read(p[0], user)],
+  ['POST', /^\/api\/documents\/([0-9A-Za-z]{4}-[0-9A-Za-z]{4}-[0-9A-Za-z]{4})\/revoke$/, (p, body, _u, user) => Docs.revoke({ code: p[0], reason: body.reason, user })],
+  ['POST', /^\/api\/remit\/ordering-bic$/, (_p, body, _u, user) => Remit.setOrderingBic({ bic: need(body, 'bic'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/remit\/watchlist$/, (_p, body, _u, user) => Remit.addWatchName({ name: need(body, 'name'), source: body.source || 'internal', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/remit\/message$/, (_p, body, _u, user) => Remit.buildMessage({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/remit\/message\/(\d+)\/clear$/, (p, body, _u, user) => Remit.clearHold(Number(p[0]), { note: need(body, 'note'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/remit\/message\/(\d+)\/approve$/, (p, _b, _u, user) => Remit.approveMessage(Number(p[0]), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/remit\/message\/(\d+)\/release$/, (p, _b, _u, user) => Remit.releaseMessage(Number(p[0]), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/remit\/message\/(\d+)\/cancel$/, (p, _b, _u, user) => Remit.cancelMessage(Number(p[0]), { actor: `human:${user.username}` })],
+
+  // ---- Markets desk -----------------------------------------------------
+  ['GET', /^\/api\/markets$/, () => Markets.overview()],
+  ['GET', /^\/api\/markets\/symbol\/([^/]+)$/, (p) => Markets.detail(decodeURIComponent(p[0]))],
+  ['POST', /^\/api\/markets\/seed$/, (_p, _b, _u, user) => Markets.seedWatchlist({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/watch$/, (_p, body, _u, user) => Markets.addSymbol({ symbol: need(body, 'symbol'), name: body.name, kind: body.kind, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/unwatch$/, (_p, body, _u, user) => Markets.removeSymbol({ symbol: need(body, 'symbol'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/refresh$/, async (_p, _b, _u, user) => Markets.refreshQuotes({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/daily$/, async (_p, _b, _u, user) => Markets.dailyPass({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/brief$/, (_p, body, _u, user) => Markets.requestBrief({ symbol: body.symbol || null, lang: body.lang || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/alert$/, (_p, body, _u, user) => Markets.addAlert({ symbol: need(body, 'symbol'), rule: need(body, 'rule'), threshold: need(body, 'threshold'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/alert\/(\d+)\/off$/, (p, _b, _u, user) => Markets.removeAlert({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/prefs$/, (_p, body, _u, user) => Markets.setPrefs({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/live$/, (_p, body, _u, user) => Markets.goLive({ key: body.key || null, provider: body.provider || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/markets\/simulated$/, (_p, _b, _u, user) => Markets.goSimulated({ actor: `human:${user.username}` })],
+
+  // ---- Portfolio desk ---------------------------------------------------
+  ['GET', /^\/api\/portfolio$/, () => Portfolio.overview()],
+  ['POST', /^\/api\/portfolio\/propose$/, (_p, body, _u, user) => Portfolio.propose({
+    accountId: body.accountId || null, symbol: need(body, 'symbol'), side: need(body, 'side'), qty: body.qty ?? null,
+    orderType: body.orderType || 'market', limitPrice: body.limitPrice ?? null, rationale: body.rationale || '', actor: `human:${user.username}`,
+  })],
+  ['POST', /^\/api\/portfolio\/order\/(\d+)\/approve$/, async (p, body, _u, user) => Portfolio.approve({ id: Number(p[0]), note: body.note || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/portfolio\/order\/(\d+)\/reject$/, (p, body, _u, user) => Portfolio.reject({ id: Number(p[0]), note: body.note || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/portfolio\/broker$/, (_p, body, _u, user) => {
+    // Real money asks for the password again, not only a phrase: the phrase
+    // proves intent, the password proves it is the person and not their tab.
+    if (body.live && !verifyPassword(user.id, body.password)) throw new HttpError(403, 'password incorrect');
+    return Portfolio.addBroker({ name: body.name, key: need(body, 'key'), live: Boolean(body.live), confirm: body.confirm || '', actor: `human:${user.username}` });
+  }],
+  ['POST', /^\/api\/portfolio\/sync$/, async (_p, _b, _u, user) => Portfolio.syncBroker({ actor: `human:${user.username}` })],
+
+  // ---- Newsroom ---------------------------------------------------------
+  ['GET', /^\/api\/newsroom$/, (_p, _b, url) => Newsroom.overview({ category: url.searchParams.get('category'), search: url.searchParams.get('q'), limit: url.searchParams.get('limit') })],
+  ['POST', /^\/api\/newsroom\/feed$/, (_p, body, _u, user) => Newsroom.addFeed({ name: body.name, url: need(body, 'url'), category: body.category || 'custom', lang: body.lang || 'en', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/newsroom\/feed\/(\d+)\/toggle$/, (p, body, _u, user) => Newsroom.setFeed({ id: Number(p[0]), enabled: Boolean(body.enabled), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/newsroom\/feed\/(\d+)\/fetch$/, async (p, _b, _u, user) => Newsroom.fetchFeedNow(Number(p[0]), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/newsroom\/digest$/, (_p, body, _u, user) => Newsroom.requestDigest({ category: need(body, 'category'), lang: body.lang || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/newsroom\/live$/, (_p, _b, _u, user) => Newsroom.goLive({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/newsroom\/quiet$/, (_p, _b, _u, user) => Newsroom.goQuiet({ actor: `human:${user.username}` })],
 
   // ---- Partnerships -----------------------------------------------------
   ['GET', /^\/api\/partnerships$/, () => partnershipsOverview()],
-  ['POST', /^\/api\/partnerships\/(\d+)\/integration$/, (p, body, user) => setIntegration({
+  ['POST', /^\/api\/partnerships\/(\d+)\/integration$/, (p, body, _u, user) => setIntegration({
     id: Number(p[0]), integration: need(body, 'integration'), agreementRef: body.agreementRef, actor: `human:${user.username}`,
   })],
 
   // ---- The simulation: the workforce in a building ------------------------
   ['GET', /^\/api\/sim$/, () => officesOverview()],
-  ['POST', /^\/api\/sim\/start$/, (_p, _b, user) => setOfficesOn(true, `human:${user.username}`)],
-  ['POST', /^\/api\/sim\/stop$/, (_p, _b, user) => setOfficesOn(false, `human:${user.username}`)],
-  ['POST', /^\/api\/sim\/seed$/, (_p, _b, user) => officesSeed({ actor: `human:${user.username}` })],
-  ['POST', /^\/api\/sim\/play$/, (_p, body, user) => officesPlay({ roomId: body?.roomId || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/sim\/start$/, (_p, _b, _u, user) => setOfficesOn(true, `human:${user.username}`)],
+  ['POST', /^\/api\/sim\/stop$/, (_p, _b, _u, user) => setOfficesOn(false, `human:${user.username}`)],
+  ['POST', /^\/api\/sim\/seed$/, (_p, _b, _u, user) => officesSeed({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/sim\/play$/, (_p, body, _u, user) => officesPlay({ roomId: body?.roomId || null, actor: `human:${user.username}` })],
   ['GET', /^\/api\/sim\/room\/([a-z0-9-]+)$/, (p) => ({ room: p[0], feed: officesRoomFeed(p[0]) })],
   ['GET', /^\/api\/sim\/encounter\/(\d+)$/, (p) => officesLines(Number(p[0]))],
 
   // ---- Growth -----------------------------------------------------------
   ['GET', /^\/api\/growth$/, () => growthOverview()],
-  ['POST', /^\/api\/growth$/, (_p, body, user) => startExperiment({ ...body, actor: `human:${user.username}` })],
-  ['POST', /^\/api\/growth\/(\d+)\/result$/, (p, body, user) => recordResult({
+  ['POST', /^\/api\/growth$/, (_p, body, _u, user) => startExperiment({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/growth\/(\d+)\/result$/, (p, body, _u, user) => recordResult({
     id: Number(p[0]), resultA: need(body, 'resultA'), resultB: need(body, 'resultB'), actor: `human:${user.username}`,
   })],
-  ['POST', /^\/api\/growth\/(\d+)\/conclude$/, (p, body, user) => concludeExperiment2({
+  ['POST', /^\/api\/growth\/(\d+)\/conclude$/, (p, body, _u, user) => concludeExperiment2({
     id: Number(p[0]), winner: need(body, 'winner'), decision: need(body, 'decision'), actor: `human:${user.username}`,
   })],
 ];
@@ -2386,7 +2623,7 @@ function permFor(m, path) {
   // what you personally could act on. Handing out a role is users.manage.
   if (path.startsWith('/api/embeddings')) return m === 'GET' ? 'graph.view' : 'graph.manage';
   if (path.startsWith('/api/deliverability')) return 'comms.view';
-  if (path === '/api/approvals') return null;
+  if (path === '/api/approvals' || path === '/api/approvals/decide') return null;
   if (path.startsWith('/api/roles')) return m === 'GET' ? 'users.manage' : 'users.manage';
   if (path.startsWith('/api/delegations')) return null;
   if (path === '/api/erasure' || path === '/api/erasure/find' || path === '/api/erasure/verify') return 'compliance.view';
@@ -2416,6 +2653,48 @@ function permFor(m, path) {
   if (path.startsWith('/api/trust')) return 'trust.publish';
   if (path === '/api/status') return 'status.view';
   if (path.startsWith('/api/status')) return 'status.post';
+  // The local brain. Asking it a question is agent work like any other, so it
+  // is runs.create; turning its answer into a request is requests.create.
+  if (path === '/api/localai') return 'localai.view';
+  if (path === '/api/localai/night' && m === 'GET') return 'localai.view';
+  if (path.startsWith('/api/drafts/')) return null;   // the handler checks the asking department's permission
+  if (path === '/api/localai/engine' && m === 'GET') return 'localai.view';
+  // Learning. Reading the web is the connector act; replacing the model is its own key.
+  // Governance and the departments around it: the read, the work, and the
+  // act that cannot be taken back, each its own key.
+  if (path.startsWith('/api/policies')) {
+    if (m === 'GET') return 'policies.view';
+    if (/\/state$/.test(path)) return 'policies.publish';
+    if (/\/ack$/.test(path)) return 'policies.view';
+    return 'policies.manage';
+  }
+  if (path.startsWith('/api/iso')) return m === 'GET' ? 'iso.view' : (path === '/api/iso/review' ? 'iso.verify' : 'iso.manage');
+  if (path.startsWith('/api/internalaudit')) return m === 'GET' ? 'ia.view' : (/\/engagement\/\d+\/advance$/.test(path) || /\/finding\/\d+$/.test(path) ? 'ia.close' : 'ia.manage');
+  if (path.startsWith('/api/transformation')) return m === 'GET' ? 'dtx.view' : 'dtx.manage';
+  if (path.startsWith('/api/production')) return m === 'GET' ? 'production.view' : 'production.manage';
+  if (path.startsWith('/api/opscenter')) return m === 'GET' ? 'opscenter.view' : 'opscenter.manage';
+  if (path.startsWith('/api/strategy')) return m === 'GET' ? 'strategy.view' : 'strategy.manage';
+  if (path.startsWith('/api/insurance')) return m === 'GET' ? 'insurance.view' : 'insurance.manage';
+  if (path.startsWith('/api/aml')) return m === 'GET' ? 'aml.view' : (/\/alert\/\d+$/.test(path) ? 'aml.decide' : 'aml.manage');
+  // One route serves four departments; the handler checks each type's own permission.
+  if (path.startsWith('/api/assurancemap')) return m === 'GET' ? 'assurancemap.view' : 'assurancemap.manage';
+  if (path.startsWith('/api/documents')) return null;
+  if (path.startsWith('/api/remit')) return m === 'GET' ? 'remit.view' : (/\/(approve|release|ordering-bic)$/.test(path) ? 'remit.release' : 'remit.manage');
+  if (path === '/api/learning') return 'learning.view';
+  if (path === '/api/learning/web/on' || path === '/api/learning/web/off') return 'connectors.manage';
+  if (path.startsWith('/api/learning/upgrade') || path === '/api/learning/exam') return 'learning.upgrade';
+  if (path.startsWith('/api/learning')) return 'learning.manage';
+  if (path === '/api/localai/ask') return 'runs.create';
+  if (/^\/api\/localai\/ask\/\d+\/file$/.test(path)) return 'requests.create';
+  if (path.startsWith('/api/localai')) return 'localai.manage';
+  // Arming a data feed is the connector act, wherever the button lives.
+  if (['/api/markets/live', '/api/markets/simulated', '/api/newsroom/live', '/api/newsroom/quiet'].includes(path)) return 'connectors.manage';
+  if (path.startsWith('/api/markets')) return m === 'GET' ? 'markets.view' : 'markets.manage';
+  if (path.startsWith('/api/newsroom')) return m === 'GET' ? 'news.view' : 'news.manage';
+  if (path === '/api/portfolio') return 'portfolio.view';
+  if (/^\/api\/portfolio\/order\/\d+\/(approve|reject)$/.test(path)) return 'portfolio.approve';
+  if (path === '/api/portfolio/broker') return 'portfolio.connect';
+  if (path.startsWith('/api/portfolio')) return 'portfolio.propose';
   if (path === '/api/partnerships') return 'partners.view';
   if (path.startsWith('/api/partnerships')) return 'partners.manage';
   // `simulation.*` is the shadow company, which forks the database. This is the
@@ -2637,6 +2916,7 @@ function permFor(m, path) {
   if (path.startsWith('/api/chief')) return m === 'GET' ? 'chief.view' : 'chief.run';
   if (path.startsWith('/api/observe')) return m === 'GET' ? 'observe.view' : 'observe.run';
   if (is(/^\/api\/backups\/\d+\/restore$/)) return 'backups.restore';
+  if (path === '/api/backups/passphrase') return 'vault.manage';
   if (path.startsWith('/api/backups')) return m === 'GET' ? 'backups.view' : 'backups.take';
   return 'dashboard.view';
 }

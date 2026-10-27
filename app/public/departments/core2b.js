@@ -279,11 +279,25 @@ export async function renderBank() {
     ${panel('Write a cheque', `<div class="form-inline">${fl('ch-acct', 'Account', acctSel('ch-acct'))}${fl('ch-no', 'Number', inp('ch-no', '000123'))}${fl('ch-dir', 'Direction', sel('ch-dir', [['issued', 'issued'], ['received', 'received']]))}${fl('ch-payee', 'Payee', inp('ch-payee', ''))}${fl('ch-amt', 'Amount', inp('ch-amt', '', 'number'))}${fl('ch-bill', 'Bill id', inp('ch-bill', '', 'number'))}${btn('ch-go', 'Draft')}</div>`)}
     ${panel('Build a batch', `<div class="form-inline">${fl('pb-run', 'Payroll run id', inp('pb-run', '', 'number'))}${fl('pb-acct', 'From account', acctSel('pb-acct'))}${btn('pb-go', 'Payroll batch')}</div>
       <div class="form-inline" style="margin-top:8px">${fl('ab-bills', 'Approved bill ids (comma)', inp('ab-bills', '1,2'))}${fl('ab-acct', 'From account', acctSel('ab-acct'))}${btn('ab-go', 'Bills batch', '')}</div>`)}
-    ${panel('Import a statement', `<div class="form-inline">${fl('st-acct', 'Account', acctSel('st-acct'))}${fl('st-label', 'Label', inp('st-label', 'August'))}</div>
+    ${panel('Import a statement', `<div class="form-inline">${fl('st-acct', 'Account', acctSel('st-acct'))}${fl('st-label', 'Label', inp('st-label', 'August'))}
+        <div><label class="fl" for="st-file">${esc(t('Statement file (CSV, MT940, camt.053)'))}</label><input type="file" id="st-file" accept=".csv,.txt,.sta,.940,.mt940,.xml"></div></div>
+      <div class="sub" id="st-read" role="status"></div>
       <textarea id="st-lines" aria-label="${esc(t('Statement lines'))}" rows="4" style="width:100%;margin-top:6px;font-family:var(--font-mono)" placeholder="2026-08-01, -1200.00, RENT\n2026-08-03, 5000.00, INV AR-2026-0001"></textarea><div style="margin-top:6px">${btn('st-go', 'Import', '')}</div>`)}
   </div>` : ''}`;
 
   wireActs(renderBank);
+  // A file is read into the lines box, not imported: a person looks at what
+  // was understood before any of it reaches the reconciliation.
+  $('#st-file')?.addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const r = await api('/api/core2/bank/statement/parse', { method: 'POST', body: { text: await f.text() } });
+      $('#st-lines').value = r.lines.map((l) => `${l.day}, ${l.amount.toFixed(2)}, ${String(l.ref || '').replace(/,/g, ' ')}`).join('\n');
+      $('#st-read').textContent = `${t('Read as')} ${r.format.toUpperCase()}: ${r.lines.length} ${t('lines')}${r.skipped ? ` · ${r.skipped} ${t('skipped')}` : ''}${r.currency ? ` · ${r.currency}` : ''} — ${t('check them, then import')}`;
+      if (!$('#st-label').value) $('#st-label').value = f.name.replace(/\.[^.]+$/, '');
+    } catch (err) { toast(err.message, true); }
+  });
   view.querySelectorAll('[data-recon]').forEach((b) => b.addEventListener('click', async () => {
     try {
       const r = await api(`/api/core2/bank/accounts/${b.dataset.recon}/reconcile`);

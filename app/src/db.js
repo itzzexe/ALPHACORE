@@ -4206,6 +4206,830 @@ for (const sql of [
   'ALTER TABLE hr_employee ADD COLUMN probation_ends TEXT',
   'ALTER TABLE hr_employee ADD COLUMN contract_ends TEXT',
 ]) { try { db.exec(sql); } catch { /* column exists */ } }
+
+// ---------------------------------------------------------------------------
+// The local brain, the markets desk, the portfolio and the newsroom.
+//
+// Prices and headlines are facts about the outside world, held here as a
+// cache: they can be fetched again, so unlike the audit chain they are trimmed.
+// What the company *did* with them — an order proposed, approved, filled — is a
+// consequential act and lands on the chain like every other.
+db.exec(`
+CREATE TABLE IF NOT EXISTS local_pulls (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  model        TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'pulling',   -- pulling|done|failed
+  detail       TEXT,
+  requested_by TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS local_bench (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  model          TEXT NOT NULL,
+  tokens_per_sec REAL,
+  prompt_per_sec REAL,
+  load_ms        INTEGER,
+  latency_ms     INTEGER,
+  ok             INTEGER NOT NULL DEFAULT 1,
+  error          TEXT,
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS local_asks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  question    TEXT NOT NULL,
+  run_id      TEXT,
+  answer      TEXT,
+  proposals   TEXT,                               -- JSON: requests the brain suggests a person files
+  state       TEXT NOT NULL DEFAULT 'thinking',   -- thinking|answered|failed
+  served_by   TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mkt_watch (
+  symbol    TEXT PRIMARY KEY,
+  name      TEXT,
+  kind      TEXT NOT NULL DEFAULT 'stock',        -- stock|etf|index|crypto|fx|commodity
+  currency  TEXT,
+  exchange  TEXT,
+  notes     TEXT,
+  added_by  TEXT NOT NULL,
+  added_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mkt_quotes (
+  symbol       TEXT PRIMARY KEY,
+  price        REAL,
+  prev_close   REAL,
+  change       REAL,
+  change_pct   REAL,
+  day_high     REAL,
+  day_low      REAL,
+  volume       REAL,
+  market_state TEXT,
+  source       TEXT NOT NULL,                     -- yahoo|finnhub|twelvedata|simulated
+  fetched_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mkt_ticks (
+  symbol TEXT NOT NULL,
+  ts     TEXT NOT NULL DEFAULT (datetime('now')),
+  price  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mkt_ticks_sym ON mkt_ticks(symbol, ts);
+
+CREATE TABLE IF NOT EXISTS mkt_bars (
+  symbol TEXT NOT NULL,
+  day    TEXT NOT NULL,
+  open   REAL, high REAL, low REAL,
+  close  REAL NOT NULL,
+  volume REAL,
+  source TEXT,
+  PRIMARY KEY (symbol, day)
+);
+
+CREATE TABLE IF NOT EXISTS mkt_forecasts (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol        TEXT NOT NULL,
+  made_on       TEXT NOT NULL,
+  horizon_days  INTEGER NOT NULL,
+  method        TEXT NOT NULL,
+  base_price    REAL NOT NULL,
+  expected      REAL NOT NULL,
+  low80 REAL, high80 REAL, low95 REAL, high95 REAL,
+  p_up          REAL,
+  due_on        TEXT NOT NULL,
+  actual        REAL,
+  resolved_on   TEXT,
+  hit_direction INTEGER,                          -- 1 when the sign of the move was right
+  inside80      INTEGER,
+  UNIQUE (symbol, made_on, horizon_days)
+);
+
+CREATE TABLE IF NOT EXISTS mkt_signals (
+  symbol     TEXT NOT NULL,
+  day        TEXT NOT NULL,
+  score      REAL NOT NULL,
+  label      TEXT NOT NULL,
+  components TEXT,
+  PRIMARY KEY (symbol, day)
+);
+
+CREATE TABLE IF NOT EXISTS mkt_briefs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL DEFAULT 'daily',       -- daily|symbol
+  symbol     TEXT,
+  day        TEXT NOT NULL,
+  run_id     TEXT,
+  state      TEXT NOT NULL DEFAULT 'thinking',    -- thinking|ready|failed
+  summary    TEXT,
+  body       TEXT,
+  served_by  TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mkt_alerts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol      TEXT NOT NULL,
+  rule        TEXT NOT NULL,                      -- above|below|move_pct|rsi_above|rsi_below
+  threshold   REAL NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'active',     -- active|fired|off
+  fired_at    TEXT,
+  fired_value REAL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pf_accounts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  kind       TEXT NOT NULL DEFAULT 'paper',       -- paper|broker
+  connector  TEXT,
+  cash       REAL NOT NULL DEFAULT 0,
+  start_cash REAL NOT NULL DEFAULT 0,
+  currency   TEXT NOT NULL DEFAULT 'USD',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pf_positions (
+  account_id INTEGER NOT NULL REFERENCES pf_accounts(id),
+  symbol     TEXT NOT NULL,
+  qty        REAL NOT NULL,
+  avg_cost   REAL NOT NULL,
+  PRIMARY KEY (account_id, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS pf_orders (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id    INTEGER NOT NULL REFERENCES pf_accounts(id),
+  symbol        TEXT NOT NULL,
+  side          TEXT NOT NULL CHECK (side IN ('buy','sell')),
+  qty           REAL NOT NULL CHECK (qty > 0),
+  order_type    TEXT NOT NULL DEFAULT 'market',   -- market|limit
+  limit_price   REAL,
+  est_price     REAL,
+  est_value     REAL,
+  rationale     TEXT,
+  risk          TEXT,                             -- JSON: the checks, and which failed
+  proposed_by   TEXT NOT NULL,
+  state         TEXT NOT NULL DEFAULT 'proposed', -- proposed|filled|rejected|failed|cancelled|held|submitted
+  decided_by    TEXT,
+  decided_at    TEXT,
+  decision_note TEXT,
+  fill_price    REAL,
+  filled_at     TEXT,
+  broker_ref    TEXT,
+  egress_id     INTEGER,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pf_snapshots (
+  account_id INTEGER NOT NULL REFERENCES pf_accounts(id),
+  day        TEXT NOT NULL,
+  equity     REAL NOT NULL,
+  cash       REAL NOT NULL,
+  PRIMARY KEY (account_id, day)
+);
+
+CREATE TABLE IF NOT EXISTS news_feeds (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  url         TEXT NOT NULL UNIQUE,
+  category    TEXT NOT NULL,                      -- tech|politics|economy|markets|world|arabic|custom
+  lang        TEXT NOT NULL DEFAULT 'en',
+  enabled     INTEGER NOT NULL DEFAULT 1,
+  last_fetch  TEXT,
+  last_ok     TEXT,
+  last_error  TEXT,
+  items_total INTEGER NOT NULL DEFAULT 0,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS news_items (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  feed_id      INTEGER REFERENCES news_feeds(id),
+  url_hash     TEXT NOT NULL UNIQUE,
+  url          TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  summary      TEXT,
+  source       TEXT,
+  category     TEXT NOT NULL,
+  lang         TEXT NOT NULL DEFAULT 'en',
+  published_at TEXT,
+  sentiment    REAL,
+  tickers      TEXT,                              -- JSON array of watchlist symbols it mentions
+  flagged      INTEGER NOT NULL DEFAULT 0,        -- the injection scanner found instructions in it
+  fetched_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS news_items_cat ON news_items(category, published_at);
+
+CREATE TABLE IF NOT EXISTS news_digests (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  category   TEXT NOT NULL,
+  day        TEXT NOT NULL,
+  run_id     TEXT,
+  state      TEXT NOT NULL DEFAULT 'thinking',    -- thinking|ready|failed
+  body       TEXT,
+  served_by  TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+// ---------------------------------------------------------------------------
+// The built-in engine, and how the workforce learns.
+//
+// Lessons and web knowledge are not here: they live in mem_docs, the one
+// memory every run already recalls from. What is here is what memory did not
+// have — rules that stop a repeated mistake, the research loop's notes before
+// they become knowledge, and the scores that decide whether a model upgrade
+// is an upgrade.
+db.exec(`
+CREATE TABLE IF NOT EXISTS engine_models (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL UNIQUE,
+  url         TEXT NOT NULL,
+  file        TEXT NOT NULL,
+  role        TEXT NOT NULL DEFAULT 'chat',     -- chat|embed
+  size        INTEGER,
+  received    INTEGER NOT NULL DEFAULT 0,
+  sha256      TEXT,
+  state       TEXT NOT NULL DEFAULT 'downloading', -- downloading|ready|failed
+  detail      TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS learn_guards (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id    TEXT,                             -- NULL: every employee
+  kind        TEXT NOT NULL DEFAULT 'must_not', -- must_not|must
+  pattern     TEXT NOT NULL,                    -- a regular expression, case-insensitive
+  why         TEXT NOT NULL,
+  lesson_id   INTEGER,                          -- mem_docs.id it came from, when it came from one
+  state       TEXT NOT NULL DEFAULT 'active',   -- active|off
+  hits        INTEGER NOT NULL DEFAULT 0,
+  last_hit    TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS learn_topics (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic       TEXT NOT NULL UNIQUE,
+  lang        TEXT NOT NULL DEFAULT 'en',
+  source      TEXT NOT NULL DEFAULT 'manual',   -- manual|watchlist|question
+  enabled     INTEGER NOT NULL DEFAULT 1,
+  every_hours INTEGER NOT NULL DEFAULT 24,
+  last_run    TEXT,
+  notes       INTEGER NOT NULL DEFAULT 0,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS learn_notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic_id    INTEGER REFERENCES learn_topics(id),
+  run_id      TEXT,
+  sources     TEXT,                             -- JSON: [{url, title, domain, trust}]
+  summary     TEXT,
+  claims      TEXT,                             -- JSON: [{claim, source}]
+  trust       REAL,
+  flagged     INTEGER NOT NULL DEFAULT 0,
+  state       TEXT NOT NULL DEFAULT 'thinking', -- thinking|pending|accepted|rejected|failed
+  memory_id   INTEGER,                          -- mem_docs.id once accepted
+  decided_by  TEXT,
+  served_by   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS learn_evals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  runtime     TEXT NOT NULL,                    -- ollama|engine
+  model       TEXT NOT NULL,
+  passed      INTEGER NOT NULL,
+  total       INTEGER NOT NULL,
+  score       REAL NOT NULL,
+  tok_per_sec REAL,
+  details     TEXT,
+  purpose     TEXT NOT NULL DEFAULT 'check',    -- check|candidate|baseline
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS learn_upgrades (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  runtime     TEXT NOT NULL,
+  from_model  TEXT,
+  to_model    TEXT NOT NULL,
+  from_score  REAL,
+  to_score    REAL,
+  state       TEXT NOT NULL,                    -- promoted|kept|rolled_back
+  why         TEXT,
+  actor       TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+// ---------------------------------------------------------------------------
+// The governance and assurance floor, and the departments a large company has
+// that this one did not: policies and procedures, ISO, internal and financial
+// audit, digital transformation, the production studio, operations, strategy,
+// insurance and AML. Core 1 tables, ordinary affinity, like the rest of Core 1.
+// Remittances live in Core 2 beside the bank and are STRICT, below.
+db.exec(`
+CREATE TABLE IF NOT EXISTS draft_jobs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  dept         TEXT NOT NULL,
+  subject_type TEXT NOT NULL,
+  subject_id   TEXT NOT NULL,
+  kind         TEXT NOT NULL,
+  run_id       TEXT,
+  state        TEXT NOT NULL DEFAULT 'thinking',  -- thinking|ready|failed
+  body         TEXT,
+  served_by    TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pol_docs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  code          TEXT NOT NULL UNIQUE,
+  kind          TEXT NOT NULL,                     -- law|policy|procedure|process|instruction|standard
+  title         TEXT NOT NULL,
+  owner         TEXT,
+  scope         TEXT,
+  body          TEXT NOT NULL DEFAULT '',
+  steps         TEXT,                              -- JSON: [{step, role, input, output, control}]
+  iso_refs      TEXT,                              -- JSON: ["ISO 9001:7.5", …]
+  version       INTEGER NOT NULL DEFAULT 1,
+  state         TEXT NOT NULL DEFAULT 'draft',     -- draft|review|published|retired
+  review_months INTEGER NOT NULL DEFAULT 12,
+  next_review   TEXT,
+  approved_by   TEXT,
+  published_at  TEXT,
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS pol_versions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id     INTEGER NOT NULL REFERENCES pol_docs(id),
+  version    INTEGER NOT NULL,
+  body       TEXT NOT NULL,
+  steps      TEXT,
+  note       TEXT,
+  changed_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS pol_acks (
+  doc_id   INTEGER NOT NULL REFERENCES pol_docs(id),
+  version  INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  acked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (doc_id, version, username)
+);
+
+CREATE TABLE IF NOT EXISTS iso_clauses (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  standard   TEXT NOT NULL,
+  ref        TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'not_started',  -- not_started|partial|implemented|verified|na
+  owner      TEXT,
+  evidence   TEXT,
+  policy_ids TEXT,
+  updated_by TEXT,
+  updated_at TEXT,
+  UNIQUE (standard, ref)
+);
+CREATE TABLE IF NOT EXISTS iso_ncrs (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  standard          TEXT,
+  clause_ref        TEXT,
+  source            TEXT NOT NULL DEFAULT 'internal', -- internal|audit|customer|supplier
+  description       TEXT NOT NULL,
+  severity          TEXT NOT NULL DEFAULT 'minor',    -- observation|minor|major
+  root_cause        TEXT,
+  correction        TEXT,
+  corrective_action TEXT,
+  owner             TEXT,
+  due               TEXT,
+  state             TEXT NOT NULL DEFAULT 'open',     -- open|action|verify|closed
+  effective         INTEGER,
+  verified_by       TEXT,
+  created_by        TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at         TEXT
+);
+CREATE TABLE IF NOT EXISTS iso_reviews (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  standard   TEXT NOT NULL,
+  held_on    TEXT NOT NULL,
+  attendees  TEXT,
+  inputs     TEXT,                                 -- JSON snapshot the review was held against
+  decisions  TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ia_entities (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL UNIQUE,
+  section       TEXT,
+  risk          INTEGER NOT NULL DEFAULT 3,        -- 1 (low) … 5 (high)
+  last_audited  TEXT,
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS ia_engagements (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_id   INTEGER REFERENCES ia_entities(id),
+  title       TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'operational', -- operational|financial|compliance|it
+  objective   TEXT,
+  scope       TEXT,
+  lead        TEXT,
+  state       TEXT NOT NULL DEFAULT 'planned',     -- planned|fieldwork|reporting|followup|closed
+  opinion     TEXT,                                -- satisfactory|needs_improvement|unsatisfactory
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at   TEXT
+);
+CREATE TABLE IF NOT EXISTS ia_findings (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  engagement_id  INTEGER REFERENCES ia_engagements(id),
+  title          TEXT NOT NULL,
+  rating         TEXT NOT NULL DEFAULT 'medium',   -- high|medium|low
+  criteria       TEXT,
+  condition      TEXT,
+  cause          TEXT,
+  effect         TEXT,
+  recommendation TEXT,
+  action_plan    TEXT,
+  owner          TEXT,
+  due            TEXT,
+  state          TEXT NOT NULL DEFAULT 'open',     -- open|in_progress|implemented|verified
+  source         TEXT NOT NULL DEFAULT 'manual',   -- manual|analytics
+  evidence       TEXT,
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at      TEXT
+);
+CREATE TABLE IF NOT EXISTS ia_analytics (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  period_from TEXT,
+  period_to   TEXT,
+  entries     INTEGER NOT NULL DEFAULT 0,
+  exceptions  INTEGER NOT NULL DEFAULT 0,
+  results     TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS dtx_assessments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  scores     TEXT NOT NULL,                        -- JSON {dimension: 1..5}
+  overall    REAL NOT NULL,
+  notes      TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS dtx_initiatives (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  title      TEXT NOT NULL,
+  dimension  TEXT NOT NULL,
+  problem    TEXT,
+  outcome    TEXT,
+  value      INTEGER NOT NULL DEFAULT 3,
+  effort     INTEGER NOT NULL DEFAULT 3,
+  stage      TEXT NOT NULL DEFAULT 'idea',         -- idea|approved|in_progress|live|retired
+  owner      TEXT,
+  quarter    TEXT,
+  kpi        TEXT,
+  baseline   REAL,
+  target     REAL,
+  current    REAL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS media_productions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'ad',          -- film|series|ad|corporate|podcast|social
+  logline     TEXT,
+  stage       TEXT NOT NULL DEFAULT 'development', -- development|preproduction|production|post|delivered
+  script      TEXT NOT NULL DEFAULT '',            -- Fountain
+  budget      REAL NOT NULL DEFAULT 0,
+  spent       REAL NOT NULL DEFAULT 0,
+  due         TEXT,
+  owner       TEXT,
+  archive_id  INTEGER,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS copy_briefs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  product    TEXT NOT NULL,
+  audience   TEXT,
+  goal       TEXT,
+  channel    TEXT,
+  tone       TEXT,
+  lang       TEXT NOT NULL DEFAULT 'ar',
+  chosen     TEXT,
+  state      TEXT NOT NULL DEFAULT 'open',         -- open|chosen
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ops_kpis (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  process_id INTEGER REFERENCES pol_docs(id),
+  unit       TEXT,
+  better     TEXT NOT NULL DEFAULT 'up',           -- up|down
+  target     REAL NOT NULL,
+  warn       REAL,
+  owner      TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS ops_readings (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kpi_id     INTEGER NOT NULL REFERENCES ops_kpis(id),
+  value      REAL NOT NULL,
+  note       TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS ops_issues (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  title      TEXT NOT NULL,
+  kpi_id     INTEGER REFERENCES ops_kpis(id),
+  severity   TEXT NOT NULL DEFAULT 'medium',
+  owner      TEXT,
+  due        TEXT,
+  state      TEXT NOT NULL DEFAULT 'open',         -- open|closed
+  resolution TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS strat_items (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL,                        -- strength|weakness|opportunity|threat|theme
+  text       TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS strat_deals (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  target     TEXT NOT NULL,
+  sector     TEXT,
+  thesis     TEXT,
+  stage      TEXT NOT NULL DEFAULT 'screening',    -- screening|contact|nda|diligence|offer|closing|closed|dropped
+  revenue    REAL,
+  ebitda     REAL,
+  multiple   REAL,
+  owner      TEXT,
+  notes      TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ins_policies (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  insurer    TEXT NOT NULL,
+  line       TEXT NOT NULL,                        -- property|liability|cyber|health|fleet|directors|marine|other
+  number     TEXT,
+  coverage   REAL NOT NULL DEFAULT 0,
+  premium    REAL NOT NULL DEFAULT 0,
+  deductible REAL NOT NULL DEFAULT 0,
+  starts     TEXT NOT NULL,
+  ends       TEXT NOT NULL,
+  broker     TEXT,
+  state      TEXT NOT NULL DEFAULT 'active',       -- active|cancelled
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS ins_claims (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  policy_id     INTEGER NOT NULL REFERENCES ins_policies(id),
+  incident_date TEXT NOT NULL,
+  description   TEXT NOT NULL,
+  claimed       REAL NOT NULL DEFAULT 0,
+  paid          REAL,
+  state         TEXT NOT NULL DEFAULT 'open',      -- open|submitted|settled|rejected
+  created_by    TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS aml_parties (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'company',    -- individual|company
+  country      TEXT,
+  pep          INTEGER NOT NULL DEFAULT 0,
+  industry     TEXT,
+  channel      TEXT,                               -- in_person|remote|intermediary
+  risk_score   INTEGER NOT NULL DEFAULT 0,
+  risk_level   TEXT NOT NULL DEFAULT 'low',
+  cdd          TEXT NOT NULL DEFAULT 'standard',   -- simplified|standard|enhanced
+  screening    TEXT,
+  next_review  TEXT,
+  state        TEXT NOT NULL DEFAULT 'active',     -- active|exited
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS aml_watchlist (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  list       TEXT NOT NULL DEFAULT 'internal',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS aml_alerts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_id    INTEGER REFERENCES aml_parties(id),
+  reason      TEXT NOT NULL,
+  amount      REAL,
+  state       TEXT NOT NULL DEFAULT 'open',        -- open|investigating|cleared|reported
+  note        TEXT,
+  decided_by  TEXT,
+  report_ref  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+// Remittances and SWIFT — Core 2, beside the bank whose transfers they carry,
+// so STRICT like every other table on that side of the seam.
+db.exec(`
+CREATE TABLE IF NOT EXISTS remit_beneficiary (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  iban       TEXT,
+  account    TEXT,
+  bic        TEXT NOT NULL,
+  bank_name  TEXT,
+  country    TEXT NOT NULL,
+  address    TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS remit_watchlist (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  source     TEXT NOT NULL DEFAULT 'internal',
+  added_by   TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS remit_message (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  transfer_id     INTEGER NOT NULL REFERENCES bank_transfer(id),
+  beneficiary_id  INTEGER NOT NULL REFERENCES remit_beneficiary(id),
+  format          TEXT NOT NULL CHECK (format IN ('MT103','pacs.008')),
+  uetr            TEXT NOT NULL,
+  currency        TEXT NOT NULL,
+  amount          REAL NOT NULL,
+  charges         TEXT NOT NULL DEFAULT 'SHA' CHECK (charges IN ('OUR','SHA','BEN')),
+  remittance_info TEXT,
+  value_date      TEXT NOT NULL,
+  content         TEXT NOT NULL,
+  screening       TEXT NOT NULL,
+  state           TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','held','approved','released','cancelled')),
+  created_by      TEXT NOT NULL,
+  approved_by     TEXT,
+  released_by     TEXT,
+  released_at     TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+`);
+
+// The night shift: a run may wait for a time (not_before) and name the lane it
+// belongs to, so heavy drafting goes to the larger model while nobody is
+// waiting on the small one.
+try { db.exec('ALTER TABLE runs ADD COLUMN not_before TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE runs ADD COLUMN lane TEXT'); } catch { /* column exists */ }
+
+db.exec(`
+-- Official documents: the frozen content of what was printed, its fingerprint, and its code.
+CREATE TABLE IF NOT EXISTS doc_issues (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  code          TEXT NOT NULL UNIQUE,
+  doc_type      TEXT NOT NULL,
+  subject_id    TEXT NOT NULL,
+  version       INTEGER NOT NULL,
+  title         TEXT NOT NULL,
+  snapshot      TEXT NOT NULL,
+  digest        TEXT NOT NULL,
+  issued_by     TEXT NOT NULL,
+  issued_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  revoked_at    TEXT,
+  revoked_by    TEXT,
+  revoke_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS doc_issues_subject ON doc_issues (doc_type, subject_id, id);
+
+-- Sanctions lists: one row per listed name, aliases under their party's reference.
+CREATE TABLE IF NOT EXISTS sanctions_entries (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  list     TEXT NOT NULL,
+  ref      TEXT NOT NULL,
+  name     TEXT NOT NULL,
+  folded   TEXT NOT NULL,
+  kind     TEXT,
+  program  TEXT,
+  alias    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS sanctions_by_list ON sanctions_entries (list, ref);
+CREATE TABLE IF NOT EXISTS sanctions_lists (
+  list       TEXT PRIMARY KEY,
+  url        TEXT,
+  entries    INTEGER NOT NULL DEFAULT 0,
+  bytes      INTEGER,
+  fetched_at TEXT,
+  state      TEXT NOT NULL DEFAULT 'never',
+  error      TEXT
+);
+-- One row per party and listed name: a match raises an alert once, not every morning.
+CREATE TABLE IF NOT EXISTS aml_sanction_hits (
+  party_id   INTEGER NOT NULL,
+  list       TEXT NOT NULL,
+  ref        TEXT NOT NULL,
+  score      REAL NOT NULL,
+  alert_id   INTEGER,
+  first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (party_id, list, ref)
+);
+
+-- Reach: a person's own Telegram chat, and what has already been announced to them.
+CREATE TABLE IF NOT EXISTS reach_channels (
+  user_id      INTEGER PRIMARY KEY,
+  chat_id      TEXT NOT NULL,
+  code_hash    TEXT,
+  code_expires TEXT,
+  verified_at  TEXT,
+  instant      INTEGER NOT NULL DEFAULT 1,
+  digest_hour  INTEGER NOT NULL DEFAULT 4,
+  last_digest  TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS reach_sent (
+  item_key TEXT NOT NULL,
+  user_id  INTEGER NOT NULL,
+  sent_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (item_key, user_id)
+);
+
+-- The governance map's proposals: one per source, ever, decided by a person.
+CREATE TABLE IF NOT EXISTS gov_proposals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,
+  from_type   TEXT NOT NULL,
+  from_id     TEXT NOT NULL,
+  to_ref      TEXT,
+  title       TEXT NOT NULL,
+  why         TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'proposed',
+  decided_by  TEXT,
+  decided_at  TEXT,
+  reason      TEXT,
+  result_ref  TEXT,
+  params      TEXT,                                 -- the particulars, so the console can say it in the reader's language
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (kind, from_type, from_id)
+);
+
+-- Restore drills: a backup opened, checked and counted, so "we have backups" is a fact.
+CREATE TABLE IF NOT EXISTS restore_drills (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  backup_id   INTEGER,
+  ok          INTEGER NOT NULL,
+  integrity   TEXT,
+  chain_ok    INTEGER,
+  chain_tip   INTEGER,
+  tables      INTEGER,
+  took_ms     INTEGER,
+  detail      TEXT,
+  actor       TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
 /**
  * Run a piece of work so that all of it happens, or none of it.
  *

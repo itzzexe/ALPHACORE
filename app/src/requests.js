@@ -108,7 +108,10 @@ The single exception, and it is narrow: if carrying it out would mean deceiving 
     actor,
   });
   exec('UPDATE requests SET run_id = ? WHERE id = ?', runId, id);
-  audit({ actorType: 'human', actorId: actor, action: 'request.submitted', subjectType: 'request', subjectId: id, payload: { title: t, priority } });
+  // The local operator files requests too; the chain must say an employee did
+  // it, not a person.
+  const actorType = String(actor).startsWith('human') ? 'human' : String(actor).startsWith('agent') ? 'agent' : 'system';
+  audit({ actorType, actorId: actor, action: 'request.submitted', subjectType: 'request', subjectId: id, payload: { title: t, priority } });
   notify({ level: 'info', source: 'requests', message: `New request #${id}: “${t}” — the intake router is planning its route.`, subjectType: 'request', subjectId: id });
   return getRequest(id);
 }

@@ -68,6 +68,9 @@ const ALWAYS_GATED = new Set([
   // read the button — and this decides whether it may happen, which is the same
   // split every other connector uses.
   'web.commit',
+  // An order to a broker spends money the moment it fills. The portfolio
+  // desk passes a person's approval through as `force`; nothing else can.
+  'order.place',
 ]);
 
 const REDACT = /(?:key|token|secret|password|authorization|cookie|seed|mnemonic|private)/i;

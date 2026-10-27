@@ -29,11 +29,22 @@ export function getSecret(name) {
   return getSetting(name) || process.env[name] || null;
 }
 
+/**
+ * Local only: every hosted provider is switched off, whatever keys are set.
+ *
+ * The keys stay where they are, so switching back is one setting rather than
+ * pasting five secrets again; what changes is that nothing outside this
+ * machine is asked. The consultant, the reviewers and the critical
+ * cross-check all follow from this one answer.
+ */
+export const localOnly = () => String(getSecret('LOCAL_ONLY') || '').toLowerCase() === 'true';
+
 export function isProviderAvailable(name) {
   const p = providersConfig.providers[name];
   if (!p) return false;
   if (p.kind === 'mock') return true;
   if (String(getSecret('ALPHACORE_MOCK') || '').toLowerCase() === 'true') return false;
+  if (localOnly() && p.family !== 'local') return false;
   if (p.kind === 'claude-cli') return String(getSecret(p.enabledEnv) || '').toLowerCase() === 'true';
   return Boolean(p.keyEnv && getSecret(p.keyEnv));
 }
@@ -84,5 +95,6 @@ export function settingsOverview() {
     mockMode: isMockMode(),
     production,
     masterKeySource,
+    twoFactor: getSetting('REQUIRE_2FA') || 'off',
   };
 }

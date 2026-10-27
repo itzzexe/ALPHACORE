@@ -25,6 +25,8 @@ import { q, one, exec, db } from './db.js';
 import { audit } from './audit.js';
 import { getSetting } from './settings.js';
 import { ROOT } from './env.js';
+import { encryptFile } from './backupcrypt.js';
+import { backupPassphrase } from './backup.js';
 
 // ------------------------------------------------------------- the drain --
 
@@ -206,12 +208,17 @@ export async function shipOffsite(file, { actor = 'system:backup' } = {}) {
 
   const [bin, ...args] = cmd.split(/\s+/);
   const started = Date.now();
+  // With a passphrase set, only an encrypted copy leaves; the plain file never does.
+  const pass = backupPassphrase();
+  const outgoing = pass ? `${file}.acbk` : file;
   try {
+    if (pass) await encryptFile(file, outgoing, pass);
     await new Promise((resolve, reject) => {
-      execFile(bin, [...args, file], { timeout: 10 * 60_000, windowsHide: true },
+      execFile(bin, [...args, outgoing], { timeout: 10 * 60_000, windowsHide: true },
         (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 300))) : resolve(stdout)));
     });
   } catch (e) {
+    if (pass) fs.rmSync(outgoing, { force: true });
     audit({
       actorType: 'system', actorId: actor, action: 'backup.ship_failed',
       subjectType: 'backup', subjectId: path.basename(file),
@@ -226,12 +233,14 @@ export async function shipOffsite(file, { actor = 'system:backup' } = {}) {
     return { shipped: false, reason: e.message };
   }
 
+  const bytes = fs.statSync(outgoing).size;
+  if (pass) fs.rmSync(outgoing, { force: true });
   audit({
     actorType: 'system', actorId: actor, action: 'backup.shipped',
     subjectType: 'backup', subjectId: path.basename(file),
-    payload: { bytes: fs.statSync(file).size, tookMs: Date.now() - started },
+    payload: { bytes, encrypted: Boolean(pass), tookMs: Date.now() - started },
   });
-  return { shipped: true, tookMs: Date.now() - started };
+  return { shipped: true, encrypted: Boolean(pass), tookMs: Date.now() - started };
 }
 
 /**

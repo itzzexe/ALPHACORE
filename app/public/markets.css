@@ -1,0 +1,121 @@
+/* The markets door and the local brain. Tokens only, so both themes hold, and
+   logical properties only, so Arabic lays out the right way round. Numbers are
+   set left-to-right inside an Arabic page on purpose: a price read backwards
+   is a different price. */
+
+.mk-up { color: var(--sx-ok); }
+.mk-down { color: var(--sx-bad); }
+.mk-scroll { overflow-x: auto; }
+.mk-callout { margin-block: 0 16px; }
+.mk-summary { font-size: 15px; line-height: 1.6; margin-block: 4px 12px; }
+.mk-disclaimer { margin-block-start: 12px; }
+.mk-ideas { padding-inline-start: 18px; margin-block: 6px 0; }
+.mk-ideas li { margin-block-end: 6px; }
+.mk-sim { font-size: 10px; padding-block: 0; }
+.mk-sparkcell { inline-size: 120px; }
+.mk-sparkcell .spark { inline-size: 110px; block-size: 28px; }
+
+.mk-hero { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.mk-hero h2 { margin: 0; font-size: 26px; }
+.mk-price b { font-size: 26px; }
+
+.mk-chart { inline-size: 100%; block-size: 260px; display: block; }
+.mk-chart .mk-axis { stroke: var(--sx-line); stroke-width: 1; }
+.mk-chart .mk-line { fill: none; stroke: var(--sx-ink); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.mk-chart .mk-sma { fill: none; stroke: var(--sx-mute); stroke-width: 1.2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.mk-chart .mk-cone95 { fill: var(--sx-ai-wash); stroke: none; }
+.mk-chart .mk-cone80 { fill: var(--sx-ai); opacity: 0.22; stroke: none; }
+.mk-chart .mk-mid { fill: none; stroke: var(--sx-ai-strong); stroke-width: 1.4; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.mk-chart .mk-tick { fill: var(--sx-mute); font-size: 11px; font-family: var(--sx-mono); }
+.mk-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--sx-mute); margin-block-start: 6px; }
+.mk-legend span::before { content: ''; display: inline-block; inline-size: 14px; block-size: 3px; margin-inline-end: 6px; vertical-align: middle; background: var(--sx-ink); }
+.mk-legend .k-sma::before { background: var(--sx-mute); }
+.mk-legend .k-cone::before { background: var(--sx-ai); block-size: 8px; opacity: 0.5; }
+
+.nw-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.nw-list li { padding-block: 9px; border-block-end: 1px solid var(--sx-line-soft); }
+.nw-list li:last-child { border-block-end: 0; }
+.nw-list a { color: var(--sx-text); text-decoration: none; font-weight: 600; }
+.nw-list a:hover, .nw-list a:focus-visible { text-decoration: underline; }
+.nw-list .chip { margin-inline-start: 4px; }
+.nw-story { padding-block: 8px; border-block-end: 1px solid var(--sx-line-soft); }
+.nw-story p { margin-block: 4px; }
+
+.la-ask { margin-block-start: 14px; padding-block-start: 12px; border-block-start: 1px solid var(--sx-line-soft); }
+.la-prop { margin-block: 8px; padding: 8px 10px; border-radius: var(--sx-r1); background: var(--sx-sunk); }
+.la-pre { white-space: pre-wrap; padding: 10px 12px; border-radius: var(--sx-r1); background: var(--sx-sunk); text-align: start; }
+
+/* The desk: who decides. Three choices side by side, the current one marked. */
+.dk-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.dk-level { display: flex; flex-direction: column; gap: 4px; text-align: start; padding: 12px 14px; border-radius: var(--sx-r2); border: 1px solid var(--sx-line); background: var(--sx-panel); color: var(--sx-text); cursor: pointer; font: inherit; }
+.dk-level span { color: var(--sx-mute); font-size: 12.5px; line-height: 1.45; }
+.dk-level.on { border-color: var(--sx-ai); background: var(--sx-ai-wash); box-shadow: inset 0 0 0 1px var(--sx-ai); }
+.dk-level:disabled { cursor: default; opacity: 0.85; }
+.dk-level:focus-visible { outline: 2px solid var(--sx-ai); outline-offset: 2px; }
+
+/* The governance and enterprise floor. */
+.sr-only { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ent-md { white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.6; margin: 6px 0; padding: 10px 12px; border-radius: var(--sx-r1); background: var(--sx-sunk); text-align: start; max-block-size: 420px; overflow: auto; }
+.ent-editor { inline-size: 100%; font-family: var(--sx-mono); font-size: 13px; line-height: 1.55; }
+.ent-draft { padding-block: 10px; border-block-end: 1px solid var(--sx-line-soft); }
+.ent-draft:last-child { border-block-end: 0; }
+.ent-variant { margin-block: 8px; padding: 8px 10px; border-radius: var(--sx-r1); border: 1px solid var(--sx-line-soft); }
+.ent-ev { color: var(--sx-ai-strong); font-size: 12px; margin-block-start: 3px; }
+.ent-list { list-style: none; padding: 0; margin: 6px 0; }
+.ent-list li { padding-block: 5px; border-block-end: 1px solid var(--sx-line-soft); }
+.ent-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-block-end: 16px; }
+.ent-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: var(--sx-r2); border: 1px solid var(--sx-line); background: var(--sx-panel); color: var(--sx-text); text-decoration: none; }
+.ent-card span { color: var(--sx-mute); font-size: 12.5px; }
+.ent-card.on { border-color: var(--sx-ai); box-shadow: inset 0 0 0 1px var(--sx-ai); }
+.ent-meter { block-size: 6px; border-radius: 3px; background: var(--sx-sunk); overflow: hidden; }
+.ent-meter i { display: block; block-size: 100%; background: var(--sx-ok); }
+.ent-swot { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.ent-swot .panel { margin: 0; }
+
+/* ---- Official documents: a sheet on screen, the only thing on paper ---- */
+.doc-tools { margin-bottom: 14px; gap: 10px; align-items: center; }
+.doc-sheet { background: var(--bg-panel); color: var(--ink); border: 1px solid var(--seam); border-radius: 10px; padding: 36px 40px; max-width: 820px; margin-inline: auto; line-height: 1.6; }
+.doc-head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid var(--ink); padding-bottom: 12px; margin-bottom: 18px; }
+.doc-company { font-size: 20px; font-weight: 700; }
+.doc-address, .doc-kind, .doc-note, .doc-url { color: var(--ink-mute); font-size: 13px; }
+.doc-kind { text-align: end; font-weight: 600; }
+.doc-title { font-size: 24px; margin: 0 0 14px; }
+.doc-sheet h3 { margin: 20px 0 8px; font-size: 16px; }
+.doc-sheet h4 { margin: 14px 0 6px; font-size: 15px; }
+.doc-meta, .doc-sign, .doc-tbl { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.doc-meta th, .doc-sign th { text-align: start; color: var(--ink-mute); font-weight: 500; width: 30%; padding: 4px 0; vertical-align: top; }
+.doc-meta td, .doc-sign td { padding: 4px 0; overflow-wrap: anywhere; }
+.doc-tbl th, .doc-tbl td { border: 1px solid var(--seam); padding: 6px 8px; text-align: start; vertical-align: top; }
+.doc-sign { margin-top: 24px; border-top: 1px solid var(--seam); }
+.doc-text p { margin: 0 0 8px; }
+.doc-text ul { padding-inline-start: 22px; margin: 0 0 8px; }
+.doc-finding { border-top: 1px solid var(--seam); padding-top: 4px; }
+.doc-rating { font-size: 12px; color: var(--ink-mute); font-weight: 500; }
+.doc-foot { display: flex; gap: 18px; align-items: center; margin-top: 28px; border-top: 1px solid var(--seam); padding-top: 14px; font-size: 13px; }
+.doc-qr svg { display: block; }
+@media (max-width: 640px) { .doc-sheet { padding: 20px 16px; } .doc-head, .doc-foot { flex-direction: column; align-items: flex-start; } }
+@media print {
+  body * { visibility: hidden !important; }
+  .doc-sheet, .doc-sheet * { visibility: visible !important; }
+  .doc-sheet { position: absolute; inset: 0 auto auto 0; width: 100%; max-width: none; border: 0; border-radius: 0; padding: 0; background: #fff; color: #000; }
+  .doc-address, .doc-kind, .doc-note, .doc-url, .doc-meta th, .doc-sign th, .doc-rating { color: #333 !important; }
+  .doc-finding, .doc-foot { break-inside: avoid; }
+}
+
+/* ---- Governance map ---- */
+.heat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.heat-tile { display: block; text-decoration: none; color: var(--ink); background: var(--bg-panel); border: 1px solid var(--seam); border-inline-start-width: 4px; border-radius: 10px; padding: 12px 14px; }
+.heat-tile:hover, .heat-tile:focus-visible { border-color: var(--accent); }
+.heat-green { border-inline-start-color: var(--ok); }
+.heat-amber { border-inline-start-color: var(--ember); }
+.heat-red { border-inline-start-color: var(--bad); }
+.heat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.heat-top .chip { white-space: nowrap; flex: none; }
+.heat-tile dl { margin: 0; display: grid; gap: 2px; }
+.heat-tile dl div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.heat-tile dt { color: var(--ink-mute); }
+.heat-tile dd { margin: 0; font-weight: 600; }
+
+/* ---- One-time code setup on the sign-in card: a white square so phones can read it in either theme ---- */
+.te-qr { display: flex; justify-content: center; margin: 10px 0 14px; }
+.te-qr svg { background: #fff; padding: 6px; border-radius: 8px; }

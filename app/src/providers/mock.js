@@ -27,6 +27,59 @@ function pick(system, prompt) {
     const dim = ((prompt || '').match(/\[ENG-REVIEW:(\w+)\]/) || [])[1] || 'this dimension';
     return { summary: `[mock] No ${dim} reviewer is connected, so only the deterministic scanner read this code. Connect a provider key for a real review.`, verdict: 'pass', findings: [], confidence: 0.3 };
   }
+  // The markets desk. The numbers were computed before the prompt was written,
+  // so mock can restate them faithfully — it just cannot add judgement.
+  if (task.includes('[MKT-BRIEF]')) {
+    let sig = [];
+    try { sig = JSON.parse(((prompt || '').match(/SIGNALS_JSON: (\[[\s\S]*?\])\n/) || [])[1] || '[]'); } catch { sig = []; }
+    const stance = (l) => (/buy/.test(l) ? 'bullish' : /sell/.test(l) ? 'bearish' : 'neutral');
+    return {
+      summary: `[mock] ${sig.length} symbols scored by the deterministic model. No analyst model is connected, so this restates the numbers without judgement — connect the local model or a provider key for a written view.`,
+      outlook: sig.slice(0, 12).map((s) => ({ symbol: s.symbol, stance: stance(s.label), why: `[mock] score ${s.score} (${s.label})`, risks: '[mock] not assessed', levels: { stop: s.stop ?? null, target: s.target ?? null } })),
+      ideas: [],
+      risks: ['[mock] written without a model'],
+      confidence: 0.3,
+    };
+  }
+  if (task.includes('[NEWS-DIGEST]')) {
+    const titles = [...(prompt || '').matchAll(/^- \[(\d+)\] (.+?) \((.+?)\)$/gm)].slice(0, 5);
+    return {
+      headline: '[mock] The newest headlines, unranked — no editor model is connected.',
+      stories: titles.map((m) => ({ title: m[2], why: '[mock] not assessed', sources: [m[3]], impact: 'none', tickers: [] })),
+      watch: [],
+      confidence: 0.3,
+    };
+  }
+  // A research note. Mock cannot read, so it quotes the first sentence of
+  // each source and says that is all it did — low confidence, so the note
+  // waits for a person instead of becoming knowledge on its own.
+  if (task.includes('[LEARN-NOTE]')) {
+    const srcs = [...(prompt || '').matchAll(/SOURCE (\d+): [^\n]*\n([^\n]*)/g)];
+    return {
+      summary: '[mock] No model read these sources; the first sentence of each is quoted below. Connect the local model for a real note.',
+      claims: srcs.map((m) => ({ claim: `[mock] ${(m[2].match(/^[^.!?؟]*[.!?؟]?/) || [''])[0].slice(0, 200)}`, source: Number(m[1]) })),
+      confidence: 0.2,
+    };
+  }
+  // Every governance draft at once: a policy, an audit programme, a scene, a
+  // line of copy. Mock writes a skeleton with the brief quoted back, so the
+  // page and the adopt-a-draft path can be walked without a model.
+  if (task.includes('[DRAFT:')) {
+    const kind = (task.match(/\[DRAFT:([\w-]+)\]/) || [])[1] || 'document';
+    const brief = (task.match(/\[DRAFT:[\w-]+\] ([^\n]{0,160})/) || [])[1] || '';
+    return {
+      title: `[mock] ${kind}`,
+      markdown: `## [mock] ${kind}\n\n${brief}\n\n- [TO CONFIRM] No model is connected, so this is a skeleton. Connect the local model and ask again.`,
+      items: [], openQuestions: ['[mock] written without a model'], confidence: 0.3,
+    };
+  }
+  if (task.includes('[LOCAL-ASK]')) {
+    return {
+      answer: '[mock] The local model is not connected, so nobody read the snapshot. Start Ollama on the server, switch it on in Local AI, and ask again.',
+      proposals: [],
+      confidence: 0.3,
+    };
+  }
   if (task.includes('[ENG-ASSIST]')) {
     return { answer: '[mock] No model is connected, so nobody has read this code. Connect a provider key in Settings and ask again.', code: '', confidence: 0.3 };
   }

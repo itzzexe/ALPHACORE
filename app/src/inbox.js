@@ -452,6 +452,37 @@ export function pendingApprovals() {
     }
   });
 
+  // --- the portfolio: paper orders and broker orders are different acts ---
+  // Kept as two kinds so the desk and the AI can never confuse an order that
+  // moves money with one that only moves a number.
+  try {
+    for (const o of q(`SELECT o.*, a.kind AS account_kind, a.name AS account_name FROM pf_orders o JOIN pf_accounts a ON a.id = o.account_id
+                       WHERE o.state = 'proposed' ORDER BY o.id LIMIT 30`)) {
+      const paper = o.account_kind === 'paper';
+      items.push(item({
+        kind: paper ? 'paperOrder' : 'brokerOrder', dept: 'portfolio', id: o.id,
+        title: `${o.side} ${o.qty} ${o.symbol} — ${o.account_name}`,
+        sub: `${o.proposed_by}${o.rationale ? `: ${String(o.rationale).slice(0, 90)}` : ''}`,
+        href: '#/portfolio', at: o.created_at, severity: paper ? 'normal' : 'high',
+        action: { method: 'POST', path: `/api/portfolio/order/${o.id}/approve`, body: {} }, actionLabel: 'Approve',
+        secondary: { method: 'POST', path: `/api/portfolio/order/${o.id}/reject`, body: {}, label: 'Reject' },
+      }));
+    }
+  } catch { /* the portfolio tables arrive with their module */ }
+
+  // --- research notes the learning loop was not sure enough to keep ---
+  try {
+    for (const n of q("SELECT n.id, n.summary, n.trust, n.created_at, t.topic FROM learn_notes n LEFT JOIN learn_topics t ON t.id = n.topic_id WHERE n.state = 'pending' ORDER BY n.id LIMIT 20")) {
+      items.push(item({
+        kind: 'learnNote', dept: 'learning', id: n.id,
+        title: `Research note: ${n.topic || 'a topic'}`, sub: `trust ${Math.round((n.trust || 0) * 100)}% — ${String(n.summary || '').slice(0, 90)}`,
+        href: '#/learning', at: n.created_at, severity: 'low',
+        action: { method: 'POST', path: `/api/learning/note/${n.id}/accept`, body: {} }, actionLabel: 'Accept',
+        secondary: { method: 'POST', path: `/api/learning/note/${n.id}/reject`, body: {}, label: 'Reject' },
+      }));
+    }
+  } catch { /* the learning tables arrive with their module */ }
+
   const order = { high: 0, normal: 1, low: 2 };
   items.sort((a, b) => (order[a.severity] - order[b.severity]) || (b.ageHours - a.ageHours));
   return items;
