@@ -5030,6 +5030,266 @@ CREATE TABLE IF NOT EXISTS restore_drills (
 );
 `);
 
+db.exec(`
+-- Files people hand the company: a scanned invoice, a recording, a document a
+-- customer uploads. The bytes live on disk under data/uploads; this is the index.
+CREATE TABLE IF NOT EXISTS uploads (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  purpose     TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  bytes       INTEGER NOT NULL,
+  sha256      TEXT NOT NULL,
+  path        TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A published process, running: each run walks the steps the process document names.
+CREATE TABLE IF NOT EXISTS proc_runs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id      INTEGER NOT NULL,
+  doc_code    TEXT NOT NULL,
+  version     INTEGER NOT NULL,
+  title       TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'open',          -- open|done|rejected|cancelled
+  current     INTEGER NOT NULL DEFAULT 0,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at   TEXT
+);
+CREATE TABLE IF NOT EXISTS proc_steps (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id      INTEGER NOT NULL REFERENCES proc_runs(id),
+  idx         INTEGER NOT NULL,
+  step        TEXT NOT NULL,
+  role        TEXT NOT NULL,
+  input       TEXT,
+  output      TEXT,
+  control     TEXT,
+  assignee    TEXT,
+  state       TEXT NOT NULL DEFAULT 'pending',       -- pending|active|done|rejected
+  due_at      TEXT,
+  done_by     TEXT,
+  done_at     TEXT,
+  note        TEXT,
+  control_ok  INTEGER,
+  late_noted  INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (run_id, idx)
+);
+
+-- Questions asked of the company's own documents, and the answers with their sources.
+CREATE TABLE IF NOT EXISTS company_asks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  question    TEXT NOT NULL,
+  sources     TEXT NOT NULL,
+  draft_id    INTEGER,
+  asked_by    TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Embeddings of the documents, kept until the text changes.
+CREATE TABLE IF NOT EXISTS ctx_vectors (
+  cite        TEXT PRIMARY KEY,
+  digest      TEXT NOT NULL,
+  model       TEXT NOT NULL,
+  vec         TEXT NOT NULL
+);
+
+-- Paper intake: a document read on this machine into fields a person checks.
+CREATE TABLE IF NOT EXISTS intake_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                          -- invoice|id|contract|other
+  source      TEXT NOT NULL DEFAULT 'upload',         -- upload|text|portal
+  upload_id   INTEGER,
+  text        TEXT,
+  fields      TEXT,
+  state       TEXT NOT NULL DEFAULT 'new',            -- new|reading|read|adopted|rejected|failed
+  error       TEXT,
+  adopted_ref TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  decided_by  TEXT,
+  decided_at  TEXT
+);
+
+-- Recordings & minutes: a recording or a transcript, the minutes, and the actions that became tasks.
+-- (Core 2's Meetings, mtg_*, is the people-only record of agendas; this is the minute-taker.)
+CREATE TABLE IF NOT EXISTS rec_meetings (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  held_on     TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'general',        -- general|committee|board|management_review
+  iso_standard TEXT,
+  attendees   TEXT,
+  upload_id   INTEGER,
+  transcript  TEXT,
+  state       TEXT NOT NULL DEFAULT 'new',            -- new|transcribing|transcribed|minuted|failed
+  error       TEXT,
+  summary     TEXT,
+  decisions   TEXT,
+  minuted_by  TEXT,
+  minuted_at  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS rec_actions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id  INTEGER NOT NULL REFERENCES rec_meetings(id),
+  task        TEXT NOT NULL,
+  owner       TEXT,
+  due         TEXT,
+  task_id     INTEGER
+);
+
+-- WhatsApp: who wrote, what was said each way, and when the window to answer freely closes.
+CREATE TABLE IF NOT EXISTS wa_contacts (
+  wa_id       TEXT PRIMARY KEY,
+  name        TEXT,
+  customer_id INTEGER,
+  last_inbound_at TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS wa_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  wa_id       TEXT NOT NULL,
+  direction   TEXT NOT NULL,                          -- in|out
+  kind        TEXT NOT NULL DEFAULT 'text',           -- text|template|media
+  body        TEXT,
+  wa_message_id TEXT UNIQUE,
+  status      TEXT,
+  created_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The portal: a customer's or supplier's own door, by a link a person issued.
+CREATE TABLE IF NOT EXISTS portal_accounts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                          -- customer|supplier
+  party_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TEXT NOT NULL,
+  revoked_at  TEXT,
+  last_seen   TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS portal_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id  INTEGER NOT NULL REFERENCES portal_accounts(id),
+  direction   TEXT NOT NULL DEFAULT 'in',             -- in|out
+  subject     TEXT,
+  body        TEXT NOT NULL,
+  upload_id   INTEGER,
+  purpose     TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The monthly board pack: the month's figures, frozen when built.
+CREATE TABLE IF NOT EXISTS board_packs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  period      TEXT NOT NULL UNIQUE,
+  snapshot    TEXT NOT NULL,
+  draft_id    INTEGER,
+  state       TEXT NOT NULL DEFAULT 'draft',          -- draft|issued
+  issued_code TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The self-improvement loop: the Grader scores employees on tasks against a
+-- fixed rubric, the Coach rewrites the failing ones' playbooks, and a rewrite
+-- is kept only if the next round's score did not fall.
+CREATE TABLE IF NOT EXISTS si_loops (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  target      REAL NOT NULL,
+  batch       INTEGER NOT NULL,
+  max_rounds  INTEGER NOT NULL,
+  mode        TEXT NOT NULL DEFAULT 'auto',          -- auto|ask
+  scope       TEXT NOT NULL,                          -- JSON agent ids
+  round       INTEGER NOT NULL DEFAULT 0,
+  state       TEXT NOT NULL DEFAULT 'grading',        -- grading|coaching|waiting|done|stopped
+  first_pass  REAL,
+  last_pass   REAL,
+  note        TEXT,
+  started_by  TEXT NOT NULL,
+  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS si_tasks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  loop_id     INTEGER NOT NULL REFERENCES si_loops(id),
+  round       INTEGER NOT NULL,
+  agent_id    TEXT NOT NULL,
+  case_key    TEXT NOT NULL,
+  source      TEXT NOT NULL,                          -- golden|history
+  prompt      TEXT NOT NULL,
+  expect      TEXT,                                   -- JSON {field, anyOf} for golden cases
+  run_id      TEXT,
+  verdict     TEXT NOT NULL DEFAULT 'pending',        -- pending|pass|fail
+  checks      TEXT,                                   -- JSON {check: true|false}
+  excerpt     TEXT
+);
+CREATE INDEX IF NOT EXISTS si_tasks_round ON si_tasks (loop_id, round, agent_id);
+CREATE TABLE IF NOT EXISTS si_rounds (
+  loop_id     INTEGER NOT NULL REFERENCES si_loops(id),
+  round       INTEGER NOT NULL,
+  passed      INTEGER NOT NULL,
+  total       INTEGER NOT NULL,
+  by_agent    TEXT NOT NULL,                          -- JSON {agent: {passed, total}}
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (loop_id, round)
+);
+CREATE TABLE IF NOT EXISTS si_coach (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  loop_id     INTEGER NOT NULL REFERENCES si_loops(id),
+  round       INTEGER NOT NULL,
+  agent_id    TEXT NOT NULL,
+  run_id      TEXT,
+  state       TEXT NOT NULL DEFAULT 'thinking',       -- thinking|proposed|applied|rejected|empty|failed
+  removed     TEXT,
+  added       TEXT,
+  why         TEXT,
+  version_id  INTEGER,
+  decided_by  TEXT
+);
+-- Every playbook the Coach wrote, with the one it replaced, so any can be undone.
+CREATE TABLE IF NOT EXISTS playbook_versions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id    TEXT NOT NULL,
+  version     INTEGER NOT NULL,
+  loop_id     INTEGER,
+  round       INTEGER,
+  before_body TEXT NOT NULL,
+  after_body  TEXT NOT NULL,
+  removed     TEXT NOT NULL,
+  added       TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'applied',        -- applied|kept|reverted
+  decided_by  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (agent_id, version)
+);
+
+-- Insider risk: patterns in the record worth a second look, one alert per pattern and person.
+CREATE TABLE IF NOT EXISTS insider_alerts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  rule        TEXT NOT NULL,
+  subject     TEXT NOT NULL,
+  key         TEXT NOT NULL,
+  score       INTEGER NOT NULL,
+  detail      TEXT NOT NULL,
+  state       TEXT NOT NULL DEFAULT 'open',           -- open|cleared|confirmed
+  decided_by  TEXT,
+  decided_at  TEXT,
+  note        TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (rule, subject, key)
+);
+`);
+
 /**
  * Run a piece of work so that all of it happens, or none of it.
  *

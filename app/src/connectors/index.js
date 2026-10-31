@@ -26,9 +26,10 @@ import broker from './broker.js';
 import modelhub from './modelhub.js';
 import webread from './webread.js';
 import sanctions from './sanctions.js';
+import whatsapp from './whatsapp.js';
 
 export const DRIVERS = Object.fromEntries(
-  [gmail, gcalendar, github, slack, telegram, x, linkedin, stripe, notion, http, marketdata, newsfeeds, broker, modelhub, webread, sanctions].map((d) => [d.id, d]),
+  [gmail, gcalendar, github, slack, telegram, x, linkedin, stripe, notion, http, marketdata, newsfeeds, broker, modelhub, webread, sanctions, whatsapp].map((d) => [d.id, d]),
 );
 
 const parse = (s, f) => { try { return s ? JSON.parse(s) : f; } catch { return f; } };

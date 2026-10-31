@@ -238,6 +238,17 @@ app/src/
   nightshift.js     drafts wait for the quiet hours and a larger model; context.js hands writers the company's own rules
   reach.js          a person's own Telegram chat: what waits for them, and a morning digest — links, never buttons
   backupcrypt.js    AES-256-GCM for backups leaving the machine; pure, so scripts/decrypt-backup.mjs runs anywhere
+  processruns.js    a published process walked step by step: roles, due times, controls, segregation of duties
+  companyask.js     an answer from the company's own documents, drawn only from what the asker may read (context.js searches)
+  intake.js         paper read on this machine (localtools.js: tesseract, pdftoppm); intake/extract.js finds the fields, MRZ checked
+  minutes.js        recordings transcribed here (ffmpeg, whisper.cpp), minutes drafted, confirmed actions become tasks
+  whatsapp.js       signed webhook in, inbox by sender, a person sends; the 24-hour window enforced
+  portal.js         a customer's or supplier's own door by a hashed, revocable link; /portal-api and public/portal.html
+  boardpack.js      the month from the record, frozen; months of cash is arithmetic, not a model
+  insider.js        patterns in the record — new networks, night approvals, exports, approval pairs — for security
+  selfimprove.js    the loop: tasks re-run as real runs, graded by a rubric in code, the Coach rewrites playbooks as
+                    versions kept only if the next round scores no lower; mapData() feeds public/views/loopmap.js
+  uploads.js        files people hand the company, checked by their first bytes, fingerprinted
   …                 and one module per department: transformation, studio-production, opscenter,
                     strategy, insurance, aml among the newest
 app/public/         the console: vanilla JS, no build step, no external requests

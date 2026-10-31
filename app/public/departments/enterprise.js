@@ -82,7 +82,7 @@ function draftsPanel(drafts = [], { adopt = false } = {}) {
 }
 
 const chip = (s, map = {}) => `<span class="chip ${map[s] || ''}">${esc(t(String(s).replace(/_/g, ' ')))}</span>`;
-const STATE_CLS = { published: 'chip-ok', closed: 'chip-ok', verified: 'chip-ok', implemented: 'chip-ok', live: 'chip-ok', delivered: 'chip-ok', settled: 'chip-ok', cleared: 'chip-ok', released: 'chip-ok', approved: 'chip-ok', green: 'chip-ok',
+const STATE_CLS = { published: 'chip-ok', closed: 'chip-ok', verified: 'chip-ok', implemented: 'chip-ok', live: 'chip-ok', delivered: 'chip-ok', settled: 'chip-ok', cleared: 'chip-ok', released: 'chip-ok', approved: 'chip-ok', green: 'chip-ok', kept: 'chip-ok', reverted: 'chip-bad', applied: 'chip-warn',
   review: 'chip-warn', partial: 'chip-warn', action: 'chip-warn', verify: 'chip-warn', amber: 'chip-warn', held: 'chip-bad', open: 'chip-warn', investigating: 'chip-warn', medium: 'chip-warn',
   red: 'chip-bad', high: 'chip-bad', major: 'chip-bad', rejected: 'chip-bad', reported: 'chip-bad', not_started: 'chip-dim', retired: 'chip-dim', cancelled: 'chip-dim', low: 'chip-dim', none: 'chip-dim' };
 const st = (s) => chip(s, STATE_CLS);
@@ -625,3 +625,6 @@ export async function renderRemit() {
     } catch (e) { toast(e.message, true); }
   }));
 }
+
+// The parts the other floors share: a form from a field list, the draft panel, the state chip.
+export { form, wireForm, draftsPanel, st, money };

@@ -17,6 +17,8 @@ import { certificationPanel, flowLegend, stateChip } from '../components/widgets
 import { preBody, scoreChip, wireXact, xbtn } from '../components/chrome.js';
 import { tile } from '../components/tile.js';
 import { t, sectionName, divisionName } from '/i18n.js';
+import { companyAskPanel, wireCompanyAsk } from './workday.js';
+import { mountLoopMap } from '../views/loopmap.js';
 
 /** The router hands the id straight through: #/s/approvals → 'approvals'. */
 export async function renderSurfaceRoute(arg) {
@@ -135,6 +137,8 @@ export async function renderAsk() {
       const r = await api('/api/ask', { method: 'POST', body: { q } });
       out.innerHTML = renderAskAnswer(r);
       $('#ask-do')?.addEventListener('click', () => runAskNext(r.next));
+      out.insertAdjacentHTML('beforeend', companyAskPanel(q));
+      wireCompanyAsk();
     } catch (err) {
       out.innerHTML = `<div class="panel" style="margin-top:16px"><div class="empty">${esc(err.message)}</div></div>`;
     }
@@ -532,7 +536,45 @@ export async function renderOffices() {
   }
 }
 // ---------- pages ----------
+// The map, the departments and the numbers are three different questions, so
+// they are three views rather than one long scroll. The workforce map is the
+// first thing a person sees because it is the one that moves: who is working,
+// what they call, and whether it passes.
+const OV_TABS = [['workforce', 'Workforce'], ['map', 'Departments'], ['dashboards', 'Dashboards']];
+let ovMap = null;
+function overviewTab() {
+  let tab = null;
+  try { tab = localStorage.getItem('alphacore-overview-tab'); } catch { /* fine */ }
+  if (!OV_TABS.some(([id]) => id === tab)) tab = 'workforce';
+  if (tab === 'workforce' && !hasPermC('selfimprove.view')) tab = 'map';
+  return tab;
+}
+const ovSwitch = (tab) => `<span class="atlas-switch">${OV_TABS.filter(([id]) => id !== 'workforce' || hasPermC('selfimprove.view'))
+  .map(([id, label]) => `<button type="button" data-ovtab="${id}" class="${tab === id ? 'on' : ''}">${esc(t(label))}</button>`).join('')}</span>`;
+function wireOvTabs() {
+  view.querySelectorAll('[data-ovtab]').forEach((b) => b.addEventListener('click', () => {
+    try { localStorage.setItem('alphacore-overview-tab', b.dataset.ovtab); } catch { /* fine */ }
+    ovMap?.destroy();
+    ovMap = null;
+    renderOverview();
+  }));
+}
+
 export async function renderOverview() {
+  const tab = overviewTab();
+  if (tab === 'workforce') {
+    // The page poll lands here every few seconds; the map is already updating
+    // itself in place, and re-drawing it would restart every particle.
+    if (ovMap && view.querySelector('#ov-workforce.lm')) return;
+    ovMap?.destroy();
+    view.innerHTML = `<div class="panel" style="border-top:none;padding-top:0">
+      <div class="panel-title atlas-bar">${ovSwitch(tab)}<span class="atlas-aside"><a class="chip chip-dim" style="text-decoration:none" href="#/selfimprove">${esc(t('Loops and rewrites'))} →</a></span></div>
+      <div id="ov-workforce"></div></div>`;
+    wireOvTabs();
+    ovMap = mountLoopMap($('#ov-workforce'), { canManage: hasPermC('selfimprove.manage'), onDestroy: () => { ovMap = null; } });
+    return;
+  }
+  ovMap?.destroy();
   // Every side-fetch degrades gracefully: a user with a narrow permission set
   // still gets the overview, with dashes where they lack access.
   const safe = (p, d) => api(p).catch(() => d);
@@ -600,19 +642,12 @@ export async function renderOverview() {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
 
-  // The map and the numbers are two different questions, so they are two
-  // views rather than one long scroll. Both are rendered; the switch decides
-  // which one is on screen, which keeps the toggle instant.
-  const tab = localStorage.getItem('alphacore-overview-tab') === 'dashboards' ? 'dashboards' : 'map';
   const here = atlasZoom && mapData ? [...mapData.divisions, ...(mapData.core2Divisions || [])].find((d) => d.id === atlasZoom) : null;
 
   view.innerHTML = `
   <div class="panel" style="border-top:none;padding-top:0">
     <div class="panel-title atlas-bar">
-      <span class="atlas-switch">
-        <button data-ovtab="map" class="${tab === 'map' ? 'on' : ''}">${esc(t('Map'))}</button>
-        <button data-ovtab="dashboards" class="${tab === 'dashboards' ? 'on' : ''}">${esc(t('Dashboards'))}</button>
-      </span>
+      ${ovSwitch(tab)}
       <span class="atlas-aside">
         ${here ? `<button class="btn btn-sm" data-atlasout>← ${esc(t('the whole company'))}</button>` : ''}
         ${mapData ? `<span class="chip ${mapData.audit.orphans.length ? 'chip-bad' : 'chip-ok'}">${mapData.audit.wired}/${mapData.audit.sections} ${esc(t('wired'))}</span>` : ''}
@@ -702,10 +737,7 @@ export async function renderOverview() {
   </div>
   </div>`;
   if (mapData) initAtlas(mapData); else initMapInteractivity();
-  view.querySelectorAll('[data-ovtab]').forEach((b) => b.addEventListener('click', () => {
-    localStorage.setItem('alphacore-overview-tab', b.dataset.ovtab);
-    renderOverview();
-  }));
+  wireOvTabs();
   view.querySelector('[data-atlasout]')?.addEventListener('click', () => atlasGoTo(null));
   // Going into a district and walking the rim: the two gestures the map needs
   // beyond what the shared interaction engine already provides.

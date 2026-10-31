@@ -88,6 +88,16 @@ import * as LocalAI from './localai.js';
 import * as Night from './nightshift.js';
 import * as Reach from './reach.js';
 import * as Assurance from './assurance.js';
+import * as Proc from './processruns.js';
+import * as CompanyAsk from './companyask.js';
+import * as Intake from './intake.js';
+import * as Minutes from './minutes.js';
+import * as WhatsApp from './whatsapp.js';
+import * as Portal from './portal.js';
+import * as BoardPack from './boardpack.js';
+import * as Insider from './insider.js';
+import * as SelfImprove from './selfimprove.js';
+import { toolStatus } from './localtools.js';
 import { draftNow } from './drafts.js';
 import * as Markets from './markets.js';
 import * as Portfolio from './portfolio.js';
@@ -2484,6 +2494,71 @@ const routes = [
   // ---- Remittances and SWIFT (Core 2, beside the bank) -------------------
   ['GET', /^\/api\/remit$/, () => Remit.remitOverview()],
   ['POST', /^\/api\/remit\/beneficiary$/, (_p, body, _u, user) => Remit.addBeneficiary({ ...body, actor: `human:${user.username}` })],
+  // --- Processes that run: a published process walked step by step ---
+  ['GET', /^\/api\/procruns$/, (_p, _b, _u, user) => Proc.overview({ actor: `human:${user.username}` })],
+  ['GET', /^\/api\/procruns\/(\d+)$/, (p) => Proc.getRun(Number(p[0]))],
+  ['POST', /^\/api\/procruns$/, (_p, body, _u, user) => Proc.startRun({ docId: need(body, 'docId'), title: body.title || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/procruns\/(\d+)\/claim$/, (p, _b, _u, user) => Proc.claim({ runId: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/procruns\/(\d+)\/complete$/, (p, body, _u, user) => Proc.complete({ runId: Number(p[0]), note: body.note || '', controlOk: body.controlOk === true, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/procruns\/(\d+)\/reject$/, (p, body, _u, user) => Proc.reject({ runId: Number(p[0]), reason: body.reason, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/procruns\/(\d+)\/cancel$/, (p, body, _u, user) => Proc.cancel({ runId: Number(p[0]), reason: body.reason, actor: `human:${user.username}` })],
+
+  // --- Ask the company: an answer from its own documents, every sentence cited ---
+  ['GET', /^\/api\/ask\/company$/, (_p, _b, _u, user) => CompanyAsk.recentAsks(user)],
+  ['GET', /^\/api\/ask\/company\/(\d+)$/, (p, _b, _u, user) => CompanyAsk.getAsk(Number(p[0]), user)],
+  ['POST', /^\/api\/ask\/company$/, async (_p, body, _u, user) => CompanyAsk.askCompany({ question: need(body, 'question'), lang: body.lang || 'ar', user })],
+
+  // --- Paper intake: documents read on this machine into fields a person checks ---
+  ['GET', /^\/api\/intake$/, () => Intake.overview()],
+  ['GET', /^\/api\/intake\/tools$/, async () => toolStatus()],
+  ['GET', /^\/api\/intake\/(\d+)$/, (p) => Intake.getItem(Number(p[0]))],
+  ['POST', /^\/api\/intake$/, (_p, body, _u, user) => Intake.createItem({ kind: need(body, 'kind'), upload: body.upload || null, text: body.text || null, source: body.upload ? 'upload' : 'text', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/intake\/(\d+)\/structure$/, (p, _b, _u, user) => Intake.structure({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/intake\/(\d+)\/adopt$/, (p, body, _u, user) => Intake.adopt({ id: Number(p[0]), fields: body.fields || {}, vendorId: body.vendorId || null, user })],
+  ['POST', /^\/api\/intake\/(\d+)\/reject$/, (p, body, _u, user) => Intake.reject({ id: Number(p[0]), reason: body.reason, user })],
+
+  // --- Recordings & minutes: recording → transcript → minutes → tasks ---
+  ['GET', /^\/api\/minutes$/, () => Minutes.overview()],
+  ['GET', /^\/api\/minutes\/(\d+)$/, (p) => Minutes.getMeeting(Number(p[0]))],
+  ['POST', /^\/api\/minutes$/, (_p, body, _u, user) => Minutes.createMeeting({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/minutes\/(\d+)\/record$/, (p, body, _u, user) => Minutes.recordMinutes({ id: Number(p[0]), summary: body.summary || '', decisions: body.decisions || '', actions: body.actions || [], actor: `human:${user.username}` })],
+
+  // --- WhatsApp: an inbox by sender, drafted replies, a person sends ---
+  ['GET', /^\/api\/whatsapp$/, () => WhatsApp.overview()],
+  ['GET', /^\/api\/whatsapp\/(\d+)$/, (p) => WhatsApp.thread(p[0])],
+  ['POST', /^\/api\/whatsapp\/(\d+)\/draft$/, (p, _b, _u, user) => WhatsApp.draftReply({ waId: p[0], actor: `human:${user.username}` })],
+  ['POST', /^\/api\/whatsapp\/(\d+)\/send$/, async (p, body, _u, user) => WhatsApp.send({ waId: p[0], text: body.text, user })],
+  ['POST', /^\/api\/whatsapp\/(\d+)\/template$/, async (p, body, _u, user) => WhatsApp.sendTemplate({ waId: p[0], name: need(body, 'name'), params: body.params || [], user })],
+  ['POST', /^\/api\/whatsapp\/(\d+)\/link$/, (p, body, _u, user) => WhatsApp.linkCustomer({ waId: p[0], customerId: body.customerId ?? null, user })],
+
+  // --- The portal, as the company sees it: links issued, messages received ---
+  ['GET', /^\/api\/portal$/, () => Portal.overview()],
+  ['GET', /^\/api\/portal\/(\d+)$/, (p) => Portal.thread(Number(p[0]))],
+  ['POST', /^\/api\/portal\/link$/, (_p, body, _u, user) => Portal.issueLink({ kind: need(body, 'kind'), partyId: need(body, 'partyId'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/portal\/(\d+)\/revoke$/, (p, _b, _u, user) => Portal.revoke({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/portal\/(\d+)\/reply$/, (p, body, _u, user) => Portal.reply({ accountId: Number(p[0]), body: body.body, actor: `human:${user.username}` })],
+
+  // --- The board pack: the month from the record, frozen, issued by a person ---
+  ['GET', /^\/api\/boardpack$/, () => BoardPack.overview()],
+  ['GET', /^\/api\/boardpack\/(\d+)$/, (p) => BoardPack.getPack(Number(p[0]))],
+  ['POST', /^\/api\/boardpack$/, (_p, body, _u, user) => BoardPack.build({ period: body.period || BoardPack.previousPeriod(), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/boardpack\/(\d+)\/summary$/, (p, _b, _u, user) => BoardPack.draftSummary({ id: Number(p[0]), actor: `human:${user.username}` })],
+
+  // --- The self-improvement loop: the Grader scores, the Coach rewrites, only what helps is kept ---
+  ['GET', /^\/api\/selfimprove$/, () => SelfImprove.overview()],
+  ['GET', /^\/api\/selfimprove\/map$/, (_p, _b, url) => SelfImprove.mapData({ loopId: url.searchParams.get('loop') })],
+  ['GET', /^\/api\/selfimprove\/(\d+)$/, (p) => SelfImprove.getLoop(Number(p[0]))],
+  ['POST', /^\/api\/selfimprove$/, (_p, body, _u, user) => SelfImprove.startLoop({ agents: body.agents || null, target: body.target ?? 0.95, batch: body.batch ?? 3, maxRounds: body.maxRounds ?? 5, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/selfimprove\/(\d+)\/stop$/, (p, _b, _u, user) => SelfImprove.stopLoop({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/selfimprove\/rewrite\/(\d+)$/, (p, body, _u, user) => SelfImprove.decideRewrite({ id: Number(p[0]), verdict: need(body, 'verdict'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/selfimprove\/version\/(\d+)\/revert$/, (p, _b, _u, user) => SelfImprove.revertVersion({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/selfimprove\/mode$/, (_p, body, _u, user) => SelfImprove.setMode({ mode: need(body, 'mode'), actor: `human:${user.username}` })],
+
+  // --- Insider risk: patterns in the record, for the security team ---
+  ['GET', /^\/api\/insider$/, () => Insider.overview()],
+  ['POST', /^\/api\/insider\/sweep$/, () => Insider.sweep()],
+  ['POST', /^\/api\/insider\/(\d+)$/, (p, body, _u, user) => Insider.decide({ id: Number(p[0]), verdict: need(body, 'verdict'), note: body.note, endSessions: body.endSessions === true, actor: `human:${user.username}` })],
+
   // --- The governance map: the assurance departments on one sheet, and the links between them ---
   ['GET', /^\/api\/assurancemap$/, () => Assurance.overview()],
   ['POST', /^\/api\/assurancemap\/(\d+)$/, (p, body, _u, user) => Assurance.decide({ id: Number(p[0]), verdict: need(body, 'verdict'), reason: body.reason || '', user })],
@@ -2678,6 +2753,17 @@ function permFor(m, path) {
   if (path.startsWith('/api/aml')) return m === 'GET' ? 'aml.view' : (/\/alert\/\d+$/.test(path) ? 'aml.decide' : 'aml.manage');
   // One route serves four departments; the handler checks each type's own permission.
   if (path.startsWith('/api/assurancemap')) return m === 'GET' ? 'assurancemap.view' : 'assurancemap.manage';
+  if (path.startsWith('/api/procruns')) return m === 'GET' ? 'procruns.view' : (/\/(claim|complete|reject)$/.test(path) ? 'procruns.act' : 'procruns.manage');
+  // Anyone who may search may ask; the answer is drawn only from what they may read.
+  if (path.startsWith('/api/ask/company')) return 'hunt.view';
+  if (path.startsWith('/api/intake')) return m === 'GET' ? 'intake.view' : 'intake.manage';
+  if (path.startsWith('/api/minutes')) return m === 'GET' ? 'minutes.view' : 'minutes.manage';
+  if (path.startsWith('/api/whatsapp')) return m === 'GET' ? 'whatsapp.view' : (/\/(send|template)$/.test(path) ? 'whatsapp.send' : 'whatsapp.manage');
+  if (path.startsWith('/api/portal')) return m === 'GET' ? 'portal.view' : 'portal.manage';
+  if (path.startsWith('/api/boardpack')) return m === 'GET' ? 'boardpack.view' : 'boardpack.manage';
+  // Insider risk is not under *.view: alerts about colleagues are the security team's to read.
+  if (path.startsWith('/api/insider')) return m === 'GET' ? 'insider.watch' : 'insider.manage';
+  if (path.startsWith('/api/selfimprove')) return m === 'GET' ? 'selfimprove.view' : 'selfimprove.manage';
   if (path.startsWith('/api/documents')) return null;
   if (path.startsWith('/api/remit')) return m === 'GET' ? 'remit.view' : (/\/(approve|release|ordering-bic)$/.test(path) ? 'remit.release' : 'remit.manage');
   if (path === '/api/learning') return 'learning.view';

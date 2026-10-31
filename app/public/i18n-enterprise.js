@@ -345,4 +345,169 @@ export const AR_ENT = {
   'This company requires a one-time code for your account. Set it up now with an authenticator app on your phone.': 'تشترط هذه الشركة رمزًا لمرة واحدة لحسابك. أعدّه الآن بتطبيق مصادقة على هاتفك.',
   'Scan this with your authenticator, then type the six digits it shows.': 'امسح هذا بتطبيق المصادقة، ثم اكتب الأرقام الستة التي يعرضها.',
   'Authenticator setup code': 'رمز إعداد المصادقة', 'Or type this key': 'أو اكتب هذا المفتاح', 'I have written them down': 'كتبتها',
+
+  // ---- the working day: catalogue, page titles
+  'Processes in motion': 'العمليات قيد التنفيذ', 'Paper intake': 'استقبال الوثائق', 'Recordings & minutes': 'التسجيلات والمحاضر',
+  'Customer & supplier portal': 'بوابة العملاء والموردين', 'Board pack': 'حزمة مجلس الإدارة', 'Insider risk': 'مخاطر الداخل', 'WhatsApp': 'واتساب',
+  'Processes in motion — published processes, run step by step': 'العمليات قيد التنفيذ — العمليات المنشورة تُنفَّذ خطوة بخطوة',
+  'Paper intake — documents read on this machine': 'استقبال الوثائق — مستندات تُقرأ على هذا الجهاز',
+  'Recordings & minutes — from the recording to the tasks': 'التسجيلات والمحاضر — من التسجيل إلى المهام',
+  'WhatsApp — customers, with a person on every message': 'واتساب — العملاء، وإنسان على كل رسالة',
+  'Customer & supplier portal — their own door': 'بوابة العملاء والموردين — بابهم الخاص',
+  'Board pack — the month from the record': 'حزمة مجلس الإدارة — الشهر من السجل',
+  'Insider risk — patterns worth a second look': 'مخاطر الداخل — أنماط تستحق نظرة ثانية',
+  'Published processes run step by step: each step to its role, controls confirmed, segregation of duties enforced': 'العمليات المنشورة تُنفَّذ خطوة بخطوة: كل خطوة لدورها، والضوابط مؤكدة، والفصل بين المهام مفروض',
+  'Invoices, identity documents and contracts read on this machine into fields a person checks': 'الفواتير ووثائق الهوية والعقود تُقرأ على هذا الجهاز إلى حقول يراجعها إنسان',
+  'A recording becomes a transcript, the transcript minutes, and the actions tasks with owners': 'التسجيل يصبح نصًا، والنص محضرًا، والإجراءات مهامًا لها مالكون',
+  'Customers on WhatsApp: an inbox by sender, drafted replies, and a person on every message sent': 'العملاء على واتساب: صندوق وارد حسب المرسل، وردود مقترحة، وإنسان على كل رسالة تُرسل',
+  "A customer's or supplier's own door: their invoices, messages and uploads, by a link a person issues": 'باب العميل أو المورد الخاص: فواتيره ورسائله وملفاته، برابط يصدره إنسان',
+  'The month from the record — results, cash and runway, governance, risks, what is late — frozen and issued': 'الشهر من السجل — النتائج والنقد ومدة كفايته والحوكمة والمخاطر وما تأخر — مجمّدًا ومُصدرًا',
+  'Patterns in the record worth a second look: new places, night approvals, export bursts, approval pairs': 'أنماط في السجل تستحق نظرة ثانية: أماكن جديدة، واعتمادات ليلية، وتصدير كثيف، وثنائيات اعتماد',
+
+  // ---- processes in motion
+  'A published process, run: each step waits for its role with a due time, a step with a control is done only when the person says how the control held, and whoever did a step does not perform the control on it. The audit of a process reads its runs.':
+    'عملية منشورة قيد التنفيذ: كل خطوة تنتظر دورها بموعد استحقاق، والخطوة ذات الضابط لا تُنجز إلا حين يذكر الشخص كيف تحقق الضابط، ومن أنجز خطوة لا يؤدي الضابط عليها. وتدقيق العملية يقرأ مرات تنفيذها.',
+  'Open runs': 'تنفيذات مفتوحة', 'Late steps': 'خطوات متأخرة', 'Control exceptions': 'استثناءات الضوابط',
+  'Start a process': 'ابدأ عملية', 'What this run is for': 'لأي شيء هذا التنفيذ', 
+  'No published process has steps yet — write one under Policies & procedures.': 'لا توجد عملية منشورة لها خطوات بعد — اكتب واحدة في قسم السياسات والإجراءات.',
+  'Runs': 'التنفيذات', 'No runs yet.': 'لا تنفيذات بعد.', 'Average hours': 'متوسط الساعات', 
+  'A step is late after': 'تتأخر الخطوة بعد', 'hours': 'ساعة', 'due': 'الاستحقاق', 'Steps': 'الخطوات', 'taken by': 'أخذها',
+  'Take this step': 'خذ هذه الخطوة', 'Cancel this run': 'ألغِ هذا التنفيذ',
+  'Did the control hold?': 'هل تحقق الضابط؟', 'How was the control satisfied?': 'كيف تحقق الضابط؟', 'A note, if any:': 'ملاحظة إن وُجدت:',
+  'Why is this step rejected? The run stops here.': 'لماذا ترفض هذه الخطوة؟ سيتوقف التنفيذ هنا.', 'Why is this run cancelled?': 'لماذا يُلغى هذا التنفيذ؟',
+  'rejected': 'مرفوض', 'cancelled': 'ملغى',
+
+  // ---- paper intake
+  'A scanned invoice, a passport or a contract, read on this machine — nothing leaves the server. The fields are found and offered to a person, who corrects them and decides what they become: a bill in payables, a party in AML. A passport or ID card checks itself: every field of its machine-readable zone carries a check digit.':
+    'فاتورة ممسوحة أو جواز سفر أو عقد، يُقرأ على هذا الجهاز — لا شيء يغادر السيرفر. تُستخرج الحقول وتُعرض على إنسان يصححها ويقرر مصيرها: فاتورة مورد في الحسابات الدائنة، أو طرف في مكافحة غسل الأموال. وجواز السفر أو البطاقة يتحقق من نفسه: كل حقل في منطقته المقروءة آليًا يحمل رقم تحقق.',
+  'Checking the reading tools…': 'جارٍ فحص أدوات القراءة…', 'ready': 'جاهز', 'not installed': 'غير مثبّت',
+  'Add a document': 'أضف مستندًا', 'Scan or photo (PDF, PNG, JPG)': 'مسح ضوئي أو صورة (PDF أو PNG أو JPG)',
+  '…or paste its text': '…أو الصق نصه', 'Read it': 'اقرأه', 'Nothing read yet.': 'لم يُقرأ شيء بعد.', 'pasted text': 'نص ملصوق',
+  'Choose a file or paste the text': 'اختر ملفًا أو الصق النص', 'The file could not be read': 'تعذّرت قراءة الملف',
+  'Invoice': 'فاتورة', 'Identity document': 'وثيقة هوية', 'Contract': 'عقد', 'Other': 'أخرى',
+  'Supplier': 'المورد', 'Invoice number': 'رقم الفاتورة', 'Tax': 'الضريبة',
+  'Surname': 'اللقب', 'Given names': 'الأسماء', 'Number': 'الرقم', 'Nationality': 'الجنسية', 'Born': 'الميلاد', 'Sex': 'الجنس',
+  'every check digit holds': 'كل أرقام التحقق سليمة', 'a check digit fails — read it again by eye': 'رقم تحقق لا يطابق — اقرأه مرة أخرى بالعين',
+  'No machine-readable zone was found — type the name and country.': 'لم تُوجد منطقة مقروءة آليًا — اكتب الاسم والدولة.',
+  'Fields': 'الحقول', 'Being read…': 'قيد القراءة…', 'Make a draft bill': 'أنشئ مسودة فاتورة مورد',
+  'Add as a party and screen': 'أضفه طرفًا وافحصه', 'File it': 'احفظه', 'Ask the intake clerk': 'اطلب من موظف الاستقبال',
+  'Text as read': 'النص كما قُرئ', 'Why is it rejected?': 'لماذا يُرفض؟', 'The intake clerk is reading': 'موظف الاستقبال يقرأ',
+  'read': 'مقروء', 'adopted': 'اعتُمد', 'new': 'جديد', 'upload': 'رفع ملف', 'text': 'نص', 'portal': 'البوابة',
+
+  // ---- recordings & minutes
+  'A recording is written down on this machine — at night when the night shift is on — then the minutes secretary drafts the summary, the decisions and the actions. A person confirms them; each confirmed action becomes a task with its owner and date.':
+    'يُكتب التسجيل على هذا الجهاز — ليلًا حين تكون الوردية الليلية مفعّلة — ثم يكتب سكرتير المحاضر الملخص والقرارات والإجراءات. يؤكدها إنسان، ويصبح كل إجراء مؤكد مهمة لها مالك وموعد.',
+  'Meetings': 'الاجتماعات', 'Being written up': 'قيد الكتابة', 'Record a meeting': 'سجّل اجتماعًا',
+  'Standard reviewed': 'المعيار المُراجَع', 'Recording (MP3, WAV, OGG, M4A)': 'التسجيل (MP3 أو WAV أو OGG أو M4A)', '…or paste the transcript': '…أو الصق النص',
+  'No meetings recorded yet.': 'لم تُسجل اجتماعات بعد.', 'actions': 'إجراءات', 'General': 'عام', 'Committee': 'لجنة', 'Board': 'مجلس الإدارة',
+  'Management review (ISO)': 'مراجعة الإدارة (آيزو)', 'Minutes': 'المحضر', 'Actions': 'الإجراءات', 'Action': 'الإجراء', 'task': 'مهمة',
+  'Record the minutes': 'سجّل المحضر', 'Summary': 'الملخص', 'Another action': 'إجراء آخر', 'Transcript': 'النص المكتوب', 
+  'transcribing': 'قيد التفريغ', 'transcribed': 'فُرّغ', 'minuted': 'دُوّن المحضر', 'Minutes of meeting': 'محضر اجتماع',
+
+  // ---- WhatsApp
+  'Customers who write on WhatsApp, by sender. The support employee drafts a reply from the conversation and the company’s documents; a person reads it and sends it. Inside the 24 hours after the customer last wrote a free reply is allowed; after that only a template WhatsApp approved in advance.':
+    'العملاء الذين يكتبون على واتساب، حسب المرسل. يكتب موظف الدعم ردًا مقترحًا من المحادثة ووثائق الشركة، ويقرؤه إنسان ويرسله. خلال 24 ساعة من آخر رسالة للعميل يُسمح برد حر، وبعدها فقط بقالب اعتمده واتساب مسبقًا.',
+  'connector': 'الموصل', 'webhook ready': 'الربط جاهز', 'set WHATSAPP_VERIFY_TOKEN': 'اضبط WHATSAPP_VERIFY_TOKEN', 'approved templates': 'قوالب معتمدة',
+  'Connect WhatsApp under Integrations with the access token and the phone number id, set WHATSAPP_VERIFY_TOKEN and WHATSAPP_APP_SECRET, and point the webhook at /webhooks/whatsapp — which needs HTTPS.':
+    'اربط واتساب من صفحة التكاملات برمز الوصول ومعرّف رقم الهاتف، واضبط WHATSAPP_VERIFY_TOKEN وWHATSAPP_APP_SECRET، ووجّه الربط إلى ‎/webhooks/whatsapp — وهذا يحتاج HTTPS.',
+  'Conversations': 'المحادثات', 'Waiting for a reply': 'بانتظار رد', 'Inbox': 'الوارد', 'waiting': 'بالانتظار', 'window open': 'النافذة مفتوحة', 'template only': 'قالب فقط',
+  'Reply': 'رد', 'Message': 'الرسالة', 'Send': 'أرسل', 'Draft a reply': 'اكتب ردًا مقترحًا', 'Sent': 'أُرسلت',
+  'More than 24 hours since they last wrote: only an approved template can be sent.': 'مرّت أكثر من 24 ساعة على آخر رسالة منهم: لا يُرسل إلا قالب معتمد.',
+  'Template': 'القالب', 'Values, one per line': 'القيم، كل قيمة في سطر', 'Send the template': 'أرسل القالب', 'The support employee is writing': 'موظف الدعم يكتب',
+  'sent': 'أُرسلت', 
+
+  // ---- the portal
+  'A customer’s or a supplier’s own door: their invoices or bills, their messages, and documents they upload — a supplier’s invoice goes straight into paper intake. Each link is for one party, lasts thirty days and can be withdrawn at once; nothing behind it reaches anyone else’s records.':
+    'باب العميل أو المورد الخاص: فواتيره، ورسائله، والمستندات التي يرفعها — وفاتورة المورد تذهب مباشرة إلى استقبال الوثائق. كل رابط لطرف واحد، يصلح ثلاثين يومًا ويمكن سحبه فورًا، ولا شيء خلفه يصل إلى سجلات غيره.',
+  'Set PUBLIC_BASE_URL (with HTTPS) before issuing links — a link has to reach the customer’s phone.': 'اضبط PUBLIC_BASE_URL (مع HTTPS) قبل إصدار الروابط — فالرابط يجب أن يصل إلى هاتف العميل.',
+  'Issue a link': 'أصدر رابطًا', 'For': 'لـ', 'Who': 'من', 'Issue the link': 'أصدر الرابط', 'Links': 'الروابط',
+  'expires': 'ينتهي', 'received': 'وارد', 'revoked': 'مسحوب', 'Withdraw': 'اسحب', 'Withdraw this link? It stops working at once.': 'هل تسحب هذا الرابط؟ سيتوقف عن العمل فورًا.',
+  'No links issued yet.': 'لم تُصدر روابط بعد.', 'Shown once.': 'يُعرض مرة واحدة.', 'Send it to them yourself, by a channel you trust.': 'أرسله إليهم بنفسك، عبر قناة تثق بها.',
+  'Nothing yet.': 'لا شيء بعد.', 'Reply in the portal': 'رد في البوابة', 'kyc': 'وثائق هوية', 'invoice': 'فاتورة',
+  'Portal': 'البوابة', 'Open the link the company sent you. This page needs it to know who you are.': 'افتح الرابط الذي أرسلته الشركة إليك. تحتاجه هذه الصفحة لتعرف من أنت.',
+  'This link has expired or was withdrawn — ask the company for a new one.': 'انتهت صلاحية هذا الرابط أو سُحب — اطلب من الشركة رابطًا جديدًا.',
+  'this link works until': 'هذا الرابط يعمل حتى', 'Your bills with us': 'فواتيرك لدينا', 'Your invoices': 'فواتيرك', 'Reference': 'المرجع',
+  'Nothing here yet.': 'لا شيء هنا بعد.', 'Write to us': 'راسلنا', 'Subject': 'الموضوع', 'Send us a document': 'أرسل لنا مستندًا', 'What is it?': 'ما هو؟',
+  'An invoice': 'فاتورة', 'Identity or company documents': 'وثائق هوية أو شركة', 'Something else': 'شيء آخر',
+  'File (PDF, PNG, JPG — up to 10 MB)': 'الملف (PDF أو PNG أو JPG — حتى 10 ميغابايت)', 'A note, if any': 'ملاحظة إن وُجدت', 'Upload': 'ارفع', 'Uploading…': 'جارٍ الرفع…',
+  'Messages': 'الرسائل', 'You': 'أنت', 'Company': 'الشركة',
+  'Anything the company issues you with a verification code can be checked at': 'أي وثيقة تصدرها لك الشركة برمز تحقق يمكن التحقق منها على',
+
+  // ---- board pack
+  'The month from the record: results, cash and how long it lasts, the governance map, the largest risks and what is late — built on the first of each month, frozen, and issued by a person as an official document.':
+    'الشهر من السجل: النتائج، والنقد ومدة كفايته، وخريطة الحوكمة، وأكبر المخاطر، وما تأخر — تُبنى في أول كل شهر، وتُجمَّد، ويُصدرها إنسان وثيقةً رسمية.',
+  'Build a pack': 'ابنِ حزمة', 'Month': 'الشهر', 'Build': 'ابنِ', 'Packs': 'الحزم',
+  'No packs yet — the first is built on the first of next month, or build one now.': 'لا حزم بعد — تُبنى الأولى في أول الشهر القادم، أو ابنِ واحدة الآن.',
+  'built': 'بُنيت', 'Rebuild': 'أعد البناء', 'Draft the covering note': 'اكتب المذكرة التمهيدية', 'The executive is writing': 'الرئيس التنفيذي يكتب',
+  'Net': 'الصافي', 'Cash': 'النقد', 'Months of cash': 'أشهر كفاية النقد',
+  'not burning cash': 'لا يستنزف النقد', 'if revenue falls 20%': 'إن هبطت الإيرادات 20%', 'Three months': 'ثلاثة أشهر',
+  'Receivables open': 'ذمم مدينة مفتوحة', 'Receivables overdue': 'ذمم مدينة متأخرة', 'Payables due in 30 days': 'ذمم دائنة مستحقة خلال 30 يومًا',
+  'Late or open': 'متأخر أو مفتوح', 'Audit actions overdue': 'إجراءات تدقيق متأخرة', 'Nonconformities open': 'حالات عدم مطابقة مفتوحة',
+  'Late process steps': 'خطوات عمليات متأخرة', 'Policies past their review date': 'سياسات تجاوزت موعد مراجعتها', 'AML alerts open': 'تنبيهات غسل أموال مفتوحة', 'Largest risks': 'أكبر المخاطر',
+  'no mitigation recorded': 'لا معالجة مسجلة', 'Operations issues': 'مشكلات التشغيل',
+  'cash ÷ average monthly (expenses − revenue) over the last three months; the stress case adds a fifth of average revenue to the burn':
+    'النقد ÷ متوسط (المصروفات − الإيرادات) الشهري لآخر ثلاثة أشهر؛ وحالة الضغط تضيف خُمس متوسط الإيرادات إلى الاستنزاف',
+
+  // ---- insider risk
+  'Patterns in the record that come before trouble: a sign-in from a new network, approvals in the small hours, a burst of exports, one person approving nearly everything one colleague prepares, failed passwords ending in a success. None is proof and none acts on its own — the security team clears each with a reason or confirms it, and confirming can end the person’s sessions.':
+    'أنماط في السجل تسبق المشاكل: دخول من شبكة جديدة، واعتمادات في ساعات الفجر، وتصدير كثيف، وشخص يعتمد كل ما يعدّه زميل واحد تقريبًا، وكلمات مرور خاطئة تنتهي بنجاح. لا شيء منها دليل ولا شيء ينفّذ وحده — فريق الأمن يغلق كل تنبيه بسبب أو يؤكده، والتأكيد قد ينهي جلسات الشخص.',
+  'People with alerts': 'أشخاص عليهم تنبيهات', 'Read the record now': 'اقرأ السجل الآن', 'Night is counted on the company’s clock': 'يُحسب الليل بتوقيت الشركة',
+  'Who to look at first': 'من تنظر إليه أولًا', 'alerts': 'تنبيهات', 'Alerts': 'التنبيهات', 'Confirm': 'أكّد', 'Nothing in the record needs a second look.': 'لا شيء في السجل يحتاج نظرة ثانية.',
+  'End this person’s sessions now? They will have to sign in again.': 'هل تنهي جلسات هذا الشخص الآن؟ سيضطر لتسجيل الدخول مجددًا.', 'session(s) ended': 'جلسة/جلسات أُنهيت',
+  'Signed in from a network not seen for this account in ninety days': 'سجّل الدخول من شبكة لم تُرَ لهذا الحساب منذ تسعين يومًا',
+  'Approved something between midnight and five in the morning': 'اعتمد شيئًا بين منتصف الليل والخامسة صباحًا',
+  'More than twenty exports or downloads in a day': 'أكثر من عشرين تصديرًا أو تنزيلًا في يوم',
+  'Approves almost everything one colleague prepares': 'يعتمد تقريبًا كل ما يعدّه زميل واحد',
+  'Five or more failed passwords, then a success, within the hour': 'خمس كلمات مرور خاطئة أو أكثر، ثم نجاح، خلال ساعة',
+
+  // ---- ask the company
+  'Answer from the company’s own documents': 'إجابة من وثائق الشركة نفسها',
+  'The local model answers only from the policies, minutes, decisions and findings you may read, and cites each one. It costs a model call, so it waits for you to ask.':
+    'يجيب النموذج المحلي فقط من السياسات والمحاضر والقرارات والملاحظات التي يحق لك قراءتها، ويذكر مصدر كل منها. وهذا يكلّف استدعاءً للنموذج، لذا ينتظر أن تطلبه.',
+  'Answer from the documents': 'أجب من الوثائق', 'Searching the documents…': 'جارٍ البحث في الوثائق…', 'Nothing you may read answers this.': 'لا شيء مما يحق لك قراءته يجيب عن هذا.',
+  'Sources': 'المصادر',
+  // ---- self-improvement loop and the workforce map
+  'Workforce': 'القوى العاملة', 'Loops and rewrites': 'الحلقات وإعادة الكتابة', 'grading': 'قيد التقييم', 'coaching': 'قيد التدريب', 'Tasks': 'المهام',
+  'pass rate': 'نسبة النجاح', 'prompt rewrites': 'إعادات كتابة التعليمات', 'edits by me': 'تعديلات بيدي', 'Start a loop': 'ابدأ حلقة',
+  'The workforce map — drag to move, wheel to zoom': 'خريطة القوى العاملة — اسحب للتحريك، ودوّر العجلة للتكبير',
+  'Zoom in': 'تكبير', 'Zoom out': 'تصغير', 'Fit to screen': 'ملاءمة الشاشة', 'As a table': 'كجدول',
+  'Capabilities': 'القدرات', 'Prompt (self-edit)': 'التعليمات (تعديل ذاتي)', 'Rules from the coach': 'قواعد من المدرّب', 'pass': 'نجاح', 'runs': 'تشغيلات',
+  'tasks': 'مهام', 'from history': 'من السجل', 'Coach': 'المدرّب', 'Prompt rewrite': 'إعادة كتابة التعليمات', 'Diff': 'الفرق', 'Memory (playbooks)': 'الذاكرة (أدلة العمل)',
+  'Grader': 'المقيّم', 'workers': 'موظفين', 'rewrites': 'إعادات كتابة', 'Scoring': 'التقييم', 'Rubric': 'معايير التقييم', 'Golden sets': 'الحالات المرجعية',
+  'The rubric is code — no model grades': 'المعايير شيفرة — لا نموذج يقيّم', 'more employees': 'موظفين آخرين', 'Pass gate': 'بوابة النجاح',
+  'the workforce, live': 'القوى العاملة، مباشرة', 'rewrites wait for a person': 'إعادات كتابة تنتظر شخصاً', 'decide': 'قرّر',
+  'fails fixed': 'إخفاقات أُصلحت', 'reverted': 'مُتراجَع عنها', 'by me': 'بيدي', 'No rewrite was needed.': 'لم تلزم أي إعادة كتابة.',
+  'Pass': 'النجاح', 'By round': 'حسب الجولة', 'Playbook': 'دليل العمل', 'Tools used': 'الأدوات المستخدمة', 'rules': 'قواعد', 'This round': 'هذه الجولة',
+  'none yet': 'لا شيء بعد', 'Output contract': 'عقد المخرجات', 'Tools used through the gate': 'الأدوات المستخدمة عبر البوابة',
+  'granted, not used yet': 'ممنوحة ولم تُستخدم بعد', 'stopped by the gate': 'أوقفتها البوابة', 'none in the last 30 days': 'لا شيء في آخر 30 يوماً',
+  'Open in Agents': 'افتح في الوكلاء', 'Its playbook': 'دليل عمله',
+  'Reads each employee’s graded failures and its playbook, and proposes standing rules to add or remove. It touches only the playbook — never the role, the guards or the permissions — and a rewrite is kept only if the next round scores no lower.':
+    'يقرأ إخفاقات كل موظف المقيّمة ودليل عمله، ويقترح قواعد دائمة تُضاف أو تُحذف. لا يلمس إلا دليل العمل — لا الدور ولا الحواجز ولا الصلاحيات — ولا تُبقى إعادة الكتابة إلا إذا لم تنخفض نتيجة الجولة التالية.',
+  'Rewrites': 'إعادات الكتابة', 'Keep if better': 'أبقِها إن تحسّنت', 'A person accepts each': 'يقبل شخصٌ كلاً منها', 'Latest rewrites': 'أحدث إعادات الكتابة', 'round': 'الجولة',
+  'Every answer is scored against the same checks, so a score cannot be talked up. A task passes only when every check that applies to it holds.':
+    'تُقيَّم كل إجابة بالفحوص نفسها، فلا يمكن تضخيم النتيجة بالكلام. ولا تنجح المهمة إلا إذا تحقق كل فحص ينطبق عليها.',
+  'Graded': 'المقيَّمة', 'The loop stops when this reaches the target, or after the last round.': 'تتوقف الحلقة حين تبلغ هذه النسبة الهدف، أو بعد الجولة الأخيرة.',
+  'Out of a loop, this is the share of the last week’s finished runs that did not stop at a person or fail.': 'خارج الحلقة، هذه نسبة تشغيلات الأسبوع الماضي المنتهية التي لم تتوقف عند شخص ولم تفشل.',
+  'Reach a pass rate of': 'بلوغ نسبة نجاح', 'No loop is running: the map shows the workforce as it works.': 'لا حلقة قيد التشغيل: تعرض الخريطة القوى العاملة كما تعمل.',
+  'golden cases': 'حالات مرجعية', 'from real work': 'من العمل الفعلي', 'finished runs in the last week.': 'تشغيلات منتهية في الأسبوع الماضي.',
+  'Prompts the employees were really given, replayed as tests — the same tasks every round, so rounds compare.': 'تعليمات أُعطيت للموظفين فعلاً، تُعاد كاختبارات — المهام نفسها في كل جولة، لتكون الجولات قابلة للمقارنة.',
+  'The core hands the goal and the tasks to the Grader, and the failures to the Coach. Every wire on this map is a relationship the code really performs, and every particle is work moving along it.':
+    'يسلّم المركز الهدف والمهام إلى المقيّم، والإخفاقات إلى المدرّب. كل سلك على هذه الخريطة علاقة تنفذها الشيفرة فعلاً، وكل جسيم عملٌ يتحرك عليه.',
+  'Stop this loop? Rewrites already kept stay; nothing else is applied.': 'إيقاف هذه الحلقة؟ تبقى إعادات الكتابة المحفوظة، ولا يُطبَّق شيء آخر.',
+  'Each employee is tested on its golden cases and on prompts it was really given; the Coach rewrites the playbooks of those that fail; a rewrite is kept only if the next round scores no lower. Every test is a real model call.':
+    'يُختبر كل موظف على حالاته المرجعية وعلى تعليمات أُعطيت له فعلاً؛ ويعيد المدرّب كتابة أدلة عمل من يخفق؛ ولا تُبقى إعادة الكتابة إلا إذا لم تنخفض نتيجة الجولة التالية. كل اختبار استدعاء حقيقي للنموذج.',
+  'Target pass rate (%)': 'نسبة النجاح المستهدفة (%)', 'Tasks per employee': 'المهام لكل موظف', 'Rounds at most': 'أقصى عدد للجولات',
+  'You need the selfimprove.view permission to see the workforce map.': 'تحتاج صلاحية selfimprove.view لرؤية خريطة القوى العاملة.',
+  'Column': 'عمود', 'Cards': 'بطاقات', 'Enabled': 'مفعّل', 'a person accepts each rewrite': 'يقبل شخصٌ كل إعادة كتابة', 'kept only if the next round improves': 'تُبقى فقط إن تحسنت الجولة التالية',
+  'Round 1 is being graded…': 'الجولة 1 قيد التقييم…', 'No loop yet — this is the workforce as it works now.': 'لا حلقة بعد — هذه القوى العاملة كما تعمل الآن.',
+  'LOOP COMPLETE': 'اكتملت الحلقة', 'LOOP STOPPED': 'أُوقفت الحلقة',
+  'The Grader scores each employee against a fixed rubric — valid JSON, every field of its contract, no guard tripped, the expected facts, a stated confidence. The Coach reads the failures and rewrites the playbook of each employee that failed; the next round shows whether the rewrite helped, and one that made things worse is reverted on its own. The role, the guards and the permissions are never touched.':
+    'يقيّم المقيّم كل موظف بمعايير ثابتة — JSON صالح، وكل حقل في عقده، ولا حاجز مُطلَق، والحقائق المتوقعة، وثقة مُعلنة. ويقرأ المدرّب الإخفاقات ويعيد كتابة دليل عمل كل موظف أخفق؛ وتُظهر الجولة التالية إن كانت إعادة الكتابة قد ساعدت، وما زاد الأمر سوءاً يُتراجع عنه تلقائياً. لا يُمسّ الدور ولا الحواجز ولا الصلاحيات أبداً.',
+  'from': 'من', 'Rewrites waiting for you': 'إعادات كتابة تنتظرك', 'Playbook versions from this loop': 'نسخ أدلة العمل من هذه الحلقة', 'Revert': 'تراجع',
+  'Loops': 'الحلقات', 'Loop': 'الحلقة', 'Pass rate': 'نسبة النجاح', 'Started': 'بدأت',
+  'No loop has run yet. Start one from the map: it tests the employees on their golden cases and on work they really did.': 'لم تعمل أي حلقة بعد. ابدأ واحدة من الخريطة: تختبر الموظفين على حالاتهم المرجعية وعلى عمل أنجزوه فعلاً.',
+  'Put this playbook back the way it was before this version?': 'إعادة دليل العمل هذا إلى ما كان عليه قبل هذه النسخة؟',
+  'Employees it can test': 'موظفون يمكن اختبارهم', 'Coach mode': 'وضع المدرّب',
+  'Answers in valid JSON': 'يجيب بـ JSON صالح', 'Every field of its output contract': 'كل حقل في عقد مخرجاته', 'No guard tripped': 'لم يُطلَق أي حاجز',
+  'The expected answer, where a golden case states one': 'الإجابة المتوقعة، حيث تذكرها حالة مرجعية', 'Confidence at or above its floor': 'ثقة عند حدّها الأدنى أو فوقه',
 };

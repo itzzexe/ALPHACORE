@@ -138,6 +138,14 @@ import { rescreenSanctions as rescreenParties } from './aml.js';
 import { rescreenOpen as rescreenPayments } from './core2/remit.js';
 import { tick as reachTick } from './reach.js';
 import { sweep as assuranceSweep } from './assurance.js';
+import { readItem as readIntake } from './intake.js';
+import { transcribe as transcribeMeeting } from './minutes.js';
+import { verifyWebhook as verifyWhatsApp, signatureValid as whatsAppSigned, ingest as ingestWhatsApp } from './whatsapp.js';
+import { authenticate as portalAuth, handle as portalHandle } from './portal.js';
+import { lateSweep as processLateSweep } from './processruns.js';
+import { sweep as insiderSweep } from './insider.js';
+import { monthlyTick as boardPackTick } from './boardpack.js';
+import { syncSelfImprove } from './selfimprove.js';
 import './deploy.js';
 
 seedAgents();
@@ -213,6 +221,10 @@ handleJob('graph.rebuild', async () => { rebuildGraph(); });
 handleJob('redteam.sweep', async () => { await runRedTeam(); });
 handleJob('chain.anchor', async () => { await anchorNow({ actor: 'system:anchor' }); });
 handleJob('backup.ship', async ({ file }) => { await shipOffsite(file); });
+// Paper and recordings are read on this machine, off the request path: an
+// invoice takes seconds, an hour of speech about an hour.
+handleJob('intake.read', async ({ id }) => { await readIntake(id); });
+handleJob('meeting.transcribe', async ({ id }) => { await transcribeMeeting(id); });
 handleJob('wal.archive', async () => { archiveWal(); });
 handleJob('retention.sweep', async () => { applyRetention(); });
 handleJob('standing.tick', async () => {
@@ -363,6 +375,8 @@ setInterval(() => { learningTick().catch(() => { /* next tick */ }); }, 5 * 60_0
 // Governance drafts land as soon as the employee finishes; cover that is about
 // to lapse is announced once per policy.
 setInterval(() => { try { syncDraftJobs(); } catch { /* next tick */ } }, 5000).unref?.();
+// The self-improvement loop moves when its runs finish: grade, judge, coach, run again.
+setInterval(() => { try { syncSelfImprove(); } catch { /* next tick */ } }, 5000).unref?.();
 setInterval(() => { try { insuranceRenewals(); } catch { /* next hour */ } }, 60 * 60_000).unref?.();
 // The sanctions lists, once a day when switched on; whoever is on the books and
 // every payment not yet released is screened again against what changed.
@@ -382,6 +396,13 @@ setInterval(() => {
 // The governance map looks across the assurance departments for the links a
 // person should make; hourly is fresh enough for findings and risks.
 setInterval(() => { try { assuranceSweep(); } catch { /* next hour */ } }, 60 * 60_000).unref?.();
+// Late process steps announced once each, the record read for insider
+// patterns, and last month's board pack built on the first of the month.
+setInterval(() => {
+  try { processLateSweep(); } catch { /* next hour */ }
+  try { insiderSweep(); } catch { /* next hour */ }
+  try { boardPackTick(); } catch { /* next hour */ }
+}, 60 * 60_000).unref?.();
 // Whoever linked a phone hears within a minute that something waits for them.
 setInterval(() => { reachTick().catch(() => { /* the gate's log says why */ }); }, 60_000).unref?.();
 setInterval(() => { serversTick().catch(() => { /* next sweep */ }); }, 5 * 60_000).unref?.();
@@ -499,6 +520,25 @@ const server = http.createServer(async (req, res) => {
         raw: Buffer.concat(chunks).toString('utf8'), signature: req.headers['x-hub-signature-256'],
       });
       res.writeHead(r.status, { 'content-type': 'text/plain' }); res.end(r.body);
+      return;
+    }
+    // WhatsApp: the subscription handshake answers only our own verify token,
+    // and a delivery is accepted only when its signature matches the app secret.
+    if (url.pathname === '/webhooks/whatsapp') {
+      if (req.method === 'GET') {
+        const challenge = verifyWhatsApp(url.searchParams);
+        res.writeHead(challenge ? 200 : 403, { 'content-type': 'text/plain' });
+        res.end(challenge || 'forbidden');
+        return;
+      }
+      const chunks = [];
+      let size = 0;
+      for await (const c of req) { size += c.length; if (size > 2_000_000) { res.writeHead(413); res.end('too large'); return; } chunks.push(c); }
+      const raw = Buffer.concat(chunks);
+      if (!whatsAppSigned(raw, req.headers['x-hub-signature-256'])) { res.writeHead(401); res.end('bad signature'); return; }
+      try { ingestWhatsApp(JSON.parse(raw.toString('utf8'))); } catch { /* malformed: acknowledged, nothing stored */ }
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
       return;
     }
     if (url.pathname.startsWith('/webhooks/')) {
@@ -626,6 +666,25 @@ const server = http.createServer(async (req, res) => {
 
     // Whoever holds a printed document can check it without an account: the
     // code is the credential, and the page shows the record, never the text.
+    // The portal's own small API. A customer or supplier holds a link, not an
+    // account: the token names one party, and the console's permissions never
+    // see these requests.
+    if (url.pathname.startsWith('/portal-api/')) {
+      const send = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+      let account;
+      try { account = portalAuth(String(req.headers['x-portal-token'] || '')); } catch (e) { return send(e.status || 429, { error: e.message }); }
+      if (!account) return send(401, { error: 'this link has expired or was withdrawn — ask the company for a new one' });
+      let body = {};
+      if (req.method === 'POST') {
+        const chunks = [];
+        let size = 0;
+        for await (const c of req) { size += c.length; if (size > 15_000_000) return send(413, { error: 'too large' }); chunks.push(c); }
+        try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { return send(400, { error: 'that was not JSON' }); }
+      }
+      try { return send(200, portalHandle(account, req.method, url.pathname.slice('/portal-api'.length), body)); }
+      catch (e) { return send(e.status || 500, { error: e.status ? e.message : 'something went wrong' }); }
+    }
+
     if (url.pathname.startsWith('/verify/') && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
       res.end(verifyPage(decodeURIComponent(url.pathname.slice('/verify/'.length))));

@@ -64,6 +64,18 @@ function pick(system, prompt) {
   // Every governance draft at once: a policy, an audit programme, a scene, a
   // line of copy. Mock writes a skeleton with the brief quoted back, so the
   // page and the adopt-a-draft path can be walked without a model.
+  // The coach. Mock writes the rules the failed checks call for, as a careful
+  // coach would, so the whole self-improvement loop can be walked without a model.
+  if (task.includes('[COACH]')) {
+    const missing = ((task.match(/contract fields missing: ([^\n.]+)/) || [])[1] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const failed = ((task.match(/Failed checks: ([^\n—.]+)/) || [])[1] || '').split(',').map((s) => s.trim());
+    const add = [];
+    if (missing.length) add.push(`Always include every field of the output contract: ${missing.join(', ')}`);
+    if (failed.includes('json')) add.push('Reply with only the JSON object — no text before or after it.');
+    if (failed.includes('confidence')) add.push('State confidence honestly; when it is below your floor, say what is missing.');
+    if (failed.includes('guards')) add.push('Check every answer against the guards you were given before you send it.');
+    return { add, remove: [], why: '[mock] rules written from the failed checks' };
+  }
   if (task.includes('[DRAFT:')) {
     const kind = (task.match(/\[DRAFT:([\w-]+)\]/) || [])[1] || 'document';
     const brief = (task.match(/\[DRAFT:[\w-]+\] ([^\n]{0,160})/) || [])[1] || '';
@@ -287,6 +299,14 @@ function pick(system, prompt) {
 
 export async function call({ system, prompt }) {
   const obj = pick(system, prompt);
+  // A model reads its playbook. Mock honours the one rule it can honour
+  // mechanically — "include every field of the output contract" — so a
+  // coach's rewrite changes what comes back, as it would with a model.
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    for (const m of String(prompt || '').matchAll(/^- Always include every field of the output contract: (.+)$/gm)) {
+      for (const f of m[1].split(',').map((s) => s.trim()).filter((s) => /^[A-Za-z_]\w*$/.test(s))) if (!(f in obj)) obj[f] = f === 'confidence' ? 0.6 : `[mock] ${f}`;
+    }
+  }
   const text = JSON.stringify(obj, null, 2);
   // Simulate plausible token counts so dashboards have something to show.
   const tokensIn = Math.ceil(((system || '').length + prompt.length) / 4);

@@ -13,6 +13,73 @@ The full reasoning for any change is in its commit message; this is the index.
 
 ## Unreleased
 
+### The workforce improves itself, and you can watch it happen
+
+- **The self-improvement loop.** A person starts a loop over the employees
+  that have something to be tested on: their golden cases, and prompts they
+  were really given. Each round runs every task again as a real run; the
+  Grader scores it against a fixed rubric — valid JSON, every field of the
+  employee's own contract, no guard tripped, the expected answer, confidence
+  above its floor. No model grades. The Coach (a new employee) reads the
+  failures and rewrites the failing playbooks; a rewrite is a numbered
+  version, kept only if the next round scores no lower and reverted on its own
+  if it scores lower. It touches the playbook only — never the role, the
+  guards or the permissions. In "ask" mode a person accepts each rewrite.
+  The loop stops at the target, at the last round, or when the coach has
+  nothing to change (a round with every playbook unchanged is the same test
+  paid for twice). Any version can be put back by a person.
+- **The workforce map.** The Company map opens on an interactive picture of
+  the loop: goal, tasks, rubric and history wired into the core, the Coach and
+  the Grader, each employee with its pass rate, the tools it really called
+  through the gate (refusals in red), and the pass gate. Particles are real
+  work — denser where runs are in flight, teal toward the gate for an employee
+  passing, red for one failing. Pan, zoom, focus an employee to light its
+  wires, open any node into its details, switch to cards, replay a loop round
+  by round, read the prompt diffs when it completes; a table under it for
+  anyone who would rather read. Out of a loop it shows the workforce live.
+  The department atlas is the next tab.
+
+### The working day: processes that run, paper read here, meetings that end in tasks
+
+- **Processes in motion.** A published process runs as steps: each waits for
+  its role with a due time, a step with a control is done only when the person
+  says how the control held, and whoever did the previous step cannot perform
+  that control. Late steps are announced once; rejections and control
+  exceptions are on the record.
+- **Ask the company.** Under every answer on the Ask page, a button to answer
+  from the company's own policies, minutes, decisions and findings — only
+  those the asker may read — with every sentence cited. Words and, when the
+  local embedding model is installed, meaning, fused.
+- **Paper intake.** Invoices, passports and ID cards, and contracts are read
+  on this machine (tesseract, Arabic and English; PDFs through pdftoppm). A
+  passport or ID card's machine-readable zone is checked digit by digit. A
+  person confirms the fields: an invoice becomes a draft bill, an identity
+  document a screened AML party.
+- **Recordings & minutes.** A recording is transcribed here by whisper.cpp —
+  at night when the night shift is on — the minutes secretary drafts, and a
+  person confirms: each action becomes a task, and a management review is
+  recorded with ISO too. (Core 2's Meetings, people only, is unchanged.)
+- **WhatsApp.** Signed webhook deliveries into an inbox by sender, a drafted
+  reply, a person sends. Free text only inside WhatsApp's 24-hour window;
+  outside it, an approved template.
+- **Customer & supplier portal.** A link a person issues for one customer or
+  supplier, thirty days, revocable, the token kept only as its hash: their own
+  invoices or bills, messages, uploads. A supplier's uploaded invoice goes into
+  paper intake.
+- **Board pack.** On the first of each month: the month's results, cash and
+  months of cash (and if revenue falls a fifth), the governance map, the
+  largest risks and what is late — frozen, and issued by a person as an
+  official document with a verification code. Minutes can be issued the same
+  way.
+- **Insider risk.** The record read for sign-ins from new networks, approvals
+  in the small hours, export bursts, approval pairs and password bursts. The
+  security team clears or confirms each, and can end a person's sessions. Its
+  read permission is outside `*.view`.
+- `deploy/vps/tools-setup.sh` installs tesseract, poppler, ffmpeg and
+  whisper.cpp with a speech model.
+- **Fixed: an Arabic supplier name was never found on an invoice** — `\W`
+  without the Unicode flag counts Arabic letters as punctuation.
+
 ### Paper you can check, lists that are real, and a server that is safe to run
 
 - **Official copies.** A published policy, a closed audit report, a management

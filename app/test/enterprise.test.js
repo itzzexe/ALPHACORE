@@ -436,7 +436,7 @@ test('the floor is wired: permissions, catalogue, one surface each, and an unbro
     assert.ok(ids.has(id), `${id} is in the catalogue`);
     assert.equal(surfaceCount(id), 1, `${id} sits in exactly one surface`);
   }
-  assert.deepEqual(SURFACES.find((s) => s.id === 'assurance').departments, ['assurancemap', 'policies', 'iso', 'internalaudit', 'aml', 'insurance']);
+  assert.deepEqual(SURFACES.find((s) => s.id === 'assurance').departments, ['assurancemap', 'policies', 'iso', 'internalaudit', 'aml', 'insurance', 'insider']);
   const chain = verifyChain();
   assert.equal(chain.ok, true, JSON.stringify(chain));
 });

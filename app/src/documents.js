@@ -77,6 +77,28 @@ const TYPES = {
       };
     },
   },
+  minutes: {
+    label: 'Minutes of meeting', view: 'minutes.view', issue: 'minutes.manage',
+    snapshot(id) {
+      const m = one('SELECT * FROM rec_meetings WHERE id = ?', Number(id));
+      if (!m) refuse('no such meeting', 404);
+      if (m.state !== 'minuted') refuse('minutes are issued once they are recorded');
+      return {
+        title: `${m.title} — ${m.held_on}`, version: 1,
+        content: { title: m.title, heldOn: m.held_on, kind: m.kind, attendees: m.attendees, summary: m.summary, decisions: m.decisions,
+          actions: q('SELECT task, owner, due FROM rec_actions WHERE meeting_id = ? ORDER BY id', m.id), approvedBy: m.minuted_by },
+      };
+    },
+  },
+  boardpack: {
+    label: 'Board pack', view: 'boardpack.view', issue: 'boardpack.manage',
+    snapshot(id) {
+      const p = one('SELECT * FROM board_packs WHERE id = ?', Number(id));
+      if (!p) refuse('no such board pack', 404);
+      return { title: `Board pack — ${p.period}`, version: 1, content: { period: p.period, ...JSON.parse(p.snapshot) } };
+    },
+    issued(id, code) { one("UPDATE board_packs SET state = 'issued', issued_code = ? WHERE id = ? RETURNING id", code, Number(id)); },
+  },
   payment: {
     label: 'Payment advice', view: 'remit.view', issue: 'remit.release',
     snapshot(id) {
@@ -131,6 +153,7 @@ export function issue({ type, id, user }) {
   exec('INSERT INTO doc_issues (code, doc_type, subject_id, version, title, snapshot, digest, issued_by) VALUES (?,?,?,?,?,?,?,?)',
     code, type, String(id), snap.version, String(snap.title).slice(0, 300), JSON.stringify(snap.content), digest, actor);
   audit({ actorType: 'human', actorId: actor, action: 'document.issued', subjectType: type, subjectId: String(id), payload: { code, digest, version: snap.version } });
+  if (spec.issued) spec.issued(id, code);
   return read(code, user);
 }
 

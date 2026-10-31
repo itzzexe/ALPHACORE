@@ -10,7 +10,7 @@
 //
 // Nothing under /api is cached, ever. A stale run count or a cached approval
 // queue is worse than an error message — it looks like the truth.
-const VERSION = 'alphacore-v9';
+const VERSION = 'alphacore-v11';
 
 // Enough to paint the shell and reach the login screen offline.
 //

@@ -56,6 +56,11 @@ app/public/departments/enterprise.js   their pages; Arabic in i18n-enterprise.js
 app/src/assurance.js     the governance map; documents.js official copies (+ /verify/<code>, public); sanctions.js the UN/OFAC lists
 app/src/nightshift.js    runs.lane / runs.not_before: drafts wait for the night model; reach.js Telegram for a person's own phone
 app/public/components/qr.js            QR codes drawn in the console (no library); verified by decoding, versions 1–10
+app/src/processruns.js   the working day: processruns, companyask, intake (+ intake/extract.js), minutes, whatsapp, portal,
+                         boardpack, insider; pages in public/departments/workday.js; public/portal.html is the outsiders' page
+app/src/localtools.js    tesseract / pdftoppm / ffmpeg / whisper run by name, no shell; tests replace `engines` in intake.js and minutes.js
+app/src/selfimprove.js   the self-improvement loop (si_* tables, playbook_versions); the Coach is AGT-COACH-001, mock answers [COACH];
+                         public/views/loopmap.js draws it — the Company map's first tab and #/selfimprove
 app/public/app.js        the route table for the console (key → { title, render, poll })
 app/public/departments/  page renderers, grouped by area (build.js = forge, sites, deploys)
 app/public/departments/studio.js       Dev Studio (the IDE); engineering.js: reviews, GitHub, app builder, metrics
@@ -120,3 +125,10 @@ app/test/                node:test files, one per area
 - The README carries measured numbers; edit counts with `npm run readme`, not by hand.
 - A run that is `running` is stalled when its `lease_until` passes (set when it starts), not by its age: night-shift runs are hours old when they begin.
 - A table a catalogue count (`links.js` `n(...)`) reads must be created in `db.js`, not at a module's top — the catalogue may load first.
+- `meetings` is Core 2's people-only Meetings (`mtg_*`); the AI minute-taker is `minutes` (`rec_meetings`). Check a department id is free before adding one.
+- Role templates grant every `*.view`; a read permission that must stay narrow (alerts about colleagues) is named otherwise — `insider.watch`.
+- A portal visitor is audited as actor type `external` (`portal:<id>`): neither staff nor the system.
+- The coach's rules live in a `## Rules from the coach` section placed *before* the playbook's first other heading:
+  recall hands an employee only the first 2,600 characters of its playbook.
+- The workforce map updates itself in place; `renderOverview` returns early while it is mounted so the page poll
+  does not rebuild it (and restart every particle) every five seconds.

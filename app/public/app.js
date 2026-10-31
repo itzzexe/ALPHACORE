@@ -31,6 +31,7 @@ import { renderCrew, renderMyWork } from '/departments/crew.js';
 import { renderMarkets, renderSymbol, renderPortfolio, renderNewsroom, renderLocalAI } from '/departments/markets.js';
 import { renderLearning } from '/departments/learning.js';
 import { renderDocument, renderAssuranceMap } from '/departments/assurance.js';
+import { renderProcRuns, renderIntake, renderMinutes, renderWhatsApp, renderPortal, renderBoardPack, renderInsider, renderSelfImprove } from '/departments/workday.js';
 import { renderPolicies, renderIso, renderInternalAudit, renderTransformation, renderProduction, renderOpscenter, renderStrategy, renderInsurance, renderAml, renderRemit } from '/departments/enterprise.js';
 import { renderAcademy, renderAsk, renderDecisionDetail, renderDepartments, renderDesignDoc, renderDisputes, renderGraph, renderJourneyDetail, renderMemory, renderOffices, renderOrg, renderOverview, renderOwner, renderPackageSection, renderPeople, renderRecruiting, renderRequestDetail, renderSkills, renderSociety, renderSurfaceRoute, renderTrust, renderWorkstreamDetail } from '/departments/people.js';
 
@@ -486,6 +487,15 @@ const ROUTE_TABLE = {
   remit: { title: 'Remittances & SWIFT — payment messages for the bank', render: renderRemit },
   document: { title: 'Official copy', render: renderDocument },
   assurancemap: { title: 'Governance map — the assurance departments on one sheet', render: renderAssuranceMap },
+  procruns: { title: 'Processes in motion — published processes, run step by step', render: renderProcRuns },
+  intake: { title: 'Paper intake — documents read on this machine', render: renderIntake },
+  minutes: { title: 'Recordings & minutes — from the recording to the tasks', render: renderMinutes },
+  whatsapp: { title: 'WhatsApp — customers, with a person on every message', render: renderWhatsApp },
+  portal: { title: 'Customer & supplier portal — their own door', render: renderPortal },
+  boardpack: { title: 'Board pack — the month from the record', render: renderBoardPack },
+  insider: { title: 'Insider risk — patterns worth a second look', render: renderInsider },
+  // The map polls itself in place; a page poll would tear it down mid-flight.
+  selfimprove: { title: 'Self-improvement loop — the Grader, the Coach, and what was kept', render: renderSelfImprove },
 };
 
 registerRoutes(ROUTE_TABLE);

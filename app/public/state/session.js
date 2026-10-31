@@ -68,7 +68,8 @@ export const navPerm = {
   studio: 'forge.view', studioProject: 'forge.view', reviews: 'reviews.view', review: 'reviews.view',
   github: 'github.view', appbuilder: 'appbuilder.view', appBuild: 'appbuilder.view', engmetrics: 'engmetrics.view',
   localai: 'localai.view', learning: 'learning.view',
-  assurancemap: 'assurancemap.view', policies: 'policies.view', iso: 'iso.view', internalaudit: 'ia.view', transformation: 'dtx.view', production: 'production.view',
+  assurancemap: 'assurancemap.view', procruns: 'procruns.view', intake: 'intake.view', minutes: 'minutes.view', whatsapp: 'whatsapp.view',
+  portal: 'portal.view', boardpack: 'boardpack.view', insider: 'insider.watch', selfimprove: 'selfimprove.view', policies: 'policies.view', iso: 'iso.view', internalaudit: 'ia.view', transformation: 'dtx.view', production: 'production.view',
   opscenter: 'opscenter.view', strategy: 'strategy.view', insurance: 'insurance.view', aml: 'aml.view', remit: 'remit.view', markets: 'markets.view', symbol: 'markets.view', portfolio: 'portfolio.view', newsroom: 'news.view',
 };
 

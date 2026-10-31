@@ -96,6 +96,25 @@ const BODY = {
     <table class="doc-meta">${field('Standard', c.standard)}${field('Held on', c.heldOn)}${field('Attendees', c.attendees)}</table>
     <h3>${esc(t('Decisions'))}</h3><div class="doc-text">${md(c.decisions)}</div>
     <table class="doc-sign">${field('Recorded by', who(c.heldBy))}</table>`,
+  minutes: (c) => `
+    <table class="doc-meta">${field('Held on', c.heldOn)}${field('Attendees', c.attendees)}</table>
+    <div class="doc-text">${md(c.summary)}</div>
+    <h3>${esc(t('Decisions'))}</h3><div class="doc-text">${md(c.decisions)}</div>
+    ${c.actions?.length ? `<h3>${esc(t('Actions'))}</h3><table class="doc-tbl"><thead><tr><th>#</th><th>${esc(t('Action'))}</th><th>${esc(t('Owner'))}</th><th>${esc(t('Due'))}</th></tr></thead>
+      <tbody>${c.actions.map((a, i) => `<tr><td>${i + 1}</td><td dir="auto">${esc(a.task)}</td><td>${esc(a.owner || '')}</td><td>${esc(a.due || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+    <table class="doc-sign">${field('Recorded by', who(c.approvedBy))}</table>`,
+  boardpack: (c) => {
+    const f = c.finance;
+    const n = (x) => (x == null ? '—' : Number(x).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+    return `
+    <table class="doc-meta">${field('Revenue', n(f.revenue))}${field('Expenses', n(f.expenses))}${field('Net', n(f.net))}${field('Cash', n(f.cash))}
+      ${field('Months of cash', f.runway.months ?? t('not burning cash'))}${field('if revenue falls 20%', f.runway.monthsIfRevenueFalls20 ?? '—')}
+      ${field('Receivables overdue', n(f.receivablesOverdue))}${field('Payables due in 30 days', n(f.payablesNext30))}</table>
+    <p class="doc-note">${esc(t(f.runway.method))}</p>
+    <h3>${esc(t('Governance map'))}</h3><table class="doc-tbl"><tbody>${c.governance.map((g) => `<tr><td>${esc(t(g.label))}</td><td>${esc(t({ green: 'in order', amber: 'needs attention', red: 'act now' }[g.status]))}</td></tr>`).join('')}</tbody></table>
+    <h3>${esc(t('Largest risks'))}</h3><table class="doc-tbl"><tbody>${c.risks.map((r) => `<tr><td dir="auto">${esc(r.title)}</td><td>${r.score}/25</td><td>${esc(r.owner)}</td></tr>`).join('') || '<tr><td>—</td></tr>'}</tbody></table>
+    <h3>${esc(t('Late or open'))}</h3><table class="doc-meta">${field('Audit actions overdue', c.overdue.auditActions)}${field('Nonconformities open', c.overdue.nonconformities)}${field('Policies past their review date', c.overdue.policiesPastReview)}${field('Late process steps', c.overdue.lateProcessSteps)}${field('AML alerts open', c.overdue.amlAlerts)}</table>`;
+  },
   payment: (c) => `
     <table class="doc-meta">${field('Format', c.format)}${field('UETR', c.uetr)}${field('Amount', `${Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${c.currency}`)}${field('Charges', c.charges)}
       ${field('Beneficiary', c.beneficiary)}${field('BIC / SWIFT code', c.bic)}${field('Country', c.country)}${field('Value date', c.valueDate)}${field('Payment details (to the beneficiary)', c.remittanceInfo)}</table>

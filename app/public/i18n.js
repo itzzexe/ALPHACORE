@@ -90,7 +90,8 @@ export const SECTION_AR = {
   engmetrics: 'مؤشرات الهندسة',
   localai: 'الذكاء المحلي', learning: 'التعلّم',
   policies: 'السياسات والإجراءات', iso: 'الجودة والآيزو', internalaudit: 'التدقيق الداخلي والمالي', transformation: 'التحول الرقمي',
-  assurancemap: 'خريطة الحوكمة', production: 'استوديو الإنتاج', opscenter: 'مركز العمليات', strategy: 'الاستراتيجية والاستحواذ', insurance: 'التأمين', aml: 'مكافحة غسل الأموال', remit: 'الحوالات وسويفت', markets: 'مكتب الأسواق', portfolio: 'المحفظة', newsroom: 'غرفة الأخبار',
+  assurancemap: 'خريطة الحوكمة', procruns: 'العمليات قيد التنفيذ', intake: 'استقبال الوثائق', minutes: 'التسجيلات والمحاضر', whatsapp: 'واتساب',
+  portal: 'بوابة العملاء والموردين', boardpack: 'حزمة مجلس الإدارة', insider: 'مخاطر الداخل', selfimprove: 'حلقة التحسين الذاتي', production: 'استوديو الإنتاج', opscenter: 'مركز العمليات', strategy: 'الاستراتيجية والاستحواذ', insurance: 'التأمين', aml: 'مكافحة غسل الأموال', remit: 'الحوالات وسويفت', markets: 'مكتب الأسواق', portfolio: 'المحفظة', newsroom: 'غرفة الأخبار',
 };
 
 // ---------- interface strings ----------

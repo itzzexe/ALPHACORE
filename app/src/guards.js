@@ -32,6 +32,20 @@ export function validPattern(pattern) {
  * A must_not guard trips on a match; a must guard trips on its absence. Both
  * are scoped to one employee or to everyone.
  */
+/**
+ * The same question without counting the answer: which active guard would
+ * this text trip? For a grader scoring a test answer — a rehearsal is not a
+ * catch, and should not inflate a guard's record of real ones.
+ */
+export function peekGuards(agentId, text) {
+  const out = String(text || '');
+  for (const g of q("SELECT * FROM learn_guards WHERE state = 'active' AND (agent_id IS NULL OR agent_id = ?) ORDER BY id", agentId)) {
+    const r = re(g.pattern);
+    if (r && (g.kind === 'must' ? !r.test(out) : r.test(out))) return g;
+  }
+  return null;
+}
+
 export function checkGuards(agentId, text) {
   const out = String(text || '');
   for (const g of q("SELECT * FROM learn_guards WHERE state = 'active' AND (agent_id IS NULL OR agent_id = ?) ORDER BY id", agentId)) {

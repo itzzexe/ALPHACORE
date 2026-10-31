@@ -55,7 +55,7 @@ export const ROLE_TEMPLATES = {
     describes: 'Sits at the gates. Decides, rules on quality, and closes what is waiting — but cannot move money or open a door to the outside.',
     perms: ['*.view', 'gate.resolve', 'decisions.decide', 'decisions.evidence', 'decisions.verify',
       'quality.manage', 'pmo.manage', 'requests.create', 'problems.resolve', 'notifications.read',
-      'rituals.complete', 'auditor.request', 'press.approve', 'policies.publish', 'iso.verify'],
+      'rituals.complete', 'auditor.request', 'press.approve', 'policies.publish', 'iso.verify', 'boardpack.manage'],
   },
   operator: {
     label: 'Operator',
@@ -65,7 +65,8 @@ export const ROLE_TEMPLATES = {
       'releases.manage', 'jobs.manage', 'assets.manage', 'notifications.read', 'rituals.complete',
       'agents.manage', 'workstreams.manage', 'evals.run', 'lab.manage', 'crew.manage',
       'markets.manage', 'news.manage', 'portfolio.propose', 'learning.manage',
-      'policies.manage', 'iso.manage', 'dtx.manage', 'production.manage', 'opscenter.manage', 'strategy.manage'],
+      'policies.manage', 'iso.manage', 'dtx.manage', 'production.manage', 'opscenter.manage', 'strategy.manage',
+      'procruns.manage', 'procruns.act', 'intake.manage', 'minutes.manage', 'whatsapp.manage', 'whatsapp.send', 'portal.manage', 'selfimprove.manage'],
   },
   finance: {
     label: 'Finance',
@@ -73,14 +74,14 @@ export const ROLE_TEMPLATES = {
     perms: ['*.view', 'finance.export', 'finreports.manage', 'budgets.freeze', 'revenue.invoice',
       'procurement.manage', 'vendors.manage', 'treasury.manage', 'treasury.pay', 'money.manage',
       'portfolio.propose', 'portfolio.approve', 'portfolio.connect',
-      'insurance.manage', 'remit.manage', 'remit.release'],
+      'insurance.manage', 'remit.manage', 'remit.release', 'intake.manage', 'procruns.act'],
   },
   security: {
     label: 'Security',
     describes: 'The SOC, the constitution, the red team, and the gate that lets things out. Reads the vault register; does not hold the vault.',
     perms: ['*.view', 'security.manage', 'compliance.manage', 'redteam.run', 'constitution.amend',
       'egress.release', 'scopes.grant', 'connectors.manage', 'provenance.issue', 'timemachine.snapshot',
-      'reviews.run', 'reviews.decide', 'ia.manage', 'ia.close', 'aml.manage', 'aml.decide', 'assurancemap.manage'],
+      'reviews.run', 'reviews.decide', 'ia.manage', 'ia.close', 'aml.manage', 'aml.decide', 'assurancemap.manage', 'insider.watch', 'insider.manage'],
   },
   marketing: {
     label: 'Marketing',
