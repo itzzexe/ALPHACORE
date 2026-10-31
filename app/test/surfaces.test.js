@@ -77,6 +77,29 @@ function consoleRoutes() {
 
 const ROUTE_KEYS = consoleRoutes();
 
+// registerRoutes throws when two modules claim one hash, but a key written
+// twice inside this one object literal never reaches it: JavaScript keeps the
+// last and says nothing. That is how the market atlas once took #/atlas from
+// the company map, and with it the sidebar link, `g a` and wall mode.
+test('no page is declared twice in the route table or in its permissions', () => {
+  const dupes = (text, open) => {
+    const start = text.indexOf(open);
+    assert.ok(start >= 0, `${open} has moved`);
+    const seen = new Map();
+    for (const line of text.slice(start + open.length).split(/\r?\n/)) {
+      if (/^\};/.test(line)) break;
+      for (const m of line.matchAll(/(?:^ {2}|,\s+)(?:'([^']*)'|([a-zA-Z][\w-]*))\s*:\s*(?=[{'])/g)) {
+        const k = m[1] ?? m[2];
+        seen.set(k, (seen.get(k) || 0) + 1);
+      }
+    }
+    return [...seen].filter(([, n]) => n > 1).map(([k]) => k);
+  };
+  assert.deepEqual(dupes(appJs, 'const ROUTE_TABLE = {'), []);
+  const session = fs.readFileSync(path.join(root, 'public', 'state', 'session.js'), 'utf8');
+  assert.deepEqual(dupes(session, 'export const navPerm = {'), []);
+});
+
 test('the route table was found, and it is the real one', () => {
   assert.ok(ROUTE_KEYS.size > 100, `only found ${ROUTE_KEYS.size} routes — the parser has drifted`);
   for (const known of ['', 'requests', 'hunt', 'chat', 'trust']) {

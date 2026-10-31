@@ -112,14 +112,31 @@ in doubt.
 
 To do real work:
 
-1. **Settings → AI providers.** Paste a key for at least one provider. It is
+1. **A Claude Pro or Max subscription instead of a key** — if you have one. Install
+   Claude Code on the machine the server runs on, sign it in once **as the user the
+   service runs as** (`claude auth login`, then `claude auth status` should say
+   `"loggedIn": true`), and set `CLAUDE_CLI_ENABLED=true` in `.env`. The
+   subscription then stands first in every tier and costs nothing per call; it is
+   metered against the plan's own five-hour windows. When a window is spent the
+   chain moves on — to a key if you set one, so remove the keys you do not want
+   paying for the overflow. Every run records which model served it. The
+   subscription is for your own company's work, not for serving other people.
+2. **Settings → AI providers.** Or paste a key for at least one provider. It is
    encrypted at rest with AES-256-GCM and never echoed back — the page shows
    you the last four characters and nothing more.
-2. **Press *Test connectivity*.** It makes one small real call and shows you
+3. **Press *Test connectivity*.** It makes one small real call and shows you
    what came back. If that works, the router works.
-3. **Set a budget.** Budgets → the company cap. Money is *reserved before a
+4. **Set a budget.** Budgets → the company cap. Money is *reserved before a
    model is called*, so a runaway loop hits the cap instead of your card.
-4. **Arm your connectors.** The World division → Connectors. Each one starts
+5. **Switch live data on.** The World division → Live data → *Switch on*. The
+   server then reads the public services — rates, holidays, weather and air,
+   the World Bank, earthquakes and natural events, the Hijri day — through the
+   gate every few minutes, and the home page, the globe, the radar, the atlas
+   and the naming studio fill in. The machine needs outbound HTTPS for this;
+   nothing is read until a person switches it on. If GitHub is connected, the
+   radar and the naming studio use its token and get five thousand reads an
+   hour instead of sixty.
+6. **Arm your connectors.** The World division → Connectors. Each one starts
    fenced by an allowlist; a live connector with an empty allowlist is a
    finding, not a convenience.
 

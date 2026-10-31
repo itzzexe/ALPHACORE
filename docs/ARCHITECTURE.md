@@ -7,6 +7,8 @@ This document explains the shape of the thing and why it is that shape. The
 you changed it. Every number here is measured by `npm run readme:check` in the
 README it came from.
 
+<img src="assets/architecture.svg" width="100%" alt="The architecture: the console talks to one Node process over HTTP and a WebSocket; inside it the route table, the departments, the workers and the audit chain over one SQLite file; everything that leaves passes the egress gate to AI providers, connectors, public data and the timestamp witness; people hold the irreversible acts">
+
 ---
 
 ## Four rules everything else follows from
@@ -106,6 +108,30 @@ never succeed. Runs left `running` by a process that died are reclaimed at boot.
 Six checks in order — scope, allowlist, quota, constitution, value ceiling,
 dry-run — and the intent is chained before the call. A new connector starts in
 dry-run: it runs the whole path and sends nothing.
+
+<img src="assets/outward-act.svg" width="100%" alt="The life of an outward act: propose, record, check, hold, act, seal">
+
+```mermaid
+flowchart LR
+  A["a module asks<br/>callConnector(capability)"] --> I["intent chained"]
+  I --> S{"scope"} --> L{"allowlist"} --> Q{"quota"} --> C{"constitution"} --> V{"value ceiling"}
+  V --> H{"irreversible<br/>or money?"}
+  H -->|"yes"| P["held for a named person"]
+  H -->|"no"| D{"dry-run?"}
+  P -->|"approved"| D
+  D -->|"yes"| R["recorded, not sent"]
+  D -->|"no"| O["the call goes out"]
+  S & L & Q & C & V -->|"refused, or cannot be evaluated"| X["refused — failure closed"]
+  R --> E["verdict and result on the egress log and the chain"]
+  O --> E
+  X --> E
+```
+
+Live data is a reader of this gate like any other: `livedata.pull` asks it for a
+public service only when the kept answer has aged out, keeps what came back in
+`od_cache` with its time, and backs off for fifteen minutes after a failure.
+Pages and the home brief read the cache only — a page that called a public
+service on render would make the console wait on the internet.
 
 Reading the web asks first. `robots.js` implements RFC 9309 and is obeyed by the
 page fetch, the intelligence crawler and the browser alike; the user-agent names

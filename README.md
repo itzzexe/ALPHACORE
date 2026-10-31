@@ -27,10 +27,10 @@ itself.
 <img src="https://img.shields.io/badge/permissions-366_atomic-e07bd2?style=flat-square" alt="366 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
-<img src="https://img.shields.io/badge/AI_providers-9_%2B_local-5ec3c9?style=flat-square" alt="9 providers plus local">
+<img src="https://img.shields.io/badge/AI_providers-8_hosted_%2B_2_local-5ec3c9?style=flat-square" alt="8 hosted providers plus 2 local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-629-78bf6d?style=flat-square" alt="629 tests">
+<img src="https://img.shields.io/badge/tests-630-78bf6d?style=flat-square" alt="630 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -39,6 +39,12 @@ itself.
 where you watch both cores work — and every tunnel between them.*
 
 **[Install & run](docs/INSTALL.md)** · [Documentation](docs/) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Licence](LICENSE)
+
+<br>
+
+<img src="docs/screenshots/home.webp" width="100%" alt="The home page: a greeting with what waits for a decision, a live globe of where the company trades with its payments drawn as arcs, the live-data strip of rates, weather and the next prayer, the health index and the next mission">
+
+<sub>The home page of a demo company — the globe, what waits on a person, and the world read through the gate. More in <a href="#a-look-inside">a look inside</a>.</sub>
 
 </div>
 
@@ -49,8 +55,10 @@ where you watch both cores work — and every tunnel between them.*
 | | |
 |---|---|
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
-| [Quick start](#quick-start) · [First run](#first-run) · [On a phone](#on-a-phone) | getting in |
+| [**A look inside**](#a-look-inside) · [**The architecture**](#the-architecture) · [The life of a run](#the-life-of-a-run) | screenshots, the drawing, the path every act takes |
+| [Quick start](#quick-start) · [First run](#first-run) · [Going live](#going-live) · [On a phone](#on-a-phone) | getting in |
 | [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 215 departments](#the-company--13-divisions-215-departments) | the shape |
+| [**The command deck**](#the-console) · [Live data](#the-world-outside-and-who-owns-the-company) · [The frontier](#the-frontier) · [The workforce improves itself](#the-workforce-improves-itself) | the newest floors: globe, live world, radar, atlas, naming, cap table |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [**The two cores**](#two-cores-one-company) · [The enterprise core](#the-enterprise-core) · [The bridges](#the-bridges) | the other galaxy |
 | [**Build and run**](#build-and-run) · [The console](#the-console) | software, websites, servers, deployments, monitoring, the crew |
@@ -97,6 +105,105 @@ honest.
 | **Zero external requests from the console** | No fonts, no CDNs, no analytics, no telemetry. This is checked in the test sweep, not merely intended. |
 | **Runs at zero cost** | Without a provider key it runs in deterministic mock mode. The entire platform is explorable for nothing. |
 | **Arabic is first-class** | Not a translation layer bolted on: a dictionary the shell speaks and a DOM pass over every rendered page, with RTL layout throughout. |
+
+<img src="docs/assets/numbers.svg" width="100%" alt="AlphaCore by the numbers — departments, relationships, AI employees, API routes, permissions, tests, live public sources, tables, AI providers, server modules, one dependency, zero external requests from the console">
+
+<sub>Every number on this card is measured from the code by <code>npm run readme</code>, which redraws it; CI fails when the drawing and the code disagree.</sub>
+
+---
+
+## A look inside
+
+Screenshots of a demo company — sample records, and the live world read for
+real through the gate on the day they were taken. Dark theme, English, unless
+the caption says otherwise.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/onboarding.webp" alt="The first-run journey: a welcome card over the blurred home page, four steps to name the company, place it, choose a focus and launch"><br><sub><b>First run</b> — four steps: name the company, place it on the globe, choose what you care about, launch.</sub></td>
+<td width="50%"><img src="docs/screenshots/globe.webp" alt="The globe page: every country the record touches lit, payment messages drawn as arcs from home, the space station and natural events on the sphere"><br><sub><b>The globe</b> — every country the record touches, payments as arcs, the night side, natural events, the space station.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/map.webp" alt="The company map's workforce tab: goal, tasks, rubric and history feeding the core, the Coach and the Grader, wires to each employee and to the pass gate"><br><sub><b>The workforce map</b> — the self-improvement loop drawn as it runs: the Grader, the Coach, every employee.</sub></td>
+<td><img src="docs/screenshots/approvals.webp" alt="The approvals desk: what waits on you and on the company, overdue and oldest, who decides — people, routine to the AI, or everything to the AI — and what the AI may decide"><br><sub><b>The desk</b> — everything waiting on a person, ordered by what it blocks, and how much the AI may decide.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/livedata.webp" alt="Live data: the gate's last pass, services answering, reads today, the dinar rate, earthquakes near the company's places, and a card per country with weather, a three-day forecast and air quality"><br><sub><b>Live data</b> — public services read through the gate: rates, weather, air, holidays, the World Bank, NASA.</sub></td>
+<td><img src="docs/screenshots/radar.webp" alt="The horizon radar: subjects watched — fintech, large language models, solar energy, a competitor — each with ninety days of attention, stories, papers, projects and hiring"><br><sub><b>Horizon radar</b> — attention, stories, research, open source and hiring for every subject you watch.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/atlas.webp" alt="The market atlas: the top three markets drawn as hexagons of six pillars over home's dashed outline, then the ranking table with each pillar's score and the World Bank figures"><br><sub><b>Market atlas</b> — every economy ranked on the World Bank's figures with your weights; the top three as hexagons.</sub></td>
+<td><img src="docs/screenshots/naming.webp" alt="The naming studio: names checked side by side with a score, eight domain zones each free or taken, the GitHub handle and the npm package, and whether the name is already a famous thing"><br><sub><b>Naming studio</b> — eight registries, GitHub and npm, asked whether a name is still free.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/equity.webp" alt="The cap table: fully diluted shares, holders, pool left and last price, an ownership ring and the table of holders with their classes, options and vesting"><br><sub><b>Cap table</b> — a ledger of who owns the company; grants vest by the calendar; rounds and exits modelled.</sub></td>
+<td><img src="docs/screenshots/markets.webp" alt="The markets desk: symbols, forecast accuracy, alerts and risk profile, and a daily brief with a stance, reason, stop and target per symbol"><br><sub><b>Markets desk</b> — the arithmetic in code, forecasts graded when they fall due, a daily brief.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/workforce.webp" alt="The workforce page: headcount, who is working right now, what is held at the gate, and a card per AI employee with its tier, owner, failure mode, reputation and runs"><br><sub><b>The workforce</b> — every AI employee, its tier, owner, reputation, cost this week and what it is doing.</sub></td>
+<td><img src="docs/screenshots/home-light.webp" alt="The home page in the light theme"><br><sub><b>Light theme</b> — every colour is a token defined for both themes.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/home-ar.webp" alt="The home page in Arabic, laid out right to left"><br><sub><b>العربية</b> — Arabic is first-class: the whole console, right to left.</sub></td>
+<td><img src="docs/screenshots/atlas-ar-light.webp" alt="The market atlas in Arabic in the light theme"><br><sub><b>أطلس الأسواق</b> — the same page in Arabic and the light theme.</sub></td>
+</tr>
+</table>
+
+---
+
+## The architecture
+
+<img src="docs/assets/architecture.svg" width="100%" alt="The architecture: the console talks to one Node process over HTTP and a WebSocket; inside it the route table, the departments, the workers and the audit chain over one SQLite file; everything that leaves passes the egress gate to AI providers, connectors, public data and the timestamp witness; people hold the irreversible acts">
+
+One process holds the whole company: the HTTP API, the console's files, the
+workers, the scheduler and the live WebSocket. Every route resolves to exactly
+one permission before its handler runs. Every department is a module with an
+`overview()` and its actions, writing to one SQLite file through append-only
+migrations. Anything that leaves the machine — a model call, a push, a message,
+a read of a public service — passes `egress.js`, and its intent is written to
+the chain before it goes. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the
+module map and the rules that keep it this way.
+
+<img src="docs/assets/outward-act.svg" width="100%" alt="The life of an outward act in six stations: propose by capability name, record the intent on the chain, check scope, allowlist, quota, constitution and value ceiling, hold for a person when it is irreversible, act or only record it in dry-run, seal the result">
+
+### The life of a run
+
+Every piece of AI work is a run: queued, leased by a worker, served by the first
+available model in its tier, paid for before it starts, and stopped at a person
+when it is unsure.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant P as Person or page
+  participant Q as Run queue
+  participant W as Worker
+  participant B as Budgets
+  participant R as Router
+  participant M as Model (tier chain)
+  participant V as Reviewer (other family)
+  participant H as Human gate
+  participant C as Audit chain
+  P->>Q: enqueue a run for an employee
+  Q->>C: run queued
+  W->>Q: lease it (lease_until set)
+  W->>B: reserve the most it may cost
+  B-->>W: reserved — or refused at the cap
+  W->>R: ask at the employee's tier
+  R->>M: first available: subscription, then keys, then local
+  M-->>R: the answer and its tokens
+  R->>B: settle the real cost, release the rest
+  opt work that is reviewed
+    W->>V: review — never the author's model family
+    V-->>W: findings
+  end
+  alt confidence below the floor, or a reviewer objects
+    W->>H: awaiting a person, the output kept and labelled
+    H->>C: a named person decides
+  else confident and clean
+    W->>C: run completed, sealed
+  end
+```
 
 ---
 
@@ -176,13 +283,24 @@ Out of the box: **mock mode**. Every model call returns a deterministic stub,
 nothing leaves the machine, nothing costs anything. The header says `MOCK MODE`
 so you are never in doubt.
 
-1. **Settings → AI providers** — paste a key. Encrypted at rest with
+1. **A Claude Pro or Max subscription, no key** — on the machine the server runs
+   on, sign Claude Code in once (`claude auth login`, as the user the service
+   runs as) and switch the provider on with `CLAUDE_CLI_ENABLED=true`. It stands
+   first in every tier, costs nothing per call, and is metered only against the
+   plan's own windows. When a window is spent, the chain moves on to whatever
+   comes next — a key if one is set, the local model if not — and the serving
+   model is recorded on every run.
+2. **Settings → AI providers** — or paste a key. Encrypted at rest with
    AES-256-GCM, never echoed back; the page shows the last four characters.
-2. **Test connectivity** — one small real call, and you see what came back.
-3. **Budgets → company cap** — money is reserved before a model is called.
-4. **World → Connectors** — each starts fenced by an allowlist.
-5. **Settings → This company** — your company's name replaces `this company` in
-   every system prompt, investor update and generated document.
+3. **Test connectivity** — one small real call, and you see what came back.
+4. **Budgets → company cap** — money is reserved before a model is called.
+5. **World → Live data → Switch on** — public services start being read through
+   the gate. Off until a person does this; pages read only what is kept.
+6. **World → Connectors** — each starts fenced by an allowlist.
+7. **Settings → This company** — your company's name replaces `this company` in
+   every system prompt, investor update and generated document. The first-run
+   journey asks for it, with the country and the currency, the first time an
+   owner signs in.
 
 Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
@@ -192,10 +310,22 @@ Full instructions, backups, upgrades and the runbook: **[docs/INSTALL.md](docs/I
 
 The console is built for a phone as much as a desktop.
 
-- Below 860px the rail and the department list slide in together as a **drawer**,
-  opening on the division you are already standing in.
+<table>
+<tr>
+<td width="33%"><img src="docs/screenshots/phone-home.webp" alt="The home page on a phone: the greeting, what waits for a decision, the capture button and the globe, with a bottom bar of home, waiting, search and menu"></td>
+<td width="33%"><img src="docs/screenshots/phone-radar-ar.webp" alt="The horizon radar on a phone, in Arabic, right to left"></td>
+<td>
+
+- Below 860px the sidebar slides in as a **drawer**, opening on the division
+  you are already standing in.
 - A **bar of four thumb-sized targets** takes the bottom of the screen —
-  overview, departments, search, account — carrying the waiting-on-you count.
+  home, what is waiting, search and the menu — carrying the waiting-on-you
+  count.
+
+</td>
+</tr>
+</table>
+
 - **Tables scroll inside their own box** instead of pushing the page sideways.
 - The layout keeps clear of the notch and the home indicator.
 
@@ -992,24 +1122,38 @@ up in the one inbox and in the duty bar at the top of every page.
 
 ## The console
 
-The console was redesigned around the two actors it serves. Colour carries one
-meaning each: **indigo is the machines** — an agent, a run, anything the AI is
+The console is drawn around the two actors it serves, and colour carries one
+meaning each: **cyan is the machines** — an agent, a run, anything the AI is
 doing — and **amber is people**: anything waiting on a human, any human act.
-Under the masthead, on every page, the **duty bar** shows both lanes: what is
-running right now and what is waiting on a person.
+Under the masthead, on every page, two lanes say it in a line: **MACHINES** —
+what is running, queued, and what today cost — and **PEOPLE** — how many things
+wait on a person, with the way to decide them.
 
-- **Home** answers "how is the company doing, and what does it need from me?"
-  — the two lanes side by side, then what is being built and what is running.
-  The atlas that used to be the home page is one click away as the **Company
-  map**.
-- **The sidebar** is labelled and grouped by what you are trying to do, AI core
-  above, enterprise core below; every department is one click from anywhere,
-  and the sidebar folds to icons.
+- **Home is a command deck** (see [the bridge](#the-bridge)): the brief written
+  from the record, the globe, the live-data strip, the health index, the next
+  mission. The deck is mounted once; a poll re-renders only what changed, so
+  nothing on it jumps every few seconds.
+- **The Company map** opens on the workforce map, with the departments and the
+  dashboards beside it.
+- **The sidebar** is grouped by what you are trying to do, AI core above,
+  enterprise core below; every department is one click from anywhere, new ones
+  are marked, and the sidebar folds to icons.
 - **Ctrl K** jumps to any department or action, or asks the company a question.
+  **N** captures a thought from anywhere, **g** and a letter goes somewhere
+  (`g a` the map, `g g` the globe, `g w` what waits), **F** pins a page, **?**
+  lists every key, **Shift W** turns the console into a wall screen.
+- **Motion has a reason or it does not run.** Pages enter on a navigation, not
+  on a poll; reveals happen as you scroll; and `prefers-reduced-motion` turns
+  all of it off.
 - Light and dark follow the operating system until you choose; English and
-  Arabic are both first-class, right to left included. On a phone the sidebar
-  becomes a drawer and a bar at the bottom carries home, what is waiting,
-  search and the menu.
+  Arabic are both first-class, right to left included.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/home-light.webp" alt="The command deck in the light theme"></td>
+<td width="50%"><img src="docs/screenshots/home-ar.webp" alt="The command deck in Arabic, right to left"></td>
+</tr>
+</table>
 
 ## The outside world
 
@@ -1297,6 +1441,13 @@ it makes can be reverted. Some kinds it never decides, whatever the policy says:
 paying out money, letting something leave through the gate, placing a broker
 order, running a server command, answering a data-subject request, filing tax.
 
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/approvals.webp" alt="The approvals desk and the policy for what the AI may decide"></td>
+<td width="50%"><img src="docs/screenshots/markets.webp" alt="The markets desk and its daily brief"></td>
+</tr>
+</table>
+
 ### The governance floor
 
 | | |
@@ -1326,17 +1477,54 @@ the console into an office wall screen.
 
 ### The world outside, and who owns the company
 
-**Live data** reads thirteen free public services through the gate on a clock —
-exchange rates for every currency (the dinar included), public holidays,
-weather, the World Bank's figures, earthquakes, runtime support dates — and
-answers lookups a person asks for: who a company is (GLEIF), whether an EU VAT
-number is real, whether a mailbox is a throwaway, whether a package an app runs
-has a published advisory (OSV). Off until a person switches it on; every read an
+**Live data** reads free public services, picked from the
+[public-apis](https://github.com/public-apis/public-apis) catalogue, through the
+gate on a clock — exchange rates for every currency (the dinar included), public
+holidays, weather and air quality where the company works, the World Bank's
+figures for every economy, earthquakes and NASA's natural events, the Hijri day
+and prayer times, the space station's orbit, runtime support dates — and answers
+lookups a person asks for: who a company is (GLEIF), whether an EU VAT number is
+real, whether a mailbox is a throwaway, whether a package an app runs has a
+published advisory (OSV). Off until a person switches it on; every read an
 egress row; every answer kept with its time. The home page and the globe show it
-from the cache, so nothing waits on the internet. The **cap table** is a ledger
-of who owns the company — shares, classes, the option pool, grants that vest by
-the calendar, SAFEs and notes — with a round modeller and an exit waterfall that
-show what each would do to every holder and change nothing.
+from the cache, so nothing waits on the internet.
+
+```mermaid
+flowchart LR
+  T["server tick<br/>every five minutes"] --> P{"livedata.pull"}
+  P -->|"answer still fresh"| K[("od_cache<br/>answer + its time")]
+  P -->|"aged out"| G{"egress gate"}
+  G -->|"allowed"| S["public service"]
+  S -->|"parsed, kept"| K
+  G -->|"refused or failing"| F["back off 15 minutes<br/>the last good answer stays"]
+  K --> H["home strip"]
+  K --> GL["the globe"]
+  K --> RN["radar · atlas · naming"]
+```
+
+<img src="docs/screenshots/livedata.webp" width="100%" alt="The live data page: last pass, services answering, reads today, the dinar rate, earthquakes near the company's places, and a card per country with weather, a three-day forecast and air quality">
+
+The **cap table** is a ledger of who owns the company — shares, classes, the
+option pool, grants that vest by the calendar, SAFEs and notes — with a round
+modeller and an exit waterfall that show what each would do to every holder and
+change nothing.
+
+<img src="docs/screenshots/equity.webp" width="100%" alt="The cap table: fully diluted shares, holders, pool left and last price, an ownership ring and the table of holders">
+
+The services, and what each is for:
+
+| Service | For |
+|---|---|
+| currency-api · Frankfurter (ECB) | every currency against the dollar, the dinar and the riyal; ninety days of the central-bank series |
+| Nager.Date · Aladhan | the days each country is shut; the Hijri date, prayer times, how far away Ramadan is |
+| Open-Meteo · its air-quality service | now and the next three days where the company works; the air there |
+| World Bank | country facts, indicators, and twelve figures for all 217 economies, governance included |
+| USGS · NASA EONET · wheretheiss.at | earthquakes and natural events near the company's places; the station overhead |
+| GLEIF · VATComply · Kickbox | is a counterparty a registered entity; is an EU VAT number real; is a mailbox a throwaway |
+| OSV · endoflife.date | advisories in the packages an app depends on; whether this runtime still gets fixes |
+| Wikipedia · Wikimedia pageviews | a paragraph about a company or a place; ninety days of public attention |
+| Hacker News · arXiv · GitHub · npm | stories, the front page, the hiring thread; research; new projects; handles and packages |
+| The registries' own RDAP | whether a domain is registered, asked of each zone's registry |
 
 ### The frontier
 
@@ -1348,6 +1536,25 @@ and keeps the shortlist of markets being decided on. The **naming studio**
 asks eight registries, GitHub and npm whether a name is still free. Live data
 adds the air, NASA's natural events, the Hijri day and prayer times, and the
 space station crossing the globe.
+
+A signal is a threshold written in the module, never a model's opinion:
+attention up by half in a week (below twenty readers a day a ratio is noise and
+is not counted), a story with 150 points, a project with 500 stars in its first
+quarter, twenty companies hiring. Each is kept once per subject, kind and day,
+and attention doubling reaches the notification tray. A registry's 404 is
+"free"; anything else is "cannot say", never "free" — and the studio says
+plainly that it is not a trademark search.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/radar.webp" alt="The horizon radar"></td>
+<td width="50%"><img src="docs/screenshots/atlas.webp" alt="The market atlas: the top three as hexagons and the ranking"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/naming.webp" alt="The naming studio"></td>
+<td><img src="docs/screenshots/globe.webp" alt="The globe with the shortlist, natural events and the space station"></td>
+</tr>
+</table>
 
 ### The workforce improves itself
 
@@ -1362,6 +1569,22 @@ relationship the code performs and every particle is work moving along it:
 teal toward the gate for an employee passing, red for one failing, tools the
 gate refused in red. Pan, zoom, open any node, switch to cards, replay a loop
 round by round, and read the prompt diffs it kept.
+
+```mermaid
+flowchart LR
+  A["goal · tasks · rubric"] --> B["a round: every employee<br/>does the tasks"]
+  B --> C{"the Grader<br/>a rubric in code"}
+  C -->|"target met"| Z(["loop done"])
+  C -->|"some failed"| D["the Coach rewrites the<br/>playbook of each one"]
+  D --> E{"the next round<br/>scores no lower?"}
+  E -->|"yes"| K["rewrite kept"]
+  E -->|"lower"| R["put back on its own"]
+  K --> B
+  R --> B
+  N["role · guards · permissions"] -.->|"never touched"| D
+```
+
+<img src="docs/screenshots/map.webp" width="100%" alt="The workforce map: the self-improvement loop drawn as it runs">
 
 ### The working day
 
@@ -1573,7 +1796,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 629 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
+| `npm test` | 630 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1600,6 +1823,8 @@ machine must be configured before it first starts.
 | `ALPHACORE_MOCK` | `true` forces mock mode even with a key present |
 | `ALPHACORE_TENANT` | set by the platform when it spawns a tenant; you do not set this |
 | `ANTHROPIC_API_KEY` | and the equivalents per provider — but prefer Settings, where keys are encrypted |
+| `CLAUDE_CLI_ENABLED` | `true` lets the Claude Pro/Max subscription serve every tier first, through the Claude Code CLI signed in on this machine — no key |
+| `CLAUDE_CLI_PATH` | where that CLI is, when it is not on the service's `PATH` |
 | `ALPHACORE_MASTER_KEY_COMMAND` | any command printing the master key material: `vault read`, `op read`, `aws kms decrypt`. The KMS door |
 | `ALPHACORE_MASTER_KEY` | the material directly, base64, for a container secret |
 | `TRUST_PROXY` | `true` only behind a reverse proxy, so `X-Forwarded-For` can be believed for rate limiting |
@@ -1691,13 +1916,32 @@ app/
     lifecycle.js      draining, alerting, and getting a backup off the machine
     deliverability.js DKIM, and whether a recording is lawful
     totp.js           RFC 6238, checked against the reference vectors
-    connectors/       nine integrations + a generic HTTP driver
+    connectors/       nine integrations + a generic HTTP driver; opendata.js and
+                      openworld.js are the keyless public services
+    livedata.js       reads them on a clock into od_cache; pages read the cache
+    radar.js          the horizon radar · atlas.js the market atlas · naming.js
+    equity.js         the cap table as a ledger, rounds and exits as arithmetic
+    deck.js           the home page's own reads; globe, missions, healthindex,
+                      whatif, broadcasts beside it
+    selfimprove.js    the Grader and the Coach, and the playbook versions
+    localai.js        the local model; engine.js runs llama.cpp itself
+    nightshift.js     drafts that wait for the night model
+    engineering/      the scanner, the review board, GitHub, the app builder
+    core2/            the enterprise core: HR, finance, bank, ops, remittances
+    policies.js       the governance floor; drafts.js how it asks for writing
+    processruns.js    the working day: processes, intake, minutes, the portal
     …
   public/
     index.html        the shell
     app.js            the console — 1,100 lines, vanilla, hash routing
     styles.css        2,700 lines: design tokens, light and dark, RTL-aware
     i18n.js           Arabic as a first-class language
+    meridian.css      the identity, loaded last: the tokens every page reads
+    core/             the shell, the command layer (keys, capture, pins, wall),
+                      motion
+    views/            the globe, the company map, the workforce map
+    departments/      the page renderers, grouped by area
+    components/       the editor, QR codes, country geometry — no libraries
     sw.js             network-first service worker
     manifest.webmanifest
   scripts/
@@ -1709,9 +1953,12 @@ app/
     make-icons.mjs    writes PNG bytes with no image library
     prove-world.mjs   end-to-end proof of the outside-world layer
     prove-platform.mjs
+    readme-numbers.mjs the numbers in this file, measured; infographic.mjs
+                      draws docs/assets/numbers.svg from the same measurements
+    sweep.mjs         every page, both themes, both languages, two widths
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               629 tests across fifty-three files
+  test/               630 tests across fifty-three files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1719,7 +1966,11 @@ app/
 docs/
   INSTALL.md          install, first run, phone, backups, upgrade, runbook
   NEXT.md             what is known to be missing, written down rather than felt
+  ARCHITECTURE.md     the module map, and the rules that keep it one process
+  VPS.md              running it on a server you share with other things
   mainboard.svg       the map, drawn
+  assets/             the infographics on this page
+  screenshots/        the console, as a demo company sees it
   blueprint/          the eleven parts the platform was designed from
 ```
 
@@ -1731,7 +1982,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 629 tests
+npm test                        # 630 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker

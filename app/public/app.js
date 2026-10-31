@@ -510,7 +510,7 @@ const ROUTE_TABLE = {
   livedata: { title: 'Live data — the world outside, read through the gate', render: renderLiveData },
   equity: { title: 'Cap table — who owns the company', render: renderEquity },
   radar: { title: 'Horizon radar — what the world is doing about what you watch', render: renderRadar },
-  atlas: { title: 'Market atlas — where to go next', render: renderAtlas },
+  'market-atlas': { title: 'Market atlas — where to go next', render: renderAtlas },
   naming: { title: 'Naming studio — is the name still free', render: renderNaming },
 };
 

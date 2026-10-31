@@ -61,6 +61,24 @@ sudo DOMAIN=ops.example.com bash install.sh
 4. **الأسواق ← المحفظة**: المحفظة ورقية افتراضيًا بـ 100,000$. لربط وسيط حقيقي: حساب Alpaca
    (بيئته الورقية افتراضيًا). الأموال الحقيقية تحتاج كتابة `REAL MONEY` وكلمة المرور، وكل أمر
    يحتاج موافقة إنسان.
+5. **العالم ← البيانات الحية ← «تشغيل»**: تبدأ قراءة الخدمات العامة (الأسعار، الطقس والهواء،
+   البنك الدولي، الأحداث الطبيعية، التاريخ الهجري ومواقيت الصلاة) عبر البوابة. يحتاج الخادم
+   اتصال HTTPS خارجيًا.
+6. **اشتراك Claude (Pro/Max) بدل المفاتيح**: سجّل دخول Claude Code على الخادم مرة واحدة
+   **بنفس المستخدم الذي تعمل به الخدمة** — `claude auth login` ثم افتح الرابط في متصفحك والصق
+   الرمز — وتأكد بـ `claude auth status`، ثم `CLAUDE_CLI_ENABLED=true` في `.env`. يصبح الاشتراك
+   أول نموذج في كل طبقة، بلا تكلفة لكل طلب، ضمن حدود الخطة كل خمس ساعات.
+
+## تحديث خادم تشاركه مع خدمات أخرى
+
+إذا كان على الخادم مواقع أو خدمات أخرى فـ**لا تشغّل `install.sh`**: فهو يعيد ضبط الجدار الناري
+ويثبّت Caddy. حدّث في مكانه: انسخ الشيفرة (`src` و`public` و`config` و`scripts` و`package.json`)
+فوق المجلد بعد أخذ نسخة احتياطية منها، ثم `systemctl restart alphacore`. البيانات في `data/` لا
+تُلمس.
+
+**البدء من جديد** (حذف كل بيانات الشركة): أوقف الخدمة، انقل `data/` و`workspace/` كما هما إلى
+مجلد نسخ احتياطية خارج التطبيق، أعد `data/master.key` وحده، ثم شغّل الخدمة: تُنشأ قاعدة جديدة
+ويُطبع حساب `owner` بكلمة مرور تظهر مرة واحدة في سجل الخدمة (أو `npm run reset-password`).
 
 ## ما الذي «يتحكم» فيه النموذج المحلي، وما الذي لا يتحكم فيه
 
@@ -99,6 +117,20 @@ fallback, and every run records which model actually served it.
 
 **Tuning knobs** (Local AI page, or `.env`): `LOCAL_NUM_CTX` (4096), `LOCAL_NUM_THREAD`
 (2), `LOCAL_KEEP_ALIVE` (30m), `LOCAL_CONCURRENCY` (1), `LOCAL_MODEL_T1/T2/T3/TL`.
+
+**A Claude Pro/Max subscription instead of keys:** sign Claude Code in once on the
+server, as the user the service runs as (`claude auth login`, open the link, paste the
+code back; `claude auth status` confirms), and set `CLAUDE_CLI_ENABLED=true` in `.env`.
+It then stands first in every tier at no cost per call, within the plan's five-hour
+windows. **Live data** is switched on at World → Live data and needs outbound HTTPS.
+
+**On a server you share with other services, never run `install.sh`** — it rewrites the
+firewall and installs Caddy. Update in place: back up the code, copy `src`, `public`,
+`config`, `scripts` and `package.json` over it, `systemctl restart alphacore`. `data/`
+is not touched. **To start the company over**, stop the service, move `data/` and
+`workspace/` whole to a backup folder outside the app, put `data/master.key` back on its
+own, and start it: a new database is created and the `owner` account is printed once in
+the service log (`npm run reset-password` if it was missed).
 
 **If AlphaCore runs elsewhere** and only the model is on the VPS, do not open port
 11434 to the internet: reach it through `ssh -L 11434:127.0.0.1:11434` or WireGuard and

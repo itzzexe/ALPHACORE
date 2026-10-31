@@ -19,12 +19,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { numbersSvg } from './infographic.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // The README is the repository's, not the platform's: one description of this
 // project, at the top, where somebody arriving from GitHub lands. The catalogues
 // it counts are still in here, which is why this script lives in the app.
 const README = path.join(ROOT, '..', 'README.md');
+const CARD = path.join(ROOT, '..', 'docs', 'assets', 'numbers.svg');
 
 // Numbers written as words keep the opening paragraph readable. They are still
 // checked: the expected count is spelled and compared, so "one hundred and
@@ -40,6 +42,7 @@ function spell(n) {
 }
 const capitalise = (s) => s[0].toUpperCase() + s.slice(1);
 const comma = (n) => n.toLocaleString('en-US');
+const LOCAL_KINDS = new Set(['ollama', 'engine']);
 const round = (n, to) => Math.round(n / to) * to;
 
 // The catalogues live behind modules that open a database on import, and a
@@ -107,9 +110,17 @@ async function measure() {
   const tables = new Set([...schema.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?([a-z_0-9]+)/gi)]
     .map((m) => m[1].toLowerCase())).size;
 
+  // Counted from the declaration, not by importing it: livedata opens the
+  // database on import, and this script has already put its scratch one away.
+  const livedata = fs.readFileSync(path.join(ROOT, 'src', 'livedata.js'), 'utf8');
+  const from = livedata.indexOf('export const SOURCES = [');
+  const sourcesBlock = livedata.slice(from, livedata.indexOf('\n];', from));
+  const liveSources = (sourcesBlock.match(/^\s+\{ id: '/gm) || []).length;
+
   const agents = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'agents.json'), 'utf8')).agents.length;
-  const providers = Object.keys(JSON.parse(
-    fs.readFileSync(path.join(ROOT, 'config', 'providers.json'), 'utf8')).providers);
+  const providerTable = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'providers.json'), 'utf8')).providers;
+  const providers = Object.keys(providerTable);
+  const kinds = Object.fromEntries(providers.map((p) => [p, providerTable[p].kind]));
 
   return {
     departments: sections.length,
@@ -127,7 +138,11 @@ async function measure() {
     cssLines: lines('public/styles.css'),
     tables,
     agents,
+    liveSources,
     realProviders: providers.filter((p) => p !== 'mock').length,
+    // Local means the model runs on this machine: Ollama, or the engine that runs llama.cpp itself.
+    localProviders: providers.filter((p) => LOCAL_KINDS.has(kinds[p])).length,
+    hostedProviders: providers.filter((p) => p !== 'mock' && !LOCAL_KINDS.has(kinds[p])).length,
     // Two themes and two languages, at two viewport sizes, over every department.
     renders: sections.length * 2 * 2,
   };
@@ -206,6 +221,8 @@ function claims(f) {
 
     { what: 'sweep departments', value: f.departments, re: /(?<=opens all )(\d+)(?= departments in both themes)/ },
     { what: 'sweep renders', value: f.renders, re: /(?<=— )(\d+)(?= renders each)/ },
+    { what: 'badge hosted providers', value: f.hostedProviders, re: /(?<=badge\/AI_providers-)(\d+)(?=_hosted)/ },
+    { what: 'badge hosted providers alt', value: f.hostedProviders, re: /(?<=alt=")(\d+)(?= hosted providers)/ },
     { what: 'real providers', value: capitalise(spell(f.realProviders)), re: /(?<=^)([A-Za-z]+)(?= real providers plus a deterministic mock)/m },
   ];
 }
@@ -230,6 +247,16 @@ for (const c of claims(facts)) {
   }
   drift.push({ what: c.what, found, want });
   if (fix) text = text.replace(c.re, want);
+}
+
+// The card is checked whole: any difference between the drawing on disk and
+// the one the code would make today is drift, exactly as a stale sentence is.
+const card = numbersSvg(facts);
+// A Windows checkout may hand the file back with CRLF; that is not drift.
+const cardNow = fs.existsSync(CARD) ? fs.readFileSync(CARD, 'utf8').replace(/\r\n/g, '\n') : null;
+if (cardNow !== card) {
+  drift.push({ what: 'numbers card (docs/assets/numbers.svg)', found: cardNow === null ? 'missing' : 'stale', want: 'redrawn' });
+  if (fix) { fs.mkdirSync(path.dirname(CARD), { recursive: true }); fs.writeFileSync(CARD, card); }
 }
 
 const pad = (s, n) => String(s).padEnd(n);

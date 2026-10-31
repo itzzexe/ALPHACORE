@@ -480,7 +480,12 @@ export async function renderProviders() {
 export async function renderWorkforce() {
   const wf = await api('/api/workforce');
   const groups = [['discover', 'DISCOVER'], ['build', 'BUILD'], ['assure', 'ASSURE'], ['run', 'RUN'], ['create', 'CREATE'], ['steer', 'STEER']];
-  const rep = (r) => r == null ? '—' : `<span class="chip ${r >= 1.05 ? 'chip-ok' : r < 0.95 ? 'chip-warn' : 'chip-dim'}">rep ${Number(r).toFixed(2)}</span>`;
+  // accuracyFactor() answers { factor, signals }; reading it as a number printed "rep NaN" on every card.
+  const rep = (a) => {
+    const r = a && typeof a === 'object' ? a.factor : a;
+    if (r == null || !Number.isFinite(Number(r))) return '—';
+    return `<span class="chip ${r >= 1.05 ? 'chip-ok' : r < 0.95 ? 'chip-warn' : 'chip-dim'}">rep ${Number(r).toFixed(2)}</span>`;
+  };
   const card = (a) => `
     <div class="panel agent-card" style="border-left:3px solid ${a.busy ? 'var(--ember)' : 'var(--edge)'}">
       <div class="agent-head">

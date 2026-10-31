@@ -1128,7 +1128,7 @@ export async function renderAudit() {
         <tr>
           <td class="num">${r.seq}</td>
           <td class="mono" style="color:var(--ink-faint)">${esc(r.occurred_at)}</td>
-          <td class="mono">${esc(r.actor_type)}:${esc(short(r.actor_id, 22))}</td>
+          <td class="mono">${esc(short(/^(human|agent|system|external):/.test(String(r.actor_id)) ? String(r.actor_id) : `${r.actor_type}:${r.actor_id}`, 28))}</td>
           <td class="mono" style="color:${r.actor_type === 'human' ? 'var(--steel)' : 'var(--ink)'}">${esc(r.action)}</td>
           <td class="mono">${(() => { const h = linkFor(r.subject_type, r.subject_id); const label = esc(short((r.subject_type || '') + ' ' + (r.subject_id || ''), 30)); return h ? `<a href="${h}" style="color:var(--steel)">${label}</a>` : `<span style="color:var(--ink-faint)">${label}</span>`; })()}</td>
           <td class="mono" style="color:var(--ink-faint)">${esc(r.hash.slice(0, 10))}…</td>

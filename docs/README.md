@@ -10,6 +10,7 @@ build rather than typed.
 | | |
 |---|---|
 | **[Install and run](INSTALL.md)** | First boot, the password printed once, going from mock mode to live, phones, backups, upgrades, and the runbook for when something is wrong. |
+| [On a server](VPS.md) | A VPS with a local model, in Arabic and English — and how to update one you share with other services without disturbing them. |
 | [Quick start](../README.md#quick-start) | Three commands, if you already have Node 22.5. |
 | [Configuration](../README.md#configuration) | Every environment variable and every setting the console owns. |
 
@@ -18,6 +19,8 @@ build rather than typed.
 | | |
 |---|---|
 | **[Architecture](ARCHITECTURE.md)** | How one Node process is a whole company: the modules, the chain, the router, the gate, and the four rules everything else follows from. |
+| [A look inside](../README.md#a-look-inside) | Screenshots of the console as a demo company sees it, in [`screenshots/`](screenshots/): the command deck, the globe, live data, the radar, the atlas, the naming studio, the cap table — in both themes and both languages, and on a phone. |
+| [The infographics](assets/) | [The architecture](assets/architecture.svg) and [the life of an outward act](assets/outward-act.svg), drawn; [the numbers](assets/numbers.svg), generated from the code by `npm run readme` and checked in CI like every other number. |
 | [The map](mainboard.svg) | The living map as a drawing. The real one is in the console and is generated, not drawn. |
 | [The blueprint](blueprint/) | The eleven documents the platform was designed from, and the reasoning behind each decision. |
 | [What is missing](NEXT.md) | The known gaps, written down rather than felt. |
