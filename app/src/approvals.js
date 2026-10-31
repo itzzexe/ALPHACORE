@@ -66,7 +66,8 @@ export const ROLE_TEMPLATES = {
       'agents.manage', 'workstreams.manage', 'evals.run', 'lab.manage', 'crew.manage',
       'markets.manage', 'news.manage', 'portfolio.propose', 'learning.manage',
       'policies.manage', 'iso.manage', 'dtx.manage', 'production.manage', 'opscenter.manage', 'strategy.manage',
-      'procruns.manage', 'procruns.act', 'intake.manage', 'minutes.manage', 'whatsapp.manage', 'whatsapp.send', 'portal.manage', 'selfimprove.manage'],
+      'procruns.manage', 'procruns.act', 'intake.manage', 'minutes.manage', 'whatsapp.manage', 'whatsapp.send', 'portal.manage', 'selfimprove.manage', 'whatif.manage', 'broadcasts.manage', 'livedata.lookup',
+      'radar.manage', 'atlas.manage', 'naming.manage'],
   },
   finance: {
     label: 'Finance',
@@ -74,7 +75,8 @@ export const ROLE_TEMPLATES = {
     perms: ['*.view', 'finance.export', 'finreports.manage', 'budgets.freeze', 'revenue.invoice',
       'procurement.manage', 'vendors.manage', 'treasury.manage', 'treasury.pay', 'money.manage',
       'portfolio.propose', 'portfolio.approve', 'portfolio.connect',
-      'insurance.manage', 'remit.manage', 'remit.release', 'intake.manage', 'procruns.act'],
+      'insurance.manage', 'remit.manage', 'remit.release', 'intake.manage', 'procruns.act',
+      'equity.manage', 'equity.issue', 'livedata.lookup'],
   },
   security: {
     label: 'Security',

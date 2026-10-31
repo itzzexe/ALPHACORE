@@ -209,6 +209,9 @@ export const PERMS = [
   'procruns.view', 'procruns.manage', 'procruns.act', 'intake.view', 'intake.manage', 'minutes.view', 'minutes.manage',
   'whatsapp.view', 'whatsapp.manage', 'whatsapp.send', 'portal.view', 'portal.manage', 'boardpack.view', 'boardpack.manage',
   'insider.watch', 'insider.manage', 'selfimprove.view', 'selfimprove.manage',
+  'globe.view', 'missions.view', 'healthindex.view', 'whatif.view', 'whatif.manage', 'broadcasts.view', 'broadcasts.manage',
+  'livedata.view', 'livedata.lookup', 'livedata.manage', 'equity.view', 'equity.manage', 'equity.issue',
+  'radar.view', 'radar.manage', 'atlas.view', 'atlas.manage', 'naming.view', 'naming.manage',
 ];
 
 export const hashPassword = (pw) => {

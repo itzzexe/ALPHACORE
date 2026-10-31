@@ -27,9 +27,10 @@ import modelhub from './modelhub.js';
 import webread from './webread.js';
 import sanctions from './sanctions.js';
 import whatsapp from './whatsapp.js';
+import opendata from './opendata.js';
 
 export const DRIVERS = Object.fromEntries(
-  [gmail, gcalendar, github, slack, telegram, x, linkedin, stripe, notion, http, marketdata, newsfeeds, broker, modelhub, webread, sanctions, whatsapp].map((d) => [d.id, d]),
+  [gmail, gcalendar, github, slack, telegram, x, linkedin, stripe, notion, http, marketdata, newsfeeds, broker, modelhub, webread, sanctions, whatsapp, opendata].map((d) => [d.id, d]),
 );
 
 const parse = (s, f) => { try { return s ? JSON.parse(s) : f; } catch { return f; } };
@@ -111,7 +112,7 @@ export function credentialFor(id, account = 'default') {
  * The only way to call a service. Everything — the gate, the driver, the
  * recording — happens here, so no caller can accidentally skip a step.
  */
-export async function callConnector({ connector, capability, args = {}, agentId = null, runId = null, actor = null, reason = '', force = false }) {
+export async function callConnector({ connector, capability, args = {}, agentId = null, runId = null, actor = null, reason = '', force = false, logResult = true }) {
   const c = one('SELECT * FROM connectors WHERE id = ?', connector);
   if (!c) throw new Error(`no connector called ${connector}`);
   const driver = DRIVERS[c.driver];
@@ -130,7 +131,7 @@ export async function callConnector({ connector, capability, args = {}, agentId 
 
   return attempt({
     connector, capability, agentId, runId, actor, target, reason,
-    payload: args, valueUsd,
+    payload: args, valueUsd, logResult,
     // A person's approval, carried through. Only ever honoured for a person:
     // an agent that asks for force gets the gate like everyone else.
     force: Boolean(force) && !agentId && String(actor || '').startsWith('human:'),

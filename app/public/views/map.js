@@ -199,7 +199,7 @@ export function buildSystemMap(s, prov, agentsList, chain, extra = {}) {
 export function initMapInteractivity() {
   const svg = view.querySelector('svg.metro');
   if (!svg) return;
-  const panel = svg.closest('.panel');
+  const panel = svg.closest('.atlas-stage') || svg.closest('.panel');
   if (!panel) return;
   panel.style.position = 'relative';
   let tip = panel.querySelector('#map-tip');
@@ -666,7 +666,9 @@ function applyLens(svg, state, lens, term) {
 export function initAtlas(map, { lens: openLens = 'all' } = {}) {
   const svg = view.querySelector('svg.atlas-svg');
   if (!svg) return;
-  const panel = svg.closest('.panel');
+  // The map's own box, not the page panel around it: the lenses, the zoom and the
+  // tip float over the map, and the panel also holds the tabs and the dashboards.
+  const panel = svg.closest('.atlas-stage') || svg.closest('.panel');
   panel.style.position = 'relative';
   let tip = panel.querySelector('#map-tip');
   if (!tip) { tip = document.createElement('div'); tip.id = 'map-tip'; tip.hidden = true; panel.appendChild(tip); }

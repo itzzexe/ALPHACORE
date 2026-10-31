@@ -90,7 +90,7 @@ export function settingsOverview() {
 
   return {
     providers: rows,
-    company: { name: getSetting('COMPANY_NAME') || '', publicBaseUrl: getSecret('PUBLIC_BASE_URL') || '' },
+    company: { name: getSetting('COMPANY_NAME') || '', country: getSetting('COMPANY_COUNTRY') || '', currency: getSetting('COMPANY_CURRENCY') || '', publicBaseUrl: getSecret('PUBLIC_BASE_URL') || '' },
     mockForced: String(getSecret('ALPHACORE_MOCK') || '').toLowerCase() === 'true',
     mockMode: isMockMode(),
     production,

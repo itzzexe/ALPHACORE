@@ -246,6 +246,22 @@ app/src/
   portal.js         a customer's or supplier's own door by a hashed, revocable link; /portal-api and public/portal.html
   boardpack.js      the month from the record, frozen; months of cash is arithmetic, not a model
   insider.js        patterns in the record — new networks, night approvals, exports, approval pairs — for security
+  globe.js          every country the record touches and the payments that crossed; ISO codes only — the console owns geography
+  missions.js       five journeys, each step a question put to the record (MISSIONS); progress is read, never ticked
+  healthindex.js    the index and its five pillars, scored by thresholds written in the module; health_snapshots once a day
+  whatif.js         cash walked forward under levers from the record's baseline; whatif_scenarios kept with that baseline
+  broadcasts.js     one message to everybody and who has read it (broadcast_acks); stays inside the console
+  deck.js           a person's own console (user_prefs: pins, focus, onboarded, wall) and the morning brief
+  livedata.js       public services read through the gate (connectors/opendata.js): od_cache keeps each answer with
+                    its time; off until a person switches it on; pull() serves the cache while fresh and backs off a
+                    failing service; the home page and the globe read only the cache
+  radar.js          subjects watched (radar_topics); five reads each through livedata.pull; signals by thresholds
+                    in the module, one per subject, kind and day (radar_signals)
+  atlas.js          every economy ranked on the World Bank figures (the 'world' read) with weights; rank() is pure;
+                    atlas_shortlist is a person's decision, drawn on the globe
+  naming.js         a name against eight registries' RDAP, GitHub and npm (connectors/openworld.js); naming_checks
+  equity.js         the cap table as a ledger (eq_ledger rows, never edited), classes, pool, grants that vest by the
+                    calendar, convertibles; modelRound() and exitWaterfall() are arithmetic and change nothing
   selfimprove.js    the loop: tasks re-run as real runs, graded by a rubric in code, the Coach rewrites playbooks as
                     versions kept only if the next round scores no lower; mapData() feeds public/views/loopmap.js
   uploads.js        files people hand the company, checked by their first bytes, fingerprinted

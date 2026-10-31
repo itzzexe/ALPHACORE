@@ -97,6 +97,17 @@ import * as Portal from './portal.js';
 import * as BoardPack from './boardpack.js';
 import * as Insider from './insider.js';
 import * as SelfImprove from './selfimprove.js';
+import * as Globe from './globe.js';
+import * as Missions from './missions.js';
+import * as HealthIndex from './healthindex.js';
+import * as WhatIf from './whatif.js';
+import * as LiveData from './livedata.js';
+import * as Equity from './equity.js';
+import * as Radar from './radar.js';
+import * as Atlas from './atlas.js';
+import * as Naming from './naming.js';
+import * as Broadcasts from './broadcasts.js';
+import * as Deck from './deck.js';
 import { toolStatus } from './localtools.js';
 import { draftNow } from './drafts.js';
 import * as Markets from './markets.js';
@@ -2553,6 +2564,74 @@ const routes = [
   ['POST', /^\/api\/selfimprove\/rewrite\/(\d+)$/, (p, body, _u, user) => SelfImprove.decideRewrite({ id: Number(p[0]), verdict: need(body, 'verdict'), actor: `human:${user.username}` })],
   ['POST', /^\/api\/selfimprove\/version\/(\d+)\/revert$/, (p, _b, _u, user) => SelfImprove.revertVersion({ id: Number(p[0]), actor: `human:${user.username}` })],
   ['POST', /^\/api\/selfimprove\/mode$/, (_p, body, _u, user) => SelfImprove.setMode({ mode: need(body, 'mode'), actor: `human:${user.username}` })],
+  // The command deck: the person's own console and the morning brief.
+  ['GET', /^\/api\/deck\/brief$/, (_p, _b, _u, user) => Deck.brief(user)],
+  ['GET', /^\/api\/deck\/broadcasts$/, (_p, _b, _u, user) => Broadcasts.unread(user.username)],
+  ['GET', /^\/api\/deck\/prefs$/, (_p, _b, _u, user) => Deck.getPrefs(user.username)],
+  ['POST', /^\/api\/deck\/prefs$/, (_p, body, _u, user) => Deck.setPrefs(user.username, body)],
+  ['GET', /^\/api\/globe$/, () => Globe.overview()],
+  ['GET', /^\/api\/missions$/, () => Missions.overview()],
+  ['GET', /^\/api\/healthindex$/, () => HealthIndex.overview()],
+  ['GET', /^\/api\/whatif$/, () => WhatIf.overview()],
+  ['GET', /^\/api\/whatif\/run$/, (_p, _b, url) => WhatIf.simulate(Object.fromEntries(url.searchParams))],
+  ['POST', /^\/api\/whatif$/, (_p, body, _u, user) => WhatIf.save({ name: need(body, 'name'), params: body.params || {}, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/whatif\/(\d+)\/remove$/, (p, _b, _u, user) => WhatIf.remove({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/broadcasts$/, () => Broadcasts.overview()],
+  ['GET', /^\/api\/broadcasts\/(\d+)$/, (p) => Broadcasts.get(Number(p[0]))],
+  ['POST', /^\/api\/broadcasts$/, (_p, body, _u, user) => Broadcasts.post({ title: need(body, 'title'), body: body.body || null, level: body.level || 'info', days: body.days ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/broadcasts\/(\d+)\/end$/, (p, _b, _u, user) => Broadcasts.end({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/broadcasts\/(\d+)\/ack$/, (p, _b, _u, user) => Broadcasts.ack({ id: Number(p[0]), username: user.username })],
+
+  // --- Live data: the public services, read through the gate ---
+  ['GET', /^\/api\/livedata$/, () => LiveData.overview()],
+  ['GET', /^\/api\/livedata\/country\/([A-Za-z]{2})$/, (p) => LiveData.country(p[0])],
+  ['GET', /^\/api\/livedata\/convert$/, (_p, _b, url) => LiveData.convert(Object.fromEntries(url.searchParams))],
+  ['GET', /^\/api\/livedata\/quakes$/, () => LiveData.quakes()],
+  ['POST', /^\/api\/livedata\/live$/, (_p, body, _u, user) => (body.on === false ? LiveData.pause({ actor: `human:${user.username}` }) : LiveData.goLive({ actor: `human:${user.username}` }))],
+  ['POST', /^\/api\/livedata\/refresh$/, async (_p, _b, _u, user) => {
+    // A full pass can take half a minute when a service is slow; the page waits ten seconds at most and the rest lands on its own.
+    const pass = LiveData.refreshDue({ actor: `human:${user.username}`, force: true }).catch(() => null);
+    await Promise.race([pass, new Promise((r) => setTimeout(r, 10_000))]);
+    return LiveData.overview();
+  }],
+  ['POST', /^\/api\/livedata\/company$/, (_p, body, _u, user) => LiveData.lookupCompany({ query: need(body, 'query'), lang: body.lang || 'en', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/livedata\/vat$/, (_p, body, _u, user) => LiveData.checkVat({ number: need(body, 'number'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/livedata\/email$/, (_p, body, _u, user) => LiveData.checkEmail({ address: need(body, 'address'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/livedata\/scan$/, (_p, body, _u, user) => LiveData.scanDependencies({ target: body.target || 'alphacore', actor: `human:${user.username}` })],
+
+  // --- The horizon radar, the market atlas, the naming studio ---
+  ['GET', /^\/api\/radar$/, () => Radar.overview()],
+  ['GET', /^\/api\/radar\/(\d+)$/, (p) => Radar.topic(Number(p[0]))],
+  ['POST', /^\/api\/radar$/, (_p, body, _u, user) => Radar.addTopic({ query: need(body, 'query'), wikiTitle: body.wikiTitle || null, lang: body.lang || 'en', note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/radar\/(\d+)$/, (p, body, _u, user) => Radar.updateTopic({ id: Number(p[0]), wikiTitle: body.wikiTitle ?? null, note: body.note, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/radar\/(\d+)\/read$/, (p, _b, _u, user) => Radar.readNow({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/radar\/(\d+)\/archive$/, (p, _b, _u, user) => Radar.archiveTopic({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['GET', /^\/api\/atlas$/, () => Atlas.overview()],
+  ['GET', /^\/api\/atlas\/score$/, (_p, _b, url) => Atlas.score({ region: url.searchParams.get('region') || 'mena', codes: url.searchParams.get('codes'), weights: Object.fromEntries([...url.searchParams].filter(([k]) => k.startsWith('w_')).map(([k, v]) => [k.slice(2), v])) })],
+  ['POST', /^\/api\/atlas\/shortlist$/, (_p, body, _u, user) => Atlas.shortlist({ code: need(body, 'code'), note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/atlas\/shortlist\/([A-Za-z]{2})$/, (p, body, _u, user) => Atlas.setStage({ code: p[0], stage: need(body, 'stage'), note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/atlas\/shortlist\/([A-Za-z]{2})\/remove$/, (p, _b, _u, user) => Atlas.unlist({ code: p[0], actor: `human:${user.username}` })],
+  ['GET', /^\/api\/naming$/, () => Naming.overview()],
+  ['GET', /^\/api\/naming\/variations$/, (_p, _b, url) => ({ variations: Naming.variations(url.searchParams.get('name') || '') })],
+  ['POST', /^\/api\/naming$/, (_p, body, _u, user) => Naming.check({ name: need(body, 'name'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/naming\/(\d+)$/, (p, body, _u, user) => Naming.mark({ id: Number(p[0]), starred: body.starred ?? null, verdict: body.verdict ?? null, note: body.note ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/naming\/(\d+)\/remove$/, (p, _b, _u, user) => Naming.remove({ id: Number(p[0]), actor: `human:${user.username}` })],
+
+  // --- The cap table: shares as ledger rows, options that vest by the calendar ---
+  ['GET', /^\/api\/equity$/, () => Equity.overview()],
+  ['GET', /^\/api\/equity\/round$/, (_p, _b, url) => Equity.modelRound({ ...Object.fromEntries(url.searchParams), convertibles: url.searchParams.get('convertibles') !== 'false' })],
+  ['GET', /^\/api\/equity\/exit$/, (_p, _b, url) => Equity.exitWaterfall({ value: url.searchParams.get('value') })],
+  ['POST', /^\/api\/equity\/holders$/, (_p, body, _u, user) => Equity.addHolder({ name: need(body, 'name'), kind: body.kind || 'other', email: body.email || null, note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/classes$/, (_p, body, _u, user) => Equity.addClass({ name: need(body, 'name'), kind: body.kind || 'common', liqPref: body.liqPref ?? 1, participating: Boolean(body.participating), seniority: body.seniority || 0, originalPrice: body.originalPrice ?? null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/issue$/, (_p, body, _u, user) => Equity.issueShares({ holderId: need(body, 'holderId'), classId: body.classId || null, shares: need(body, 'shares'), price: body.price || 0, issuedOn: body.issuedOn || null, ref: body.ref || null, note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/cancel$/, (_p, body, _u, user) => Equity.cancelShares({ holderId: need(body, 'holderId'), classId: need(body, 'classId'), shares: need(body, 'shares'), note: need(body, 'note'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/pool$/, (_p, body, _u, user) => Equity.setPool({ size: need(body, 'size'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/grants$/, (_p, body, _u, user) => Equity.grantOptions({ holderId: need(body, 'holderId'), shares: need(body, 'shares'), strike: body.strike || 0, grantedOn: body.grantedOn || null, vestMonths: body.vestMonths ?? 48, cliffMonths: body.cliffMonths ?? 12, note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/grants\/(\d+)\/exercise$/, (p, body, _u, user) => Equity.exerciseOptions({ grantId: Number(p[0]), shares: need(body, 'shares'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/grants\/(\d+)\/cancel$/, (p, body, _u, user) => Equity.cancelGrant({ grantId: Number(p[0]), note: need(body, 'note'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/convertibles$/, (_p, body, _u, user) => Equity.addConvertible({ holderId: need(body, 'holderId'), kind: body.kind || 'safe', principal: need(body, 'principal'), cap: body.cap ?? null, discountPct: body.discountPct || 0, interestPct: body.interestPct || 0, issuedOn: body.issuedOn || null, note: body.note || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/scenarios$/, (_p, body, _u, user) => Equity.saveScenario({ name: need(body, 'name'), params: body.params || {}, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/equity\/scenarios\/(\d+)\/remove$/, (p, _b, _u, user) => Equity.removeScenario({ id: Number(p[0]), actor: `human:${user.username}` })],
 
   // --- Insider risk: patterns in the record, for the security team ---
   ['GET', /^\/api\/insider$/, () => Insider.overview()],
@@ -2764,6 +2843,26 @@ function permFor(m, path) {
   // Insider risk is not under *.view: alerts about colleagues are the security team's to read.
   if (path.startsWith('/api/insider')) return m === 'GET' ? 'insider.watch' : 'insider.manage';
   if (path.startsWith('/api/selfimprove')) return m === 'GET' ? 'selfimprove.view' : 'selfimprove.manage';
+  // A person's own preferences and brief are theirs; reading the home page is the only right they need.
+  if (path.startsWith('/api/deck/')) return 'dashboard.view';
+  if (path.startsWith('/api/globe')) return 'globe.view';
+  if (path.startsWith('/api/missions')) return 'missions.view';
+  if (path.startsWith('/api/healthindex')) return 'healthindex.view';
+  // Running a scenario changes nothing, so it is a read; keeping one is not.
+  if (path.startsWith('/api/whatif')) return m === 'GET' ? 'whatif.view' : 'whatif.manage';
+  // Acknowledging a broadcast is reading it.
+  if (/^\/api\/broadcasts\/\d+\/ack$/.test(path)) return 'broadcasts.view';
+  if (path.startsWith('/api/broadcasts')) return m === 'GET' ? 'broadcasts.view' : 'broadcasts.manage';
+  // Switching the clock on is a decision; a lookup a person asks for is a read that leaves the machine.
+  if (path === '/api/livedata/live' || path === '/api/livedata/refresh') return 'livedata.manage';
+  if (path.startsWith('/api/livedata')) return m === 'GET' ? 'livedata.view' : 'livedata.lookup';
+  // Watching, comparing and naming read the world and change nothing in it; deciding is the manage power.
+  if (path.startsWith('/api/radar')) return m === 'GET' ? 'radar.view' : 'radar.manage';
+  if (path.startsWith('/api/atlas')) return m === 'GET' ? 'atlas.view' : 'atlas.manage';
+  if (path.startsWith('/api/naming')) return m === 'GET' ? 'naming.view' : 'naming.manage';
+  // Modelling a round or an exit changes nothing; who owns the company is a separate power.
+  if (/^\/api\/equity\/(holders|classes|scenarios)/.test(path) && m !== 'GET') return 'equity.manage';
+  if (path.startsWith('/api/equity')) return m === 'GET' ? 'equity.view' : 'equity.issue';
   if (path.startsWith('/api/documents')) return null;
   if (path.startsWith('/api/remit')) return m === 'GET' ? 'remit.view' : (/\/(approve|release|ordering-bic)$/.test(path) ? 'remit.release' : 'remit.manage');
   if (path === '/api/learning') return 'learning.view';

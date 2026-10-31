@@ -47,6 +47,9 @@ const ICON = {
   'e-seam': '<circle cx="6.5" cy="12" r="3"/><circle cx="17.5" cy="12" r="3"/><path d="M9.5 12h5"/>',
   all: '<path d="M4 5h6v6H4zM14 5h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
   atlas: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5"/>',
+  missions: '<path d="M5 20V5"/><path d="M5 5h11l-2 3.5 2 3.5H5"/><circle cx="17.5" cy="18" r="2.5"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="3.6" ry="8.5"/><path d="M3.8 9h16.4M3.8 15h16.4"/>',
+  pin: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
 };
 const ico = (id) => `<svg class="sx-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICON[id] || ICON.all}</svg>`;
 const CHEV = '<svg class="sx-chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>';
@@ -109,6 +112,9 @@ function buildNav() {
     ${item('#/approvals', 'waiting', t('Waiting on you'), '<span class="sx-badge" id="nav-waiting"></span>', 'data-div="approvals-top"')}
     ${item('#/ask', 'ask', t('Ask the company'))}
     ${item('#/mywork', 'mywork', t('My work'), '<span class="sx-badge ai" id="nav-mywork"></span>')}
+    ${item('#/missions', 'missions', t('Missions'), '<span class="sx-badge ai" id="nav-missions"></span>')}
+    ${item('#/globe', 'globe', t('The globe'))}
+    <div id="sx-pins"></div>
     ${core1 ? `<div class="sx-sec"><span>${esc(t('AI core'))}</span></div>${core1}` : ''}
     ${core2 ? `<div class="sx-sec enterprise"><span>${esc(t('Enterprise core'))}</span></div>${core2}` : ''}
     <div class="sx-sec"><span>${esc(t('Everything'))}</span></div>
@@ -228,8 +234,13 @@ function openPalette() {
   palFilter('');
 }
 function closePalette() { $('#palette').hidden = true; }
+/** Commands other modules add: { label, kind, run, perm?, keys? }. Run, not navigated to. */
+const COMMANDS = [];
+export function addPaletteCommands(list) { COMMANDS.push(...list); }
+export { openPalette };
 function go(hit) {
   closePalette();
+  if (hit.run) { hit.run(); return; }
   if (hit.ask) {
     try { sessionStorage.setItem('alphacore-ask', hit.ask); } catch { /* fine */ }
     if (location.hash === '#/ask') navigate(); else location.hash = '#/ask';
@@ -241,7 +252,8 @@ function palFilter(qv) {
   const q = qv.trim().toLowerCase();
   const depts = visibleSections().map((s) => ({ href: s.href, title: sectionName(s.id, s.label), sub: t(SURFACE_LABEL[surfaceOfSection(s.id)] || ''), hay: `${s.label} ${sectionName(s.id, '')} ${s.id} ${s.hint || ''}`.toLowerCase() }));
   const acts = ACTIONS.filter((a) => !a.perm || hasPermC(a.perm)).map((a) => ({ href: a.href, title: t(a.label), sub: t(a.kind), hay: `${a.label} ${t(a.label)}`.toLowerCase() }));
-  const pool = [...acts, ...depts];
+  const cmds = COMMANDS.filter((a) => !a.perm || hasPermC(a.perm)).map((a) => ({ run: a.run, title: t(a.label), sub: `${t(a.kind || 'Do')}${a.keys ? ` · ${a.keys}` : ''}`, hay: `${a.label} ${t(a.label)}`.toLowerCase() }));
+  const pool = [...cmds, ...acts, ...depts];
   palHits = (!q ? pool : pool.filter((x) => x.hay.includes(q))).slice(0, 30);
   if (q.length > 2) palHits.push({ ask: qv.trim(), title: `${t('Ask the company')}: “${qv.trim()}”`, sub: t('Ask') });
   palIndex = 0;
@@ -498,6 +510,10 @@ export function currentRoute() {
  * The sweep found it because a sweep is a thousand navigations in a row.
  */
 export let navGeneration = 0;
+/** A render that a navigation caused, as opposed to a page refreshing itself. */
+let freshRender = false;
+const renderHooks = [];
+export function onRender(fn) { renderHooks.push(fn); }
 export async function navigate() {
   const gen = ++navGeneration;
   clearInterval(pollTimer);
@@ -526,6 +542,7 @@ export async function navigate() {
     requestAnimationFrame(() => view.focus({ preventScroll: true }));
   }
   view.innerHTML = `<div class="empty">${esc(t('Loading…'))}</div>`;
+  freshRender = true;
   try {
     await r.render(arg);
     // Somebody navigated while this was fetching. Whatever it drew belongs to
@@ -629,6 +646,9 @@ export function afterRender() {
     table.replaceWith(box);
     box.appendChild(table);
   }
+  const fresh = freshRender;
+  freshRender = false;
+  for (const fn of renderHooks) { try { fn(view, fresh); } catch { /* a courtesy must not break the page */ } }
 }
 window.addEventListener('hashchange', navigate);
 

@@ -32,6 +32,11 @@ import { renderMarkets, renderSymbol, renderPortfolio, renderNewsroom, renderLoc
 import { renderLearning } from '/departments/learning.js';
 import { renderDocument, renderAssuranceMap } from '/departments/assurance.js';
 import { renderProcRuns, renderIntake, renderMinutes, renderWhatsApp, renderPortal, renderBoardPack, renderInsider, renderSelfImprove } from '/departments/workday.js';
+import { renderGlobe, renderMissions, renderHealthIndex, renderWhatIf, renderBroadcasts } from '/departments/command.js';
+import { renderLiveData, renderEquity } from '/departments/horizon.js';
+import { renderRadar, renderAtlas, renderNaming } from '/departments/frontier.js';
+import { initMotion } from '/core/motion.js';
+import { startCommand } from '/core/command.js';
 import { renderPolicies, renderIso, renderInternalAudit, renderTransformation, renderProduction, renderOpscenter, renderStrategy, renderInsurance, renderAml, renderRemit } from '/departments/enterprise.js';
 import { renderAcademy, renderAsk, renderDecisionDetail, renderDepartments, renderDesignDoc, renderDisputes, renderGraph, renderJourneyDetail, renderMemory, renderOffices, renderOrg, renderOverview, renderOwner, renderPackageSection, renderPeople, renderRecruiting, renderRequestDetail, renderSkills, renderSociety, renderSurfaceRoute, renderTrust, renderWorkstreamDetail } from '/departments/people.js';
 
@@ -496,6 +501,17 @@ const ROUTE_TABLE = {
   insider: { title: 'Insider risk — patterns worth a second look', render: renderInsider },
   // The map polls itself in place; a page poll would tear it down mid-flight.
   selfimprove: { title: 'Self-improvement loop — the Grader, the Coach, and what was kept', render: renderSelfImprove },
+  // The globe turns on its own canvas; a page poll would rebuild it, so it has none.
+  globe: { title: 'The globe — where the company touches the world', render: renderGlobe },
+  missions: { title: 'Missions — the journeys a company takes', render: renderMissions, poll: 30000 },
+  healthindex: { title: 'Health index — one number, taken apart', render: renderHealthIndex, poll: 60000 },
+  whatif: { title: 'What if — the months ahead, if something changes', render: renderWhatIf },
+  broadcasts: { title: 'Broadcasts — one message to everybody', render: renderBroadcasts, poll: 30000 },
+  livedata: { title: 'Live data — the world outside, read through the gate', render: renderLiveData },
+  equity: { title: 'Cap table — who owns the company', render: renderEquity },
+  radar: { title: 'Horizon radar — what the world is doing about what you watch', render: renderRadar },
+  atlas: { title: 'Market atlas — where to go next', render: renderAtlas },
+  naming: { title: 'Naming studio — is the name still free', render: renderNaming },
 };
 
 registerRoutes(ROUTE_TABLE);
@@ -949,8 +965,17 @@ function paintLive(state, entries = []) {
     <span class="lb-dot"></span>
     <span class="lb-txt">${state === 'on' ? esc(t('live')) : esc(t('reconnecting…'))}</span>
     ${others.length ? `<span class="lb-who">${others.slice(0, 4).map((w) => `<b title="${esc(w.pages.join(', '))}">${esc(w.who)}</b>`).join(' · ')}${others.length > 4 ? ` +${others.length - 4}` : ''}</span>` : ''}
-    ${entries.length ? `<span class="lb-feed">${entries.slice(-2).map((e) => `<span class="mono">${esc(e.action)}</span> <span class="lb-actor">${esc(e.actor_id)}</span>`).join(' · ')}</span>` : ''}`;
+    ${entries.length ? `<span class="lb-feed">${entries.slice(-1).map((e) => `<span>${esc(liveAction(e.action))}</span> <span class="lb-actor">${esc(liveActor(e.actor_id))}</span>`).join('')}</span>` : ''}`;
 }
+/** "graph.rebuilt" is the chain's name for it; a person reads "graph rebuilt". */
+const liveAction = (a) => t(String(a || '').replace(/[._]+/g, ' ').trim());
+/** Who did it, as a person would say it: a name, an employee's id, or the system. */
+const liveActor = (id) => {
+  const s = String(id || '');
+  if (s.startsWith('human:')) return s.slice(6);
+  if (s.startsWith('agent:')) return s.slice(6);
+  return t('the system');
+};
 
 function connectLive() {
   const token = localStorage.getItem(TOKEN_KEY);
@@ -1012,6 +1037,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // boot — authenticate first, then bring up the console.
 async function boot() {
   initShell();
+  initMotion();
   try {
     const me = await api('/api/auth/me');
     // A live session on an account that never chose its own password gets the
@@ -1024,6 +1050,7 @@ async function boot() {
     refreshShell();
     navigate();
     connectLive();
+    startCommand();
   } catch (e) {
     showLogin();
     // Installed on a phone, this screen is also what you get in a lift or on a

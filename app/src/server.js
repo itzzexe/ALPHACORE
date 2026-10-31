@@ -146,6 +146,9 @@ import { lateSweep as processLateSweep } from './processruns.js';
 import { sweep as insiderSweep } from './insider.js';
 import { monthlyTick as boardPackTick } from './boardpack.js';
 import { syncSelfImprove } from './selfimprove.js';
+import { snapshotToday as snapshotHealth } from './healthindex.js';
+import { refreshDue as refreshLiveData } from './livedata.js';
+import { refresh as refreshRadar } from './radar.js';
 import './deploy.js';
 
 seedAgents();
@@ -377,6 +380,15 @@ setInterval(() => { learningTick().catch(() => { /* next tick */ }); }, 5 * 60_0
 setInterval(() => { try { syncDraftJobs(); } catch { /* next tick */ } }, 5000).unref?.();
 // The self-improvement loop moves when its runs finish: grade, judge, coach, run again.
 setInterval(() => { try { syncSelfImprove(); } catch { /* next tick */ } }, 5000).unref?.();
+// One reading of the health index a day, so its trend is what it said then. Cheap to ask hourly; it writes once.
+setTimeout(() => { try { snapshotHealth(); } catch { /* tomorrow */ } }, 30000).unref?.();
+setInterval(() => { try { snapshotHealth(); } catch { /* next hour */ } }, 3600000).unref?.();
+// Live data looks every five minutes; each service is asked only once its last answer has aged out.
+setTimeout(() => { refreshLiveData().catch(() => { /* next pass */ }); }, 20000).unref?.();
+setInterval(() => { refreshLiveData().catch(() => { /* next pass */ }); }, 5 * 60_000).unref?.();
+// The radar reads its subjects after the ground has been read; each source is asked only when it has aged out.
+setInterval(() => { refreshRadar().catch(() => { /* next pass */ }); }, 20 * 60_000).unref?.();
+setTimeout(() => { refreshRadar().catch(() => { /* next pass */ }); }, 90_000).unref?.();
 setInterval(() => { try { insuranceRenewals(); } catch { /* next hour */ } }, 60 * 60_000).unref?.();
 // The sanctions lists, once a day when switched on; whoever is on the books and
 // every payment not yet released is screened again against what changed.

@@ -161,6 +161,9 @@ export async function attempt({
   // the log, or the log becomes a second, unerasable home for it. The caller
   // says so explicitly; the verdict, the intent hash and the payload shape
   // are recorded either way, so the evidence of what happened survives.
+  // A string instead of false says where the answer is kept instead — for a
+  // caller that stores every answer itself, so the log does not hold a second
+  // copy of each one forever.
   logResult = true,
 }) {
   const conn = one('SELECT * FROM connectors WHERE id = ?', connectorId);
@@ -267,7 +270,8 @@ export async function attempt({
   try {
     const result = await call();
     exec("UPDATE egress_log SET result = ? WHERE id = ?",
-      JSON.stringify(logResult ? redact(result ?? { ok: true }) : { logged: false, why: 'the answer may contain sealed personal content' }), id);
+      JSON.stringify(logResult === true ? redact(result ?? { ok: true })
+        : { logged: false, why: typeof logResult === 'string' ? logResult : 'the answer may contain sealed personal content' }), id);
     exec("UPDATE connectors SET last_call = datetime('now'), health = 'ok' WHERE id = ?", connectorId);
     certify({ connectorId, capability, verdict: 'allowed', outcome: 'ok', egressId: id });
     return { verdict: 'allowed', id, result };

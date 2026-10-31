@@ -13,6 +13,143 @@ The full reasoning for any change is in its commit message; this is the index.
 
 ## Unreleased
 
+### The frontier: a radar, an atlas of markets, a naming studio, and the sky over the company
+
+- **The horizon radar.** Put a subject on it — a technology, a market, a
+  competitor, an idea — and it reads, every few hours, how much attention the
+  public pays it (ninety days of Wikipedia page views), what builders posted
+  about it this month (Hacker News), the newest research (arXiv), the
+  open-source projects started on it this quarter (GitHub) and the companies
+  that named it in this month's "Who is hiring?" thread. Signals are computed
+  from those reads by thresholds written in the module — attention up by half
+  in a week (below twenty readers a day a ratio is noise and is not counted),
+  a story with 150 points this week, a project with 500 stars in its first
+  quarter, twenty companies hiring — kept once per subject, kind and day, and
+  attention doubling reaches the notification tray.
+- **The market atlas.** All 217 economies, twelve World Bank figures each,
+  including the governance estimates (control of corruption, regulatory
+  quality, political stability). Six pillars — size, growth, wealth, digital
+  reach, stability, proximity (distance from home, and whether the market
+  speaks Arabic) — weighted by the founder with sliders, ranked by region
+  (the Gulf, MENA, the Arabic-speaking world, Africa, Europe, Asia, the
+  Americas, the G20) or across every economy. Each of the top three is drawn
+  as a hexagon of its pillars over home's dashed outline. A figure the World
+  Bank does not have is left out of a pillar, not counted as zero. Markets go
+  onto a shortlist and along stages (watching, researching, entering,
+  operating), a person's act on the chain, and are ringed on the globe.
+- **The naming studio.** Whether a name is free in eight domain zones — asked
+  of each registry's own RDAP server, since rdap.org refuses after a few names
+  in a row — as a GitHub handle and as an npm package, and whether it is
+  already a famous thing. A registry's 404 is free, a refusal is "cannot say",
+  never free. Variations are suggested without asking anybody; names are kept
+  side by side with a star, a verdict and a note.
+- **The ground and the sky.** Live data now also reads the air at each place
+  (US AQI), natural events still open from NASA (wildfires, storms,
+  volcanoes, floods — flagged within 500 km of a capital where the company
+  works), the day at home from Aladhan (the Hijri date, the six prayer times
+  with the next one lit, and how many days until Ramadan), the International
+  Space Station's next orbit, and the Hacker News front page. The globe draws
+  each kind of natural event in its own shape, the station moving along its
+  real track between reads, and the atlas shortlist ringed; the home page's
+  strip gains the next prayer, the Ramadan countdown and the air at home.
+- **GitHub's keyless limit.** Sixty reads an hour is soon gone; if the company
+  has connected GitHub, the radar and the naming studio send its token to
+  api.github.com and get five thousand.
+
+### Horizon: the company reads the world, and knows who owns it
+
+- **Live data.** Thirteen free public services, picked from the public-apis
+  catalogue because a decision here changes with each answer, are now read
+  through the gate on a clock: exchange rates for every currency including the
+  dinar and the riyal (currency-api, with the ECB's series from Frankfurter for
+  the ninety-day trend), public holidays for each country the company works in
+  (Nager.Date), the weather now and for three days at each of those places
+  (Open-Meteo), capital, income group and six economic indicators from the
+  World Bank, magnitude 4.5+ earthquakes this week from USGS with the ones near
+  a place the company works flagged, and whether the Node.js the platform runs
+  on still gets security fixes (endoflife.date). A person can also ask who a
+  company is (GLEIF's legal-entity register and Wikipedia), whether an EU VAT
+  number is real (VIES via VATComply), whether a mail address is a throwaway
+  (Kickbox), and whether any package an app runs has a published advisory
+  (OSV) — for this platform or any factory project, from its lock file. It is
+  off until a person switches it on; every read is an egress row, fenced to the
+  named hosts by the connector's allowlist; every answer is kept with its time,
+  and a failure keeps the last good answer. When the main rates service is down
+  the ECB's rates are used and the currencies it does not publish keep their
+  last rate, named as carried over — the dinar no longer vanishes.
+- **The world on the home page and the globe.** A live strip under the deck:
+  the home currency and the majors with their ninety-day move, the weather at
+  home, the next day off, and earthquakes near the company's places. The globe
+  draws this week's earthquakes as ripples, the temperature beside each place,
+  and the point where the sun is overhead; picking a country opens a card with
+  its capital, local time, weather, currency, growth, inflation, population,
+  next holiday and any quake near it.
+- **The cap table.** Who owns the company, as a ledger: shares issued and
+  cancelled as rows that are never edited (a correction is a negative row with
+  its reason), share classes with a liquidation preference, participation and
+  seniority, an option pool that cannot be granted past its size, grants that
+  vest by the calendar with a cliff, exercise into common at the strike, SAFEs
+  and convertible notes with a cap, a discount and simple interest. Two models
+  that change nothing: a priced round (pre-money, new money, the pool after the
+  round, SAFEs converting at the better of the cap and the discount — solved by
+  iteration, so the investor's share is exactly investment over post-money) and
+  an exit waterfall (preferred first and most senior first, each
+  non-participating class taking the better of its preference or converting).
+  Issuing, granting, exercising and cancelling are a person's acts with their
+  own permission, `equity.issue`, and every one is on the chain.
+- **Instrument shapes.** A ring of light that travels the hero and the live
+  strip, corner ticks on every figure, a light that follows the pointer across
+  the panel it is over, hexagons for measured things (a magnitude, a step), a
+  radar sweep behind the globe, data that draws itself in — the ownership ring,
+  vesting bars, the dilution bars — and blocks below the fold that arrive when
+  scrolled to. All of it stops for anybody who asked for less motion.
+- **Arabic for every catalogue description.** The line under each page's
+  title — what a department is for — was English in the Arabic console for a
+  hundred and sixty-seven departments. It is Arabic now.
+
+### Meridian: the console becomes a bridge, and a company can be run from it end to end
+
+- **A new identity.** The whole console is redrawn as mission control for a
+  company that spans the planet: a deep orbital ground after dark,
+  high-altitude daylight by day, glass panels with a hairline that catches the
+  light, instrument-panel type, and the two colours the product is about —
+  ion for the machines, solar for people — kept as the only loud ones. It is
+  one sheet (`public/meridian.css`) loaded last that redefines the tokens every
+  page already reads, so all two hundred pages changed at once, in both themes
+  and both languages. Nothing is fetched to do it.
+- **Motion that says something.** A thread across the top while a page is on
+  its way; the blocks of a page arriving in reading order; figures counting up
+  to their value — on a navigation only, never on a page refreshing itself,
+  and none of it for anyone whose system asks for less motion.
+- **The command deck.** Home is now a brief written from the record (what
+  waits, what is overdue, what failed, what is due), a living globe, the
+  health index, the next mission and the person's own pinned places. It is
+  mounted once and updated in place, so the globe keeps turning.
+- **The globe.** Every country the record touches — counterparties,
+  beneficiaries, researched companies, phone numbers — lit and sized; every
+  payment message an arc from home with a comet on it; the sun where it really
+  is, the terminator drawn, the night side glowing like cities from orbit;
+  local clocks where the company deals. A canvas and a table of centroids:
+  no map tiles, no coastline file.
+- **Missions.** Five journeys — lay the foundations, run the money, put the
+  workforce to work, govern it, reach the world — twenty-two steps, each a
+  question put to the record, so a step is done when the company has done it.
+- **The health index.** One number, taken apart into money, operations,
+  people, the workforce and governance; every reading shown with its score and
+  where it lives; a pillar with nothing to read left out rather than counted as
+  perfect; one snapshot a day for the trend.
+- **What if.** Revenue, growth, costs, hires, a one-off and the horizon as
+  levers over the cash in the record; month by month, runway and break-even;
+  scenarios kept with the baseline they were run against. Arithmetic, never
+  applied to the books.
+- **Broadcasts.** One message to everybody, on top of every page until each
+  person has read it, with who has.
+- **Setup, capture, keys, pins, wall.** A first-run journey (name, country,
+  currency, what matters first); capture a task, risk, note, broadcast or
+  question from any page (N); g-then-a-letter to go anywhere and ? for the
+  list; pin any page to the sidebar with the star (F); and wall mode
+  (Shift W), the console as an office screen cycling chosen pages.
+
 ### The workforce improves itself, and you can watch it happen
 
 - **The self-improvement loop.** A person starts a loop over the employees

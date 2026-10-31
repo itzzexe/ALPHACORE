@@ -59,6 +59,16 @@ app/public/components/qr.js            QR codes drawn in the console (no library
 app/src/processruns.js   the working day: processruns, companyask, intake (+ intake/extract.js), minutes, whatsapp, portal,
                          boardpack, insider; pages in public/departments/workday.js; public/portal.html is the outsiders' page
 app/src/localtools.js    tesseract / pdftoppm / ffmpeg / whisper run by name, no shell; tests replace `engines` in intake.js and minutes.js
+app/public/meridian.css  the identity: loaded last, redefines the --sx-* tokens every page reads, then the shell and components
+app/public/core/command.js  pins, broadcasts banner, capture (N), keys (g+letter, ?), wall mode, first-run setup; motion.js the movement
+app/public/views/globe.js   the canvas globe (components/geo.js holds centroids and zones; names come from Intl.DisplayNames)
+app/src/deck.js          the home page's own reads: /api/deck/brief and /api/deck/prefs; globe, missions, healthindex, whatif, broadcasts beside it
+app/src/livedata.js     live data: connectors/opendata.js reads 13 keyless public services through the gate; od_cache
+                         keeps each answer with its time; public/departments/horizon.js holds its page and the cap table's
+app/src/radar.js         the horizon radar; atlas.js the market atlas; naming.js the naming studio — all read through
+                         livedata.pull, whose second set of services is connectors/openworld.js; pages in public/departments/frontier.js
+app/src/equity.js        the cap table: eq_ledger rows (a correction is a negative row), grants vest by the calendar,
+                         modelRound / exitWaterfall are arithmetic; issuing is `equity.issue`, human-only
 app/src/selfimprove.js   the self-improvement loop (si_* tables, playbook_versions); the Coach is AGT-COACH-001, mock answers [COACH];
                          public/views/loopmap.js draws it — the Company map's first tab and #/selfimprove
 app/public/app.js        the route table for the console (key → { title, render, poll })
@@ -130,5 +140,16 @@ app/test/                node:test files, one per area
 - A portal visitor is audited as actor type `external` (`portal:<id>`): neither staff nor the system.
 - The coach's rules live in a `## Rules from the coach` section placed *before* the playbook's first other heading:
   recall hands an employee only the first 2,600 characters of its playbook.
+- Page entrance motion runs only when `afterRender` follows a navigation (`onRender(fn)` receives `fresh`): a page that
+  polls must not jump every few seconds. Home mounts the deck once and re-renders only `#hq-rest` on a poll.
+- New colours belong in `meridian.css` as tokens defined for both `:root` and `:root[data-theme="dark"]`.
+- Live data is off until a person switches it on (`livedata.manage`). Pages and the home brief read the cache only —
+  a page that called a public service on render would make the console wait on the internet. Tests replace
+  `globalThis.fetch`; nothing in `npm test` reaches the network.
+- Domain checks ask each registry's own RDAP server (`RDAP` in openworld.js): rdap.org answers 429 after a few names.
+  A registry's 404 is free; anything else is "cannot say" — never report it as free.
+- The hiring search on HN Algolia forgives typos; postings are kept only if every word of the subject is in them.
+- The ECB fallback for exchange rates has no dinar or riyal: `MERGE.fx` in livedata.js carries the missing currencies
+  over from the last answer. Do not store a fallback answer whole.
 - The workforce map updates itself in place; `renderOverview` returns early while it is mounted so the page poll
   does not rebuild it (and restart every particle) every five seconds.

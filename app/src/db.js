@@ -5288,6 +5288,183 @@ CREATE TABLE IF NOT EXISTS insider_alerts (
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (rule, subject, key)
 );
+
+-- The health index, one row a day, so the trend is the record's and not a recomputation.
+CREATE TABLE IF NOT EXISTS health_snapshots (
+  day         TEXT PRIMARY KEY,                       -- YYYY-MM-DD (UTC)
+  score       INTEGER NOT NULL,
+  pillars     TEXT NOT NULL,                          -- JSON {money, operations, people, ai, governance}
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- What-if: a scenario somebody wanted to keep, with the baseline it was run against.
+CREATE TABLE IF NOT EXISTS whatif_scenarios (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  params      TEXT NOT NULL,
+  baseline    TEXT NOT NULL,
+  result      TEXT NOT NULL,                          -- the summary, not the curve
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Broadcasts: one message to everybody, and who has read it.
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  body        TEXT,
+  level       TEXT NOT NULL DEFAULT 'info',           -- info|important|critical
+  state       TEXT NOT NULL DEFAULT 'live',           -- live|ended
+  expires_at  TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_by    TEXT,
+  ended_at    TEXT
+);
+CREATE TABLE IF NOT EXISTS broadcast_acks (
+  broadcast_id INTEGER NOT NULL REFERENCES broadcasts(id),
+  username     TEXT NOT NULL,
+  acked_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (broadcast_id, username)
+);
+
+-- A person's own console: pinned places, whether they have been through setup.
+CREATE TABLE IF NOT EXISTS user_prefs (
+  username    TEXT PRIMARY KEY,
+  prefs       TEXT NOT NULL DEFAULT '{}',
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Live data: the last answer from each public service, and the last time asking failed.
+CREATE TABLE IF NOT EXISTS od_cache (
+  source      TEXT NOT NULL,                          -- fx|holidays|weather|countries|indicators|quakes|eol|lei|wiki|vat|mail|osv|fxseries
+  key         TEXT NOT NULL,
+  payload     TEXT,                                   -- JSON; NULL until a first answer
+  error       TEXT,                                   -- the last try's failure; cleared by a success
+  fetched_at  TEXT,
+  tried_at    TEXT,
+  PRIMARY KEY (source, key)
+);
+
+-- The cap table. Shares move only as ledger rows; a correction is a negative row with its reason.
+CREATE TABLE IF NOT EXISTS eq_holders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'other',          -- founder|employee|investor|advisor|other
+  email       TEXT,
+  note        TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS eq_classes (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL UNIQUE,
+  kind           TEXT NOT NULL DEFAULT 'common',      -- common|preferred
+  liq_pref       REAL NOT NULL DEFAULT 0,             -- multiple of the price paid, preferred only
+  participating  INTEGER NOT NULL DEFAULT 0,
+  seniority      INTEGER NOT NULL DEFAULT 0,          -- higher is paid first at an exit
+  original_price REAL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS eq_ledger (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  holder_id   INTEGER NOT NULL REFERENCES eq_holders(id),
+  class_id    INTEGER NOT NULL REFERENCES eq_classes(id),
+  kind        TEXT NOT NULL,                          -- issue|exercise|cancel
+  shares      INTEGER NOT NULL,                       -- negative for a cancellation
+  price       REAL NOT NULL DEFAULT 0,
+  on_day      TEXT NOT NULL,
+  ref         TEXT,                                   -- the board resolution, the grant
+  note        TEXT,
+  actor       TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS eq_grants (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  holder_id     INTEGER NOT NULL REFERENCES eq_holders(id),
+  shares        INTEGER NOT NULL,
+  strike        REAL NOT NULL DEFAULT 0,
+  granted_on    TEXT NOT NULL,
+  vest_months   INTEGER NOT NULL DEFAULT 48,
+  cliff_months  INTEGER NOT NULL DEFAULT 12,
+  exercised     INTEGER NOT NULL DEFAULT 0,
+  state         TEXT NOT NULL DEFAULT 'active',       -- active|cancelled
+  cancelled_on  TEXT,
+  note          TEXT,
+  actor         TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS eq_convertibles (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  holder_id     INTEGER NOT NULL REFERENCES eq_holders(id),
+  kind          TEXT NOT NULL DEFAULT 'safe',         -- safe|note
+  principal     REAL NOT NULL,
+  cap           REAL,
+  discount_pct  REAL NOT NULL DEFAULT 0,
+  interest_pct  REAL NOT NULL DEFAULT 0,
+  issued_on     TEXT NOT NULL,
+  state         TEXT NOT NULL DEFAULT 'open',         -- open|converted|cancelled
+  note          TEXT,
+  actor         TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS eq_meta (
+  k  TEXT PRIMARY KEY,
+  v  TEXT
+);
+CREATE TABLE IF NOT EXISTS radar_topics (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  query       TEXT NOT NULL,
+  wiki_title  TEXT,
+  lang        TEXT NOT NULL DEFAULT 'en',
+  note        TEXT,
+  state       TEXT NOT NULL DEFAULT 'watching',       -- watching|archived
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- A change worth telling somebody about: one per subject, kind and day.
+CREATE TABLE IF NOT EXISTS radar_signals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic_id    INTEGER NOT NULL REFERENCES radar_topics(id),
+  kind        TEXT NOT NULL,                          -- attention.rising|attention.falling|stories.hot|repos.breakout|jobs.demand
+  day         TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  strength    REAL,
+  payload     TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (topic_id, kind, day)
+);
+-- The market atlas: markets a person is considering, and how far along.
+CREATE TABLE IF NOT EXISTS atlas_shortlist (
+  code        TEXT PRIMARY KEY,
+  stage       TEXT NOT NULL DEFAULT 'watching',       -- watching|researching|entering|operating|dropped
+  note        TEXT,
+  added_by    TEXT NOT NULL,
+  added_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT
+);
+-- The naming studio: a name, where it was free when asked, and what a person decided.
+CREATE TABLE IF NOT EXISTS naming_checks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  label       TEXT NOT NULL UNIQUE,
+  results     TEXT NOT NULL,
+  score       INTEGER,
+  starred     INTEGER NOT NULL DEFAULT 0,
+  verdict     TEXT,
+  note        TEXT,
+  checked_by  TEXT NOT NULL,
+  checked_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS eq_scenarios (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'round',          -- round|exit
+  params      TEXT NOT NULL,
+  result      TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
 /**

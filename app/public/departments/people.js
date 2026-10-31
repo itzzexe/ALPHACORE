@@ -655,7 +655,7 @@ export async function renderOverview() {
         <a class="chip chip-ember" style="text-decoration:none" href="#/map2">${esc(t('The seam, in detail'))} →</a>
       </span>
     </div>
-    <div ${tab === 'map' ? '' : 'hidden'}>
+    <div class="atlas-stage" ${tab === 'map' ? '' : 'hidden'}>
       ${mapData ? buildMap(mapData) : buildSystemMap(s, prov, agentsList, chain, extra)}
       <div class="map-legend">${esc(t(here
         ? 'One district, and the departments inside it. Each mark is a department; a filled one holds records, a hollow one is declared and still empty. The arrows walk you round the rim.'
@@ -668,32 +668,32 @@ export async function renderOverview() {
   <div ${tab === 'dashboards' ? '' : 'hidden'}>
   <div class="grid grid-4">
     <div class="panel tile">
-      <div class="panel-title">Month spend</div>
+      <div class="panel-title">${esc(t('Month spend'))}</div>
       <div class="big">${esc(money(s.spend.monthUsd))}</div>
-      <div class="sub">cap ${esc(money(s.spend.companyCapUsd))} · ${monthPct.toFixed(1)}%</div>
+      <div class="sub">${esc(t('cap'))} ${esc(money(s.spend.companyCapUsd))} · ${monthPct.toFixed(1)}%</div>
       <div class="meter"><div class="meter-track"><div class="meter-fill ${monthPct > 80 ? 'hot' : ''}" style="width:${monthPct}%"></div></div></div>
     </div>
     <div class="panel tile tile-warn">
-      <div class="panel-title">Governance pool · ≤5% rule</div>
+      <div class="panel-title">${esc(t('Governance pool · ≤5% rule'))}</div>
       <div class="big">${esc(money(s.spend.governanceUsd))}</div>
-      <div class="sub">cap ${esc(money(s.spend.governanceCapUsd))} · ${govPct.toFixed(1)}%</div>
+      <div class="sub">${esc(t('cap'))} ${esc(money(s.spend.governanceCapUsd))} · ${govPct.toFixed(1)}%</div>
       <div class="meter"><div class="meter-track"><div class="meter-fill ${govPct > 80 ? 'hot' : ''}" style="width:${govPct}%"></div></div></div>
     </div>
     <div class="panel tile tile-steel">
-      <div class="panel-title">Today</div>
+      <div class="panel-title">${esc(t('Today'))}</div>
       <div class="big">${esc(money(s.spend.todayUsd))}</div>
-      <div class="sub">${s.spend.todayCalls} model calls</div>
+      <div class="sub">${s.spend.todayCalls} ${esc(t('model calls'))}</div>
     </div>
     <div class="panel tile ${s.awaitingHuman ? 'tile-warn' : ''}">
-      <div class="panel-title">Awaiting human</div>
+      <div class="panel-title">${esc(t('Awaiting human'))}</div>
       <div class="big">${s.awaitingHuman}</div>
-      <div class="sub"><a href="#/gate" style="color:var(--warn)">open the gate queue →</a></div>
+      <div class="sub"><a href="#/gate" style="color:var(--warn)">${esc(t('open the gate queue'))} →</a></div>
     </div>
   </div>
 
   <div class="grid grid-2">
     <div class="panel">
-      <div class="panel-title">Spend · last 14 days</div>
+      <div class="panel-title">${esc(t('Spend · last 14 days'))}</div>
       <svg aria-hidden="true" focusable="false" class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Daily spend sparkline">
         <polyline points="${points}" fill="none" stroke="var(--ember)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
         <polygon points="0,100 ${points} 100,100" fill="rgba(255,107,44,0.08)"/>
@@ -701,36 +701,36 @@ export async function renderOverview() {
       <div class="meter-label"><span>${esc(s.spendSeries[0]?.d || '')}</span><span>${esc(s.spendSeries.at(-1)?.d || '')}</span></div>
     </div>
     <div class="panel">
-      <div class="panel-title">Run queue</div>
+      <div class="panel-title">${esc(t('Run queue'))}</div>
       <table><tbody>
         ${['queued', 'leased', 'running', 'awaiting_human', 'done', 'failed', 'escalated', 'cancelled']
           .filter((k) => queue[k]).map((k) => `
-          <tr><td><span class="state state-${k}">${k}</span></td><td class="num">${queue[k]}</td></tr>`).join('') || '<tr><td class="empty">No runs yet — enqueue one from the Runs page.</td></tr>'}
+          <tr><td><span class="state state-${k}">${esc(t(k.replace(/_/g, ' ')))}</span></td><td class="num">${queue[k]}</td></tr>`).join('') || `<tr><td class="empty">${esc(t('No runs yet — enqueue one from the Runs page.'))}</td></tr>`}
       </tbody></table>
-      <div class="panel-title" style="margin-top:14px">Decisions</div>
+      <div class="panel-title" style="margin-top:14px">${esc(t('Decisions'))}</div>
       <div class="agent-meta">
-        ${Object.entries(dec).map(([k, n]) => `<span class="chip">${esc(k)} · ${n}</span>`).join('') || '<span class="empty">No decisions registered.</span>'}
+        ${Object.entries(dec).map(([k, n]) => `<span class="chip">${esc(t(k.replace(/_/g, ' ')))} · ${n}</span>`).join('') || `<span class="empty">${esc(t('No decisions registered.'))}</span>`}
       </div>
     </div>
   </div>
 
   <div class="grid grid-2">
     <div class="panel">
-      <div class="panel-title">Spend by provider</div>
+      <div class="panel-title">${esc(t('Spend by provider'))}</div>
       <table>
-        <thead><tr><th>Provider</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Cost</th></tr></thead>
+        <thead><tr><th>${esc(t('Provider'))}</th><th class="num">${esc(t('Calls'))}</th><th class="num">${esc(t('Errors'))}</th><th class="num">${esc(t('Cost'))}</th></tr></thead>
         <tbody>${s.byProvider.map((p) => `
           <tr><td class="mono">${esc(p.provider)}</td><td class="num">${p.calls}</td>
-          <td class="num">${p.errors || 0}</td><td class="num">${esc(money4(p.cost))}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No model calls yet.</td></tr>'}
+          <td class="num">${p.errors || 0}</td><td class="num">${esc(money4(p.cost))}</td></tr>`).join('') || `<tr><td colspan="4" class="empty">${esc(t('No model calls yet.'))}</td></tr>`}
         </tbody>
       </table>
     </div>
     <div class="panel">
-      <div class="panel-title">Spend by agent</div>
+      <div class="panel-title">${esc(t('Spend by agent'))}</div>
       <table>
-        <thead><tr><th>Agent</th><th class="num">Runs</th><th class="num">Cost</th></tr></thead>
+        <thead><tr><th>${esc(t('Agent'))}</th><th class="num">${esc(t('Runs'))}</th><th class="num">${esc(t('Cost'))}</th></tr></thead>
         <tbody>${s.byAgent.map((a) => `
-          <tr><td class="mono">${esc(a.agent_id)}</td><td class="num">${a.runs}</td><td class="num">${esc(money4(a.cost))}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">No runs yet.</td></tr>'}
+          <tr><td class="mono">${esc(a.agent_id)}</td><td class="num">${a.runs}</td><td class="num">${esc(money4(a.cost))}</td></tr>`).join('') || `<tr><td colspan="3" class="empty">${esc(t('No runs yet.'))}</td></tr>`}
         </tbody>
       </table>
     </div>
