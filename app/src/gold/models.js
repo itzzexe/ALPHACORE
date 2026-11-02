@@ -397,6 +397,24 @@ export function indicators(cs) {
 }
 
 /**
+ * The same indicators with the periods a person chose on the screen. The
+ * technical summary keeps the standard ones above: a vote is only comparable
+ * with everyone else's if it is taken on the same settings.
+ */
+export function chartIndicators(cs, p) {
+  const c = cs.map((x) => x.c);
+  const bb = bollinger(c, p.bb[0], p.bb[1]);
+  const m = macd(c, p.macd[0], p.macd[1], p.macd[2]);
+  const st = stoch(cs, p.stoch[0], p.stoch[1]);
+  return {
+    ema: p.ema.map((n) => ema(c, n)), sma: sma(c, p.sma),
+    bbUpper: bb.map((b) => b?.upper ?? null), bbMid: bb.map((b) => b?.mid ?? null), bbLower: bb.map((b) => b?.lower ?? null),
+    rsi: rsi(c, p.rsi), macd: m.line, macdSignal: m.signal, macdHist: m.hist,
+    stochK: st.k, stochD: st.d, cci: cci(cs, p.cci), willR: williams(cs, p.wr), atr: atrSeries(cs, p.atr),
+  };
+}
+
+/**
  * The technical summary in the shape every trading platform shows: each
  * oscillator and each moving average votes buy, sell or neutral, and the
  * count is the verdict. It is a description of the chart, not a forecast, and

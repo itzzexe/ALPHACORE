@@ -357,6 +357,38 @@
 .gd-chartwrap .gd-tag { fill: var(--sx-ink); }
 .gd-chartwrap .gd-tagt { fill: var(--sx-bg); font-size: 11px; font-family: var(--sx-mono); }
 .gd-chartwrap .gd-pt { fill: var(--sx-ai-ink); }
+/* The chart a person drives: the scale, the crosshair, drawn levels, the other drawings. */
+.gd-chart { position: relative; cursor: crosshair; touch-action: pan-y; user-select: none; outline: none; border-radius: var(--sx-r1); }
+.gd-chart:focus-visible { box-shadow: 0 0 0 2px var(--sx-ai); }
+.gd-chart.gd-drawing { cursor: copy; }
+.gd-chartwrap .gd-main, .gd-chartwrap .gd-sub { inline-size: 100%; }
+.gd-chartwrap .gd-grid { stroke: var(--sx-line-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-cross { stroke: var(--sx-mute); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-ctag { fill: var(--sx-mute); }
+.gd-chartwrap .gd-ctagt, .gd-chartwrap .gd-ltagt { fill: var(--sx-bg); font-size: 11px; font-family: var(--sx-mono); }
+.gd-chartwrap .gd-level { stroke: var(--sx-info); stroke-width: 1.2; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-ltag { fill: var(--sx-info); }
+.gd-chartwrap .gd-line { fill: none; stroke: var(--sx-ai-ink); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-area { fill: var(--sx-ai-wash); stroke: none; }
+.gd-chartwrap .gd-bar-up { fill: none; stroke: var(--sx-ok); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-bar-down { fill: none; stroke: var(--sx-bad); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-hup { fill: var(--sx-panel); stroke: var(--sx-ok); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-sma { fill: none; stroke: var(--sx-info); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.gd-readout { display: flex; flex-wrap: wrap; gap: 2px 12px; font-family: var(--sx-mono); font-size: 12px; min-block-size: 20px; margin-block: 4px; }
+.gd-readout .r-e0 { color: var(--sx-human); }
+.gd-readout .r-e1 { color: var(--sx-ai-ink); }
+.gd-readout .r-e2 { color: var(--sx-mute); }
+.gd-readout .r-sma { color: var(--sx-info); }
+.gd-readout .r-bb { color: var(--sx-ai); }
+.gd-sel { display: inline-flex; align-items: center; gap: 4px; }
+.gd-sel select { padding-block: 2px; }
+.gd-inds { justify-content: flex-start; }
+.gd-params { margin-block-end: 6px; }
+.gd-params .fields { margin-block-start: 6px; }
+.gd-levels { gap: 6px; margin-block-end: 4px; }
+.gd-x { background: none; border: 0; color: inherit; cursor: pointer; padding-inline: 2px; font-size: 14px; line-height: 1; }
+.gd-chartwrap:fullscreen { background: var(--sx-bg); padding: 16px; overflow: auto; }
+.gd-chartwrap::backdrop { background: var(--sx-bg); }
 .mk-legend .k-e9::before { background: var(--sx-human); }
 .mk-legend .k-e21::before { background: var(--sx-ai-ink); }
 .mk-legend .k-e50::before { background: var(--sx-mute); }

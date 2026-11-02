@@ -1,4 +1,4 @@
-// The gold feed — spot gold and silver, bid and ask, a few seconds apart.
+// The gold feed — spot gold and silver, bid and ask, a second apart.
 //
 // Swissquote's public quote feed first, because it carries a real bid and ask
 // from a dealing desk: a forecast of gold that ignores the spread is a
@@ -7,7 +7,8 @@
 // is labelled as such.
 //
 // One gate pass is a short window, not one quote: `spot.stream` samples every
-// few seconds for ten seconds and returns them all. The intent written to the
+// second for ten seconds, hands each quote to `sink` as it arrives, and returns
+// them all. The intent written to the
 // chain is "watch gold for ten seconds", which is what the company decided,
 // and eight thousand rows a day saying so is the price of a seconds-level desk.
 import { wire } from './wire.js';
@@ -49,7 +50,14 @@ async function one(sym, ctx) {
 
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms).unref?.(); });
 
-export async function stream({ symbols = ['XAU', 'XAG'], duration = 10, interval = 2 }, ctx) {
+/**
+ * Where each quote goes the moment it is read. The gate approves the window,
+ * not each quote, so the window still returns them all; but a desk that waited
+ * for the window to close would show the price ten seconds late, in a burst.
+ */
+export const sink = { tick: null };
+
+export async function stream({ symbols = ['XAU', 'XAG'], duration = 10, interval = 1 }, ctx) {
   const syms = (Array.isArray(symbols) ? symbols : [symbols]).filter((s) => METALS[s]);
   const ticks = []; const errors = [];
   const until = Date.now() + Math.min(60, Math.max(1, duration)) * 1000;
@@ -57,7 +65,11 @@ export async function stream({ symbols = ['XAU', 'XAG'], duration = 10, interval
   do {
     const started = Date.now();
     for (const s of syms) {
-      try { ticks.push(await one(s, ctx)); } catch (e) { errors.push(String(e.message || e).slice(0, 160)); }
+      try {
+        const tk = await one(s, ctx);
+        ticks.push(tk);
+        try { sink.tick?.(tk); } catch { /* the window still returns it */ }
+      } catch (e) { errors.push(String(e.message || e).slice(0, 160)); }
     }
     const left = every - (Date.now() - started);
     if (Date.now() + left >= until) break;

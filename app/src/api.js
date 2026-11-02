@@ -2707,7 +2707,7 @@ const routes = [
 
   // ---- Gold desk --------------------------------------------------------
   ['GET', /^\/api\/gold$/, () => Gold.overview()],
-  ['GET', /^\/api\/gold\/live$/, (_p, _b, url) => Gold.live({ tf: url.searchParams.get('tf') || '15s' })],
+  ['GET', /^\/api\/gold\/live$/, (_p, _b, url) => Gold.live({ tf: url.searchParams.get('tf') || '15s', bars: url.searchParams.get('bars'), p: Object.fromEntries(url.searchParams) })],
   ['POST', /^\/api\/gold\/ask$/, (_p, body, _u, user) => Gold.ask({ at: need(body, 'at'), actor: `human:${user.username}` })],
   ['POST', /^\/api\/gold\/trade$/, (_p, body, _u, user) => Gold.openTrade({ side: need(body, 'side'), oz: need(body, 'oz'), sl: body.sl ?? null, tp: body.tp ?? null, expiresIn: body.expiresIn ?? null, note: body.note || '', actor: `human:${user.username}` })],
   ['POST', /^\/api\/gold\/trade\/(\d+)\/close$/, (p, _b, _u, user) => Gold.closeTrade({ id: Number(p[0]), actor: `human:${user.username}` })],
