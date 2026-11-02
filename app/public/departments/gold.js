@@ -29,8 +29,15 @@ const VERDICT_CLS = { 'strong buy': 'chip-ok', buy: 'chip-ok', neutral: '', sell
 
 let lastSlow = 0;
 
+// The tab comes from the address bar, so it is matched against this list
+// before it names anything: an unknown or hostile value ("constructor") is
+// the terminal, never a property looked up on an object.
+const TABS = ['terminal', 'forecast', 'accuracy', 'learning', 'simulator', 'settings'];
+const pick = (map, tab) => (Object.prototype.hasOwnProperty.call(map, tab) ? map[tab] : null);
+
 export async function renderGold() {
-  const tab = hashParam('tab') || 'terminal';
+  const asked = hashParam('tab');
+  const tab = TABS.includes(asked) ? asked : 'terminal';
   const root = view.querySelector('#gd-root');
   // A poll on a mounted page refreshes only what moves.
   if (root && root.dataset.tab === tab) {
@@ -38,7 +45,8 @@ export async function renderGold() {
     if (Date.now() - lastSlow < 8000) return;
     lastSlow = Date.now();
     const d = await api('/api/gold');
-    const dyn = $('#gd-dyn'); if (dyn) dyn.innerHTML = SLOW[tab]?.(d) || '';
+    const slow = pick(SLOW, tab);
+    const dyn = $('#gd-dyn'); if (dyn) dyn.innerHTML = slow ? slow(d) : '';
     return;
   }
   lastSlow = Date.now();
@@ -52,8 +60,8 @@ export async function renderGold() {
     <div class="inline">${srcChip(d.source)} <span class="sub">${num(Math.floor(d.seconds / 60))} ${esc(t('minutes of one-second prices'))}</span></div>
   </div>
   ${tabs([['terminal', 'Trading screen'], ['forecast', 'Forecasts'], ['accuracy', 'Accuracy'], ['learning', 'Learning'], ['simulator', 'Simulator'], ['settings', 'Settings']], tab)}
-  ${STATIC[tab]?.(d, { canManage, canConfigure, canFeed }) || ''}
-  <div id="gd-dyn">${tab === 'terminal' ? '' : SLOW[tab]?.(d) || ''}</div>
+  ${pick(STATIC, tab)?.(d, { canManage, canConfigure, canFeed }) || ''}
+  <div id="gd-dyn">${tab === 'terminal' ? '' : pick(SLOW, tab)?.(d) || ''}</div>
   <div class="panel">${disclaimer()}</div></div>`;
   view.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { location.hash = `#/gold?tab=${b.dataset.tab}`; }));
   wireActs(view, api, toast, () => { view.innerHTML = ''; renderGold(); });

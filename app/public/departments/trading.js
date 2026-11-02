@@ -38,7 +38,10 @@ export async function renderTrading() {
   const d = await api('/api/trading');
   const canManage = hasPermC('trading.manage');
   const canConfigure = hasPermC('trading.configure');
-  const tab = hashParam('tab') || 'board';
+  // Matched against the list before it names a function: the tab comes from the address bar.
+  const asked = hashParam('tab');
+  const tab = ['board', 'journal', 'scan', 'whatif', 'rules'].includes(asked) ? asked : 'board';
+  const TAB = { board, journal, scan, whatif, rules };
   const s = d.stats;
   const open = d.board.filter((p) => ['open', 'proposed'].includes(p.state));
   const left = Math.max(0, d.today.dailyLimit - Math.max(0, -d.today.realizedUsd) - d.today.openRiskUsd);
@@ -58,7 +61,7 @@ export async function renderTrading() {
     <div class="kpi"><div class="k-label">${esc(t('Equity in R'))}</div>${spark(d.curve)}</div>
   </div>
   ${tabs([['board', 'Board', d.board.filter((p) => ['watching', 'triggered', 'proposed', 'open'].includes(p.state)).length], ['journal', 'Trade journal', s.n], ['scan', 'Scanner'], ['whatif', 'Time Machine'], ['rules', 'Rules']], tab)}
-  <div id="tr-body">${({ board, journal, scan, whatif, rules })[tab]?.(d, { canManage, canConfigure, open }) || ''}</div>
+  <div id="tr-body">${Object.prototype.hasOwnProperty.call(TAB, tab) ? TAB[tab](d, { canManage, canConfigure, open }) : ''}</div>
   <div class="panel">${disclaimer()}</div>`;
 
   wireActs(view, api, toast, renderTrading);
