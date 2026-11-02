@@ -22,7 +22,7 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v5
         with:
@@ -62,7 +62,7 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
@@ -91,7 +91,7 @@ jobs:
     name: No secrets in the tree
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Nothing under data/, no keys, no .env
         run: |
           bad=$(git ls-files | grep -E '(^|/)data/|\.env$|\.env\..*|\.key$|\.pem$' | grep -v '\.env\.example$' || true)
@@ -114,7 +114,7 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
