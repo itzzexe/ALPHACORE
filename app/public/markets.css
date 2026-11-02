@@ -457,3 +457,81 @@
 .gd-w i { display: block; block-size: 100%; background: var(--sx-ai); }
 .gd-ask { border-block-end: 1px solid var(--sx-line-soft); padding-block: 8px; }
 .gd-ask:last-child { border-block-end: 0; }
+
+/* ------------------------------------------------ the trading pages, every screen --
+   The markets desk, a symbol, the portfolio, the newsroom, the trading floor and the
+   gold desk, laid out for a phone held in one hand, a tablet, a laptop and a wall.
+   The shell writes the page's name on the view (data-page), so these rules touch
+   these pages and nothing else. */
+
+/* Every size: controls wrap instead of running off the edge, and a wide screen gives
+   the terminal's side columns room to breathe. */
+:is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) .seg { flex-wrap: wrap; }
+.gd-indbox, .gd-setbox { margin-block: 4px 6px; }
+:is(.gd-indbox, .gd-setbox) > summary { cursor: pointer; font-weight: 600; padding-block: 6px; }
+:is(.gd-indbox, .gd-setbox)[open] > summary { margin-block-end: 4px; }
+.gd-tick { margin-block: 2px 4px; }
+/* A tab's panels sit in one container; give them the page's own spacing so two
+   panels never touch. */
+#tr-body, #gd-dyn { display: grid; gap: 16px; }
+#tr-body > *, #gd-dyn > * { min-inline-size: 0; }
+@media (min-width: 1600px) { .gd-term { grid-template-columns: 280px minmax(0, 1fr) 330px; } }
+
+/* Tablet and laptop-without-room: one column, the chart first, then the panels a
+   trader acts from side by side, then the market watch. */
+@media (max-width: 1180px) {
+  .gd-chartwrap { order: 1; }
+  .gd-side { order: 2; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+  .gd-side > .panel { margin: 0; }
+  .gd-watch { order: 3; }
+  .mq-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Phone. */
+@media (max-width: 640px) {
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) .pg-head > p:not(.open) {
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer;
+  }
+  /* Tables scroll sideways inside their panel rather than pushing the page wider;
+     numbers stay on one line, explanations keep wrapping. */
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) .tbl {
+    display: block; max-inline-size: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) .tbl :is(th, td) { white-space: nowrap; padding: 7px 8px; font-size: 12.5px; }
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) .tbl td.sub { white-space: normal; min-inline-size: 180px; }
+  /* Tabs fill the width, two rows at most. */
+  :is(.view[data-page="trading"], .view[data-page="gold"], .view[data-page="newsroom"]) .tabs { display: flex; inline-size: 100%; }
+  :is(.view[data-page="trading"], .view[data-page="gold"], .view[data-page="newsroom"]) .tabs > * { flex: 1 1 auto; justify-content: center; }
+  /* The quote strip scrolls sideways, so the chart starts higher on the screen. */
+  .gd-bar { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; padding-block-end: 4px; }
+  .gd-q { flex: none; scroll-snap-align: start; }
+  .gd-big { font-size: 20px; }
+  /* Chart settings: two to a row, their labels kept for screen readers only. */
+  .gd-chartwrap .gd-tools > .inline:has(> .gd-sel) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; inline-size: 100%; }
+  .gd-sel { display: block; }
+  .gd-sel select { inline-size: 100%; }
+  .gd-sel-l { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .gd-tools { gap: 6px; }
+  .gd-readout { font-size: 11px; gap: 2px 8px; }
+  .gd-side { grid-template-columns: minmax(0, 1fr); }
+  .gd-advtbl { display: table; }
+  .gd-advtbl td { white-space: normal; }
+  .tr-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tr-levels b { font-size: 16px; }
+  .mq-row { flex-direction: column; }
+  .mq-row .btn { inline-size: 100%; }
+  .mq-tfs > div { flex: 1 1 30%; }
+  .mq-price b { font-size: 20px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Touch screens of any size: everything a finger presses is at least 40 pixels, and
+   text fields are 16px so a phone does not zoom the page on focus. */
+@media (pointer: coarse) {
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) :is(.btn, .tabs button, .tabs a) { min-block-size: 40px; }
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { min-block-size: 42px; font-size: 16px; }
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) .eng-chk { min-block-size: 36px; display: inline-flex; align-items: center; gap: 6px; padding-inline-end: 6px; }
+  :is(.view[data-page="markets"], .view[data-page="symbol"], .view[data-page="portfolio"], .view[data-page="newsroom"], .view[data-page="trading"], .view[data-page="tradePlan"], .view[data-page="gold"]) input[type=checkbox] { inline-size: 18px; block-size: 18px; }
+  .gd-x { min-inline-size: 32px; min-block-size: 32px; }
+  .gd-chart { touch-action: pan-y pinch-zoom; }
+}

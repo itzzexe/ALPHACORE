@@ -770,11 +770,17 @@ export function advise(f, { bid, ask, record = null, trend = 'flat', minP = 0.55
   if (grade === 'C') why.push('unproven');
   if (withTrend === 'against' && p < aloneP) why.push('against-trend');
   if (dirn * (entry - stop) <= 0) why.push('no-room');
+  // Right often is not enough: a target nearer than the stop has to be right very
+  // often to pay. The bracket itself must be worth taking — the chance times what
+  // the target pays, less the rest times what the stop costs. A record of signals
+  // that won three times in four and still lost money is how this was found.
+  const bracket = p * reward - (1 - p) * risk;
+  if (bracket <= 0 && !why.includes('no-edge')) why.push('negative-ev');
   const oz = risk > 0 ? Math.min(maxOz, Math.floor(((equity * riskPct) / 100 / risk) * 100) / 100) : 0;
   return {
     horizon: f.horizon, action: why.length ? 'wait' : lean, lean, why,
     p: round(p, 3), expected: round(f.ens, 3), move: round(move, 3), entry: round(entry, 3), stop: round(stop, 3), target: round(target, 3),
-    ev: round(Math.abs(move) - spread, 3), rr: risk > 0 ? round(reward / risk, 2) : null, oz, grade, trend: withTrend, spread: round(spread, 3),
+    ev: round(Math.abs(move) - spread, 3), bracket: round(bracket, 3), rr: risk > 0 ? round(reward / risk, 2) : null, oz, grade, trend: withTrend, spread: round(spread, 3),
     low80: f.low80, high80: f.high80,
   };
 }

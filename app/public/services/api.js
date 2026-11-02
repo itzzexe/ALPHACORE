@@ -25,7 +25,12 @@ export async function api(path, opts = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized();
-  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  if (!res.ok) {
+    // The status rides along, so a page can tell "not there" from "broken".
+    const err = new Error(data.error || `${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 /**

@@ -547,6 +547,9 @@ html[lang="ar"] #live-bar .lb-txt { letter-spacing: 0; font-family: var(--sx-tex
 #live-bar .lb-who { color: var(--sx-ink); }
 #live-bar .lb-feed { color: var(--sx-mute); padding-inline-start: 10px; border-inline-start: 1px solid var(--sx-line); }
 #live-bar .lb-actor { color: var(--sx-ai); margin-inline-start: 4px; }
+/* This sheet loads last, so the rule above would put the badge on top of the phone's
+   tab bar, over "Menu"; on a phone it sits above the bar, as ui.css intended. */
+@media (max-width: 900px) { #live-bar { inset-block-end: calc(70px + env(safe-area-inset-bottom, 0px)); inset-inline-end: 12px; } }
 #live-bar .lb-actor::before { content: "· "; color: var(--sx-faint); }
 html.m-wall #live-bar { display: none; }
 

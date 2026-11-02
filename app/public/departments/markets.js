@@ -209,7 +209,22 @@ export async function renderMarkets() {
 // =============================================================== symbol ==
 
 export async function renderSymbol(arg) {
-  const d = await api(`/api/markets/symbol/${encodeURIComponent(arg)}`);
+  let d;
+  try { d = await api(`/api/markets/symbol/${encodeURIComponent(arg)}`); } catch (err) {
+    // A symbol reached by a link or typed into the address that nobody watches yet:
+    // say so, and offer the one step that makes the page possible.
+    if (err.status !== 404) throw err;
+    const sym = String(arg || '').toUpperCase();
+    view.innerHTML = `<div class="panel"><div class="empty">
+      <p><b class="ltr">${esc(sym)}</b> — ${esc(t('this symbol is not on the watchlist yet, so the desk has no history or forecasts for it.'))}</p>
+      <div class="inline" style="justify-content:center">
+        ${hasPermC('markets.manage') ? `<button type="button" class="btn btn-primary" id="sym-add">${esc(t('Add it and analyse it'))}</button>` : ''}
+        <a class="btn" href="#/markets">${esc(t('Back to the markets desk'))}</a></div></div></div>`;
+    $('#sym-add')?.addEventListener('click', async () => {
+      try { await api('/api/markets/watch', { method: 'POST', body: { symbol: sym } }); toast(t('Added — the history is on its way')); setTimeout(() => renderSymbol(arg), 1500); } catch (e) { toast(e.message, true); }
+    });
+    return;
+  }
   const a = d.analysis; const s = a.summary || {};
   const qt = d.quote || {};
   const canManage = hasPermC('markets.manage');

@@ -464,6 +464,10 @@ function restoreScroll(snap) {
   };
   requestAnimationFrame(put);
 }
+// On a phone a page's opening paragraph is folded to three lines (see the
+// trading pages in markets.css); a tap opens it and another folds it again.
+view.addEventListener('click', (e) => { const p = e.target.closest('.pg-head > p'); if (p) p.classList.toggle('open'); });
+
 export function pollPaused() {
   return document.hidden || isEditingField() || hasUnsavedInput() || pollHolds.size > 0 || isReading();
 }
@@ -543,6 +547,9 @@ export async function navigate() {
     requestAnimationFrame(() => view.focus({ preventScroll: true }));
   }
   view.innerHTML = `<div class="empty">${esc(t('Loading…'))}</div>`;
+  // The page's name on the view, so a stylesheet can lay out one family of
+  // pages for a phone without every page wrapping itself in a class.
+  view.dataset.page = deptKey;
   freshRender = true;
   try {
     await r.render(arg);

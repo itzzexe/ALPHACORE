@@ -295,6 +295,7 @@ export const AR_GLD = {
   'the desk has not beaten “no change” at this horizon': 'المكتب لم يتفوق على «لا تغيير» في هذا الأفق',
   'against the higher-timeframe trend': 'عكس اتجاه الإطار الزمني الأعلى',
   'the stop would sit inside the spread': 'وقف الخسارة سيقع داخل فارق السعر',
+  'the target pays too little for the stop it risks': 'الهدف يربح أقل مما يخاطر به الوقف',
   'Signals in the last 24 hours': 'الإشارات في آخر 24 ساعة',
   'won': 'ربحت',
   'Won': 'ربحت',
@@ -367,6 +368,12 @@ export const AR_GLD = {
   'Bollinger high': 'بولنجر العلوي',
   'Pivot': 'الارتكاز',
   'not shown to beat the baseline': 'لم يثبت تفوقه على الأساس',
+  'Chart settings and drawing': 'إعدادات الرسم وأدواته',
+  'this symbol is not on the watchlist yet, so the desk has no history or forecasts for it.': 'هذا الرمز ليس في قائمة المتابعة بعد، فلا تاريخ ولا توقعات له لدى المكتب.',
+  'Add it and analyse it': 'أضفه وحلّله',
+  'Back to the markets desk': 'العودة إلى مكتب الأسواق',
+  'Added — the history is on its way': 'أُضيف — التاريخ في الطريق',
+  'Drawing': 'الرسم',
   'In the walk-forward test this forecast called the direction less often than simply assuming the usual direction. Read the score as a description of the chart, not as an edge.':
     'في اختبار السير للأمام أصاب هذا التوقع الاتجاه أقل مما يصيبه مجرد افتراض الاتجاه المعتاد. اقرأ الدرجة كوصف للرسم، لا كأفضلية.',
 };

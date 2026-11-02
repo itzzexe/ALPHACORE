@@ -131,6 +131,10 @@ test('advice says buy or sell only when every condition holds, and names the one
   assert.ok(M.advise({ ...f, pUp: 0.6 }, { bid: 3999.9, ask: 4000.1, record: A, trend: 'down' }).why.includes('against-trend'));
   assert.ok(M.advise({ ...f, ens: 4000.05 }, { bid: 3999.9, ask: 4000.1, record: A }).why.includes('no-edge'));
   assert.ok(M.advise({ ...f, pUp: 0.52 }, { bid: 3999.9, ask: 4000.1, record: A }).why.includes('unsure'));
+  // Seventy percent right, but the target pays 0.5 and the stop costs 2.66: a losing bracket.
+  const thin = M.advise({ ...f, ens: 4000.6, sigma: 2 }, { bid: 3999.9, ask: 4000.1, record: A, trend: 'up' });
+  assert.deepEqual(thin.why, ['negative-ev']);
+  assert.ok(thin.bracket < 0);
   const sell = M.advise({ ...f, ens: 3998.6, pUp: 0.3 }, { bid: 3999.9, ask: 4000.1, record: A, trend: 'down' });
   assert.equal(sell.action, 'sell');
   assert.ok(sell.stop > sell.entry && sell.entry > sell.target);

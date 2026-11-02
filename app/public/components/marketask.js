@@ -20,7 +20,7 @@ const DIR = { up: ['chip-ok', '↑', 'Rising'], down: ['chip-bad', '↓', 'Falli
 const dirChip = (d) => { const [c, g, l] = DIR[d] || ['chip-dim', '·', 'Not enough data']; return `<span class="chip ${c}">${g} ${esc(t(l))}</span>`; };
 const ACT = { buy: ['chip-ok', 'Buy'], sell: ['chip-bad', 'Sell'], wait: ['chip-dim', 'Wait'], 'strong buy': ['chip-ok', 'strong buy'], 'strong sell': ['chip-bad', 'strong sell'], hold: ['chip-dim', 'hold'] };
 const actChip = (a, big = false) => { const [c, l] = ACT[a] || ['', a]; return `<span class="chip ${c}${big ? ' mq-big' : ''}">${esc(t(l))}</span>`; };
-const WHY = { 'no-edge': 'the expected move does not clear the spread', unsure: 'the chance of the direction is too low', unproven: 'the desk has not beaten “no change” at this horizon', 'against-trend': 'against the higher-timeframe trend', 'no-room': 'the stop would sit inside the spread' };
+const WHY = { 'no-edge': 'the expected move does not clear the spread', unsure: 'the chance of the direction is too low', unproven: 'the desk has not beaten “no change” at this horizon', 'against-trend': 'against the higher-timeframe trend', 'no-room': 'the stop would sit inside the spread', 'negative-ev': 'the target pays too little for the stop it risks' };
 
 const kept = new Map();
 

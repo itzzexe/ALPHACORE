@@ -23,7 +23,7 @@ const hz = (h) => (h < 60 ? `${h}s` : h < 3600 ? `${h / 60}m` : `${h / 3600}h`);
 const clock = (ms) => new Date(ms).toISOString().slice(11, 19);
 const MODEL = { naive: 'No change', drift: 'Drift', momentum: 'Momentum', meanrev: 'Mean reversion', ar: 'Autoregression', holt: 'Damped trend', learn: 'Learner', ens: 'Ensemble' };
 const MEMBERS = Object.keys(MODEL).filter((m) => m !== 'ens');
-const WHY = { 'no-edge': 'the expected move does not clear the spread', unsure: 'the chance of the direction is too low', unproven: 'the desk has not beaten “no change” at this horizon', 'against-trend': 'against the higher-timeframe trend', 'no-room': 'the stop would sit inside the spread' };
+const WHY = { 'no-edge': 'the expected move does not clear the spread', unsure: 'the chance of the direction is too low', unproven: 'the desk has not beaten “no change” at this horizon', 'against-trend': 'against the higher-timeframe trend', 'no-room': 'the stop would sit inside the spread', 'negative-ev': 'the target pays too little for the stop it risks' };
 const TF_SEC = { '1s': 1, '5s': 5, '15s': 15, '30s': 30, '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600 };
 const TFS = Object.keys(TF_SEC);
 const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(`gold:${k}`)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(`gold:${k}`, JSON.stringify(v)); } catch { /* a private window */ } } };
@@ -46,6 +46,8 @@ const DEF = {
   p: { ema: [9, 21, 50], sma: 20, bb: [20, 2], rsi: 14, macd: [12, 26, 9], stoch: [14, 3], cci: 20, wr: 14, atr: 14, st: [10, 3], ichi: [9, 26, 52], dc: 20, sar: [0.02, 0.2] },
 };
 const isPoint = (x) => x && Number.isFinite(Number(x.t)) && Number.isFinite(Number(x.p));
+// Where there is room the indicator list stands open; on a phone it folds away until asked for.
+const wideScreen = () => { try { return window.matchMedia('(min-width: 900px)').matches; } catch { return true; } };
 
 /** What this browser kept, held to the lists it may name — a stored value is read like an address bar's. */
 function chartCfg() {
@@ -157,7 +159,7 @@ export async function renderGold() {
 const STATIC = {
   terminal: (d, { canManage }) => {
     const c = chartCfg();
-    const sel = (key, label, opts) => `<label class="gd-sel"><span class="sub">${esc(t(label))}</span><select data-cc="${key}">${opts.map(([v, l]) => `<option value="${v}" ${String(c[key]) === String(v) ? 'selected' : ''}>${esc(t(l))}</option>`).join('')}</select></label>`;
+    const sel = (key, label, opts) => `<label class="gd-sel"><span class="sub gd-sel-l">${esc(t(label))}</span><select data-cc="${key}">${opts.map(([v, l]) => `<option value="${v}" ${String(c[key]) === String(v) ? 'selected' : ''}>${esc(t(l))}</option>`).join('')}</select></label>`;
     const zb = (k, label, glyph) => `<button type="button" class="btn btn-sm btn-ghost" data-cz="${k}" aria-label="${esc(t(label))}" title="${esc(t(label))}">${glyph}</button>`;
     const pf = (k, label, v) => `<div><label class="fl" for="gp-${k}">${esc(t(label))}</label><input id="gp-${k}" data-p="${k}" class="ltr" value="${esc(Array.isArray(v) ? v.join(', ') : String(v))}"></div>`;
     return `
@@ -167,24 +169,29 @@ const STATIC = {
     <section class="panel gd-chartwrap" id="gd-chartwrap">
       <div class="gd-tools">
         <div class="seg" role="group" aria-label="${esc(t('Timeframe'))}">${TFS.map((x) => `<button type="button" class="btn btn-sm ${x === c.tf ? 'btn-primary' : 'btn-ghost'}" data-tf="${x}">${x}</button>`).join('')}</div>
-        <div class="inline">
-          ${sel('type', 'Chart type', TYPES)}
-          ${sel('bars', 'History', [[120, '120 candles'], [240, '240 candles'], [500, '500 candles']])}
-          ${sel('height', 'Height', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large'], ['xl', 'Extra large']])}
-          ${sel('time', 'Time', [['utc', 'UTC'], ['local', 'Your clock']])}
-          ${sel('gh', 'Past forecasts at', [[15, '15s'], [60, '1m'], [300, '5m']])}
-        </div>
-      </div>
-      <div class="gd-tools">
-        <div class="inline" role="group" aria-label="${esc(t('Chart controls'))}">
+        <div class="inline gd-nav" role="group" aria-label="${esc(t('Chart controls'))}">
           ${zb('in', 'Zoom in', '+')}${zb('out', 'Zoom out', '−')}${zb('left', 'Older', '◀')}${zb('right', 'Newer', '▶')}${zb('fit', 'Show all candles', '⤢')}
-          <button type="button" class="btn btn-sm btn-ghost" data-cz="cross" aria-pressed="${c.cross}">${esc(t('Crosshair'))}</button>
-          ${[['level', 'Draw a level'], ['trend', 'Draw a trend line'], ['fib', 'Draw Fibonacci']].map(([k, l]) => `<button type="button" class="btn btn-sm btn-ghost" data-cz="draw" data-tool="${k}" aria-pressed="false">${esc(t(l))}</button>`).join('')}
-          ${zb('full', 'Full screen', '⛶')}
           <button type="button" class="btn btn-sm btn-primary" data-cz="live" id="gd-golive" hidden>${esc(t('Back to live'))} ▶▶</button>
         </div>
-        <span id="gd-tick" class="sub"></span>
       </div>
+      <details class="gd-setbox" ${wideScreen() ? 'open' : ''}><summary>${esc(t('Chart settings and drawing'))}</summary>
+        <div class="gd-tools">
+          <div class="inline gd-sels">
+            ${sel('type', 'Chart type', TYPES)}
+            ${sel('bars', 'History', [[120, '120 candles'], [240, '240 candles'], [500, '500 candles']])}
+            ${sel('height', 'Height', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large'], ['xl', 'Extra large']])}
+            ${sel('time', 'Time', [['utc', 'UTC'], ['local', 'Your clock']])}
+            ${sel('gh', 'Past forecasts at', [[15, '15s'], [60, '1m'], [300, '5m']])}
+          </div>
+          <div class="inline" role="group" aria-label="${esc(t('Drawing'))}">
+            <button type="button" class="btn btn-sm btn-ghost" data-cz="cross" aria-pressed="${c.cross}">${esc(t('Crosshair'))}</button>
+            ${[['level', 'Draw a level'], ['trend', 'Draw a trend line'], ['fib', 'Draw Fibonacci']].map(([k, l]) => `<button type="button" class="btn btn-sm btn-ghost" data-cz="draw" data-tool="${k}" aria-pressed="false">${esc(t(l))}</button>`).join('')}
+            ${zb('full', 'Full screen', '⛶')}
+          </div>
+        </div>
+      </details>
+      <div id="gd-tick" class="sub gd-tick"></div>
+      <details class="gd-indbox" ${wideScreen() ? 'open' : ''}><summary>${esc(t('Indicators'))} <span class="chip chip-dim" id="gd-indcount">${num(Object.values(c.ind).filter(Boolean).length)}</span></summary>
       <div class="gd-tools gd-inds" role="group" aria-label="${esc(t('Indicators'))}">${IND.map(([k, l]) => `<label class="eng-chk"><input type="checkbox" data-ind="${k}" ${c.ind[k] ? 'checked' : ''}> ${esc(t(l))}</label>`).join('')}</div>
       <details class="gd-params"><summary class="sub">${esc(t('Indicator settings'))}</summary>
         <form id="gd-params" class="fields">
@@ -194,6 +201,7 @@ const STATIC = {
           ${pf('st', 'Supertrend: ATR period, multiple', c.p.st)}${pf('ichi', 'Ichimoku: conversion, base, span B', c.p.ichi)}${pf('dc', 'Donchian period', c.p.dc)}${pf('sar', 'Parabolic SAR: step, maximum', c.p.sar)}
           <div class="wide inline"><button class="btn btn-sm btn-primary" type="submit">${esc(t('Apply'))}</button><button class="btn btn-sm btn-ghost" type="button" data-cz="pdefault">${esc(t('Standard settings'))}</button></div>
         </form>
+      </details>
       </details>
       <div id="gd-levels" class="inline gd-levels"></div>
       <div id="gd-readout" class="gd-readout ltr" dir="ltr"></div>
@@ -773,6 +781,7 @@ function wireChart() {
   wrap.querySelectorAll('[data-ind]').forEach((b) => b.addEventListener('change', () => {
     update((c) => { c.ind[b.dataset.ind] = b.checked; });
     b.defaultChecked = b.checked;
+    set('#gd-indcount', num(Object.values(chartCfg().ind).filter(Boolean).length));
   }));
   $('#gd-params')?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -917,9 +926,9 @@ function reliabilityChart(rows, h) {
 
 function signalTable(r, title) {
   if (!r) return '';
-  return `<div class="fl">${esc(t(title))}</div><table class="tbl"><thead><tr><th>${esc(t('Horizon'))}</th><th>${esc(t('Signals'))}</th><th>${esc(t('Won'))}</th><th>${esc(t('Average $/oz'))}</th><th>${esc(t('Total $/oz'))}</th><th>PF</th><th>${esc(t('Target / stop / time'))}</th></tr></thead><tbody>
+  return `<div class="fl">${esc(t(title))}</div><div class="mk-scroll"><table class="tbl"><thead><tr><th>${esc(t('Horizon'))}</th><th>${esc(t('Signals'))}</th><th>${esc(t('Won'))}</th><th>${esc(t('Average $/oz'))}</th><th>${esc(t('Total $/oz'))}</th><th>PF</th><th>${esc(t('Target / stop / time'))}</th></tr></thead><tbody>
     ${[...r.byHorizon, { horizon: null, ...r.all }].map((x) => `<tr${x.horizon == null ? ' class="gd-total"' : ''}><td>${x.horizon == null ? esc(t('All')) : num(hz(x.horizon))}</td><td class="ltr">${x.n}</td><td class="ltr">${pct(x.winRate, 0)}</td>
-      <td class="ltr ${dir(x.avg)}">${sg(x.avg, 3)}</td><td class="ltr ${dir(x.total)}">${sg(x.total)}</td><td class="ltr">${f2(x.pf)}</td><td class="ltr">${x.targets} / ${x.stops} / ${x.times}</td></tr>`).join('')}</tbody></table>`;
+      <td class="ltr ${dir(x.avg)}">${sg(x.avg, 3)}</td><td class="ltr ${dir(x.total)}">${sg(x.total)}</td><td class="ltr">${f2(x.pf)}</td><td class="ltr">${x.targets} / ${x.stops} / ${x.times}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function curveChart(curve, label) {
