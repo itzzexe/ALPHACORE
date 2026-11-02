@@ -107,7 +107,7 @@ function checks(acc, { symbol, side, qty, price }) {
  * With no quantity, the size comes from the volatility-targeted weight the
  * markets desk computed for the house risk profile.
  */
-export function propose({ accountId = null, symbol, side, qty = null, orderType = 'market', limitPrice = null, rationale = '', actor }) {
+export function propose({ accountId = null, symbol, side, qty = null, orderType = 'market', limitPrice = null, rationale = '', stopPrice = null, takeProfit = null, planId = null, actor }) {
   if (!actor) refuse('an order has to name who proposed it');
   const acc = accountId ? account(accountId) : ensurePaperBook();
   const s = String(symbol || '').toUpperCase();
@@ -127,10 +127,12 @@ export function propose({ accountId = null, symbol, side, qty = null, orderType 
     if (!(n > 0)) refuse('give a quantity — there was nothing to size this from');
   }
   const risk = checks(acc, { symbol: s, side, qty: n, price });
-  const r = exec(`INSERT INTO pf_orders (account_id, symbol, side, qty, order_type, limit_price, est_price, est_value, rationale, risk, proposed_by, state)
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+  // A bracket is only a bracket the right way round: stop under, target over.
+  const bracket = side === 'buy' && Number(stopPrice) > 0 && Number(takeProfit) > 0 && Number(stopPrice) < price && Number(takeProfit) > price;
+  const r = exec(`INSERT INTO pf_orders (account_id, symbol, side, qty, order_type, limit_price, est_price, est_value, rationale, risk, proposed_by, state, stop_price, take_profit, plan_id)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   acc.id, s, side, n, orderType, orderType === 'limit' ? price : null, lp.price, risk.value, String(rationale || '').slice(0, 2000),
-  JSON.stringify(risk), actor, risk.ok ? 'proposed' : 'held');
+  JSON.stringify(risk), actor, risk.ok ? 'proposed' : 'held', bracket ? Number(stopPrice) : null, bracket ? Number(takeProfit) : null, planId ? Number(planId) : null);
   const id = Number(r.lastInsertRowid);
   audit({ actorType: isHuman(actor) ? 'human' : 'agent', actorId: actor, action: 'portfolio.proposed', subjectType: 'pf_order', subjectId: id, payload: { account: acc.id, symbol: s, side, qty: n, value: risk.value, passed: risk.ok } });
   return getOrder(id);
@@ -205,7 +207,7 @@ export async function approve({ id, note = '', actor }) {
   const r = await callConnector({
     connector: acc.connector || 'broker', capability: 'order.place', actor, force: true,
     reason: `${o.side} ${o.qty} ${o.symbol}, approved by ${actor}`,
-    args: { orderId: o.id, symbol: o.symbol, qty: o.qty, side: o.side, type: o.order_type, limitPrice: o.limit_price, estValue: risk.value },
+    args: { orderId: o.id, symbol: o.symbol, qty: o.qty, side: o.side, type: o.order_type, limitPrice: o.limit_price, estValue: risk.value, stopPrice: o.stop_price, takeProfit: o.take_profit },
   });
   exec('UPDATE pf_orders SET egress_id = ? WHERE id = ?', r.id, o.id);
   if (r.verdict !== 'allowed') {
@@ -222,6 +224,47 @@ export function reject({ id, note = '', actor }) {
   if (!['proposed', 'held', 'working'].includes(o.state)) refuse(`this order is ${o.state}`, 409);
   exec("UPDATE pf_orders SET state = 'rejected', decided_by = ?, decided_at = datetime('now'), decision_note = ? WHERE id = ?", actor, String(note).slice(0, 500), o.id);
   audit({ actorType: isHuman(actor) ? 'human' : 'system', actorId: actor, action: 'portfolio.rejected', subjectType: 'pf_order', subjectId: o.id, payload: { note } });
+  return getOrder(o.id);
+}
+
+/**
+ * A leg of a bracket the person already approved, filled on paper.
+ *
+ * Approving a day trade approved its exits with it — the stop and the target
+ * were on the order a person said yes to — so the sell that closes it is not
+ * a new decision and is not asked for again. It exists only on paper: at a
+ * broker the legs sit with the broker and fill there.
+ */
+export function bracketExit({ orderId, price, reason, actor = 'system:trading', brokerRef = null }) {
+  const entry = getOrder(orderId);
+  const acc = account(entry.account_id);
+  // At a broker the leg has already filled there; this only writes it down.
+  if (acc.kind !== 'paper' && !brokerRef) refuse('a broker holds its own bracket legs', 409);
+  if (entry.state !== 'filled' || entry.side !== 'buy') refuse('only a filled entry has legs to close', 409);
+  const held = one('SELECT qty FROM pf_positions WHERE account_id = ? AND symbol = ?', acc.id, entry.symbol)?.qty || 0;
+  const qty = Math.min(entry.qty, held);
+  if (!(qty > 0)) refuse('nothing left to close', 409);
+  const r = exec(`INSERT INTO pf_orders (account_id, symbol, side, qty, order_type, est_price, est_value, rationale, proposed_by, state, decided_by, decided_at, decision_note, plan_id)
+                  VALUES (?,?,'sell',?,'market',?,?,?,?,'proposed',?,datetime('now'),?,?)`,
+  acc.id, entry.symbol, qty, price, round(qty * price), `Bracket ${reason} for order #${entry.id}`, actor, entry.decided_by, `leg of order #${entry.id}, approved with it`, entry.plan_id);
+  const id = Number(r.lastInsertRowid);
+  audit({ actorType: 'system', actorId: actor, action: 'portfolio.bracket_leg', subjectType: 'pf_order', subjectId: id, payload: { entry: entry.id, symbol: entry.symbol, qty, price, reason, approvedBy: entry.decided_by } });
+  const slip = reason === 'target' || brokerRef ? 0 : limits().slippageBps / 10_000;
+  fill({ ...getOrder(id), decided_by: entry.decided_by }, price * (1 - slip), { actor, brokerRef });
+  return getOrder(id);
+}
+
+/**
+ * Whoever proposed an order may take the proposal back before anyone has said
+ * yes to it. Withdrawing spends nothing, so it is not a decision kept for a
+ * person — but a decided order is no longer the proposer's to withdraw.
+ */
+export function withdraw({ id, reason = '', actor }) {
+  const o = getOrder(id);
+  if (!isHuman(actor) && actor !== o.proposed_by) refuse('only whoever proposed an order may withdraw it', 403);
+  if (!['proposed', 'held', 'working'].includes(o.state)) refuse(`this order is ${o.state}`, 409);
+  exec("UPDATE pf_orders SET state = 'cancelled', decision_note = ? WHERE id = ?", `withdrawn by ${actor}: ${String(reason).slice(0, 300)}`, o.id);
+  audit({ actorType: isHuman(actor) ? 'human' : 'agent', actorId: actor, action: 'portfolio.withdrawn', subjectType: 'pf_order', subjectId: o.id, payload: { reason } });
   return getOrder(o.id);
 }
 

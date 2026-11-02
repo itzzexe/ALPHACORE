@@ -189,6 +189,8 @@ export const PERMS = [
   'markets.view', 'markets.manage',
   'news.view', 'news.manage',
   'portfolio.view', 'portfolio.propose', 'portfolio.approve', 'portfolio.connect',
+  // The trading floor. Watching a symbol is not setting the desk's limits.
+  'trading.view', 'trading.manage', 'trading.configure',
   // Learning. Correcting an answer and setting a guard is everyday work;
   // letting the model replace itself is a different power, held apart.
   'learning.view', 'learning.manage', 'learning.upgrade',

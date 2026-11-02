@@ -604,6 +604,7 @@ export function sectionCatalog() {
     S('learning', 'Learning', 'engine', '#/learning', n("SELECT COUNT(*) AS n FROM mem_docs WHERE kind = 'lesson' AND source_type LIKE 'learn:%'"), 'What the company learned from its mistakes, what it read, the rules that stop a repeat, and whether a newer model earned its place'),
     S('markets', 'Markets desk', 'capital', '#/markets', n('SELECT COUNT(*) AS n FROM mkt_watch'), 'A watchlist that updates itself, the arithmetic behind every symbol, a forecast that keeps score of itself, and a daily view'),
     S('portfolio', 'Portfolio', 'capital', '#/portfolio', n('SELECT COUNT(*) AS n FROM pf_orders'), 'Where an idea becomes an order — on paper by default — and only a person turns an order into a trade'),
+    S('trading', 'Trading floor', 'capital', '#/trading', n("SELECT COUNT(*) AS n FROM tr_plans WHERE state = 'closed'"), 'Day trades from the pre-market scan to flat by the close: the opening range, the trigger, the stop, ten thousand replays, the size, and a person\'s yes'),
     S('newsroom', 'Newsroom', 'data', '#/newsroom', n('SELECT COUNT(*) AS n FROM news_items'), 'Technology, politics, the economy and the markets, from the feeds the outlets publish, briefed once a day'),
     ...packageSections(),
   ];
@@ -832,7 +833,7 @@ export const SURFACES = [
     core: 'core1',
     label: 'Markets',
     hint: 'Prices as they move, what the numbers say, what the news says, and the book — where only a person trades.',
-    departments: ['markets', 'portfolio', 'newsroom'],
+    departments: ['markets', 'trading', 'portfolio', 'newsroom'],
   },
   {
     id: 'people',
@@ -1651,6 +1652,11 @@ export function relationshipMatrix() {
     edge('portfolio', 'approvals', 'every order waits for a person', n("SELECT COUNT(*) AS n FROM pf_orders WHERE state = 'proposed'"), '#/approvals', 'gate'),
     edge('portfolio', 'egress', 'a broker order leaves only with the approval attached', n("SELECT COUNT(*) AS n FROM egress_log WHERE connector = 'broker'"), '#/egress'),
     edge('portfolio', 'audit', 'proposals, approvals and fills on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'portfolio.%'"), '#/audit', 'audit'),
+    edge('trading', 'portfolio', 'a triggered plan is filed as a bracket order a person approves', n('SELECT COUNT(*) AS n FROM tr_plans WHERE order_id IS NOT NULL'), '#/portfolio', 'gate'),
+    edge('markets', 'trading', 'the watchlist prices every symbol the floor trades', n('SELECT COUNT(DISTINCT symbol) AS n FROM tr_plans'), '#/trading'),
+    edge('trading', 'egress', 'five-minute bars and the scan read through the gate', n("SELECT COUNT(*) AS n FROM egress_log WHERE capability IN ('intraday.fetch','spark.fetch','bars.intraday')"), '#/egress'),
+    edge('trading', 'runs', 'the Day Trader writes the morning plan and the evening review', n('SELECT COUNT(*) AS n FROM tr_notes WHERE run_id IS NOT NULL'), '#/runs'),
+    edge('trading', 'audit', 'scans, triggers, refusals, fills and the breaker on the chain', n("SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'trading.%'"), '#/audit', 'audit'),
 
     edge('tax', 'ledger', 'a tax line is a journal entry in the same books, not a report beside them', n('SELECT COUNT(*) AS n FROM tax_lines WHERE entry_id IS NOT NULL'), '#/ledger'),
     edge('tax', 'money', 'the invoices it classifies', n('SELECT COUNT(*) AS n FROM invoices'), '#/money'),

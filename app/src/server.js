@@ -127,6 +127,7 @@ import { syncCrew, crewSweep } from './crew.js';
 import { marketsTick, seedWatchlist } from './markets.js';
 import { newsTick, seedFeeds } from './newsroom.js';
 import { portfolioTick } from './portfolio.js';
+import { tradingTick } from './trading.js';
 import { syncAsks, operatorTick } from './localai.js';
 import { bootEngine, stopAll as stopEngine } from './engine.js';
 import { learningTick, seedGuards } from './learning.js';
@@ -367,6 +368,10 @@ try { seedWatchlist(); seedFeeds(); } catch { /* a first boot seeds on the next 
 setInterval(() => { marketsTick().catch(() => { /* next tick */ }); }, 15_000).unref?.();
 setInterval(() => { newsTick().catch(() => { /* next tick */ }); }, 60_000).unref?.();
 setInterval(() => { try { portfolioTick(); operatorTick(); } catch { /* next tick */ } }, 20_000).unref?.();
+// The trading floor keeps New York's clock: the scan before the open, plans
+// evaluated through the session, every open trade watched to its stop, its
+// target or the flat-by time.
+setInterval(() => { tradingTick().catch(() => { /* next tick */ }); }, 20_000).unref?.();
 // The built-in engine comes back with the process, and goes with it: a
 // llama.cpp server left running after AlphaCore stops is two gigabytes of
 // memory that nothing is using.

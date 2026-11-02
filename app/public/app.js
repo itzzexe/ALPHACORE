@@ -29,6 +29,7 @@ import { renderReviews, renderReview, renderGithub, renderAppBuilder, renderAppB
 import { renderServers, renderServer, renderDeploys, renderDeployTarget, renderMonitors } from '/departments/fleet.js';
 import { renderCrew, renderMyWork } from '/departments/crew.js';
 import { renderMarkets, renderSymbol, renderPortfolio, renderNewsroom, renderLocalAI } from '/departments/markets.js';
+import { renderTrading, renderTradePlan } from '/departments/trading.js';
 import { renderLearning } from '/departments/learning.js';
 import { renderDocument, renderAssuranceMap } from '/departments/assurance.js';
 import { renderProcRuns, renderIntake, renderMinutes, renderWhatsApp, renderPortal, renderBoardPack, renderInsider, renderSelfImprove } from '/departments/workday.js';
@@ -476,6 +477,8 @@ const ROUTE_TABLE = {
   markets: { title: 'Markets desk — the numbers, the forecast and its track record', render: renderMarkets, poll: 10000 },
   symbol: { title: 'Symbol', render: renderSymbol, poll: 15000 },
   portfolio: { title: 'Portfolio — where only a person trades', render: renderPortfolio, poll: 10000 },
+  trading: { title: 'Trading floor — day trades, flat by the close', render: renderTrading, poll: 15000 },
+  tradePlan: { title: 'Day trade', render: renderTradePlan, poll: 15000 },
   newsroom: { title: 'Newsroom — technology, politics, the economy and the markets', render: renderNewsroom, poll: 30000 },
   localai: { title: 'Local AI — the model on the company’s own server', render: renderLocalAI, poll: 10000 },
   learning: { title: 'Learning — what it learned, and what stops a repeat', render: renderLearning, poll: 30000 },

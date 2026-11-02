@@ -9,6 +9,7 @@
 // The credential is "KEY_ID:SECRET" — one vault entry, split here.
 import { wire, need } from './wire.js';
 
+const DATA = 'https://data.alpaca.markets';
 const base = (ctx) => (ctx.config?.live === true ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets');
 
 function headers(ctx) {
@@ -23,7 +24,7 @@ export default {
   auth: { kind: 'api_key' },
   docs: 'Paste KEY_ID:SECRET from alpaca.markets. Orders go to paper-api unless config.live is true.',
   quotaDay: 500,
-  capabilities: ['account.read', 'positions.list', 'orders.list', 'order.place', 'order.cancel'],
+  capabilities: ['account.read', 'positions.list', 'orders.list', 'order.place', 'order.cancel', 'clock.read', 'bars.intraday', 'position.close'],
   ops: {
     'account.read': { target: () => 'alpaca', run: (_a, ctx) => wire(`${base(ctx)}/v2/account`, { headers: headers(ctx), service: 'alpaca' }) },
     'positions.list': { target: () => 'alpaca', run: (_a, ctx) => wire(`${base(ctx)}/v2/positions`, { headers: headers(ctx), service: 'alpaca' }) },
@@ -40,10 +41,36 @@ export default {
           type: a.type === 'limit' ? 'limit' : 'market',
           time_in_force: 'day',
           ...(a.type === 'limit' ? { limit_price: String(a.limitPrice) } : {}),
+          // A day trade's exits travel with its entry: the stop and the target
+          // sit at the broker from the moment it fills, so a dropped
+          // connection here never leaves a position without its stop.
+          ...(a.stopPrice && a.takeProfit ? {
+            order_class: 'bracket',
+            take_profit: { limit_price: String(a.takeProfit) },
+            stop_loss: { stop_price: String(a.stopPrice) },
+          } : {}),
           // Our id on their side, so an order can be matched without guessing.
           client_order_id: `alphacore-${a.orderId}`,
         },
       }),
+    },
+    // The exchange's own clock, for the days the calendar here does not know.
+    'clock.read': { target: () => 'alpaca', run: (_a, ctx) => wire(`${base(ctx)}/v2/clock`, { headers: headers(ctx), service: 'alpaca' }) },
+    // Five-minute bars from the IEX feed the free account carries: the
+    // broker's own prices, so the trigger and the fill read the same market.
+    'bars.intraday': {
+      target: (a) => a.symbol,
+      run: async (a, ctx) => {
+        const start = new Date(Date.now() - (Number(a.days) || 5) * 86_400_000).toISOString();
+        const d = await wire(`${DATA}/v2/stocks/${encodeURIComponent(a.symbol)}/bars?timeframe=5Min&start=${encodeURIComponent(start)}&limit=10000&adjustment=raw&feed=iex`, { headers: headers(ctx), service: 'alpaca-data' });
+        return { symbol: a.symbol, source: 'alpaca-iex', interval: '5m', bars: (d?.bars || []).map((b) => ({ t: Math.floor(Date.parse(b.t) / 1000), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })) };
+      },
+    },
+    // Closing a whole position is a sell, and a sell is an order.
+    'position.close': {
+      target: (a) => a.symbol,
+      value: (a) => Number(a.estValue) || 0,
+      run: (a, ctx) => wire(`${base(ctx)}/v2/positions/${encodeURIComponent(a.symbol)}`, { method: 'DELETE', headers: headers(ctx), service: 'alpaca' }),
     },
     'order.cancel': {
       target: (a) => a.brokerRef,

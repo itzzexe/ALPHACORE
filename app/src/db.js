@@ -5467,6 +5467,79 @@ CREATE TABLE IF NOT EXISTS eq_scenarios (
 );
 `);
 
+// The trading floor. A plan is one day trade from the moment a symbol is
+// watched to the moment it is flat: its range, its trigger, its exits, its
+// replays, its size, its checks, its order and its result in R. The journal
+// is these rows once they are closed — nothing is copied into a second table
+// that could disagree with the first.
+db.exec(`
+CREATE TABLE IF NOT EXISTS tr_plans (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  day          TEXT NOT NULL,                          -- New York date
+  symbol       TEXT NOT NULL,
+  setup        TEXT NOT NULL DEFAULT 'orb',            -- orb|level
+  source       TEXT,                                   -- scan:<id>|desk:<run>|person
+  state        TEXT NOT NULL DEFAULT 'watching',       -- watching|triggered|refused|proposed|open|closed|expired|cancelled
+  level        REAL,
+  or_high      REAL,
+  or_low       REAL,
+  entry        REAL,
+  entry_at     TEXT,
+  stop         REAL,
+  stop_rule    TEXT,
+  target       REAL,
+  target_r     REAL,
+  risk_share   REAL,
+  qty          INTEGER,
+  sizing       TEXT,                                   -- JSON
+  tm           TEXT,                                   -- JSON: the Time Machine
+  history      TEXT,                                   -- JSON: the rule replayed through past sessions
+  checks       TEXT,                                   -- JSON: the risk checks
+  order_id     INTEGER,                                -- pf_orders.id of the entry
+  exit_order_id INTEGER,
+  exit_price   REAL,
+  exit_reason  TEXT,                                   -- stop|target|flat|manual
+  exit_at      TEXT,
+  r_result     REAL,
+  pnl          REAL,
+  note         TEXT,
+  why          TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS tr_plans_day ON tr_plans (day, state);
+CREATE TABLE IF NOT EXISTS tr_scans (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  mode        TEXT NOT NULL,                           -- daily|orb
+  day         TEXT NOT NULL,
+  universe    INTEGER NOT NULL DEFAULT 0,
+  scanned     INTEGER NOT NULL DEFAULT 0,
+  failed      INTEGER NOT NULL DEFAULT 0,
+  hits        TEXT NOT NULL DEFAULT '[]',
+  source      TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS tr_notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                           -- gameplan|review
+  day         TEXT NOT NULL,
+  run_id      TEXT,
+  state       TEXT NOT NULL DEFAULT 'thinking',        -- thinking|ready|failed
+  summary     TEXT,
+  body        TEXT,
+  served_by   TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+// A day trade's order carries its exits, so the broker holds the stop from
+// the moment the entry fills; and it names the plan it belongs to.
+try { db.exec('ALTER TABLE pf_orders ADD COLUMN stop_price REAL'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE pf_orders ADD COLUMN take_profit REAL'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE pf_orders ADD COLUMN plan_id INTEGER'); } catch { /* column exists */ }
+
 /**
  * Run a piece of work so that all of it happens, or none of it.
  *

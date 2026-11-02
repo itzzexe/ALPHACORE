@@ -61425,6 +61425,770 @@
         ]
       }
     },
+    "/api/trading": {
+      "get": {
+        "summary": "GET /api/trading",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/clock": {
+      "get": {
+        "summary": "GET /api/trading/clock",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.view` permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/plan/{planId}": {
+      "get": {
+        "summary": "GET /api/trading/plan/{planId}",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.view` permission.",
+        "parameters": [
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.view` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/scan": {
+      "post": {
+        "summary": "POST /api/trading/scan",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/watch": {
+      "post": {
+        "summary": "POST /api/trading/watch",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/plan/{planId}/evaluate": {
+      "post": {
+        "summary": "POST /api/trading/plan/{planId}/evaluate",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "parameters": [
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/plan/{planId}/cancel": {
+      "post": {
+        "summary": "POST /api/trading/plan/{planId}/cancel",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "parameters": [
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/plan/{planId}/flatten": {
+      "post": {
+        "summary": "POST /api/trading/plan/{planId}/flatten",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "parameters": [
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "matched by `\\d+`"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/whatif": {
+      "post": {
+        "summary": "POST /api/trading/whatif",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/gameplan": {
+      "post": {
+        "summary": "POST /api/trading/gameplan",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/review": {
+      "post": {
+        "summary": "POST /api/trading/review",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/config": {
+      "post": {
+        "summary": "POST /api/trading/config",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.configure` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.configure` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/halt": {
+      "post": {
+        "summary": "POST /api/trading/halt",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.manage` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.manage` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/trading/resume": {
+      "post": {
+        "summary": "POST /api/trading/resume",
+        "tags": [
+          "trading"
+        ],
+        "description": "Requires the `trading.configure` permission.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Shape is defined by the handler; see src/api.js."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key"
+          },
+          "403": {
+            "description": "Missing the `trading.configure` permission"
+          },
+          "404": {
+            "description": "No such record"
+          },
+          "429": {
+            "description": "Rate limited (API keys, and sign-in attempts)"
+          }
+        },
+        "security": [
+          {
+            "sessionToken": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
     "/api/newsroom": {
       "get": {
         "summary": "GET /api/newsroom",

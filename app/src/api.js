@@ -112,6 +112,7 @@ import { toolStatus } from './localtools.js';
 import { draftNow } from './drafts.js';
 import * as Markets from './markets.js';
 import * as Portfolio from './portfolio.js';
+import * as Trading from './trading.js';
 import * as Newsroom from './newsroom.js';
 import * as Engine from './engine.js';
 import * as Learning from './learning.js';
@@ -2685,6 +2686,24 @@ const routes = [
   }],
   ['POST', /^\/api\/portfolio\/sync$/, async (_p, _b, _u, user) => Portfolio.syncBroker({ actor: `human:${user.username}` })],
 
+  // ---- Trading floor ----------------------------------------------------
+  ['GET', /^\/api\/trading$/, () => Trading.overview()],
+  ['GET', /^\/api\/trading\/clock$/, () => Trading.clockNow()],
+  ['GET', /^\/api\/trading\/plan\/(\d+)$/, async (p) => Trading.planDetail(Number(p[0]))],
+  ['POST', /^\/api\/trading\/scan$/, async (_p, body, _u, user) => (body.mode === 'orb'
+    ? Trading.scanOrb({ actor: `human:${user.username}` })
+    : Trading.scanDaily({ actor: `human:${user.username}` }))],
+  ['POST', /^\/api\/trading\/watch$/, (_p, body, _u, user) => Trading.watch({ symbol: need(body, 'symbol'), setup: body.setup || 'orb', level: body.level ?? null, why: body.why || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/plan\/(\d+)\/evaluate$/, async (p, _b, _u, user) => Trading.evaluate(Number(p[0]), { actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/plan\/(\d+)\/cancel$/, (p, _b, _u, user) => Trading.cancel({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/plan\/(\d+)\/flatten$/, async (p, _b, _u, user) => Trading.flatten({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/whatif$/, async (_p, body, _u, user) => Trading.whatIf({ ...body, symbol: need(body, 'symbol'), entry: need(body, 'entry'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/gameplan$/, (_p, body, _u, user) => Trading.requestGameplan({ lang: body.lang || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/review$/, (_p, body, _u, user) => Trading.requestReview({ day: body.day || null, lang: body.lang || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/config$/, (_p, body, _u, user) => Trading.setConfig({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/halt$/, (_p, body, _u, user) => Trading.halt({ why: body.why || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/trading\/resume$/, (_p, _b, _u, user) => Trading.resume({ actor: `human:${user.username}` })],
+
   // ---- Newsroom ---------------------------------------------------------
   ['GET', /^\/api\/newsroom$/, (_p, _b, url) => Newsroom.overview({ category: url.searchParams.get('category'), search: url.searchParams.get('q'), limit: url.searchParams.get('limit') })],
   ['POST', /^\/api\/newsroom\/feed$/, (_p, body, _u, user) => Newsroom.addFeed({ name: body.name, url: need(body, 'url'), category: body.category || 'custom', lang: body.lang || 'en', actor: `human:${user.username}` })],
@@ -2880,6 +2899,15 @@ function permFor(m, path) {
   if (/^\/api\/portfolio\/order\/\d+\/(approve|reject)$/.test(path)) return 'portfolio.approve';
   if (path === '/api/portfolio/broker') return 'portfolio.connect';
   if (path.startsWith('/api/portfolio')) return 'portfolio.propose';
+  // The trading floor: watching and scanning is everyday work; the desk's risk
+  // rules and lifting a halt are held apart. Anybody who may trade may halt —
+  // stopping is never the dangerous direction. Approving the order stays on
+  // the portfolio desk, under portfolio.approve.
+  if (path.startsWith('/api/trading')) {
+    if (m === 'GET') return 'trading.view';
+    if (path === '/api/trading/config' || path === '/api/trading/resume') return 'trading.configure';
+    return 'trading.manage';
+  }
   if (path === '/api/partnerships') return 'partners.view';
   if (path.startsWith('/api/partnerships')) return 'partners.manage';
   // `simulation.*` is the shadow company, which forks the database. This is the

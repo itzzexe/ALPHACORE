@@ -14,6 +14,7 @@ import { AR_BUILD } from '/i18n-build.js';
 import { AR_ENG } from '/i18n-eng.js';
 import { AR_MKT } from '/i18n-markets.js';
 import { AR_ENT } from '/i18n-enterprise.js';
+import { AR_TRD } from '/i18n-trading.js';
 
 export const LANGS = { en: 'English', ar: 'العربية' };
 const KEY = 'alphacore-lang';
@@ -91,7 +92,7 @@ export const SECTION_AR = {
   localai: 'الذكاء المحلي', learning: 'التعلّم',
   policies: 'السياسات والإجراءات', iso: 'الجودة والآيزو', internalaudit: 'التدقيق الداخلي والمالي', transformation: 'التحول الرقمي',
   assurancemap: 'خريطة الحوكمة', procruns: 'العمليات قيد التنفيذ', intake: 'استقبال الوثائق', minutes: 'التسجيلات والمحاضر', whatsapp: 'واتساب',
-  portal: 'بوابة العملاء والموردين', boardpack: 'حزمة مجلس الإدارة', insider: 'مخاطر الداخل', selfimprove: 'حلقة التحسين الذاتي', globe: 'الكرة الأرضية', missions: 'المهمات', healthindex: 'مؤشر الصحة', whatif: 'ماذا لو', broadcasts: 'البث العام', livedata: 'البيانات الحية', equity: 'جدول الملكية', radar: 'رادار الأفق', atlas: 'أطلس الأسواق', naming: 'استوديو الأسماء', production: 'استوديو الإنتاج', opscenter: 'مركز العمليات', strategy: 'الاستراتيجية والاستحواذ', insurance: 'التأمين', aml: 'مكافحة غسل الأموال', remit: 'الحوالات وسويفت', markets: 'مكتب الأسواق', portfolio: 'المحفظة', newsroom: 'غرفة الأخبار',
+  portal: 'بوابة العملاء والموردين', boardpack: 'حزمة مجلس الإدارة', insider: 'مخاطر الداخل', selfimprove: 'حلقة التحسين الذاتي', globe: 'الكرة الأرضية', missions: 'المهمات', healthindex: 'مؤشر الصحة', whatif: 'ماذا لو', broadcasts: 'البث العام', livedata: 'البيانات الحية', equity: 'جدول الملكية', radar: 'رادار الأفق', atlas: 'أطلس الأسواق', naming: 'استوديو الأسماء', production: 'استوديو الإنتاج', opscenter: 'مركز العمليات', strategy: 'الاستراتيجية والاستحواذ', insurance: 'التأمين', aml: 'مكافحة غسل الأموال', remit: 'الحوالات وسويفت', markets: 'مكتب الأسواق', portfolio: 'المحفظة', trading: 'قاعة التداول', newsroom: 'غرفة الأخبار',
 };
 
 // ---------- interface strings ----------
@@ -1122,6 +1123,7 @@ Object.assign(AR, AR_BUILD);
 Object.assign(AR, AR_ENG);
 Object.assign(AR, AR_MKT);
 Object.assign(AR, AR_ENT);
+Object.assign(AR, AR_TRD);
 
 export function t(s) {
   if (lang !== 'ar' || s == null) return s;

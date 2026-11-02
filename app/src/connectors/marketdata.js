@@ -176,13 +176,92 @@ export async function history(symbol, ctx, range = '2y') {
   throw lastErr || new Error(`no history for ${s}`);
 }
 
+// --------------------------------------------------------------- intraday --
+
+// Yahoo writes BRK.B as BRK-B; the desk keeps the dot.
+const toYahoo = (s) => (/^[A-Z]{1,5}\.[A-Z]$/.test(s) ? s.replace('.', '-') : s);
+
+/**
+ * Five-minute bars for the trading floor. 60d is the most Yahoo serves at
+ * this interval and is what the Time Machine samples from; 1d is today alone,
+ * for the trigger. Pre- and post-market are left out: the opening range is
+ * the regular session's first fifteen minutes, not the night's.
+ */
+async function yahooIntraday(symbol, range) {
+  const r = await yahooChart(toYahoo(symbol), range, '5m');
+  const ts = r.timestamp || [];
+  const qt = r.indicators?.quote?.[0] || {};
+  const bars = [];
+  for (let i = 0; i < ts.length; i++) {
+    if (qt.close?.[i] == null) continue;
+    bars.push({ t: ts[i], o: qt.open?.[i] ?? qt.close[i], h: qt.high?.[i] ?? qt.close[i], l: qt.low?.[i] ?? qt.close[i], c: qt.close[i], v: qt.volume?.[i] ?? 0 });
+  }
+  return { symbol, bars, source: 'yahoo', interval: '5m' };
+}
+
+async function twelveIntraday(symbol, key, range) {
+  const size = range === '1d' ? 80 : 5000;
+  const d = await wire(`${TWELVE}/time_series?symbol=${encodeURIComponent(symbol)}&interval=5min&outputsize=${size}&timezone=UTC&apikey=${encodeURIComponent(key)}`, { service: 'twelvedata' });
+  if (d?.status === 'error') throw new Error(d.message);
+  const bars = (d?.values || []).map((v) => ({
+    t: Math.floor(Date.parse(`${v.datetime.replace(' ', 'T')}Z`) / 1000), o: Number(v.open), h: Number(v.high), l: Number(v.low), c: Number(v.close), v: Number(v.volume) || 0,
+  })).reverse();
+  return { symbol, bars, source: 'twelvedata', interval: '5m' };
+}
+
+export async function intraday(symbol, ctx, range = '5d') {
+  const [s] = cleanSymbols([symbol]);
+  const rg = ['1d', '5d', '60d'].includes(range) ? range : '5d';
+  const key = ctx.credential();
+  let lastErr = null;
+  for (const p of order(ctx)) {
+    try {
+      if (p === 'twelvedata') return await twelveIntraday(s, key, rg);
+      if (p === 'yahoo') return await yahooIntraday(s, rg);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error(`no intraday bars for ${s}`);
+}
+
+/**
+ * Daily closes for many symbols at once, for the pre-market scan. Yahoo's
+ * spark answers twenty symbols a request and refuses more, so a universe of a
+ * hundred is five requests, not a hundred.
+ */
+export async function spark(symbols, range = '3mo', interval = '1d') {
+  const syms = [...new Set((Array.isArray(symbols) ? symbols : String(symbols || '').split(','))
+    .map((s) => String(s).trim().toUpperCase()).filter((s) => SYMBOL.test(s)))].slice(0, 400);
+  if (!syms.length) throw new Error('no valid symbols');
+  const out = {}; const failed = [];
+  for (let i = 0; i < syms.length; i += 20) {
+    const batch = syms.slice(i, i + 20);
+    const back = Object.fromEntries(batch.map((s) => [toYahoo(s), s]));
+    try {
+      const data = await wire(`${YAHOO}/v7/finance/spark?symbols=${encodeURIComponent(Object.keys(back).join(','))}&range=${range}&interval=${interval}`, { headers: ua(), service: 'yahoo', timeout: 15_000 });
+      for (const item of data?.spark?.result || []) {
+        const resp = item.response?.[0];
+        if (!resp) continue;
+        const sym = back[String(item.symbol || '').toUpperCase()] || String(item.symbol || '').toUpperCase();
+        const closes = resp.indicators?.quote?.[0]?.close || [];
+        out[sym] = {
+          t: resp.timestamp || [], c: closes,
+          price: resp.meta?.regularMarketPrice ?? null, volume: resp.meta?.regularMarketVolume ?? null,
+          name: resp.meta?.longName || resp.meta?.shortName || null,
+        };
+      }
+    } catch { failed.push(...batch); }
+    for (const s of batch) if (!out[s] && !failed.includes(s)) failed.push(s);
+  }
+  return { series: out, failed, source: 'yahoo' };
+}
+
 export default {
   id: 'marketdata',
   label: 'Market data — Yahoo Finance, Twelve Data, Finnhub',
   auth: { kind: 'api_key', optional: true },
   docs: 'Works with no key (Yahoo Finance). A free Twelve Data or Finnhub key adds a second source; set config.provider to prefer it.',
   quotaDay: 6000,
-  capabilities: ['quotes.fetch', 'history.fetch'],
+  capabilities: ['quotes.fetch', 'history.fetch', 'intraday.fetch', 'spark.fetch'],
   ops: {
     'quotes.fetch': {
       target: () => 'query1.finance.yahoo.com',
@@ -191,6 +270,14 @@ export default {
     'history.fetch': {
       target: () => 'query1.finance.yahoo.com',
       run: (args, ctx) => history(args.symbol, ctx, args.range || '2y'),
+    },
+    'intraday.fetch': {
+      target: () => 'query1.finance.yahoo.com',
+      run: (args, ctx) => intraday(args.symbol, ctx, args.range || '5d'),
+    },
+    'spark.fetch': {
+      target: () => 'query1.finance.yahoo.com',
+      run: (args) => spark(args.symbols, args.range || '3mo', args.interval || '1d'),
     },
   },
 };
