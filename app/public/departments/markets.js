@@ -11,6 +11,7 @@ import { hasPermC } from '../state/session.js';
 import { t, lang } from '/i18n.js';
 import { kpi, tabs, emptyCta, act, wireActs, spark, ago, hashParam, bar } from '../components/ui.js';
 import { correctButton, wireCorrections } from './learning.js';
+import { askPanel, wireAsk } from '../components/marketask.js';
 
 // ---------------------------------------------------------------- format --
 
@@ -93,6 +94,7 @@ export async function renderMarkets() {
       ${canManage ? act('/api/markets/brief', 'Write a brief now', { done: 'The analyst is writing' }) : ''}
     </div>
   </div>
+  ${canManage ? askPanel('markets') : ''}
   ${d.source !== 'live' ? `<div class="callout mk-callout">
     <b>${esc(t('These prices are simulated.'))}</b> ${esc(t('A plausible random walk so the desk can be learned on a fresh install. Nothing here is the market.'))}
     ${canArm ? `<form id="mk-live" class="form-inline" style="margin-top:10px">
@@ -181,6 +183,7 @@ export async function renderMarkets() {
   </div>`;
 
   wireActs(view, api, toast, renderMarkets);
+  wireAsk(view);
   wireCorrections(view, renderMarkets);
   $('#mk-add')?.addEventListener('submit', async (e) => {
     e.preventDefault();

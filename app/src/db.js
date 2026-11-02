@@ -5668,6 +5668,37 @@ CREATE TABLE IF NOT EXISTS gold_notes (
 );
 `);
 
+// The gold desk's advice, and how each piece of it came out. A signal is
+// written when it is given, with its entry, stop and target, and graded by
+// the tape: the target reached first, the stop reached first, or neither by
+// the end of its horizon. The probability is stored before calibration too,
+// because calibration learns from the raw number, not from its own output.
+db.exec(`
+CREATE TABLE IF NOT EXISTS gold_signals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  made_at     INTEGER NOT NULL,
+  horizon     INTEGER NOT NULL,                        -- seconds
+  side        TEXT NOT NULL,                           -- buy|sell
+  entry       REAL NOT NULL,                           -- the ask for a buy, the bid for a sell
+  stop        REAL NOT NULL,
+  target      REAL NOT NULL,
+  expected    REAL NOT NULL,                           -- the ensemble's price at the horizon
+  p           REAL NOT NULL,                           -- calibrated chance the direction is right
+  ev          REAL,                                    -- expected dollars an ounce after the spread
+  spread      REAL,
+  grade       TEXT,                                    -- A|B|C: how the desk has done at this horizon
+  trend       TEXT,                                    -- with|against|flat: the fifteen-minute trend
+  src         TEXT,
+  exit_price  REAL,
+  exit_at     INTEGER,
+  outcome     TEXT,                                    -- target|stop|time
+  pnl         REAL                                     -- dollars an ounce after the spread
+);
+CREATE INDEX IF NOT EXISTS gold_signals_open ON gold_signals (outcome, made_at);
+CREATE INDEX IF NOT EXISTS gold_preds_hdue ON gold_preds (horizon, due_at);
+`);
+try { db.exec('ALTER TABLE gold_preds ADD COLUMN p_raw REAL'); } catch { /* column exists */ }
+
 /**
  * Run a piece of work so that all of it happens, or none of it.
  *

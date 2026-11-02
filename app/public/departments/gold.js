@@ -12,6 +12,7 @@ import { api } from '../services/api.js';
 import { hasPermC } from '../state/session.js';
 import { t } from '/i18n.js';
 import { kpi, tabs, act, wireActs, spark, ago, hashParam } from '../components/ui.js';
+import { askPanel, wireAsk } from '../components/marketask.js';
 
 const num = (x) => `<span class="ltr">${x}</span>`;
 const f2 = (x, d = 2) => (x == null || !Number.isFinite(Number(x)) ? '—' : Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -20,7 +21,9 @@ const dir = (x) => (x > 0 ? 'mk-up' : x < 0 ? 'mk-down' : '');
 const pct = (x, d = 1) => (x == null ? '—' : `${(x * 100).toFixed(d)}%`);
 const hz = (h) => (h < 60 ? `${h}s` : h < 3600 ? `${h / 60}m` : `${h / 3600}h`);
 const clock = (ms) => new Date(ms).toISOString().slice(11, 19);
-const MODEL = { naive: 'No change', drift: 'Drift', momentum: 'Momentum', meanrev: 'Mean reversion', ar: 'Autoregression', ens: 'Ensemble' };
+const MODEL = { naive: 'No change', drift: 'Drift', momentum: 'Momentum', meanrev: 'Mean reversion', ar: 'Autoregression', holt: 'Damped trend', learn: 'Learner', ens: 'Ensemble' };
+const MEMBERS = Object.keys(MODEL).filter((m) => m !== 'ens');
+const WHY = { 'no-edge': 'the expected move does not clear the spread', unsure: 'the chance of the direction is too low', unproven: 'the desk has not beaten “no change” at this horizon', 'against-trend': 'against the higher-timeframe trend', 'no-room': 'the stop would sit inside the spread' };
 const TF_SEC = { '1s': 1, '5s': 5, '15s': 15, '30s': 30, '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600 };
 const TFS = Object.keys(TF_SEC);
 const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(`gold:${k}`)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(`gold:${k}`, JSON.stringify(v)); } catch { /* a private window */ } } };
@@ -33,13 +36,16 @@ const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(`g
 
 const TYPES = [['candles', 'Candles'], ['hollow', 'Hollow candles'], ['ha', 'Heikin Ashi'], ['bars', 'OHLC bars'], ['line', 'Line'], ['area', 'Area']];
 const HEIGHTS = { s: 260, m: 380, l: 520, xl: 680 };
-const IND = [['ema', 'EMA'], ['sma', 'SMA'], ['bb', 'Bollinger'], ['cone', 'Forecast'], ['pos', 'Positions'], ['levels', 'Levels'], ['rsi', 'RSI'], ['macd', 'MACD'], ['stoch', 'Stochastic'], ['cci', 'CCI'], ['wr', 'Williams %R'], ['atr', 'ATR']];
+const IND = [['ema', 'EMA'], ['sma', 'SMA'], ['bb', 'Bollinger'], ['st', 'Supertrend'], ['ichi', 'Ichimoku'], ['dc', 'Donchian'], ['sar', 'Parabolic SAR'], ['piv', 'Pivots'],
+  ['cone', 'Forecast'], ['ghost', 'Past forecasts'], ['sig', 'Signals'], ['pos', 'Positions'], ['levels', 'Drawings'],
+  ['rsi', 'RSI'], ['macd', 'MACD'], ['stoch', 'Stochastic'], ['cci', 'CCI'], ['wr', 'Williams %R'], ['atr', 'ATR']];
 const SUBS = ['rsi', 'macd', 'stoch', 'cci', 'wr', 'atr'];
 const DEF = {
-  tf: '15s', type: 'candles', bars: 240, height: 'm', time: 'utc', cross: true, levels: [],
-  ind: { ema: true, sma: false, bb: true, cone: true, pos: true, levels: true, rsi: true, macd: true, stoch: false, cci: false, wr: false, atr: false },
-  p: { ema: [9, 21, 50], sma: 20, bb: [20, 2], rsi: 14, macd: [12, 26, 9], stoch: [14, 3], cci: 20, wr: 14, atr: 14 },
+  tf: '15s', type: 'candles', bars: 240, height: 'm', time: 'utc', cross: true, levels: [], drawings: [], gh: 60,
+  ind: { ema: true, sma: false, bb: true, st: false, ichi: false, dc: false, sar: false, piv: false, cone: true, ghost: false, sig: true, pos: true, levels: true, rsi: true, macd: true, stoch: false, cci: false, wr: false, atr: false },
+  p: { ema: [9, 21, 50], sma: 20, bb: [20, 2], rsi: 14, macd: [12, 26, 9], stoch: [14, 3], cci: 20, wr: 14, atr: 14, st: [10, 3], ichi: [9, 26, 52], dc: 20, sar: [0.02, 0.2] },
 };
+const isPoint = (x) => x && Number.isFinite(Number(x.t)) && Number.isFinite(Number(x.p));
 
 /** What this browser kept, held to the lists it may name — a stored value is read like an address bar's. */
 function chartCfg() {
@@ -53,6 +59,8 @@ function chartCfg() {
     time: one(s.time, ['utc', 'local'], DEF.time),
     cross: s.cross !== false,
     levels: Array.isArray(s.levels) ? s.levels.map(Number).filter(Number.isFinite).slice(0, 20) : [],
+    drawings: Array.isArray(s.drawings) ? s.drawings.filter((x) => ['trend', 'fib'].includes(x?.k) && isPoint(x.a) && isPoint(x.b)).slice(0, 20) : [],
+    gh: one(Number(s.gh), [15, 60, 300], DEF.gh),
     ind: Object.fromEntries(IND.map(([k]) => [k, typeof s.ind?.[k] === 'boolean' ? s.ind[k] : DEF.ind[k]])),
     p: { ...DEF.p, ...(s.p && typeof s.p === 'object' ? s.p : {}) },
   };
@@ -61,13 +69,15 @@ const saveCfg = (c) => store.set('chart', c);
 const query = (c) => new URLSearchParams({
   tf: c.tf, bars: String(c.bars), ema: c.p.ema.join(','), sma: String(c.p.sma), bb: c.p.bb.join(','), rsi: String(c.p.rsi),
   macd: c.p.macd.join(','), stoch: c.p.stoch.join(','), cci: String(c.p.cci), wr: String(c.p.wr), atr: String(c.p.atr),
+  st: c.p.st.join(','), ichi: c.p.ichi.join(','), dc: String(c.p.dc), sar: c.p.sar.join(','), gh: String(c.gh),
 }).toString();
 
 const vw = { span: null, off: 0 };
 let screen = null;
 let hover = null;
 let geo = null;
-let drawing = false;
+let tool = null;
+let anchor = null;
 let drag = null;
 let frame = 0;
 let timer = null;
@@ -130,12 +140,14 @@ export async function renderGold() {
     <p>${esc(t('Spot gold by the second. Five models and an ensemble forecast every horizon from five seconds to an hour; every forecast is written down before its moment and graded when it comes; the ensemble re-weights itself after every grade, re-fits its error bands, and retunes its models every hour. Ask for any moment in the future, test the forecasts in the simulator, and trade them on paper.'))}</p>
     <div class="inline">${srcChip(d.source)} <span class="sub">${num(Math.floor(d.seconds / 60))} ${esc(t('minutes of one-second prices'))}</span></div>
   </div>
+  ${hasPermC('markets.manage') ? askPanel('gold') : ''}
   ${tabs([['terminal', 'Trading screen'], ['forecast', 'Forecasts'], ['accuracy', 'Accuracy'], ['learning', 'Learning'], ['simulator', 'Simulator'], ['settings', 'Settings']], tab)}
   ${pick(STATIC, tab)?.(d, { canManage, canConfigure, canFeed }) || ''}
   <div id="gd-dyn">${tab === 'terminal' ? '' : pick(SLOW, tab)?.(d) || ''}</div>
   <div class="panel">${disclaimer()}</div></div>`;
   view.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { location.hash = `#/gold?tab=${b.dataset.tab}`; }));
   wireActs(view, api, toast, () => { view.innerHTML = ''; renderGold(); });
+  wireAsk(view);
   wire(tab);
   if (tab === 'terminal') { await refreshTerminal(); startLoop(); }
 }
@@ -160,13 +172,14 @@ const STATIC = {
           ${sel('bars', 'History', [[120, '120 candles'], [240, '240 candles'], [500, '500 candles']])}
           ${sel('height', 'Height', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large'], ['xl', 'Extra large']])}
           ${sel('time', 'Time', [['utc', 'UTC'], ['local', 'Your clock']])}
+          ${sel('gh', 'Past forecasts at', [[15, '15s'], [60, '1m'], [300, '5m']])}
         </div>
       </div>
       <div class="gd-tools">
         <div class="inline" role="group" aria-label="${esc(t('Chart controls'))}">
           ${zb('in', 'Zoom in', '+')}${zb('out', 'Zoom out', '−')}${zb('left', 'Older', '◀')}${zb('right', 'Newer', '▶')}${zb('fit', 'Show all candles', '⤢')}
           <button type="button" class="btn btn-sm btn-ghost" data-cz="cross" aria-pressed="${c.cross}">${esc(t('Crosshair'))}</button>
-          <button type="button" class="btn btn-sm btn-ghost" data-cz="draw" aria-pressed="false">${esc(t('Draw a level'))}</button>
+          ${[['level', 'Draw a level'], ['trend', 'Draw a trend line'], ['fib', 'Draw Fibonacci']].map(([k, l]) => `<button type="button" class="btn btn-sm btn-ghost" data-cz="draw" data-tool="${k}" aria-pressed="false">${esc(t(l))}</button>`).join('')}
           ${zb('full', 'Full screen', '⛶')}
           <button type="button" class="btn btn-sm btn-primary" data-cz="live" id="gd-golive" hidden>${esc(t('Back to live'))} ▶▶</button>
         </div>
@@ -178,6 +191,7 @@ const STATIC = {
           ${pf('ema', 'EMA periods (three)', c.p.ema)}${pf('sma', 'SMA period', c.p.sma)}${pf('bb', 'Bollinger: period, deviations', c.p.bb)}
           ${pf('rsi', 'RSI period', c.p.rsi)}${pf('macd', 'MACD: fast, slow, signal', c.p.macd)}${pf('stoch', 'Stochastic: %K, %D', c.p.stoch)}
           ${pf('cci', 'CCI period', c.p.cci)}${pf('wr', 'Williams %R period', c.p.wr)}${pf('atr', 'ATR period', c.p.atr)}
+          ${pf('st', 'Supertrend: ATR period, multiple', c.p.st)}${pf('ichi', 'Ichimoku: conversion, base, span B', c.p.ichi)}${pf('dc', 'Donchian period', c.p.dc)}${pf('sar', 'Parabolic SAR: step, maximum', c.p.sar)}
           <div class="wide inline"><button class="btn btn-sm btn-primary" type="submit">${esc(t('Apply'))}</button><button class="btn btn-sm btn-ghost" type="button" data-cz="pdefault">${esc(t('Standard settings'))}</button></div>
         </form>
       </details>
@@ -186,6 +200,7 @@ const STATIC = {
       <div id="gd-chart" class="gd-chart" dir="ltr" tabindex="0" role="group" aria-label="${esc(t('Gold chart: drag to scroll, the wheel or + and − to zoom, arrow keys to move, Home for live'))}"></div>
     </section>
     <aside class="gd-side">
+      <div class="panel gd-advice" id="gd-advice"></div>
       <div class="panel"><div class="panel-title">${esc(t('Order ticket'))} <span class="chip chip-dim">${esc(t('paper'))}</span></div>
         ${canManage ? `<form id="gd-ticket" class="fields">
           <div><label class="fl" for="gd-oz">${esc(t('Ounces'))}</label><input id="gd-oz" type="number" step="any" min="0.01" value="10" class="ltr"></div>
@@ -254,6 +269,9 @@ const STATIC = {
       ${f('botMinP', 'Bot: least confidence in the direction', c.botMinP)}
       ${f('botOz', 'Bot: ounces', c.botOz)}
       ${f('simPattern', 'Simulated tape: planted pattern (0 = pure random walk)', c.simPattern)}
+      ${f('adviceMinP', 'Advice: least chance of the direction', c.adviceMinP)}
+      ${f('adviceEdgeX', 'Advice: expected move, times the spread', c.adviceEdgeX)}
+      ${f('riskPct', 'Advice: percent of the book one idea risks', c.riskPct)}
       ${canConfigure ? `<div class="wide"><button class="btn btn-primary" type="submit">${esc(t('Save'))}</button></div>` : ''}
     </form>
     ${canConfigure ? `<div class="inline" style="margin-block-start:10px">${act('/api/gold/reset-paper', 'Reset the paper book', { cls: 'btn-sm btn-ghost', confirm: 'Close every paper trade and reset the cash?' })}
@@ -298,6 +316,17 @@ function wire(tab) {
     try { await api('/api/gold/config', { method: 'POST', body }); toast(t('Saved')); } catch (err) { toast(err.message, true); }
   });
   if (tab === 'terminal') {
+    // The advice fills the ticket; it never presses the button.
+    view.querySelector('#gd-advice')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-fill]');
+      const x = b && screen?.advice?.list.find((a) => a.horizon === Number(b.dataset.fill));
+      if (!x || !$('#gd-ticket')) return;
+      const put = (id, v) => { const el = $(id); if (el) el.value = v; };
+      put('#gd-oz', x.oz); put('#gd-sl', x.stop.toFixed(2)); put('#gd-tp', x.target.toFixed(2)); put('#gd-exp', x.horizon);
+      view.querySelectorAll('#gd-ticket [data-side]').forEach((s) => s.classList.toggle('gd-suggested', s.dataset.side === x.action));
+      $('#gd-ticket').scrollIntoView({ block: 'nearest' });
+      toast(t(x.action === 'buy' ? 'The ticket is filled. Check it, then press Buy.' : 'The ticket is filled. Check it, then press Sell.'));
+    });
     view.querySelector('#gd-bottom')?.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-close]');
       if (!b) return;
@@ -347,6 +376,7 @@ async function refreshTerminal() {
     </tbody></table><p class="sub">${esc(t('Others from the markets desk'))}</p>`);
   drawChart();
   set('#gd-tick', tickNote(d));
+  set('#gd-advice', advicePanel(d));
   const open = $('#gd-tech details')?.open;
   if (set('#gd-tech', techPanel(d.tech)) && open) $('#gd-tech details').open = true;
   const a = d.account;
@@ -372,6 +402,39 @@ async function refreshTerminal() {
           <td>${p.hit == null ? '<span class="chip chip-dim">—</span>' : p.hit ? `<span class="chip chip-ok">${esc(t('right'))}</span>` : `<span class="chip chip-bad">${esc(t('wrong'))}</span>`}</td>
           <td aria-label="${esc(t(p.inside80 ? 'inside the band' : 'outside the band'))}">${p.inside80 ? '✓' : '✗'}</td></tr>`).join('')}</tbody></table></div>
     </div>`);
+}
+
+const actChip = (a, big = false) => `<span class="chip ${a === 'buy' ? 'chip-ok' : a === 'sell' ? 'chip-bad' : 'chip-dim'}${big ? ' mq-big' : ''}">${esc(t(a === 'buy' ? 'Buy' : a === 'sell' ? 'Sell' : 'Wait'))}</span>`;
+const TREND = { up: ['chip-ok', '↑', 'Rising'], down: ['chip-bad', '↓', 'Falling'], flat: ['', '→', 'Sideways'] };
+
+/**
+ * The advice, beside its record. A buy or a sell carries its entry, stop,
+ * target and size, and a button that fills the ticket with them — the person
+ * still presses buy or sell. A wait says what is missing.
+ */
+function advicePanel(d) {
+  const a = d.advice;
+  if (!a) return '';
+  const best = a.verdict.horizon ? a.list.find((x) => x.horizon === a.verdict.horizon) : null;
+  const [tc, tg, tl] = TREND[a.trend?.dir] || TREND.flat;
+  const r = d.signalRecord;
+  return `<div class="panel-title">${esc(t('The advice'))} <span class="chip ${tc}" title="${esc(t('Higher-timeframe trend'))}">${tg} ${esc(t(tl))}${a.trend?.tf ? ` · ${esc(a.trend.tf)}` : ''}</span></div>
+    <div class="gd-verdict">${actChip(a.verdict.action, true)} ${best ? `<span>${esc(t('at'))} ${num(hz(best.horizon))}</span>` : ''}</div>
+    ${best ? `<div class="tr-levels gd-plan">
+        <div><span class="sub">${esc(t('Entry'))}</span><b class="ltr">${f2(best.entry)}</b></div>
+        <div><span class="sub">${esc(t('Stop loss'))}</span><b class="ltr mk-down">${f2(best.stop)}</b></div>
+        <div><span class="sub">${esc(t('Take profit'))}</span><b class="ltr mk-up">${f2(best.target)}</b></div>
+        <div><span class="sub">${esc(t('Chance'))}</span><b class="ltr">${pct(best.p, 0)}</b></div>
+        <div><span class="sub">${esc(t('Reward / risk'))}</span><b class="ltr">${f2(best.rr)}</b></div>
+        <div><span class="sub">${esc(t('Size'))}</span><b class="ltr">${best.oz} oz</b></div></div>
+      ${hasPermC('gold.manage') ? `<button type="button" class="btn btn-sm btn-primary" data-fill="${best.horizon}">${esc(t('Put it in the ticket'))}</button>` : ''}`
+    : `<p class="hint">${esc(t('No horizon has everything a trade needs right now. Waiting is advice too: each line below says what is missing.'))}</p>`}
+    <table class="tbl gd-advtbl"><tbody>
+      ${a.list.map((x) => `<tr><td>${num(hz(x.horizon))}</td><td>${actChip(x.action)}</td><td class="ltr">${pct(x.p, 0)}</td><td class="ltr ${dir(x.ev)}">${sg(x.ev)}</td>
+        <td title="${esc(`${x.record?.n || 0} · ${pct(x.record?.hitRate)} · ${x.record?.skillPct ?? '—'}%`)}"><b>${esc(x.grade)}</b></td></tr>
+        ${x.why.length ? `<tr class="gd-why"><td colspan="5" class="sub">${x.why.map((w) => esc(t(WHY[w] || w))).join(' · ')}</td></tr>` : ''}`).join('')}
+    </tbody></table>
+    <p class="sub">${esc(t('Signals in the last 24 hours'))}: ${num(r?.n || 0)}${r?.n ? ` · ${esc(t('won'))} ${num(pct(r.winRate, 0))} · ${num(`${sg(r.avg)} $/oz`)}${r.pf != null ? ` · PF ${num(f2(r.pf))}` : ''}` : ''}</p>`;
 }
 
 function techPanel(tech) {
@@ -465,6 +528,9 @@ function drawChart() {
     ...(c.ind.bb ? [...I.bbUpper, ...I.bbLower] : []),
     ...(c.ind.ema ? I.ema.flat() : []),
     ...(c.ind.sma ? I.sma : []),
+    ...(c.ind.st ? I.st : []),
+    ...(c.ind.dc ? [...I.dcUp, ...I.dcLo] : []),
+    ...(c.ind.ichi ? [...I.spanA, ...I.spanB, ...I.tenkan, ...I.kijun] : []),
     ...cone.flatMap((f) => [f.low95, f.high95]),
   ].filter((v) => v != null && Number.isFinite(v));
   let lo = Math.min(...vals); let hi = Math.max(...vals);
@@ -500,9 +566,60 @@ function drawChart() {
     }).join('');
   }
 
+  // A moment in time → a slot, so things stored by their time (signals, past
+  // forecasts, drawings) stay on their candle as the chart scrolls and zooms.
+  const span0 = tfs * 1000;
+  const xt = (ms) => {
+    let lo2 = 0; let hi2 = cs.length - 1;
+    if (ms >= cs[hi2].t) return x(hi2 + (ms - cs[hi2].t) / span0);
+    if (ms <= cs[0].t) return x((ms - cs[0].t) / span0);
+    while (hi2 - lo2 > 1) { const m = (lo2 + hi2) >> 1; if (cs[m].t <= ms) lo2 = m; else hi2 = m; }
+    return x(lo2 + (ms - cs[lo2].t) / (cs[hi2].t - cs[lo2].t || span0));
+  };
+  const seg = (x1, y1, x2, y2, cls) => `<line class="${cls}" x1="${P(x1)}" y1="${P(y1)}" x2="${P(x2)}" y2="${P(y2)}"/>`;
+  const only = (arr, keep) => arr.map((v, i) => (keep(i) ? v : null));
+  const cloud = () => {
+    let up = ''; let back = '';
+    I.spanA.forEach((v, i) => { if (v != null && I.spanB[i] != null) { up += `${up ? 'L' : 'M'}${P(x(i))} ${P(y(v))}`; back = `L${P(x(i))} ${P(y(I.spanB[i]))}${back}`; } });
+    return up ? `<path class="gd-cloud" d="${up}${back}Z"/>` : '';
+  };
+
   const overlays = (c.ind.bb ? path(I.bbUpper, 'gd-bb') + path(I.bbLower, 'gd-bb') + path(I.bbMid, 'gd-bbm') : '')
+    + (c.ind.ichi ? cloud() + path(I.spanA, 'gd-spa') + path(I.spanB, 'gd-spb') + path(I.tenkan, 'gd-tenkan') + path(I.kijun, 'gd-kijun') : '')
+    + (c.ind.dc ? path(I.dcUp, 'gd-dc') + path(I.dcLo, 'gd-dc') + path(I.dcMid, 'gd-dcm') : '')
     + (c.ind.sma ? path(I.sma, 'gd-sma') : '')
-    + (c.ind.ema ? I.ema.map((e, j) => path(e, ['gd-e9', 'gd-e21', 'gd-e50'][j])).join('') : '');
+    + (c.ind.ema ? I.ema.map((e, j) => path(e, ['gd-e9', 'gd-e21', 'gd-e50'][j])).join('') : '')
+    + (c.ind.st ? path(only(I.st, (i) => I.stDir[i] === 1), 'gd-stup') + path(only(I.st, (i) => I.stDir[i] === -1), 'gd-stdn') : '')
+    + (c.ind.sar ? I.sar.map((v, i) => (v == null ? '' : `<circle class="gd-sar" cx="${P(x(i))}" cy="${P(y(v))}" r="1.8"/>`)).join('') : '')
+    + (c.ind.piv && d.pivots ? [['S2', 's2'], ['S1', 's1'], ['P', 'pivot'], ['R1', 'r1'], ['R2', 'r2']].filter(([, k]) => inY(d.pivots[k]))
+      .map(([l, k]) => `${hline(d.pivots[k], 'gd-piv')}<text class="mk-tick" x="4" y="${P(y(d.pivots[k]) - 3)}">${l} ${f2(d.pivots[k])}</text>`).join('') : '');
+
+  // What the desk said each moment would be, and its 80% band — beside what the candles show it was.
+  const gh = c.ind.ghost ? (d.ghost?.rows || []).filter((r) => r.t >= cs[0].t) : [];
+  const ghost = gh.length > 1 ? `<path class="gd-ghostband" d="${gh.map((r, i) => `${i ? 'L' : 'M'}${P(xt(r.t))} ${P(y(r.high80))}`).join('')}${[...gh].reverse().map((r) => `L${P(xt(r.t))} ${P(y(r.low80))}`).join('')}Z"/>
+      <path class="gd-ghost" d="${gh.map((r, i) => `${i ? 'L' : 'M'}${P(xt(r.t))} ${P(y(r.ens))}`).join('')}"/>` : '';
+
+  // The advice on the chart: ▲ a buy, ▼ a sell, coloured by how it came out; an open one shows its stop and target.
+  const sigs = c.ind.sig ? (d.signals || []).filter((s) => s.made_at >= cs[0].t) : [];
+  const signals = sigs.map((s) => {
+    const sx = xt(s.made_at); const buy = s.side === 'buy';
+    const cls = s.outcome == null ? 'gd-sig-open' : s.pnl > 0 ? 'gd-sig-win' : 'gd-sig-loss';
+    const sy = buy ? Math.min(H - padB - 2, y(s.entry) + 14) : Math.max(padT + 2, y(s.entry) - 14);
+    const tri = buy ? `${P(sx)},${P(sy - 7)} ${P(sx - 5)},${P(sy + 2)} ${P(sx + 5)},${P(sy + 2)}` : `${P(sx)},${P(sy + 7)} ${P(sx - 5)},${P(sy - 2)} ${P(sx + 5)},${P(sy - 2)}`;
+    const end = xt(s.exit_at || s.made_at + s.horizon * 1000);
+    const live = s.outcome == null
+      ? (inY(s.stop) ? seg(sx, y(s.stop), end, y(s.stop), 'tr-stop') : '') + (inY(s.target) ? seg(sx, y(s.target), end, y(s.target), 'tr-target') : '')
+      : (s.exit_price != null && inY(s.exit_price) ? `<circle class="${cls}" cx="${P(end)}" cy="${P(y(s.exit_price))}" r="2.5"/>` : '');
+    return `<polygon class="${cls}" points="${tri}"><title>${esc(`${t(buy ? 'Buy' : 'Sell')} ${hz(s.horizon)} · ${pct(s.p, 0)} · ${s.grade || ''}${s.pnl != null ? ` · ${sg(s.pnl)} $/oz` : ''}`)}</title></polygon>${live}`;
+  }).join('');
+
+  // Drawings a person made, kept by time and price.
+  const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  const drawn = c.ind.levels ? c.drawings.map((g) => {
+    if (g.k === 'trend') return seg(xt(g.a.t), y(g.a.p), xt(g.b.t), y(g.b.p), 'gd-trendl');
+    const x1 = Math.min(xt(g.a.t), xt(g.b.t));
+    return FIB.map((f) => { const v = g.b.p + (g.a.p - g.b.p) * f; return inY(v) ? `${seg(x1, y(v), W - padR, y(v), f === 0.5 || f === 0.618 ? 'gd-fibk' : 'gd-fib')}<text class="mk-tick" x="${P(x1 + 3)}" y="${P(y(v) - 3)}">${(f * 100).toFixed(1)}% ${f2(v)}</text>` : ''; }).join('');
+  }).join('') + (anchor ? `<circle class="gd-anchor" cx="${P(xt(anchor.t))}" cy="${P(y(anchor.p))}" r="4"/>` : '') : '';
 
   const lastReal = real[len - 1];
   const i0 = cs.length - 1;
@@ -526,7 +643,7 @@ function drawChart() {
     ${h.price != null && inY(h.price) ? hline(h.price, 'gd-cross') + tag(h.price, 'gd-ctag', f2(h.price, dec)) : ''}` : '';
 
   const main = `<svg class="mk-chart gd-main tr-chart" style="block-size:${H}px" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(t('Gold candles with indicators and the forecast'))}">
-    ${grid}${overlays}${series}${conePath}${positions}${levels}
+    ${grid}${ghost}${overlays}${series}${conePath}${positions}${levels}${drawn}${signals}
     ${atLive ? hline(lastReal.c, 'gd-now') + tag(lastReal.c, 'gd-tag', f2(lastReal.c)) : ''}
     ${cross}</svg>`;
 
@@ -570,8 +687,8 @@ function drawChart() {
 
   host.innerHTML = main + subs.map(pane).join('');
   shown.delete(host);
-  host.classList.toggle('gd-drawing', drawing);
-  geo = { W, H, padT, padB, padR, bw, lo, hi, span, a, len };
+  host.classList.toggle('gd-drawing', Boolean(tool));
+  geo = { W, H, padT, padB, padR, bw, lo, hi, span, a, len, times: cs.map((k) => k.t), tfs };
   if (golive) golive.hidden = atLive;
 }
 
@@ -604,8 +721,25 @@ const step = () => Math.max(1, Math.round((geo?.span || 60) / 10));
 
 function paintLevels() {
   const c = chartCfg();
-  set('#gd-levels', c.levels.length ? `<span class="sub">${esc(t('Levels'))}</span> ${c.levels.map((v, i) => `<span class="chip">${num(f2(v))} <button type="button" class="gd-x" data-unlevel="${i}" aria-label="${esc(t('Remove level'))} ${f2(v)}">×</button></span>`).join('')}
-    <button type="button" class="btn btn-sm btn-ghost" data-cz="clear">${esc(t('Clear levels'))}</button>` : '');
+  const any = c.levels.length || c.drawings.length;
+  set('#gd-levels', any ? `<span class="sub">${esc(t('Drawings'))}</span>
+    ${c.levels.map((v, i) => `<span class="chip">${num(f2(v))} <button type="button" class="gd-x" data-unlevel="${i}" aria-label="${esc(t('Remove level'))} ${f2(v)}">×</button></span>`).join('')}
+    ${c.drawings.map((g, i) => `<span class="chip">${esc(t(g.k === 'trend' ? 'Trend line' : 'Fibonacci'))} ${num(`${f2(g.a.p)} → ${f2(g.b.p)}`)} <button type="button" class="gd-x" data-undraw="${i}" aria-label="${esc(t('Remove drawing'))}">×</button></span>`).join('')}
+    <button type="button" class="btn btn-sm btn-ghost" data-cz="clear">${esc(t('Clear all drawings'))}</button>` : '');
+}
+
+/** The moment under a slot: a candle's own time, or, past the last candle, as many candles on as the slot is. */
+const timeAt = (i) => {
+  const ts = geo.times;
+  return i < ts.length ? ts[Math.max(0, i)] : ts[ts.length - 1] + (i - ts.length + 1) * geo.tfs * 1000;
+};
+const TOOL_HINT = { level: 'Click the chart where the level goes.', trend: 'Click where the line starts, then where it ends.', fib: 'Click the swing’s start, then its end.' };
+function setTool(next, wrap) {
+  tool = next; anchor = null;
+  wrap.querySelectorAll('[data-cz="draw"]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.tool === tool)));
+  $('#gd-chart')?.classList.toggle('gd-drawing', Boolean(tool));
+  if (tool) toast(t(TOOL_HINT[tool]));
+  redraw();
 }
 
 const parseNums = (s, n, lo, hi, whole = true) => {
@@ -615,7 +749,7 @@ const parseNums = (s, n, lo, hi, whole = true) => {
 
 function wireChart() {
   watchSize();
-  hover = null; drawing = false; drag = null;
+  hover = null; tool = null; anchor = null; drag = null;
   const host = $('#gd-chart');
   const wrap = $('#gd-chartwrap');
   if (!host || !wrap) return;
@@ -632,7 +766,8 @@ function wireChart() {
   // the console does not count a chart setting as an unsaved form.
   wrap.querySelectorAll('[data-cc]').forEach((s) => s.addEventListener('change', () => {
     const k = s.dataset.cc;
-    update((c) => { c[k] = k === 'bars' ? Number(s.value) : s.value; }, { refetch: k === 'bars' });
+    const numeric = k === 'bars' || k === 'gh';
+    update((c) => { c[k] = numeric ? Number(s.value) : s.value; }, { refetch: numeric });
     for (const o of s.options) o.defaultSelected = o.selected;
   }));
   wrap.querySelectorAll('[data-ind]').forEach((b) => b.addEventListener('change', () => {
@@ -648,7 +783,12 @@ function wireChart() {
       bb: bbp && Number.isInteger(bbp[0]) && bbp[0] >= 2 && bbp[1] <= 4 ? bbp : null,
       rsi: parseNums(v('rsi'), 1, 2, 200)?.[0], macd: parseNums(v('macd'), 3, 2, 200), stoch: parseNums(v('stoch'), 2, 2, 200),
       cci: parseNums(v('cci'), 1, 2, 200)?.[0], wr: parseNums(v('wr'), 1, 2, 200)?.[0], atr: parseNums(v('atr'), 1, 2, 200)?.[0],
+      ichi: parseNums(v('ichi'), 3, 2, 200), dc: parseNums(v('dc'), 1, 2, 200)?.[0],
     };
+    const stp = parseNums(v('st'), 2, 0.5, 200, false);
+    p.st = stp && Number.isInteger(stp[0]) && stp[0] >= 2 && stp[1] <= 10 ? stp : null;
+    const sar = parseNums(v('sar'), 2, 0.001, 1, false);
+    p.sar = sar && sar[0] <= 0.2 && sar[1] >= 0.01 && sar[0] < sar[1] ? sar : null;
     if (Object.values(p).some((x) => x == null) || p.macd[0] >= p.macd[1]) {
       toast(t('Each period is a whole number from 2 to 200, Bollinger’s deviations are from 0.5 to 4, and MACD’s fast average is shorter than its slow one.'), true);
       return;
@@ -661,6 +801,8 @@ function wireChart() {
   wrap.addEventListener('click', (e) => {
     const un = e.target.closest('[data-unlevel]');
     if (un) { update((c) => { c.levels.splice(Number(un.dataset.unlevel), 1); }); paintLevels(); return; }
+    const ud = e.target.closest('[data-undraw]');
+    if (ud) { update((c) => { c.drawings.splice(Number(ud.dataset.undraw), 1); }); paintLevels(); return; }
     const b = e.target.closest('[data-cz]');
     if (!b) return;
     const k = b.dataset.cz;
@@ -671,8 +813,8 @@ function wireChart() {
     else if (k === 'fit') { vw.span = geo?.len || null; vw.off = 0; redraw(); }
     else if (k === 'live') { vw.off = 0; redraw(); }
     else if (k === 'cross') { update((c) => { c.cross = !c.cross; }); b.setAttribute('aria-pressed', String(chartCfg().cross)); }
-    else if (k === 'draw') { drawing = !drawing; b.setAttribute('aria-pressed', String(drawing)); host.classList.toggle('gd-drawing', drawing); if (drawing) toast(t('Click the chart where the level goes.')); }
-    else if (k === 'clear') { update((c) => { c.levels = []; }); paintLevels(); }
+    else if (k === 'draw') setTool(tool === b.dataset.tool ? null : b.dataset.tool, wrap);
+    else if (k === 'clear') { update((c) => { c.levels = []; c.drawings = []; }); paintLevels(); }
     else if (k === 'full') { if (document.fullscreenElement) document.exitFullscreen?.(); else wrap.requestFullscreen?.().catch(() => {}); }
     else if (k === 'pdefault') {
       update((c) => { c.p = { ...DEF.p }; }, { refetch: true });
@@ -695,12 +837,14 @@ function wireChart() {
   host.addEventListener('pointerleave', () => { hover = null; redraw(); });
   host.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    if (drawing) {
+    if (tool) {
       const pt = pointAt(e);
       if (pt?.price == null) return;
-      update((c) => { c.levels = [...c.levels, Math.round(pt.price * 100) / 100].slice(-20); });
-      drawing = false;
-      wrap.querySelector('[data-cz="draw"]')?.setAttribute('aria-pressed', 'false');
+      const here = { t: timeAt(pt.i), p: Math.round(pt.price * 100) / 100 };
+      if (tool === 'level') update((c) => { c.levels = [...c.levels, here.p].slice(-20); });
+      else if (!anchor) { anchor = here; redraw(); return; }
+      else { const k = tool; const a2 = anchor; update((c) => { c.drawings = [...c.drawings, { k, a: a2, b: here }].slice(-20); }); }
+      setTool(null, wrap);
       paintLevels();
       return;
     }
@@ -718,7 +862,7 @@ function wireChart() {
     zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, pointAt(e)?.i ?? null);
   }, { passive: false });
   host.addEventListener('keydown', (e) => {
-    const keys = { '+': () => zoom(1 / 1.25), '=': () => zoom(1 / 1.25), '-': () => zoom(1.25), ArrowLeft: () => pan(step()), ArrowRight: () => pan(-step()), Home: () => { vw.off = 0; redraw(); }, End: () => { vw.off = geo?.len || 0; redraw(); }, Escape: () => { drawing = false; redraw(); } };
+    const keys = { '+': () => zoom(1 / 1.25), '=': () => zoom(1 / 1.25), '-': () => zoom(1.25), ArrowLeft: () => pan(step()), ArrowRight: () => pan(-step()), Home: () => { vw.off = 0; redraw(); }, End: () => { vw.off = geo?.len || 0; redraw(); }, Escape: () => setTool(null, wrap) };
     if (Object.hasOwn(keys, e.key)) { e.preventDefault(); keys[e.key](); }
   });
 }
@@ -758,6 +902,26 @@ function boardTable(board, title) {
     <p class="sub">${esc(t('Each cell: average error in dollars, direction right, and skill against no change.'))}</p></details></div>`;
 }
 
+function reliabilityChart(rows, h) {
+  const S = 150; const pad = 18;
+  const pt = (v) => pad + v * (S - 2 * pad);
+  const pts = rows.filter((r) => r.rate != null && r.n >= 5);
+  const n = Math.round(rows.reduce((a, r) => a + (r.n || 0), 0));
+  return `<figure class="gd-relfig"><svg class="mk-chart" viewBox="0 0 ${S} ${S}" role="img" aria-label="${esc(t('Calibration'))} ${hz(h)}" style="block-size:${S}px;inline-size:${S}px">
+    <rect class="gd-relbox" x="${pad}" y="${pad}" width="${S - 2 * pad}" height="${S - 2 * pad}"/>
+    <line class="mk-axis" x1="${pt(0)}" y1="${S - pt(0)}" x2="${pt(1)}" y2="${S - pt(1)}"/>
+    ${pts.map((r) => `<circle class="gd-pt" cx="${pt((r.from + r.to) / 2).toFixed(1)}" cy="${(S - pt(r.rate)).toFixed(1)}" r="${Math.min(6, 2 + Math.log10(r.n + 1) * 1.5).toFixed(1)}"><title>${Math.round(r.from * 100)}–${Math.round(r.to * 100)}% → ${Math.round(r.rate * 100)}% (${Math.round(r.n)})</title></circle>`).join('')}
+    <text class="mk-tick" x="${pad}" y="${S - 4}">0%</text><text class="mk-tick" x="${S - pad}" y="${S - 4}" text-anchor="end">100%</text></svg>
+    <figcaption class="sub">${num(hz(h))} · ${num(n)} ${esc(t('graded'))}</figcaption></figure>`;
+}
+
+function signalTable(r, title) {
+  if (!r) return '';
+  return `<div class="fl">${esc(t(title))}</div><table class="tbl"><thead><tr><th>${esc(t('Horizon'))}</th><th>${esc(t('Signals'))}</th><th>${esc(t('Won'))}</th><th>${esc(t('Average $/oz'))}</th><th>${esc(t('Total $/oz'))}</th><th>PF</th><th>${esc(t('Target / stop / time'))}</th></tr></thead><tbody>
+    ${[...r.byHorizon, { horizon: null, ...r.all }].map((x) => `<tr${x.horizon == null ? ' class="gd-total"' : ''}><td>${x.horizon == null ? esc(t('All')) : num(hz(x.horizon))}</td><td class="ltr">${x.n}</td><td class="ltr">${pct(x.winRate, 0)}</td>
+      <td class="ltr ${dir(x.avg)}">${sg(x.avg, 3)}</td><td class="ltr ${dir(x.total)}">${sg(x.total)}</td><td class="ltr">${f2(x.pf)}</td><td class="ltr">${x.targets} / ${x.stops} / ${x.times}</td></tr>`).join('')}</tbody></table>`;
+}
+
 function curveChart(curve, label) {
   if (curve.length < 2) return `<div class="empty">${esc(t('The curve draws itself after two hours of graded forecasts.'))}</div>`;
   return `<div class="kpi"><div class="k-label">${esc(t(label))}</div>${spark(curve.map((c) => c.skillPct ?? 0))}
@@ -780,14 +944,22 @@ const SLOW = {
   </div>
   ${boardTable(d.today, 'Today')}
   ${boardTable(d.week, 'Last seven days')}
+  <div class="split2">
+    <div class="panel"><div class="panel-title">${esc(t('Are the chances honest?'))}</div>
+      <p class="hint">${esc(t('Each dot is a bin of forecasts: across, the chance the desk gave of a rise; up, how often prices did rise. On the diagonal, “60%” means 60%. The chance shown on the screen is already corrected by this curve.'))}</p>
+      <div class="gd-rel">${[15, 60, 300].map((h) => reliabilityChart(d.reliability?.[h] || [], h)).join('')}</div></div>
+    <div class="panel"><div class="panel-title">${esc(t('How the advice came out'))}</div>
+      ${signalTable(d.signalRecord?.day, 'Last 24 hours')}${signalTable(d.signalRecord?.week, 'Last seven days')}
+      <p class="sub">${esc(t('Every buy or sell the desk advised is written down with its entry, stop and target, and settled by the tape: the target first, the stop first, or neither by the end of its horizon. Dollars per ounce, after the spread.'))}</p></div>
+  </div>
   <div class="panel"><p class="hint">${esc(t('How to read this: the error in percent is always tiny at seconds, because gold moves a few cents a second — so “accuracy 99.99%” is true and means nothing. Skill is the honest measure: positive means the forecast beat “the price stays the same”; zero means it did not. Direction right is how often it called up or down correctly, against 50% for a coin. The bands are honest when about 80% and 95% of outcomes land inside them.'))}</p></div>`;
   },
   learning: (d) => `
   <div class="kpis">${curveChart(d.curve, 'Skill at 1 minute, hour by hour')}${curveChart(d.curve5, 'Skill at 5 seconds, hour by hour')}
     ${kpi('Last retuned', d.tunedAt ? ago(new Date(d.tunedAt).toISOString()) : '—', esc(t('every hour, on the last two hours')))}</div>
   <div class="panel"><div class="panel-title">${esc(t('What the ensemble trusts now'))} ${hasPermC('gold.manage') ? act('/api/gold/tune', 'Retune now', { cls: 'btn-sm' }) : ''}</div>
-    <div class="mk-scroll"><table class="tbl"><thead><tr><th>${esc(t('Horizon'))}</th>${['naive', 'drift', 'momentum', 'meanrev', 'ar'].map((m) => `<th>${esc(t(MODEL[m]))}</th>`).join('')}<th>${esc(t('Band width (80%)'))}</th><th>${esc(t('Tuned settings'))}</th></tr></thead><tbody>
-    ${d.today.map((h) => `<tr><td><b>${hz(h.horizon)}</b></td>${['naive', 'drift', 'momentum', 'meanrev', 'ar'].map((m) => `<td><div class="gd-w"><i style="inline-size:${Math.round((h.weights[m] || 0) * 100)}%"></i></div><span class="sub ltr">${Math.round((h.weights[m] || 0) * 100)}%</span></td>`).join('')}
+    <div class="mk-scroll"><table class="tbl"><thead><tr><th>${esc(t('Horizon'))}</th>${MEMBERS.map((m) => `<th>${esc(t(MODEL[m]))}</th>`).join('')}<th>${esc(t('Band width (80%)'))}</th><th>${esc(t('Tuned settings'))}</th></tr></thead><tbody>
+    ${d.today.map((h) => `<tr><td><b>${hz(h.horizon)}</b></td>${MEMBERS.map((m) => `<td><div class="gd-w"><i style="inline-size:${Math.round((h.weights[m] || 0) * 100)}%"></i></div><span class="sub ltr">${Math.round((h.weights[m] || 0) * 100)}%</span></td>`).join('')}
       <td class="ltr">${h.calib ? `${h.calib.k80}σ` : '1.28σ'}</td><td class="sub ltr">${esc(Object.entries(h.params || {}).map(([m, p]) => `${m}: ${Object.values(p).join('/')}`).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div>
     <p class="sub">${esc(t('The weights move after every graded forecast toward the models that have been right lately (Hedge, with a memory that fades). The band width is re-fitted every fifty grades from the errors actually made. The settings are retuned every hour and kept only where they beat the ones in use.'))}</p></div>
   <div class="panel"><div class="panel-title">${esc(t('Learning log'))}</div>

@@ -2,13 +2,16 @@
 // forecasts, scores, candles and indicators out. No database, no clock, no
 // network.
 //
-// Five forecasters, each simple enough to read in a minute:
+// Seven forecasters, each simple enough to read in a minute:
 //   naive      the price stays where it is — the baseline every other model
 //              has to beat, because at a horizon of seconds it is very hard to
 //   drift      the recent average return, carried forward
 //   momentum   the recent slope, damped
 //   meanrev    a pull back toward a moving average
 //   ar         an autoregression on one-second returns, fitted by least squares
+//   holt       a smoothed level and a damped trend (Holt's method)
+//   learn      a ridge regression of the move ahead on ten features of the
+//              recent tape, refitted on the last half hour every time it speaks
 // and an ensemble whose weights are earned: after every graded forecast each
 // model's weight falls with its squared error (the Hedge rule, with a memory
 // that fades so a change of regime is noticed), and the error bands are
@@ -19,7 +22,7 @@
 // says so in numbers.
 import { ema, sma, rsi, macd, bollinger, phi } from '../markets/quant.js';
 
-export const MODELS = ['naive', 'drift', 'momentum', 'meanrev', 'ar'];
+export const MODELS = ['naive', 'drift', 'momentum', 'meanrev', 'ar', 'holt', 'learn'];
 export const HORIZONS = [5, 15, 30, 60, 300, 900, 3600];
 const round = (x, d = 4) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d);
 
@@ -29,15 +32,20 @@ export const DEFAULT_PARAMS = {
   momentum: { lookback: 60, damp: 0.5 },
   meanrev: { window: 300, speed: 0.5 },
   ar: { p: 2, fit: 1800 },
+  holt: { alpha: 0.3, beta: 0.02, phi: 0.95, window: 600 },
+  learn: { lambda: 1, fit: 1800 },
 };
 
-/** The values the tuner tries. Small on purpose: a grid this size is searched every hour in under a second. */
+/** The values the tuner tries. Small on purpose: a grid this size is searched every hour in a second or two. */
 export const GRID = {
   drift: [{ halfLife: 60 }, { halfLife: 300 }, { halfLife: 1800 }],
   momentum: [15, 30, 60, 120, 300].flatMap((lookback) => [0.25, 0.5, 1].map((damp) => ({ lookback, damp }))),
   meanrev: [60, 180, 600, 1800].flatMap((window) => [0.25, 0.5, 1].map((speed) => ({ window, speed }))),
   ar: [1, 2, 3, 5].map((p) => ({ p, fit: 1800 })),
+  holt: [0.1, 0.3, 0.8].flatMap((alpha) => [0.01, 0.05].flatMap((beta) => [0.9, 0.98].map((phi) => ({ alpha, beta, phi, window: 600 })))),
+  learn: [0.3, 1, 3].map((lambda) => ({ lambda, fit: 1800 })),
 };
+export const TUNED = ['drift', 'momentum', 'meanrev', 'ar', 'holt', 'learn'];
 
 // ------------------------------------------------------------- the series --
 
@@ -76,6 +84,112 @@ export function sigma1(xs, halfLife = 300) {
 
 // ------------------------------------------------------------ the models --
 
+/** A x = b by Gaussian elimination with partial pivoting; A and b are overwritten. Null when A is singular. */
+export function solve(A, b) {
+  const p = b.length;
+  for (let c = 0; c < p; c++) {
+    let piv = c;
+    for (let i = c + 1; i < p; i++) if (Math.abs(A[i][c]) > Math.abs(A[piv][c])) piv = i;
+    [A[c], A[piv]] = [A[piv], A[c]]; [b[c], b[piv]] = [b[piv], b[c]];
+    if (Math.abs(A[c][c]) < 1e-300) return null;
+    for (let i = c + 1; i < p; i++) {
+      const f = A[i][c] / A[c][c];
+      for (let j = c; j < p; j++) A[i][j] -= f * A[c][j];
+      b[i] -= f * b[c];
+    }
+  }
+  const x = new Array(p).fill(0);
+  for (let i = p - 1; i >= 0; i--) {
+    let s = b[i];
+    for (let j = i + 1; j < p; j++) s -= A[i][j] * x[j];
+    x[i] = s / A[i][i];
+  }
+  return x;
+}
+
+/** Holt's level and trend over the last `window` seconds: the state a damped-trend forecast starts from. */
+export function holtState(xs, { alpha, beta, window }) {
+  const n = xs.length;
+  const s = Math.max(1, n - window);
+  let level = xs[s - 1]; let trend = 0;
+  for (let i = s; i < n; i++) {
+    const prev = level;
+    level = alpha * xs[i] + (1 - alpha) * (level + trend);
+    trend = beta * (level - prev) + (1 - beta) * trend;
+  }
+  return { level, trend };
+}
+
+// ---------------------------------------------------------- the learner --
+//
+// Ten numbers describe the tape at a moment: the returns over the last 1, 5,
+// 15, 60 and 300 seconds, where the price sits against its one- and
+// five-minute averages (in standard deviations), the one-minute volatility,
+// where it sits in its one-minute range, and the one-minute return per unit of
+// volatility. The learner fits the move `h` seconds later on those numbers by
+// ridge regression over the last half hour, then speaks. It has no intercept
+// on purpose: a drift measured over half an hour is noise at these horizons,
+// and the drift model already carries one.
+
+export const FEATURES = ['r1', 'r5', 'r15', 'r60', 'r300', 'z60', 'z300', 'vol60', 'pos60', 'rr60'];
+const LAGS = [1, 5, 15, 60, 300];
+const NEED = 301;
+
+/** Running sums, so each feature at each moment costs a subtraction, not a loop. */
+function prefixes(xs) {
+  const n = xs.length;
+  const s1 = new Float64Array(n + 1); const s2 = new Float64Array(n + 1); const q = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    s1[i + 1] = s1[i] + xs[i];
+    s2[i + 1] = s2[i] + xs[i] * xs[i];
+    const r = i ? (xs[i] / xs[i - 1] - 1) * 1e4 : 0;
+    q[i + 1] = q[i] + r * r;
+  }
+  return { s1, s2, q };
+}
+
+/** The ten features at moment t (needs t ≥ 300), in basis points or standard deviations so a ridge penalty means the same at any price. */
+export function featuresAt(xs, t, P) {
+  const x = xs[t];
+  const z = (w) => {
+    const m = (P.s1[t + 1] - P.s1[t + 1 - w]) / w;
+    const v = Math.max(0, (P.s2[t + 1] - P.s2[t + 1 - w]) / w - m * m);
+    return v > 0 ? (x - m) / Math.sqrt(v) : 0;
+  };
+  let hi = -Infinity; let lo = Infinity;
+  for (let i = t - 59; i <= t; i++) { if (xs[i] > hi) hi = xs[i]; if (xs[i] < lo) lo = xs[i]; }
+  const vol = Math.sqrt((P.q[t + 1] - P.q[t - 59]) / 60);
+  const r = LAGS.map((k) => (x / xs[t - k] - 1) * 1e4);
+  return [...r, z(60), z(300), vol, hi > lo ? (x - lo) / (hi - lo) - 0.5 : 0, vol > 0 ? r[3] / (vol * Math.sqrt(60)) : 0];
+}
+
+/** Ridge fit of the h-second move on the features over the last `fit` seconds whose outcome is known. Null when there is too little. */
+export function fitLearner(xs, h, { lambda = 1, fit = 1800 } = {}, P = prefixes(xs)) {
+  const tEnd = xs.length - 1 - h;
+  const tStart = Math.max(NEED - 1, tEnd - fit);
+  if (tEnd - tStart < 120) return null;
+  // Three hundred moments are plenty for ten coefficients, and keep the hourly tuner quick.
+  const stride = Math.max(1, Math.floor((tEnd - tStart) / 300));
+  const X = []; const y = [];
+  for (let t = tStart; t <= tEnd; t += stride) { X.push(featuresAt(xs, t, P)); y.push((xs[t + h] / xs[t] - 1) * 1e4); }
+  const k = FEATURES.length; const m = X.length;
+  const mu = new Array(k).fill(0); const sd = new Array(k).fill(0);
+  for (const row of X) row.forEach((v, j) => { mu[j] += v / m; });
+  for (const row of X) row.forEach((v, j) => { sd[j] += (v - mu[j]) ** 2 / m; });
+  for (let j = 0; j < k; j++) sd[j] = Math.sqrt(sd[j]) || 1;
+  const A = Array.from({ length: k }, () => new Array(k).fill(0)); const b = new Array(k).fill(0);
+  for (let r = 0; r < m; r++) {
+    const zr = X[r].map((v, j) => (v - mu[j]) / sd[j]);
+    for (let i = 0; i < k; i++) { b[i] += zr[i] * y[r]; for (let j = 0; j < k; j++) A[i][j] += zr[i] * zr[j]; }
+  }
+  for (let i = 0; i < k; i++) A[i][i] += lambda * m;
+  const beta = solve(A, b);
+  if (!beta) return null;
+  // A forecast larger than any move the window held is the fit talking to itself.
+  const cap = Math.max(...y.map(Math.abs));
+  return { beta, mu, sd, cap };
+}
+
 /** Least squares for AR(p) on returns: solves the normal equations by Gaussian elimination. */
 export function fitAR(r, p) {
   const n = r.length;
@@ -91,23 +205,8 @@ export function fitAR(r, p) {
   // A little ridge, so a flat market does not make the system singular.
   const tr = A.reduce((s, row, i) => s + row[i], 0) / p || 1e-12;
   for (let i = 0; i < p; i++) A[i][i] += tr * 1e-3;
-  for (let c = 0; c < p; c++) {
-    let piv = c;
-    for (let i = c + 1; i < p; i++) if (Math.abs(A[i][c]) > Math.abs(A[piv][c])) piv = i;
-    [A[c], A[piv]] = [A[piv], A[c]]; [b[c], b[piv]] = [b[piv], b[c]];
-    if (Math.abs(A[c][c]) < 1e-300) return null;
-    for (let i = c + 1; i < p; i++) {
-      const f = A[i][c] / A[c][c];
-      for (let j = c; j < p; j++) A[i][j] -= f * A[c][j];
-      b[i] -= f * b[c];
-    }
-  }
-  const phiv = new Array(p).fill(0);
-  for (let i = p - 1; i >= 0; i--) {
-    let s = b[i];
-    for (let j = i + 1; j < p; j++) s -= A[i][j] * phiv[j];
-    phiv[i] = s / A[i][i];
-  }
+  const phiv = solve(A, b);
+  if (!phiv) return null;
   // A fitted process that would explode is not a forecast; it is a bug.
   if (phiv.reduce((s, x) => s + Math.abs(x), 0) >= 0.98) return phiv.map((x) => x * 0.98 / phiv.reduce((s, y) => s + Math.abs(y), 0));
   return phiv;
@@ -163,15 +262,35 @@ export function predict(model, xs, h, params = DEFAULT_PARAMS[model] || {}, fitt
     }
     return last * Math.exp(cum);
   }
+  if (model === 'holt') {
+    const key = `${params.alpha}/${params.beta}/${params.window}`;
+    const st = fitted?.holt?.[key] || holtState(xs, params);
+    if (fitted?.holt) fitted.holt[key] = st;
+    // A damped trend adds less each second, so an hour ahead is not sixty one-minute slopes.
+    const damp = params.phi >= 1 ? h : (params.phi * (1 - params.phi ** h)) / (1 - params.phi);
+    return st.level + st.trend * damp;
+  }
+  if (model === 'learn') {
+    if (n < NEED + 130) return last;
+    const P = fitted?.P || prefixes(xs);
+    const key = `${h}/${params.lambda}/${params.fit}`;
+    const fit = fitted?.learn && key in fitted.learn ? fitted.learn[key] : fitLearner(xs, h, params, P);
+    if (fitted?.learn) fitted.learn[key] = fit;
+    if (!fit) return last;
+    const f = featuresAt(xs, n - 1, P);
+    let y = 0;
+    for (let j = 0; j < f.length; j++) y += fit.beta[j] * ((f[j] - fit.mu[j]) / fit.sd[j]);
+    return last * (1 + Math.max(-fit.cap, Math.min(fit.cap, y)) / 1e4);
+  }
   return last;
 }
 
 /** Every model at every horizon from one moment, the ensemble beside them, and the band around it. */
-export function forecastAll(xs, { horizons = HORIZONS, params = {}, weights = {}, calib = {} } = {}) {
+export function forecastAll(xs, { horizons = HORIZONS, params = {}, weights = {}, calib = {}, pcal = {} } = {}) {
   const last = xs[xs.length - 1];
   const s1 = sigma1(xs);
   if (!s1 || !last) return [];
-  const fitted = { ar: {} };
+  const fitted = { ar: {}, holt: {}, learn: {}, P: prefixes(xs) };
   return horizons.map((h) => {
     // Parameters are tuned per horizon: the lookback that suits five seconds
     // is not the one that suits fifteen minutes.
@@ -187,10 +306,11 @@ export function forecastAll(xs, { horizons = HORIZONS, params = {}, weights = {}
     const sd = s1 * Math.sqrt(h) * last;
     const k = calib[h] || {};
     const k80 = k.k80 || 1.2816; const k95 = k.k95 || 1.96;
+    const pRaw = sd > 0 ? phi((ens - last) / sd) : 0.5;
     return {
       horizon: h, base: last, sigma: sd, preds: per, weights: w, ens: round(ens, 4),
       low80: round(ens - k80 * sd, 4), high80: round(ens + k80 * sd, 4), low95: round(ens - k95 * sd, 4), high95: round(ens + k95 * sd, 4),
-      pUp: round(sd > 0 ? phi((ens - last) / sd) : 0.5, 3), k80, k95,
+      pUp: round(pcalApply(pcal[h], pRaw), 3), pRaw: round(pRaw, 4), k80, k95,
     };
   });
 }
@@ -202,7 +322,7 @@ export function forecastAll(xs, { horizons = HORIZONS, params = {}, weights = {}
  * it is the forecast that is never far wrong, and the others have to earn
  * their share by being graded.
  */
-export const PRIOR = { naive: 2, drift: 1, momentum: 1, meanrev: 1, ar: 1 };
+export const PRIOR = { naive: 3, drift: 1, momentum: 1, meanrev: 1, ar: 1, holt: 1, learn: 1 };
 
 export function normWeights(w = {}) {
   const raw = MODELS.map((m) => Math.max(0, Number(w[m]) || 0));
@@ -220,11 +340,21 @@ export function normWeights(w = {}) {
  */
 export function hedge(state = {}, errors, { eta = 2, decay = 0.995, floor = 0.02 } = {}) {
   const L = { ...(state.loss || {}) };
-  for (const m of MODELS) {
-    const e = errors[m];
-    if (e == null || !Number.isFinite(e)) continue;
-    L[m] = (L[m] || 0) * decay + Math.min(25, e * e);
+  // A model that joins an ensemble already running starts at the others'
+  // average loss: at zero it would outweigh models with days of record
+  // behind them on its very first grade, having proved nothing.
+  const had = MODELS.filter((m) => Number.isFinite(L[m]));
+  if (had.length && had.length < MODELS.length) {
+    const mean = had.reduce((a, m) => a + L[m], 0) / had.length;
+    for (const m of MODELS) if (!Number.isFinite(L[m])) L[m] = mean;
   }
+  const inc = Object.fromEntries(MODELS.filter((m) => errors[m] != null && Number.isFinite(errors[m])).map((m) => [m, Math.min(25, errors[m] ** 2)]));
+  const known = Object.values(inc);
+  if (!known.length) return { loss: L, weights: normWeights(state.weights), n: state.n || 0 };
+  // A model that said nothing this time — a forecast written before it existed —
+  // is charged the round's average: silence must not be the way to gain weight.
+  const avg = known.reduce((a, x) => a + x, 0) / known.length;
+  for (const m of MODELS) L[m] = (L[m] || 0) * decay + (inc[m] ?? avg);
   const min = Math.min(...MODELS.map((m) => L[m] ?? 0));
   const raw = Object.fromEntries(MODELS.map((m) => [m, Math.exp(-eta * ((L[m] ?? 0) - min))]));
   const w = normWeights(raw);
@@ -243,6 +373,56 @@ export function calibrate(normErrors) {
   if (e.length < 30) return null;
   const q = (p) => e[Math.min(e.length - 1, Math.floor(p * e.length))];
   return { k80: round(Math.max(0.2, q(0.8)), 3), k95: round(Math.max(0.3, q(0.95)), 3), n: e.length };
+}
+
+// --------------------------------------------------------- the chances --
+//
+// "62% up" is a promise about frequency: of all the times the desk says 62%,
+// about 62 in 100 should go up. The raw number comes from the ensemble's
+// distance from the price in units of its band, which says nothing of the
+// kind until it is checked. So each horizon keeps ten bins of what it said and
+// what happened, fading slowly, and the number shown is what happened in the
+// bin — pooled so it never goes down as the raw number goes up, and leaning on
+// the raw number until a bin has seen enough.
+
+const BINS = 10;
+const binOf = (p) => Math.min(BINS - 1, Math.max(0, Math.floor(p * BINS)));
+
+export function pcalUpdate(state = null, pRaw, up, { decay = 0.9995 } = {}) {
+  const bins = state?.bins?.length === BINS ? state.bins.map((b) => [...b]) : Array.from({ length: BINS }, () => [0, 0]);
+  for (const b of bins) { b[0] *= decay; b[1] *= decay; }
+  const i = binOf(pRaw);
+  bins[i][0] += 1; bins[i][1] += up ? 1 : 0;
+  return { bins, n: (state?.n || 0) + 1 };
+}
+
+/** Pool adjacent bins until the rates rise with the raw number (pool-adjacent-violators). */
+export function pcalCurve(state) {
+  if (!state?.bins) return null;
+  const blocks = state.bins.map(([n, u], i) => ({ n, u, from: i, to: i }));
+  for (let i = 0; i < blocks.length - 1;) {
+    const a = blocks[i]; const b = blocks[i + 1];
+    const ra = a.n ? a.u / a.n : 0.5; const rb = b.n ? b.u / b.n : 0.5;
+    if (a.n && b.n && ra > rb) { blocks.splice(i, 2, { n: a.n + b.n, u: a.u + b.u, from: a.from, to: b.to }); if (i) i--; } else i++;
+  }
+  const out = new Array(BINS).fill(null);
+  for (const b of blocks) for (let i = b.from; i <= b.to; i++) out[i] = { n: b.n, rate: b.n ? b.u / b.n : null };
+  return out;
+}
+
+export function pcalApply(state, pRaw) {
+  const curve = pcalCurve(state);
+  if (!curve) return pRaw;
+  const c = curve[binOf(pRaw)];
+  if (!c?.n || c.rate == null) return pRaw;
+  const w = c.n / (c.n + 60);
+  return w * c.rate + (1 - w) * pRaw;
+}
+
+/** What the desk said against what happened, bin by bin — the reliability diagram the accuracy page draws. */
+export function reliability(state) {
+  if (!state?.bins) return [];
+  return state.bins.map(([n, u], i) => ({ from: i / BINS, to: (i + 1) / BINS, n: round(n, 1), rate: n >= 1 ? round(u / n, 3) : null }));
 }
 
 /**
@@ -266,6 +446,14 @@ export function walkForward(series, model, params, h, { start = 1800, stride = 2
   return { n, mae: n ? sae / n : null, hit: moves ? hits / moves : null };
 }
 
+/**
+ * How the tuner walks a model. The learner refits at every step, so it is
+ * walked a minute at a time: the hourly tuner runs inside the one-second clock
+ * and must not stall it. Every setting of one model is still compared on the
+ * same moments.
+ */
+export const tuneOpts = (m, opts = {}) => (m === 'learn' ? { ...opts, stride: Math.max(opts.stride || 20, 60) } : opts);
+
 export function tune(series, horizons = [5, 15, 30, 60, 300], opts = {}) {
   const xs = Float64Array.from(series);
   const out = {};
@@ -273,10 +461,10 @@ export function tune(series, horizons = [5, 15, 30, 60, 300], opts = {}) {
     if (xs.length < 1800 + h + 60) continue;
     const naive = walkForward(xs, 'naive', {}, h, opts);
     const best = {};
-    for (const m of ['drift', 'momentum', 'meanrev', 'ar']) {
+    for (const m of TUNED) {
       let pick = null;
       for (const p of GRID[m]) {
-        const r = walkForward(xs, m, p, h, opts);
+        const r = walkForward(xs, m, p, h, tuneOpts(m, opts));
         if (r.mae != null && (!pick || r.mae < pick.mae)) pick = { params: p, ...r };
       }
       if (pick) best[m] = pick;
@@ -396,6 +584,65 @@ export function indicators(cs) {
   };
 }
 
+/** Supertrend: a band at `mult` ATRs that follows the price and flips side when it is crossed. */
+function supertrend(cs, n = 10, mult = 3) {
+  const a = atrSeries(cs, n);
+  const line = new Array(cs.length).fill(null); const dir = new Array(cs.length).fill(null);
+  let up = null; let dn = null; let d = 1;
+  for (let i = 0; i < cs.length; i++) {
+    if (a[i] == null) continue;
+    const mid = (cs[i].h + cs[i].l) / 2;
+    const bu = mid + mult * a[i]; const bl = mid - mult * a[i];
+    const pc = i ? cs[i - 1].c : cs[i].c;
+    up = up == null || bu < up || pc > up ? bu : up;
+    dn = dn == null || bl > dn || pc < dn ? bl : dn;
+    if (d === 1 && cs[i].c < dn) d = -1; else if (d === -1 && cs[i].c > up) d = 1;
+    line[i] = d === 1 ? dn : up; dir[i] = d;
+  }
+  return { line, dir };
+}
+
+/** Ichimoku: conversion and base lines, and the cloud drawn where it belongs — `shift` candles after the moment it was computed. */
+function ichimoku(cs, a = 9, b = 26, c = 52) {
+  const mid = (n, i) => {
+    if (i < n - 1) return null;
+    let hi = -Infinity; let lo = Infinity;
+    for (let k = i - n + 1; k <= i; k++) { if (cs[k].h > hi) hi = cs[k].h; if (cs[k].l < lo) lo = cs[k].l; }
+    return (hi + lo) / 2;
+  };
+  const tenkan = cs.map((_, i) => mid(a, i)); const kijun = cs.map((_, i) => mid(b, i));
+  const spanA = cs.map((_, i) => { const j = i - b; return j >= 0 && tenkan[j] != null && kijun[j] != null ? (tenkan[j] + kijun[j]) / 2 : null; });
+  const spanB = cs.map((_, i) => (i - b >= 0 ? mid(c, i - b) : null));
+  return { tenkan, kijun, spanA, spanB };
+}
+
+/** Donchian channel: the highest high and lowest low of the last n candles. */
+function donchian(cs, n = 20) {
+  const up = cs.map((_, i) => (i < n - 1 ? null : Math.max(...cs.slice(i - n + 1, i + 1).map((x) => x.h))));
+  const lo = cs.map((_, i) => (i < n - 1 ? null : Math.min(...cs.slice(i - n + 1, i + 1).map((x) => x.l))));
+  return { up, lo, mid: up.map((u, i) => (u == null ? null : (u + lo[i]) / 2)) };
+}
+
+/** Parabolic SAR: a stop that trails the trend and accelerates with it. */
+function psar(cs, step = 0.02, max = 0.2) {
+  const out = new Array(cs.length).fill(null);
+  if (cs.length < 3) return out;
+  let up = cs[1].c >= cs[0].c; let af = step;
+  let ep = up ? Math.max(cs[0].h, cs[1].h) : Math.min(cs[0].l, cs[1].l);
+  let sar = up ? Math.min(cs[0].l, cs[1].l) : Math.max(cs[0].h, cs[1].h);
+  for (let i = 2; i < cs.length; i++) {
+    sar += af * (ep - sar);
+    sar = up ? Math.min(sar, cs[i - 1].l, cs[i - 2].l) : Math.max(sar, cs[i - 1].h, cs[i - 2].h);
+    if (up ? cs[i].l < sar : cs[i].h > sar) {
+      up = !up; sar = ep; af = step; ep = up ? cs[i].h : cs[i].l;
+    } else if (up ? cs[i].h > ep : cs[i].l < ep) {
+      ep = up ? cs[i].h : cs[i].l; af = Math.min(max, af + step);
+    }
+    out[i] = sar;
+  }
+  return out;
+}
+
 /**
  * The same indicators with the periods a person chose on the screen. The
  * technical summary keeps the standard ones above: a vote is only comparable
@@ -406,11 +653,16 @@ export function chartIndicators(cs, p) {
   const bb = bollinger(c, p.bb[0], p.bb[1]);
   const m = macd(c, p.macd[0], p.macd[1], p.macd[2]);
   const st = stoch(cs, p.stoch[0], p.stoch[1]);
+  const sup = supertrend(cs, p.st[0], p.st[1]);
+  const ich = ichimoku(cs, p.ichi[0], p.ichi[1], p.ichi[2]);
+  const dc = donchian(cs, p.dc);
   return {
     ema: p.ema.map((n) => ema(c, n)), sma: sma(c, p.sma),
     bbUpper: bb.map((b) => b?.upper ?? null), bbMid: bb.map((b) => b?.mid ?? null), bbLower: bb.map((b) => b?.lower ?? null),
     rsi: rsi(c, p.rsi), macd: m.line, macdSignal: m.signal, macdHist: m.hist,
     stochK: st.k, stochD: st.d, cci: cci(cs, p.cci), willR: williams(cs, p.wr), atr: atrSeries(cs, p.atr),
+    st: sup.line, stDir: sup.dir, tenkan: ich.tenkan, kijun: ich.kijun, spanA: ich.spanA, spanB: ich.spanB,
+    dcUp: dc.up, dcLo: dc.lo, dcMid: dc.mid, sar: psar(cs, p.sar[0], p.sar[1]),
   };
 }
 
@@ -465,6 +717,97 @@ export function signal(f, { spread, edgeX = 1.5, minP = 0.55 }) {
   const p = move > 0 ? f.pUp : 1 - f.pUp;
   if (Math.abs(move) < edgeX * spread || p < minP) return null;
   return { side: move > 0 ? 'buy' : 'sell', expectedMove: move, p };
+}
+
+/**
+ * How much the desk's record at a horizon earns it the right to advise there.
+ * A: a week of grades, beating "no change" and calling the direction more
+ * often than a coin; B: some record and ahead of both; C: not shown to be
+ * better than doing nothing — and C never advises a trade.
+ */
+export function gradeOf(rec) {
+  if (!rec?.n) return 'C';
+  if (rec.n >= 300 && rec.skillPct >= 2 && rec.hitRate >= 0.54) return 'A';
+  if (rec.n >= 100 && rec.skillPct > 0 && rec.hitRate > 0.51) return 'B';
+  return 'C';
+}
+
+/**
+ * The advice for one horizon, built from its forecast and the desk's own record.
+ *
+ * The lean is wherever the ensemble points. It becomes a buy or a sell only
+ * if everything that has to be true is: the expected move clears the spread
+ * by `edgeX`, the calibrated chance of the direction is at least `minP`, the
+ * record at this horizon is grade A or B, and the fifteen-minute trend is not
+ * against it (unless the chance is high enough to stand alone). Each missing
+ * condition is named, so "wait" always says why.
+ *
+ * The stop sits one 80%-band half-width from the price now, on the losing
+ * side: a move against the idea the desk expects about one time in ten. It is
+ * measured from the price now, not from the expected price — the band says
+ * where the price may be at the horizon, and the stop has to survive the way
+ * there. The target is the expected price. The size risks `riskPct` of the
+ * book between entry and stop.
+ */
+export function advise(f, { bid, ask, record = null, trend = 'flat', minP = 0.55, edgeX = 1, aloneP = 0.65, equity = 100_000, riskPct = 0.5, maxOz = 1000 } = {}) {
+  if (!f || bid == null || ask == null) return null;
+  const spread = ask - bid;
+  const move = f.ens - f.base;
+  const lean = move >= 0 ? 'buy' : 'sell';
+  const dirn = lean === 'buy' ? 1 : -1;
+  const p = lean === 'buy' ? f.pUp : 1 - f.pUp;
+  const entry = lean === 'buy' ? ask : bid;
+  const half = (f.k80 || 1.2816) * f.sigma;
+  const stop = f.base - dirn * half;
+  const target = f.ens;
+  const risk = Math.abs(entry - stop);
+  const reward = dirn * (target - entry);
+  const grade = gradeOf(record);
+  const withTrend = trend === 'flat' ? 'flat' : (trend === 'up') === (lean === 'buy') ? 'with' : 'against';
+  const why = [];
+  if (Math.abs(move) < edgeX * spread || reward <= 0) why.push('no-edge');
+  if (p < minP) why.push('unsure');
+  if (grade === 'C') why.push('unproven');
+  if (withTrend === 'against' && p < aloneP) why.push('against-trend');
+  if (dirn * (entry - stop) <= 0) why.push('no-room');
+  const oz = risk > 0 ? Math.min(maxOz, Math.floor(((equity * riskPct) / 100 / risk) * 100) / 100) : 0;
+  return {
+    horizon: f.horizon, action: why.length ? 'wait' : lean, lean, why,
+    p: round(p, 3), expected: round(f.ens, 3), move: round(move, 3), entry: round(entry, 3), stop: round(stop, 3), target: round(target, 3),
+    ev: round(Math.abs(move) - spread, 3), rr: risk > 0 ? round(reward / risk, 2) : null, oz, grade, trend: withTrend, spread: round(spread, 3),
+    low80: f.low80, high80: f.high80,
+  };
+}
+
+/** The advice across horizons: the actionable one with the most expected after the spread per minute held, or wait. */
+export function verdict(list) {
+  const act = list.filter((a) => a && a.action !== 'wait');
+  if (!act.length) return { action: 'wait', horizon: null };
+  const best = act.sort((a, b) => b.ev / Math.sqrt(b.horizon) - a.ev / Math.sqrt(a.horizon))[0];
+  return { action: best.action, horizon: best.horizon };
+}
+
+/**
+ * How a signal came out, read from the one-second tape after it was given:
+ * whichever of target and stop the closing side of the spread reached first,
+ * or the price at the horizon. Null while it is still running.
+ */
+export function settle(sig, xs, t0, { now }) {
+  const due = sig.made_at + sig.horizon * 1000;
+  const half = (sig.spread || 0) / 2;
+  const buy = sig.side === 'buy';
+  const i0 = Math.max(0, Math.ceil((sig.made_at - t0) / 1000));
+  const i1 = Math.min(xs.length - 1, Math.floor((Math.min(now, due) - t0) / 1000));
+  for (let i = i0; i <= i1; i++) {
+    const out = buy ? xs[i] - half : xs[i] + half;
+    if (buy ? out >= sig.target : out <= sig.target) return { outcome: 'target', exit: sig.target, at: t0 + i * 1000 };
+    if (buy ? out <= sig.stop : out >= sig.stop) return { outcome: 'stop', exit: sig.stop, at: t0 + i * 1000 };
+  }
+  if (now >= due && i1 >= i0) {
+    const out = buy ? xs[i1] - half : xs[i1] + half;
+    return { outcome: 'time', exit: round(out, 3), at: t0 + i1 * 1000 };
+  }
+  return null;
 }
 
 export function backtest(series, { horizon = 60, stride = 10, spread = 0.3, edgeX = 1.5, minP = 0.55, oz = 10, params = {}, weights = {}, start = 600 } = {}) {

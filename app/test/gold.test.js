@@ -71,6 +71,86 @@ test('the ensemble’s weights move toward the model that is right, and never to
   assert.equal(M.normWeights({}).naive, 2 / 6, '“no change” starts with a third');
 });
 
+test('a model that said nothing in a round is charged the round’s average, not let off', () => {
+  let s = {};
+  for (let i = 0; i < 100; i++) s = M.hedge(s, { naive: 1, drift: 1, momentum: 1, meanrev: 1, ar: 1 });
+  assert.ok(Math.abs(s.weights.holt - s.weights.ar) < 1e-9, 'silent models end level with the rest');
+
+  // An install upgraded mid-run: five models with a long record, two new ones with none.
+  const old = { loss: { naive: 180, drift: 200, momentum: 210, meanrev: 205, ar: 175 }, n: 5000 };
+  const up = M.hedge(old, { naive: 1, drift: 1, momentum: 1, meanrev: 1, ar: 1, holt: 1, learn: 1 });
+  assert.ok(up.weights.learn < up.weights.ar && up.weights.holt < up.weights.ar, `newcomers ${up.weights.learn} do not outweigh the best ${up.weights.ar}`);
+});
+
+test('the damped trend carries a ramp forward, and the learner finds a pattern planted in the tape', () => {
+  const ramp = Array.from({ length: 900 }, (_, i) => 100 + i * 0.01);
+  const h = M.predict('holt', ramp, 30, M.DEFAULT_PARAMS.holt);
+  assert.ok(h > ramp.at(-1) && h < ramp.at(-1) + 0.31, `holt ${h}`);
+
+  // Returns that lean on the one before (φ = 0.4). One second out the pattern is
+  // worth about 6% of the error; by five seconds it is too small for the mean
+  // error to show even for the true model, so the learner is held to one second.
+  let x = 4000; let r = 0; let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const xs = [];
+  for (let i = 0; i < 4200; i++) { const z = Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd()); r = 0.4 * r + 1e-4 * z; x *= Math.exp(r); xs.push(x); }
+  const naive = M.walkForward(xs, 'naive', {}, 1, { start: 1900 });
+  const learn = M.walkForward(xs, 'learn', M.DEFAULT_PARAMS.learn, 1, { start: 1900 });
+  assert.ok(learn.mae < naive.mae * 0.96, `learner ${learn.mae} vs naive ${naive.mae}`);
+  assert.ok(learn.hit > 0.57, `direction ${learn.hit}`);
+  const fs = M.forecastAll(xs, { horizons: [5, 60] });
+  assert.ok(fs.every((f) => Number.isFinite(f.preds.learn) && Number.isFinite(f.preds.holt)));
+});
+
+test('a chance is what happened when the desk said it, and never falls as the raw number rises', () => {
+  let c = null;
+  // The raw number says 75% up; the market goes up half the time.
+  for (let i = 0; i < 2000; i++) c = M.pcalUpdate(c, 0.75, i % 2 === 0);
+  assert.ok(Math.abs(M.pcalApply(c, 0.75) - 0.5) < 0.05, `calibrated ${M.pcalApply(c, 0.75)}`);
+  // Untouched bins lean on the raw number.
+  assert.equal(M.pcalApply(c, 0.15), 0.15);
+  // A bin that disagrees with its neighbour is pooled so the curve rises.
+  let d = null;
+  for (let i = 0; i < 400; i++) { d = M.pcalUpdate(d, 0.55, i % 10 < 7); d = M.pcalUpdate(d, 0.65, i % 10 < 4); }
+  const curve = M.pcalCurve(d);
+  assert.ok(curve[5].rate <= curve[6].rate + 1e-12);
+  assert.equal(M.reliability(d).length, 10);
+});
+
+test('advice says buy or sell only when every condition holds, and names the one that does not', () => {
+  const f = { horizon: 60, ens: 4002, base: 4000, sigma: 0.8, pUp: 0.7, k80: 1.28, low80: 4001, high80: 4003 };
+  const A = { n: 500, skillPct: 3, hitRate: 0.56 };
+  const a = M.advise(f, { bid: 3999.9, ask: 4000.1, record: A, trend: 'up', equity: 100000, riskPct: 0.5 });
+  assert.equal(a.action, 'buy');
+  assert.equal(a.grade, 'A');
+  assert.ok(a.stop < a.entry && a.entry < a.target, `${a.stop} < ${a.entry} < ${a.target}`);
+  assert.ok(Math.abs(a.oz * (a.entry - a.stop) - 500) < 2, 'risks half a percent of the book to the stop');
+  assert.ok(a.ev > 0 && a.rr > 0);
+
+  assert.deepEqual(M.advise(f, { bid: 3999.9, ask: 4000.1, record: { n: 50, skillPct: -1, hitRate: 0.49 }, trend: 'up' }).why, ['unproven']);
+  assert.ok(M.advise({ ...f, pUp: 0.6 }, { bid: 3999.9, ask: 4000.1, record: A, trend: 'down' }).why.includes('against-trend'));
+  assert.ok(M.advise({ ...f, ens: 4000.05 }, { bid: 3999.9, ask: 4000.1, record: A }).why.includes('no-edge'));
+  assert.ok(M.advise({ ...f, pUp: 0.52 }, { bid: 3999.9, ask: 4000.1, record: A }).why.includes('unsure'));
+  const sell = M.advise({ ...f, ens: 3998.6, pUp: 0.3 }, { bid: 3999.9, ask: 4000.1, record: A, trend: 'down' });
+  assert.equal(sell.action, 'sell');
+  assert.ok(sell.stop > sell.entry && sell.entry > sell.target);
+  assert.deepEqual(M.verdict([sell, a]).action, 'buy', 'the larger edge per minute held wins');
+  assert.equal(M.verdict([{ action: 'wait' }]).action, 'wait');
+});
+
+test('a signal is settled by whichever of its target and stop the tape reaches first, or by the clock', () => {
+  const sig = { made_at: 10_000, horizon: 30, side: 'buy', entry: 100.1, stop: 99, target: 101, spread: 0.2 };
+  const up = Array.from({ length: 60 }, (_, i) => 100 + i * 0.1);
+  assert.equal(M.settle(sig, up, 0, { now: 60_000 }).outcome, 'target');
+  const down = Array.from({ length: 60 }, (_, i) => 100 - i * 0.1);
+  assert.equal(M.settle(sig, down, 0, { now: 60_000 }).outcome, 'stop');
+  const flat = Array.from({ length: 60 }, () => 100.3);
+  assert.equal(M.settle(sig, flat, 0, { now: 30_000 }), null, 'still running');
+  const t = M.settle(sig, flat, 0, { now: 60_000 });
+  assert.equal(t.outcome, 'time');
+  assert.equal(t.exit, 100.2, 'closed at the bid');
+});
+
 test('the bands are re-fitted to the errors actually made', () => {
   const errs = Array.from({ length: 1000 }, (_, i) => ((i % 100) / 100) * 3);
   const c = M.calibrate(errs);
@@ -251,6 +331,68 @@ test('the screen keeps its finished candles, re-reads only the one forming, and 
   assert.deepEqual(bad.ema, [9, 21, 50]);
   assert.equal(bad.rsi, 14);
   assert.deepEqual(bad.bb, [20, 2]);
+});
+
+test('the desk advises on four horizons, writes down what it advised, and grades it by the tape', async () => {
+  const a = G.advice({ now });
+  assert.equal(a.list.length, 4);
+  assert.ok(['buy', 'sell', 'wait'].includes(a.verdict.action));
+  for (const s of a.list) {
+    assert.ok(['A', 'B', 'C'].includes(s.grade));
+    if (s.action === 'wait') assert.ok(s.why.length > 0, 'a wait says why');
+  }
+  // A signal planted at the price now is graded within its horizon.
+  const mid = G.quote().mid;
+  exec('INSERT INTO gold_signals (made_at, horizon, side, entry, stop, target, expected, p, spread, src) VALUES (?,?,?,?,?,?,?,?,?,?)', now, 15, 'buy', mid, mid - 50, mid + 50, mid + 1, 0.6, 0.3, 'simulated');
+  await run(20);
+  const s = one('SELECT * FROM gold_signals WHERE horizon = 15 AND stop = ? ', mid - 50);
+  assert.equal(s.outcome, 'time');
+  assert.ok(Number.isFinite(s.pnl));
+  const rec = G.signalRecord({ hours: 24, now });
+  assert.ok(rec.all.n >= 1);
+  assert.equal(rec.byHorizon.length, 4);
+  const o = G.overview({ now });
+  assert.ok(o.reliability[60].length === 10);
+  assert.ok(o.signalRecord.day.all.n >= 1);
+  const l = G.live({ tf: '15s', gh: 15, now });
+  assert.equal(l.ghost.horizon, 15);
+  assert.ok(l.ghost.rows.length > 0 && l.ghost.rows.some((r) => r.actual != null));
+  assert.ok(l.ind.st.length === l.candles.length && l.ind.spanA.length === l.candles.length && l.ind.sar.some((v) => v != null));
+  assert.ok(l.pivots?.pivot > 0);
+});
+
+test('a question in either language finds its instrument, and gold and stocks answer in one shape', async () => {
+  const { resolve, askInstrument } = await import('../src/instrument.js');
+  assert.equal(resolve('ما حالة الذهب اليوم؟').symbol, 'GOLD');
+  assert.equal(resolve('how is gold doing').symbol, 'GOLD');
+  assert.equal(resolve('توقع سهم آبل').symbol, 'AAPL');
+  assert.equal(resolve('ما رأيك في النفط').symbol, 'CL=F');
+  assert.equal(resolve('$tsla this week').symbol, 'TSLA');
+  assert.equal(resolve('ما حالة NVDA؟').symbol, 'NVDA');
+  assert.equal(resolve('سهم 2222.SR').symbol, '2222.SR');
+  assert.equal(resolve('I wonder'), null, 'a capital I is not a ticker');
+  assert.equal(resolve('مرحبا'), null);
+
+  const g = await askInstrument({ text: 'ما حالة الذهب', actor: ME, now });
+  assert.equal(g.kind, 'gold');
+  assert.ok(g.price > 0 && g.forecasts.length === 7 && g.timeframes.length === 4);
+  assert.ok(g.forecasts.every((f) => f.low80 <= f.expected && f.expected <= f.high80));
+  assert.ok(['buy', 'sell', 'wait'].includes(g.advice.verdict.action));
+  assert.ok(g.chart.length > 20 && g.levels.length === 5);
+  assert.match(g.note, /not financial advice/);
+
+  const s = await askInstrument({ text: 'how is Tesla', actor: ME, now });
+  assert.equal(s.kind, 'symbol');
+  assert.equal(s.symbol, 'TSLA');
+  assert.equal(s.source, 'simulated', 'a simulated desk says so');
+  assert.ok(one("SELECT symbol FROM mkt_watch WHERE symbol = 'TSLA'"), 'kept on the watchlist so its forecasts are graded from now on');
+  assert.deepEqual(s.forecasts.map((f) => f.horizon), [5, 20, 60]);
+  assert.ok(['strong buy', 'buy', 'hold', 'sell', 'strong sell'].includes(s.signal.label) && s.signal.components.length > 0);
+  assert.equal(s.timeframes.length, 3);
+  assert.ok(s.timeframes.every((x) => x.dir), 'two years of history is enough for a daily, a weekly and a monthly direction');
+  assert.equal(typeof s.proven, 'boolean', 'every stock answer says whether its record beats the baseline');
+  assert.ok(one("SELECT * FROM audit_log WHERE action = 'markets.asked' AND subject_id = 'TSLA'"));
+  await assert.rejects(askInstrument({ text: 'hello there', actor: ME, now }), /no instrument/);
 });
 
 test('a live quote reaches the desk as it is read, not when its window closes', async () => {

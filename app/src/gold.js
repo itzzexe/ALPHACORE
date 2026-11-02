@@ -32,7 +32,7 @@ import { enqueueRun } from './workflow.js';
 import { callConnector, connect, setConnectorState } from './connectors/index.js';
 import { sink as feedSink } from './connectors/goldfeed.js';
 import { readRun } from './markets/fold.js';
-import { forecast as dailyForecast } from './markets/quant.js';
+import { forecast as dailyForecast, ema, phi, rsi } from './markets/quant.js';
 import { headlinesFor } from './newsroom.js';
 import * as G from './gold/models.js';
 
@@ -71,6 +71,10 @@ export function config() {
     // returns lean on the one before — so the learning has something to find
     // and a person can watch it find it. A real market promises nothing of the sort.
     simPattern: num('GD_SIM_AR', 0.12, 0, 0.6),
+    // The advice: how sure, how far past the spread, and how much of the book one idea may risk.
+    adviceMinP: num('GD_ADVICE_MIN_P', 0.55, 0.5, 0.95),
+    adviceEdgeX: num('GD_ADVICE_EDGE_X', 1, 0, 20),
+    riskPct: num('GD_RISK_PCT', 0.5, 0.05, 5),
   };
 }
 
@@ -82,13 +86,13 @@ let mem = null;
 function state() {
   if (mem) return mem;
   const get = (k, d) => parse(one('SELECT v FROM gold_state WHERE k = ?', k)?.v, d);
-  mem = { weights: get('weights', {}), calib: get('calib', {}), buf: get('buf', {}), params: get('params', {}), tunedAt: get('tunedAt', 0), lastMade: {}, dirty: false };
+  mem = { weights: get('weights', {}), calib: get('calib', {}), buf: get('buf', {}), params: get('params', {}), tunedAt: get('tunedAt', 0), pcal: get('pcal', {}), lastMade: {}, dirty: false };
   return mem;
 }
 function save() {
   const s = state();
   if (!s.dirty) return;
-  for (const k of ['weights', 'calib', 'buf', 'params', 'tunedAt']) {
+  for (const k of ['weights', 'calib', 'buf', 'params', 'tunedAt', 'pcal']) {
     exec("INSERT INTO gold_state (k, v, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at", k, JSON.stringify(s[k]));
   }
   s.dirty = false;
@@ -219,13 +223,13 @@ function makeForecasts(now, horizons) {
   const s = seriesOf('XAU', now);
   if (!s?.xs || s.xs.length < 600) return [];
   const st = state();
-  const fs = G.forecastAll(s.xs, { horizons, params: st.params, weights: Object.fromEntries(horizons.map((h) => [h, st.weights[h]?.weights])), calib: st.calib });
+  const fs = G.forecastAll(s.xs, { horizons, params: st.params, weights: Object.fromEntries(horizons.map((h) => [h, st.weights[h]?.weights])), calib: st.calib, pcal: st.pcal });
   const madeAt = s.t0 + (s.xs.length - 1) * 1000;
   const src = source();
   for (const f of fs) {
-    exec(`INSERT INTO gold_preds (made_at, due_at, horizon, base, sigma, preds, weights, ens, low80, high80, low95, high95, p_up, src)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    madeAt, madeAt + f.horizon * 1000, f.horizon, f.base, f.sigma, JSON.stringify(f.preds), JSON.stringify(f.weights), f.ens, f.low80, f.high80, f.low95, f.high95, f.pUp, src);
+    exec(`INSERT INTO gold_preds (made_at, due_at, horizon, base, sigma, preds, weights, ens, low80, high80, low95, high95, p_up, p_raw, src)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    madeAt, madeAt + f.horizon * 1000, f.horizon, f.base, f.sigma, JSON.stringify(f.preds), JSON.stringify(f.weights), f.ens, f.low80, f.high80, f.low95, f.high95, f.pUp, f.pRaw, src);
     st.lastMade[f.horizon] = now;
   }
   return fs;
@@ -280,6 +284,8 @@ export function grade(now = Date.now()) {
       st.weights[p.horizon] = G.hedge(st.weights[p.horizon], g.norm, { eta: 2 * Math.min(1, (EVERY[p.horizon] || 5) / p.horizon) });
       const b = st.buf[p.horizon] || (st.buf[p.horizon] = []);
       b.push(round(g.norm.ens, 4)); if (b.length > 400) b.splice(0, b.length - 400);
+      // The chance shown is checked against what happened; a price that did not move says nothing about up or down.
+      if (p.p_raw != null && actual !== p.base) st.pcal[p.horizon] = G.pcalUpdate(st.pcal[p.horizon], p.p_raw, actual > p.base);
       if (st.weights[p.horizon].n % 50 === 0) recalibrate(p.horizon);
       n++;
     }
@@ -315,7 +321,7 @@ export function retune({ now = Date.now(), actor = SYS } = {}) {
     st.params[h] = st.params[h] || {};
     for (const [m, best] of Object.entries(r.best)) {
       const cur = { ...G.DEFAULT_PARAMS[m], ...(st.params[h][m] || {}) };
-      const now0 = G.walkForward(s.xs.slice(-KEEP), m, cur, Number(h));
+      const now0 = G.walkForward(s.xs.slice(-KEEP), m, cur, Number(h), G.tuneOpts(m));
       if (best.mae != null && now0.mae != null && best.mae < now0.mae * 0.995 && JSON.stringify(best.params) !== JSON.stringify(cur)) {
         st.params[h][m] = best.params;
         changes.push({ h: Number(h), m, before: now0.mae, after: best.mae, params: best.params, naive: r.naive.mae });
@@ -332,7 +338,7 @@ export function retune({ now = Date.now(), actor = SYS } = {}) {
 /** Forget what the models learned: weights, bands and settings back to their defaults. The scores stay — they are history. */
 export function resetLearning({ actor }) {
   if (!isHuman(actor)) refuse('a person resets what the desk learned', 403);
-  mem = { weights: {}, calib: {}, buf: {}, params: {}, tunedAt: 0, lastMade: {}, dirty: true };
+  mem = { weights: {}, calib: {}, buf: {}, params: {}, tunedAt: 0, pcal: {}, lastMade: {}, dirty: true };
   save();
   exec('INSERT INTO gold_learning (kind, detail) VALUES (?, ?)', 'reset', JSON.stringify({ by: actor }));
   audit({ actorType: 'human', actorId: actor, action: 'gold.learning_reset', subjectType: 'gold', subjectId: 'models' });
@@ -363,7 +369,7 @@ export function ask({ at, actor, now = Date.now() }) {
   if (h <= 7200 && s?.xs?.length >= 600) {
     const st = state();
     const near = G.HORIZONS.reduce((a, x) => (Math.abs(Math.log(x / h)) < Math.abs(Math.log(a / h)) ? x : a), 60);
-    const [r] = G.forecastAll(s.xs, { horizons: [h], params: { [h]: st.params[near] }, weights: { [h]: st.weights[near]?.weights }, calib: { [h]: st.calib[near] } });
+    const [r] = G.forecastAll(s.xs, { horizons: [h], params: { [h]: st.params[near] }, weights: { [h]: st.weights[near]?.weights }, calib: { [h]: st.calib[near] }, pcal: { [h]: st.pcal[near] } });
     f = r && { expected: r.ens, low80: r.low80, high80: r.high80, low95: r.low95, high95: r.high95, pUp: r.pUp, base: r.base };
     method = `ensemble on one-second prices (weights and settings learned at ${near}s)`;
   } else if (h <= 5 * 86400) {
@@ -608,10 +614,130 @@ function syncNotes() {
   }
 }
 
+// ----------------------------------------------------------------- advice --
+//
+// The desk advises on four horizons. Every piece of advice is computed from
+// the latest forecast re-based on the price now, checked against the desk's
+// own record at that horizon, and — when it says buy or sell — written down
+// with its entry, stop and target and graded by the tape. The record of the
+// advice is shown beside the advice. Nothing here opens a trade: a person
+// reads it, and a person presses buy or sell.
+
+const ADVISE = [15, 60, 300, 900];
+let trendMemo = { at: 0, v: null };
+let recMemo = { at: 0, v: null };
+let lastSignalAt = 0;
+
+/** The direction of the higher timeframe: fifteen-minute candles when the desk has enough of them, five-minute otherwise. */
+function trendNow(now) {
+  if (trendMemo.v && now >= trendMemo.at && now - trendMemo.at < 30_000) return trendMemo.v;
+  let v = { dir: 'flat', tf: null };
+  for (const [tf, sec] of [['15m', 900], ['5m', 300]]) {
+    const c = candlesOf(tf, sec, now).map((k) => k.c);
+    if (c.length < 55) continue;
+    const a = ema(c, 20); const b = ema(c, 50); const L = c.length - 1;
+    const slope = a[L] - a[L - 5];
+    v = { dir: a[L] > b[L] && slope > 0 ? 'up' : a[L] < b[L] && slope < 0 ? 'down' : 'flat', tf };
+    break;
+  }
+  trendMemo = { at: now, v };
+  return v;
+}
+
+function records(now) {
+  if (recMemo.v && now >= recMemo.at && now - recMemo.at < 15_000) return recMemo.v;
+  recMemo = { at: now, v: Object.fromEntries(ADVISE.map((h) => [h, recordNear(h)])) };
+  return recMemo.v;
+}
+
+export function advice({ now = Date.now() } = {}) {
+  const qt = quote();
+  const tr = trendNow(now);
+  if (!qt) return { list: [], verdict: { action: 'wait', horizon: null }, trend: tr, at: now };
+  const cfg = config(); const st = state(); const rec = records(now);
+  const fc = Object.fromEntries(currentForecasts().map((f) => [f.horizon, f]));
+  const equity = account().equity;
+  const list = ADVISE.map((h) => {
+    const f = fc[h];
+    // A forecast older than three of its own cycles is about a moment that has gone.
+    if (!f || now - f.made_at > Math.max(30_000, (EVERY[h] || 5) * 3000)) return null;
+    // The forecast is of a price at a moment; the move that matters is from the price now.
+    const pUp = G.pcalApply(st.pcal[h], f.sigma > 0 ? phi((f.ens - qt.mid) / f.sigma) : 0.5);
+    const a = G.advise({ horizon: h, ens: f.ens, base: qt.mid, sigma: f.sigma, pUp, low80: f.low80, high80: f.high80, k80: st.calib[h]?.k80 },
+      { bid: qt.bid, ask: qt.ask, record: rec[h], trend: tr.dir, minP: cfg.adviceMinP, edgeX: cfg.adviceEdgeX, equity, riskPct: cfg.riskPct, maxOz: cfg.maxOz });
+    return a && { ...a, record: { n: rec[h]?.n || 0, skillPct: rec[h]?.skillPct ?? null, hitRate: rec[h]?.hitRate ?? null } };
+  }).filter(Boolean);
+  return { list, verdict: G.verdict(list), trend: tr, at: now, src: source() };
+}
+
+/** Grade the open signals by the tape, then — every five seconds — write down any new advice to trade, one open signal per horizon. */
+function signalTick(now) {
+  settleSignals(now);
+  if (now - lastSignalAt < 5000 && now >= lastSignalAt) return;
+  lastSignalAt = now;
+  const a = advice({ now });
+  const open = new Set(q('SELECT horizon FROM gold_signals WHERE outcome IS NULL').map((r) => r.horizon));
+  for (const s of a.list) {
+    if (s.action === 'wait' || open.has(s.horizon)) continue;
+    exec(`INSERT INTO gold_signals (made_at, horizon, side, entry, stop, target, expected, p, ev, spread, grade, trend, src)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, now, s.horizon, s.action, s.entry, s.stop, s.target, s.expected, s.p, s.ev, s.spread, s.grade, s.trend, a.src);
+  }
+}
+
+function settleSignals(now) {
+  const open = q('SELECT * FROM gold_signals WHERE outcome IS NULL');
+  if (!open.length) return;
+  const s = seriesOf('XAU', now);
+  const end = s?.t0 != null ? s.t0 + (s.xs.length - 1) * 1000 : null;
+  for (const sig of open) {
+    let r = end != null ? G.settle(sig, s.xs, s.t0, { now: Math.min(now, end) }) : null;
+    // After a restart the tape may no longer reach back: the price at the horizon decides.
+    if (!r && now > sig.made_at + sig.horizon * 1000 + 120_000) {
+      const px = priceAt(sig.made_at + sig.horizon * 1000) ?? lastTick('XAU')?.mid;
+      if (px == null) continue;
+      const half = (sig.spread || 0) / 2;
+      r = { outcome: 'time', exit: round(sig.side === 'buy' ? px - half : px + half, 3), at: now };
+    }
+    if (!r) continue;
+    const pnl = round(sig.side === 'buy' ? r.exit - sig.entry : sig.entry - r.exit, 3);
+    exec('UPDATE gold_signals SET outcome = ?, exit_price = ?, exit_at = ?, pnl = ? WHERE id = ?', r.outcome, r.exit, r.at, pnl, sig.id);
+  }
+}
+
+/** Which way each timeframe points: EMA 20 against EMA 50 and the slope of the 20, RSI, and the move over twenty candles. */
+export function timeframes({ now = Date.now() } = {}) {
+  return [['1m', 60], ['5m', 300], ['15m', 900], ['1h', 3600]].map(([tf, sec]) => {
+    const c = candlesOf(tf, sec, now).map((k) => k.c);
+    if (c.length < 25) return { tf, dir: null, candles: c.length };
+    const L = c.length - 1;
+    const a = ema(c, 20); const b = c.length > 50 ? ema(c, 50) : null;
+    const slope = a[L] - a[L - 5];
+    const above = b ? a[L] > b[L] : c[L] > a[L];
+    const dir = above && slope > 0 ? 'up' : !above && slope < 0 ? 'down' : 'flat';
+    return { tf, dir, candles: c.length, last: round(c[L], 3), ema20: round(a[L], 3), ema50: b ? round(b[L], 3) : null, rsi: round(rsi(c, 14)[L], 1), change: round((c[L] / c[Math.max(0, L - 20)] - 1) * 100, 3) };
+  });
+}
+
+/** How the advice came out: per horizon and in all, in dollars an ounce after the spread. */
+export function signalRecord({ hours = 24, now = Date.now() } = {}) {
+  const rows = q('SELECT horizon, outcome, pnl FROM gold_signals WHERE outcome IS NOT NULL AND made_at >= ?', now - hours * 3600_000);
+  const sum = (list) => {
+    const n = list.length;
+    const total = list.reduce((a, r) => a + r.pnl, 0);
+    const gw = list.filter((r) => r.pnl > 0).reduce((a, r) => a + r.pnl, 0);
+    const gl = -list.filter((r) => r.pnl < 0).reduce((a, r) => a + r.pnl, 0);
+    const c = (o) => list.filter((r) => r.outcome === o).length;
+    return { n, winRate: n ? round(list.filter((r) => r.pnl > 0).length / n, 3) : null, avg: n ? round(total / n, 3) : null, total: round(total, 2), pf: gl ? round(gw / gl, 2) : null, targets: c('target'), stops: c('stop'), times: c('time') };
+  };
+  return { hours, all: sum(rows), byHorizon: ADVISE.map((h) => ({ horizon: h, ...sum(rows.filter((r) => r.horizon === h)) })) };
+}
+
 // ------------------------------------------------------------------- reads --
 
+/** The latest forecast at each horizon: the one due last, read off the (horizon, due_at) index rather than by grouping the table. */
 export function currentForecasts() {
-  return q('SELECT p.* FROM gold_preds p JOIN (SELECT horizon, MAX(id) AS id FROM gold_preds GROUP BY horizon) m ON m.id = p.id ORDER BY p.horizon')
+  return G.HORIZONS.map((h) => one('SELECT * FROM gold_preds WHERE horizon = ? ORDER BY due_at DESC, id DESC LIMIT 1', h))
+    .filter(Boolean)
     .map((p) => ({ ...p, preds: parse(p.preds, {}), weights: parse(p.weights, {}) }));
 }
 
@@ -690,15 +816,37 @@ export function chartParams(p = {}) {
     cci: PERIOD(p.cci, 20),
     wr: PERIOD(p.wr, 14),
     atr: PERIOD(p.atr, 14),
+    st: [periods(p.st, [10])[0], within(String(p.st ?? '').split(',')[1], 3, 0.5, 10)],
+    ichi: periods(p.ichi, [9, 26, 52]),
+    dc: PERIOD(p.dc, 20),
+    sar: [within(String(p.sar ?? '').split(',')[0], 0.02, 0.001, 0.2), within(String(p.sar ?? '').split(',')[1], 0.2, 0.01, 1)],
   };
 }
+function within(v, d, lo, hi) { const n = Number(v); return v !== undefined && v !== '' && Number.isFinite(n) && n >= lo && n <= hi ? n : d; }
 
-export function live({ tf = '15s', bars = 160, p = {}, now = Date.now() } = {}) {
+/** Floor pivots from the cached day range, for the chart: the screen asks every second, the range moves every fifteen. */
+function pivotsFast(now) {
+  const t = lastTick('XAU'); const d = dayOf24('XAU', now);
+  if (!t || d.h == null) return null;
+  const h = Math.max(d.h, t.mid); const l = Math.min(d.l, t.mid); const pv = (h + l + t.mid) / 3;
+  return { pivot: round(pv), r1: round(2 * pv - l), s1: round(2 * pv - h), r2: round(pv + (h - l)), s2: round(pv - (h - l)) };
+}
+
+/** What the desk said each moment would be, one per candle, beside what it was — the forecasts drawn over the chart they were about. */
+function ghostOf(h, from, to, sec) {
+  const rows = q('SELECT due_at, ens, low80, high80, actual FROM gold_preds WHERE horizon = ? AND due_at >= ? AND due_at <= ? ORDER BY due_at', h, from, to);
+  const by = new Map();
+  for (const r of rows) by.set(Math.floor(r.due_at / 1000 / sec), r);
+  return [...by.values()].map((r) => ({ t: r.due_at, ens: round(r.ens, 3), low80: round(r.low80, 3), high80: round(r.high80, 3), actual: r.actual == null ? null : round(r.actual, 3) }));
+}
+
+export function live({ tf = '15s', bars = 160, p = {}, gh = 60, now = Date.now() } = {}) {
   // The timeframe comes from the address bar of a request: it is matched
   // against the list before it names anything.
   const key = Object.hasOwn(TF, tf) ? tf : '15s';
   const sec = TF[key];
   const n = Math.min(MAX_BARS, Math.max(30, Math.round(Number(bars)) || 160));
+  const ghH = [15, 60, 300].includes(Number(gh)) ? Number(gh) : 60;
   const params = chartParams(p);
   const all = candlesOf(key, sec, now);
   // Indicators run over everything kept and are cut to what is shown, so a
@@ -725,6 +873,12 @@ export function live({ tf = '15s', bars = 160, p = {}, now = Date.now() } = {}) 
     tech: G.technicalSummary(cs),
     forecasts: currentForecasts(),
     tape, pending,
+    advice: advice({ now }),
+    signalRecord: signalRecord({ hours: 24, now }).all,
+    signals: cs.length ? q('SELECT id, made_at, horizon, side, entry, stop, target, p, grade, outcome, exit_price, exit_at, pnl FROM gold_signals WHERE made_at >= ? ORDER BY made_at DESC LIMIT 120', cs[0].t) : [],
+    // Past forecasts over the chart, for the last six hours at most: further back they are one dot a candle and say little.
+    ghost: cs.length ? { horizon: ghH, rows: ghostOf(ghH, Math.max(cs[0].t, now - 6 * 3600_000), now, sec) } : { horizon: ghH, rows: [] },
+    pivots: pivotsFast(now),
     account: account(),
     // The rest of the market a gold screen keeps beside it, from the markets desk's own quotes.
     watch: q("SELECT symbol, price, change_pct, source FROM mkt_quotes WHERE symbol IN ('GC=F','SI=F','EURUSD=X','^GSPC','CL=F','BTC-USD') ORDER BY symbol"),
@@ -758,6 +912,10 @@ export function overview({ now = Date.now() } = {}) {
     stats: { person: statsOf('person'), bot: statsOf('bot') },
     backtests: q('SELECT * FROM gold_backtests ORDER BY id DESC LIMIT 10').map((b) => ({ ...b, params: parse(b.params), result: parse(b.result) })),
     pivots: pivots(now),
+    advice: advice({ now }),
+    signalRecord: { day: signalRecord({ hours: 24, now }), week: signalRecord({ hours: 168, now }) },
+    recentSignals: q('SELECT * FROM gold_signals ORDER BY made_at DESC LIMIT 40'),
+    reliability: Object.fromEntries([15, 60, 300].map((h) => [h, G.reliability(st.pcal[h])])),
     brief: note ? { ...note, body: parse(note.body) } : null,
     note: 'Analysis and simulation, not financial advice. At a horizon of seconds gold is close to a random walk: the error in percent looks tiny because the price barely moves — skill against "no change" and the direction hit rate are the numbers that matter. Paper only; nothing here moves money.',
   };
@@ -766,7 +924,8 @@ export function overview({ now = Date.now() } = {}) {
 export function setConfig({ actor, ...b }) {
   if (!isHuman(actor)) refuse('a person sets the gold desk', 403);
   const RANGES = { streamSeconds: ['GD_STREAM_SECONDS', 3, 60], streamInterval: ['GD_STREAM_INTERVAL', 1, 30], spread: ['GD_SPREAD', 0.01, 20], startCash: ['GD_START_CASH', 100, 1e9],
-    leverage: ['GD_LEVERAGE', 1, 100], maxOz: ['GD_MAX_OZ', 0.01, 1e6], botHorizon: ['GD_BOT_HORIZON', 15, 300], botEdgeX: ['GD_BOT_EDGE_X', 0, 20], botMinP: ['GD_BOT_MIN_P', 0.5, 0.99], botOz: ['GD_BOT_OZ', 0.01, 10_000], simPattern: ['GD_SIM_AR', 0, 0.6] };
+    leverage: ['GD_LEVERAGE', 1, 100], maxOz: ['GD_MAX_OZ', 0.01, 1e6], botHorizon: ['GD_BOT_HORIZON', 15, 300], botEdgeX: ['GD_BOT_EDGE_X', 0, 20], botMinP: ['GD_BOT_MIN_P', 0.5, 0.99], botOz: ['GD_BOT_OZ', 0.01, 10_000], simPattern: ['GD_SIM_AR', 0, 0.6],
+    adviceMinP: ['GD_ADVICE_MIN_P', 0.5, 0.95], adviceEdgeX: ['GD_ADVICE_EDGE_X', 0, 20], riskPct: ['GD_RISK_PCT', 0.05, 5] };
   const changed = {};
   for (const [k, [key, lo, hi]] of Object.entries(RANGES)) {
     if (b[k] === undefined || b[k] === null || b[k] === '') continue;
@@ -800,6 +959,7 @@ export async function goldTick({ now = Date.now() } = {}) {
     const dueH = G.HORIZONS.filter((h) => !st.lastMade[h] || now - st.lastMade[h] >= EVERY[h] * 1000);
     if (dueH.length) makeForecasts(now, dueH);
     grade(now);
+    signalTick(now);
     gradeAsks(now);
     watchTrades(now);
     botStep(now);
@@ -809,6 +969,7 @@ export async function goldTick({ now = Date.now() } = {}) {
       exec('DELETE FROM gold_ticks WHERE ts < ?', now - 3 * 86400_000);
       exec('DELETE FROM gold_preds WHERE actual IS NOT NULL AND made_at < ?', now - 2 * 86400_000);
       exec('DELETE FROM gold_preds WHERE actual IS NULL AND due_at < ?', now - 86400_000);
+      exec('DELETE FROM gold_signals WHERE made_at < ?', now - 30 * 86400_000);
     }
     save();
   } finally {
