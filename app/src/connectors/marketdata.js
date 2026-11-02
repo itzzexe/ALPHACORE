@@ -261,6 +261,8 @@ export default {
   auth: { kind: 'api_key', optional: true },
   docs: 'Works with no key (Yahoo Finance). A free Twelve Data or Finnhub key adds a second source; set config.provider to prefer it.',
   quotaDay: 6000,
+  // Capabilities added after the first release, offered to installs seeded before them.
+  added: ['intraday.fetch', 'spark.fetch'],
   capabilities: ['quotes.fetch', 'history.fetch', 'intraday.fetch', 'spark.fetch'],
   ops: {
     'quotes.fetch': {

@@ -24,6 +24,8 @@ export default {
   auth: { kind: 'api_key' },
   docs: 'Paste KEY_ID:SECRET from alpaca.markets. Orders go to paper-api unless config.live is true.',
   quotaDay: 500,
+  // Capabilities added after the first release, offered to installs seeded before them.
+  added: ['clock.read', 'bars.intraday', 'position.close'],
   capabilities: ['account.read', 'positions.list', 'orders.list', 'order.place', 'order.cancel', 'clock.read', 'bars.intraday', 'position.close'],
   ops: {
     'account.read': { target: () => 'alpaca', run: (_a, ctx) => wire(`${base(ctx)}/v2/account`, { headers: headers(ctx), service: 'alpaca' }) },

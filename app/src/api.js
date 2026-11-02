@@ -113,6 +113,7 @@ import { draftNow } from './drafts.js';
 import * as Markets from './markets.js';
 import * as Portfolio from './portfolio.js';
 import * as Trading from './trading.js';
+import * as Gold from './gold.js';
 import * as Newsroom from './newsroom.js';
 import * as Engine from './engine.js';
 import * as Learning from './learning.js';
@@ -2704,6 +2705,22 @@ const routes = [
   ['POST', /^\/api\/trading\/halt$/, (_p, body, _u, user) => Trading.halt({ why: body.why || '', actor: `human:${user.username}` })],
   ['POST', /^\/api\/trading\/resume$/, (_p, _b, _u, user) => Trading.resume({ actor: `human:${user.username}` })],
 
+  // ---- Gold desk --------------------------------------------------------
+  ['GET', /^\/api\/gold$/, () => Gold.overview()],
+  ['GET', /^\/api\/gold\/live$/, (_p, _b, url) => Gold.live({ tf: url.searchParams.get('tf') || '15s' })],
+  ['POST', /^\/api\/gold\/ask$/, (_p, body, _u, user) => Gold.ask({ at: need(body, 'at'), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/trade$/, (_p, body, _u, user) => Gold.openTrade({ side: need(body, 'side'), oz: need(body, 'oz'), sl: body.sl ?? null, tp: body.tp ?? null, expiresIn: body.expiresIn ?? null, note: body.note || '', actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/trade\/(\d+)\/close$/, (p, _b, _u, user) => Gold.closeTrade({ id: Number(p[0]), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/backtest$/, (_p, body, _u, user) => Gold.backtest({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/brief$/, (_p, body, _u, user) => Gold.requestBrief({ lang: body.lang || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/tune$/, (_p, _b, _u, user) => Gold.retune({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/config$/, (_p, body, _u, user) => Gold.setConfig({ ...body, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/bot$/, (_p, body, _u, user) => Gold.setBot({ on: Boolean(body.on), actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/reset-learning$/, (_p, _b, _u, user) => Gold.resetLearning({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/reset-paper$/, (_p, _b, _u, user) => Gold.resetPaper({ actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/feed\/live$/, (_p, body, _u, user) => Gold.goLive({ provider: body.provider || null, actor: `human:${user.username}` })],
+  ['POST', /^\/api\/gold\/feed\/simulated$/, (_p, _b, _u, user) => Gold.goSimulated({ actor: `human:${user.username}` })],
+
   // ---- Newsroom ---------------------------------------------------------
   ['GET', /^\/api\/newsroom$/, (_p, _b, url) => Newsroom.overview({ category: url.searchParams.get('category'), search: url.searchParams.get('q'), limit: url.searchParams.get('limit') })],
   ['POST', /^\/api\/newsroom\/feed$/, (_p, body, _u, user) => Newsroom.addFeed({ name: body.name, url: need(body, 'url'), category: body.category || 'custom', lang: body.lang || 'en', actor: `human:${user.username}` })],
@@ -2907,6 +2924,15 @@ function permFor(m, path) {
     if (m === 'GET') return 'trading.view';
     if (path === '/api/trading/config' || path === '/api/trading/resume') return 'trading.configure';
     return 'trading.manage';
+  }
+  // The gold desk: asking, paper trading and simulating are everyday work; the
+  // bot, the desk's settings and forgetting what it learned are held apart;
+  // switching the feed is the connector act, as on the markets desk.
+  if (path.startsWith('/api/gold')) {
+    if (m === 'GET') return 'gold.view';
+    if (path.startsWith('/api/gold/feed/')) return 'connectors.manage';
+    if (['/api/gold/config', '/api/gold/bot', '/api/gold/reset-learning', '/api/gold/reset-paper'].includes(path)) return 'gold.configure';
+    return 'gold.manage';
   }
   if (path === '/api/partnerships') return 'partners.view';
   if (path.startsWith('/api/partnerships')) return 'partners.manage';

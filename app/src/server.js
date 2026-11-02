@@ -128,6 +128,7 @@ import { marketsTick, seedWatchlist } from './markets.js';
 import { newsTick, seedFeeds } from './newsroom.js';
 import { portfolioTick } from './portfolio.js';
 import { tradingTick } from './trading.js';
+import { goldTick } from './gold.js';
 import { syncAsks, operatorTick } from './localai.js';
 import { bootEngine, stopAll as stopEngine } from './engine.js';
 import { learningTick, seedGuards } from './learning.js';
@@ -372,6 +373,9 @@ setInterval(() => { try { portfolioTick(); operatorTick(); } catch { /* next tic
 // evaluated through the session, every open trade watched to its stop, its
 // target or the flat-by time.
 setInterval(() => { tradingTick().catch(() => { /* next tick */ }); }, 20_000).unref?.();
+// The gold desk runs by the second: forecasts are made and graded on a
+// one-second grid, and a slow second simply waits for the next.
+setInterval(() => { goldTick().catch(() => { /* next second */ }); }, 1_000).unref?.();
 // The built-in engine comes back with the process, and goes with it: a
 // llama.cpp server left running after AlphaCore stops is two gigabytes of
 // memory that nothing is using.

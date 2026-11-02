@@ -51,6 +51,8 @@ app/src/learning.js      lessons, corrections, guards (guards.js), web research,
 app/src/markets.js       markets desk (markets/quant.js is the arithmetic); portfolio.js, newsroom.js beside it
 app/src/trading.js       the trading floor (day trades): trading/math.js is the day-trader skill's arithmetic, trading/clock.js
                          the NYSE clock; a triggered plan is a bracket order on the portfolio desk; tests hand bars in via `feed`
+app/src/gold.js          the gold desk, by the second: gold/models.js the forecasters, Hedge weights, conformal bands, tuning,
+                         candles, indicators and the backtest; connectors/goldfeed.js the feed; tests hand the clock in (`now`)
 app/src/core2/           the enterprise core (HR, finance, bank, ops, remit) — held apart by rules in ARCHITECTURE
 app/src/policies.js      governance floor: policies, iso, internalaudit, aml, insurance, transformation, opscenter,
                          strategy, studio-production; drafts.js is how they all ask an employee to write ([DRAFT:<kind>])
@@ -156,5 +158,10 @@ app/test/                node:test files, one per area
 - The trading floor sizes and checks at the worst fill the order allows (its limit), not the trigger price: sizing at
   the trigger let a full-size order breach the portfolio's caps by a few dollars and be held. A bracket's legs were
   approved with the entry, so `bracketExit` fills them on paper without asking again; at a broker they fill there.
+- The gold desk ticks every second on its own clock (`goldTick`); keep each second small. Forecasts are graded on the
+  in-memory one-second series, and its learned state (weights, bands, settings) lives in `gold_state`, not in memory
+  alone. Its accuracy page leads with skill against "no change": percent error is always tiny at seconds.
+- A connector that gains capabilities lists them in `added`; `seedConnectors` offers them to older installs only when
+  their stored scopes still hold everything the driver had before.
 - The workforce map updates itself in place; `renderOverview` returns early while it is mounted so the page poll
   does not rebuild it (and restart every particle) every five seconds.

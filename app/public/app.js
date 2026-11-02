@@ -30,6 +30,7 @@ import { renderServers, renderServer, renderDeploys, renderDeployTarget, renderM
 import { renderCrew, renderMyWork } from '/departments/crew.js';
 import { renderMarkets, renderSymbol, renderPortfolio, renderNewsroom, renderLocalAI } from '/departments/markets.js';
 import { renderTrading, renderTradePlan } from '/departments/trading.js';
+import { renderGold } from '/departments/gold.js';
 import { renderLearning } from '/departments/learning.js';
 import { renderDocument, renderAssuranceMap } from '/departments/assurance.js';
 import { renderProcRuns, renderIntake, renderMinutes, renderWhatsApp, renderPortal, renderBoardPack, renderInsider, renderSelfImprove } from '/departments/workday.js';
@@ -479,6 +480,7 @@ const ROUTE_TABLE = {
   portfolio: { title: 'Portfolio — where only a person trades', render: renderPortfolio, poll: 10000 },
   trading: { title: 'Trading floor — day trades, flat by the close', render: renderTrading, poll: 15000 },
   tradePlan: { title: 'Day trade', render: renderTradePlan, poll: 15000 },
+  gold: { title: 'Gold desk — forecasts graded by the second', render: renderGold, poll: 2000 },
   newsroom: { title: 'Newsroom — technology, politics, the economy and the markets', render: renderNewsroom, poll: 30000 },
   localai: { title: 'Local AI — the model on the company’s own server', render: renderLocalAI, poll: 10000 },
   learning: { title: 'Learning — what it learned, and what stops a repeat', render: renderLearning, poll: 30000 },

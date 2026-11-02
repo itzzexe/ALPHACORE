@@ -331,3 +331,45 @@
 .tr-odds .s { background: var(--sx-bad); }
 .tr-odds .n { background: var(--sx-faint); }
 .tr-nw, .tr-nw .chip { white-space: nowrap; }
+
+/* The gold desk: a trading screen. Bid in the bad colour and ask in the good
+   one, as every platform does; the forecast cone runs off the right edge. */
+.gd-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
+.gd-q { background: var(--sx-panel); border: 1px solid var(--sx-line); border-radius: var(--sx-r1); padding: 6px 12px; display: flex; flex-direction: column; min-inline-size: 96px; }
+.gd-big { font-size: 22px; }
+.gd-term { display: grid; grid-template-columns: 250px minmax(0, 1fr) 280px; gap: 12px; align-items: start; }
+@media (max-width: 1180px) { .gd-term { grid-template-columns: minmax(0, 1fr); } }
+.gd-watch { overflow-x: auto; }
+.gd-watch .tbl { font-size: 12px; }
+.gd-watch .tbl td { padding: 5px 4px; white-space: nowrap; }
+.gd-term .chip, .gd-tape .chip { white-space: nowrap; }
+.gd-tools { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-block-end: 6px; }
+.gd-tools .seg { display: flex; gap: 2px; }
+.gd-main { block-size: 360px; }
+.gd-sub { block-size: 80px; }
+.gd-subhead { margin-block-start: 6px; }
+.gd-chartwrap .gd-bb { fill: none; stroke: var(--sx-ai); stroke-width: 1; opacity: 0.55; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-bbm { fill: none; stroke: var(--sx-ai); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.45; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-e9 { fill: none; stroke: var(--sx-human); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-e21 { fill: none; stroke: var(--sx-ai-ink); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-e50 { fill: none; stroke: var(--sx-mute); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-now { stroke: var(--sx-ink); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.6; vector-effect: non-scaling-stroke; }
+.gd-chartwrap .gd-tag { fill: var(--sx-ink); }
+.gd-chartwrap .gd-tagt { fill: var(--sx-bg); font-size: 11px; font-family: var(--sx-mono); }
+.gd-chartwrap .gd-pt { fill: var(--sx-ai-ink); }
+.mk-legend .k-e9::before { background: var(--sx-human); }
+.mk-legend .k-e21::before { background: var(--sx-ai-ink); }
+.mk-legend .k-e50::before { background: var(--sx-mute); }
+.gd-buysell { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gd-buysell .btn { display: flex; flex-direction: column; align-items: center; padding-block: 10px; }
+/* Specific enough to win over the shell's .btn, which loads after this file.
+   White on the solid colours, as the shell does for its own accent buttons. */
+.gd-buysell .btn.gd-sell { background: var(--sx-bad); border-color: var(--sx-bad); color: #fff; }
+.gd-buysell .btn.gd-buy { background: var(--sx-ok); border-color: var(--sx-ok); color: #fff; }
+.gd-buysell .btn:hover { filter: brightness(1.08); }
+.gd-gauge { text-align: center; margin-block: 6px 10px; }
+.gd-gauge .chip { font-size: 15px; padding: 6px 14px; }
+.gd-w { block-size: 6px; background: var(--sx-sunk); border-radius: 3px; overflow: hidden; inline-size: 80px; }
+.gd-w i { display: block; block-size: 100%; background: var(--sx-ai); }
+.gd-ask { border-block-end: 1px solid var(--sx-line-soft); padding-block: 8px; }
+.gd-ask:last-child { border-block-end: 0; }

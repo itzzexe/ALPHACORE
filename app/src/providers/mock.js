@@ -64,6 +64,21 @@ function pick(system, prompt) {
       kept: [], mistakes: [], ruleChanges: [], confidence: 0.3,
     };
   }
+  // The gold desk. The levels were computed before the prompt was written, so
+  // mock can name them; it cannot judge them.
+  if (task.includes('[GOLD-BRIEF]')) {
+    let g = {};
+    try { g = JSON.parse(((prompt || '').match(/GOLD_JSON: (\{[\s\S]*?\})\n/) || [])[1] || '{}'); } catch { g = {}; }
+    const p = g.pivots || {};
+    return {
+      summary: `[mock] Pivot ${p.pivot ?? '—'}, 24-hour range ${p.low24 ?? '—'}–${p.high24 ?? '—'}. No analyst model is connected, so this restates the computed levels without judgement.`,
+      shortTerm: '[mock] see the scoreboard: the forecasts are graded there, beside the naive one',
+      intraday: '[mock] not assessed',
+      levels: { support: [p.s1, p.s2].filter((x) => x != null), resistance: [p.r1, p.r2].filter((x) => x != null) },
+      risks: ['[mock] written without a model'],
+      confidence: 0.3,
+    };
+  }
   if (task.includes('[NEWS-DIGEST]')) {
     const titles = [...(prompt || '').matchAll(/^- \[(\d+)\] (.+?) \((.+?)\)$/gm)].slice(0, 5);
     return {
