@@ -71,6 +71,8 @@ const ALWAYS_GATED = new Set([
   // An order to a broker spends money the moment it fills. The portfolio
   // desk passes a person's approval through as `force`; nothing else can.
   'order.place',
+  // Closing a position at the broker is a market sell by another name.
+  'position.close',
 ]);
 
 const REDACT = /(?:key|token|secret|password|authorization|cookie|seed|mnemonic|private)/i;

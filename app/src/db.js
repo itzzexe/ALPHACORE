@@ -5467,6 +5467,207 @@ CREATE TABLE IF NOT EXISTS eq_scenarios (
 );
 `);
 
+// The trading floor. A plan is one day trade from the moment a symbol is
+// watched to the moment it is flat: its range, its trigger, its exits, its
+// replays, its size, its checks, its order and its result in R. The journal
+// is these rows once they are closed — nothing is copied into a second table
+// that could disagree with the first.
+db.exec(`
+CREATE TABLE IF NOT EXISTS tr_plans (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  day          TEXT NOT NULL,                          -- New York date
+  symbol       TEXT NOT NULL,
+  setup        TEXT NOT NULL DEFAULT 'orb',            -- orb|level
+  source       TEXT,                                   -- scan:<id>|desk:<run>|person
+  state        TEXT NOT NULL DEFAULT 'watching',       -- watching|triggered|refused|proposed|open|closed|expired|cancelled
+  level        REAL,
+  or_high      REAL,
+  or_low       REAL,
+  entry        REAL,
+  entry_at     TEXT,
+  stop         REAL,
+  stop_rule    TEXT,
+  target       REAL,
+  target_r     REAL,
+  risk_share   REAL,
+  qty          INTEGER,
+  sizing       TEXT,                                   -- JSON
+  tm           TEXT,                                   -- JSON: the Time Machine
+  history      TEXT,                                   -- JSON: the rule replayed through past sessions
+  checks       TEXT,                                   -- JSON: the risk checks
+  order_id     INTEGER,                                -- pf_orders.id of the entry
+  exit_order_id INTEGER,
+  exit_price   REAL,
+  exit_reason  TEXT,                                   -- stop|target|flat|manual
+  exit_at      TEXT,
+  r_result     REAL,
+  pnl          REAL,
+  note         TEXT,
+  why          TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS tr_plans_day ON tr_plans (day, state);
+CREATE TABLE IF NOT EXISTS tr_scans (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  mode        TEXT NOT NULL,                           -- daily|orb
+  day         TEXT NOT NULL,
+  universe    INTEGER NOT NULL DEFAULT 0,
+  scanned     INTEGER NOT NULL DEFAULT 0,
+  failed      INTEGER NOT NULL DEFAULT 0,
+  hits        TEXT NOT NULL DEFAULT '[]',
+  source      TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS tr_notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,                           -- gameplan|review
+  day         TEXT NOT NULL,
+  run_id      TEXT,
+  state       TEXT NOT NULL DEFAULT 'thinking',        -- thinking|ready|failed
+  summary     TEXT,
+  body        TEXT,
+  served_by   TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+// A day trade's order carries its exits, so the broker holds the stop from
+// the moment the entry fills; and it names the plan it belongs to.
+try { db.exec('ALTER TABLE pf_orders ADD COLUMN stop_price REAL'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE pf_orders ADD COLUMN take_profit REAL'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE pf_orders ADD COLUMN plan_id INTEGER'); } catch { /* column exists */ }
+
+// The gold desk. Ticks are kept three days; a forecast row carries every
+// model's number for one horizon from one moment, so grading it grades them
+// all; the running sums in gold_scores outlive the rows they were made from.
+db.exec(`
+CREATE TABLE IF NOT EXISTS gold_ticks (
+  sym   TEXT NOT NULL,                                 -- XAU|XAG
+  ts    INTEGER NOT NULL,                              -- ms
+  bid   REAL,
+  ask   REAL,
+  mid   REAL NOT NULL,
+  src   TEXT NOT NULL,
+  PRIMARY KEY (sym, ts)
+);
+CREATE TABLE IF NOT EXISTS gold_preds (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  made_at   INTEGER NOT NULL,
+  due_at    INTEGER NOT NULL,
+  horizon   INTEGER NOT NULL,                          -- seconds
+  base      REAL NOT NULL,
+  sigma     REAL NOT NULL,                             -- price units over the horizon
+  preds     TEXT NOT NULL,                             -- JSON {model: price}
+  weights   TEXT NOT NULL,                             -- JSON {model: weight} at the time
+  ens       REAL NOT NULL,
+  low80 REAL, high80 REAL, low95 REAL, high95 REAL,
+  p_up      REAL,
+  src       TEXT,
+  actual    REAL,
+  graded_at INTEGER,
+  err       REAL,
+  hit       INTEGER,
+  inside80  INTEGER,
+  inside95  INTEGER
+);
+CREATE INDEX IF NOT EXISTS gold_preds_due ON gold_preds (due_at) WHERE actual IS NULL;
+CREATE INDEX IF NOT EXISTS gold_preds_graded ON gold_preds (horizon, graded_at);
+CREATE TABLE IF NOT EXISTS gold_scores (
+  day      TEXT NOT NULL,
+  horizon  INTEGER NOT NULL,
+  model    TEXT NOT NULL,
+  n        INTEGER NOT NULL DEFAULT 0,
+  sae      REAL NOT NULL DEFAULT 0,
+  sse      REAL NOT NULL DEFAULT 0,
+  sape     REAL NOT NULL DEFAULT 0,
+  hits     INTEGER NOT NULL DEFAULT 0,
+  dir_n    INTEGER NOT NULL DEFAULT 0,
+  inside80 INTEGER NOT NULL DEFAULT 0,
+  inside95 INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, horizon, model)
+);
+CREATE TABLE IF NOT EXISTS gold_state (
+  k  TEXT PRIMARY KEY,
+  v  TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS gold_learning (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind    TEXT NOT NULL,                               -- tune|calibrate|weights
+  horizon INTEGER,
+  model   TEXT,
+  before  REAL,
+  after   REAL,
+  detail  TEXT,
+  at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS gold_asks (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  asked_by  TEXT NOT NULL,
+  asked_at  INTEGER NOT NULL,
+  target_at INTEGER NOT NULL,
+  horizon   INTEGER NOT NULL,
+  base      REAL NOT NULL,
+  expected  REAL NOT NULL,
+  low80 REAL, high80 REAL, low95 REAL, high95 REAL,
+  p_up      REAL,
+  method    TEXT NOT NULL,
+  record    TEXT,                                      -- JSON: the track record at that horizon when asked
+  src       TEXT,
+  actual    REAL,
+  graded_at INTEGER,
+  err       REAL
+);
+CREATE TABLE IF NOT EXISTS gold_accounts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  cash       REAL NOT NULL,
+  start_cash REAL NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS gold_trades (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id  INTEGER NOT NULL REFERENCES gold_accounts(id),
+  side        TEXT NOT NULL CHECK (side IN ('buy','sell')),
+  oz          REAL NOT NULL CHECK (oz > 0),
+  open_price  REAL NOT NULL,
+  open_at     INTEGER NOT NULL,
+  sl          REAL,
+  tp          REAL,
+  expires_at  INTEGER,
+  close_price REAL,
+  close_at    INTEGER,
+  close_reason TEXT,                                   -- sl|tp|expiry|manual
+  pnl         REAL,
+  source      TEXT NOT NULL,                           -- person|bot
+  opened_by   TEXT NOT NULL,
+  pred_id     INTEGER,
+  note        TEXT,
+  state       TEXT NOT NULL DEFAULT 'open'             -- open|closed
+);
+CREATE TABLE IF NOT EXISTS gold_backtests (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  params     TEXT NOT NULL,
+  result     TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS gold_notes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id     TEXT,
+  state      TEXT NOT NULL DEFAULT 'thinking',
+  summary    TEXT,
+  body       TEXT,
+  served_by  TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
 /**
  * Run a piece of work so that all of it happens, or none of it.
  *

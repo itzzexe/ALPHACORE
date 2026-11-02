@@ -23,6 +23,7 @@ import http from './http.js';
 import marketdata from './marketdata.js';
 import newsfeeds from './newsfeeds.js';
 import broker from './broker.js';
+import goldfeed from './goldfeed.js';
 import modelhub from './modelhub.js';
 import webread from './webread.js';
 import sanctions from './sanctions.js';
@@ -30,7 +31,7 @@ import whatsapp from './whatsapp.js';
 import opendata from './opendata.js';
 
 export const DRIVERS = Object.fromEntries(
-  [gmail, gcalendar, github, slack, telegram, x, linkedin, stripe, notion, http, marketdata, newsfeeds, broker, modelhub, webread, sanctions, whatsapp, opendata].map((d) => [d.id, d]),
+  [gmail, gcalendar, github, slack, telegram, x, linkedin, stripe, notion, http, marketdata, newsfeeds, broker, modelhub, webread, sanctions, whatsapp, opendata, goldfeed].map((d) => [d.id, d]),
 );
 
 const parse = (s, f) => { try { return s ? JSON.parse(s) : f; } catch { return f; } };
@@ -143,7 +144,21 @@ export async function callConnector({ connector, capability, args = {}, agentId 
 export function seedConnectors() {
   for (const d of Object.values(DRIVERS)) {
     if (d.id === 'http') continue; // generic driver: instances are created by hand
-    if (one('SELECT id FROM connectors WHERE id = ?', d.id)) continue;
+    const have = one('SELECT id, scopes FROM connectors WHERE id = ?', d.id);
+    if (have) {
+      // A driver that learned new capabilities in a release offers them to
+      // installs seeded before it — but only where the stored list still holds
+      // everything the driver offered before. A list a person narrowed on
+      // purpose stays narrowed.
+      const added = d.added || [];
+      const stored = parse(have.scopes, []);
+      const before = d.capabilities.filter((c) => !added.includes(c));
+      const missing = added.filter((c) => !stored.includes(c));
+      if (missing.length && stored.length && before.every((c) => stored.includes(c))) {
+        exec('UPDATE connectors SET scopes = ? WHERE id = ?', JSON.stringify([...stored, ...missing]), d.id);
+      }
+      continue;
+    }
     exec(
       `INSERT INTO connectors (id, driver, label, config, scopes, allowlist, quota_day, state)
        VALUES (?,?,?, '{}', ?, '[]', ?, 'disconnected')`,

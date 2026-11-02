@@ -5,9 +5,9 @@
 ### An AI company operating system where agents can act, but cannot silently exceed their authority.
 
 **An entire AI-native company inside a single Node process.**
-Two hundred and fifteen departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
+Two hundred and seventeen departments across thirteen divisions, staffed by an AI workforce that drafts, builds,
 researches, sells, supports and **hires its own new employees** — reaching the real world through one guarded
-door, under 366 atomic permissions, with every consequential act written to a hash chain before it happens.
+door, under 372 atomic permissions, with every consequential act written to a hash chain before it happens.
 
 Two halves, kept apart on purpose. The **AI core** thinks and acts. The
 **enterprise core** records what is true — people, time, payroll, documents,
@@ -19,18 +19,18 @@ cannot do is any of that without a scope that permits it, a record that survives
 irreversible or costs money — a named person who said yes. The company runs itself; it does not answer to
 itself.
 
-<img src="https://img.shields.io/badge/departments-215-c0563a?style=flat-square" alt="215 departments">
+<img src="https://img.shields.io/badge/departments-217-c0563a?style=flat-square" alt="217 departments">
 <img src="https://img.shields.io/badge/divisions-13-a08f6a?style=flat-square" alt="13 divisions">
 <img src="https://img.shields.io/badge/cores-2_(AI_%2B_enterprise)-e07bd2?style=flat-square" alt="two cores: AI and enterprise">
-<img src="https://img.shields.io/badge/relationships-627-8d8477?style=flat-square" alt="627 declared relationships">
-<img src="https://img.shields.io/badge/API-1155_routes-4f9cf0?style=flat-square" alt="1155 API routes">
-<img src="https://img.shields.io/badge/permissions-366_atomic-e07bd2?style=flat-square" alt="366 atomic permissions">
+<img src="https://img.shields.io/badge/relationships-637-8d8477?style=flat-square" alt="637 declared relationships">
+<img src="https://img.shields.io/badge/API-1183_routes-4f9cf0?style=flat-square" alt="1183 API routes">
+<img src="https://img.shields.io/badge/permissions-372_atomic-e07bd2?style=flat-square" alt="372 atomic permissions">
 <img src="https://img.shields.io/badge/integrations-9_%2B_any_HTTP_API-2fd6a8?style=flat-square" alt="9 integrations plus any HTTP API">
 <img src="https://img.shields.io/badge/MCP-client_%2B_server-b78bff?style=flat-square" alt="MCP client and server">
 <img src="https://img.shields.io/badge/AI_providers-8_hosted_%2B_2_local-5ec3c9?style=flat-square" alt="8 hosted providers plus 2 local">
 <img src="https://img.shields.io/badge/audit-hash--chained-948b7d?style=flat-square" alt="hash-chained audit">
 <img src="https://img.shields.io/badge/chain-externally_witnessed-5d7f5f?style=flat-square" alt="externally witnessed chain">
-<img src="https://img.shields.io/badge/tests-630-78bf6d?style=flat-square" alt="630 tests">
+<img src="https://img.shields.io/badge/tests-668-78bf6d?style=flat-square" alt="668 tests">
 <img src="https://img.shields.io/badge/dependencies-1-78bf6d?style=flat-square" alt="one dependency">
 <img src="https://img.shields.io/badge/node-%E2%89%A522.5-cfa257?style=flat-square" alt="Node ≥ 22.5">
 <img src="https://img.shields.io/badge/licence-AGPL--3.0-948b7d?style=flat-square" alt="AGPL-3.0 licence">
@@ -57,7 +57,7 @@ where you watch both cores work — and every tunnel between them.*
 | [What this is](#what-this-is) · [What makes it different](#what-makes-it-different) | the argument |
 | [**A look inside**](#a-look-inside) · [**The architecture**](#the-architecture) · [The life of a run](#the-life-of-a-run) | screenshots, the drawing, the path every act takes |
 | [Quick start](#quick-start) · [First run](#first-run) · [Going live](#going-live) · [On a phone](#on-a-phone) | getting in |
-| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 215 departments](#the-company--13-divisions-215-departments) | the shape |
+| [The company at a glance](#the-company-at-a-glance) · [How work moves](#how-work-moves-through-the-company) · [All 217 departments](#the-company--13-divisions-217-departments) | the shape |
 | [**The command deck**](#the-console) · [Live data](#the-world-outside-and-who-owns-the-company) · [The frontier](#the-frontier) · [The workforce improves itself](#the-workforce-improves-itself) | the newest floors: globe, live world, radar, atlas, naming, cap table |
 | [The engine room](#the-engine-room) · [The books](#the-books) · [Unit economics](#does-the-workforce-earn-its-keep) · [Standing orders](#standing-orders) · [Deep search](#deep-search) · [The outside world](#the-outside-world) · [The platform layer](#the-platform-layer) | the machinery |
 | [**The two cores**](#two-cores-one-company) · [The enterprise core](#the-enterprise-core) · [The bridges](#the-bridges) | the other galaxy |
@@ -367,7 +367,7 @@ flowchart TD
   DATA["DATA · 13<br/>intelligence · segments · datasets<br/>archive · knowledge graph · deep search"] --> CORE
   MARKETING["MARKETING · 23<br/>brand · content · design · SEO<br/>paid · lifecycle · events · press"] --> CORE
   COMMERCE["COMMERCE · 10<br/>pricing · sales · customers<br/>success · revenue loop"] --> CORE
-  CAPITAL["CAPITAL · 22<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
+  CAPITAL["CAPITAL · 24<br/>finance · reports · FinOps · treasury<br/>money desk · ledger · bookkeeping · unit economics"] --> CORE
   OPERATE["OPERATE · 25<br/>incidents · support · assets<br/>legal · contact centre"] --> CORE
   TALENT["TALENT · 23<br/>people · recruiting · academy<br/>memory · the floor · skills"] --> CORE
   TRUST["TRUST · 15<br/>SOC · compliance · sustainability<br/>provenance · red team"] --> CORE
@@ -404,7 +404,7 @@ flowchart TD
 ```
 
 Every department declares what it hands to, reviews for, audits, and remembers.
-Those declarations are data, not decoration: **627 relationships** that the map
+Those declarations are data, not decoration: **637 relationships** that the map
 draws, the trace walks hop by hop, and the launch audit checks. A department
 joined to nothing is a finding, not a diagram problem.
 
@@ -476,7 +476,7 @@ what the lenses light up.
 
 ---
 
-## The company — 13 divisions, 215 departments
+## The company — 13 divisions, 217 departments
 
 <details open>
 <summary><b>ENGINE · 13</b> — the workforce and the work</summary>
@@ -484,7 +484,7 @@ what the lenses light up.
 **Request desk** · **Agents** · **Workforce** · **Run queue** · **Pipelines** ·
 **Providers** · **Artifacts** · **Capacity** · **Workstreams** · **Model chains**
 
-Where work is asked for and carried out. 61 AI employees seeded from
+Where work is asked for and carried out. 63 AI employees seeded from
 `config/agents.json`, each with a mission, a tier, a sensitivity class and a
 human owner — and more than that in any company that has been running a while,
 because recruiting hires its own. Runs are leased, attempted, retried with
@@ -558,7 +558,7 @@ stop for a person.
 </details>
 
 <details>
-<summary><b>CAPITAL · 22</b> — the books, money going out, and money held</summary>
+<summary><b>CAPITAL · 24</b> — the books, money going out, and money held</summary>
 
 **Finance** · **Financial reports** · **Ledger** · **Bookkeeping** ·
 **Unit economics** · **FinOps** · **Treasury (crypto)** · **Money desk** · **Tax**
@@ -1075,7 +1075,7 @@ as a human who did not act.
 
 ### The workforce
 
-61 employees seeded from `config/agents.json`, each with a system prompt that
+63 employees seeded from `config/agents.json`, each with a system prompt that
 resolves `{{company}}` to your company's name. That is the starting roster, not
 a ceiling: recruiting opens roles and hires into the org, so a company that has
 been running for a while has more employees than this file describes, and the
@@ -1382,7 +1382,7 @@ department rather than buried in Settings.
 | **Anchors** | The chain's head witnessed by an RFC 3161 timestamping authority, outside this disk. Verifying the chain proves it agrees with *itself*, which is exactly what a rewritten record also does — anybody who owns the file can edit it and recompute every hash. This is the only check that cannot be forged locally. |
 | **Erasure** | Crypto-shredding: a person's data sealed under their own key, so erasing them destroys the key while every hash still verifies. A right to be forgotten inside a record that cannot forget. It reaches the intelligence tables, support, and the contact centre — including a call transcript and the recording of somebody's voice, which are the most sensitive things here and the easiest to miss, because a recording is not equal to the phone number an erasure request names. |
 | **The desk** | Everything waiting on a person, ordered by what it blocks. Batches are recorded as one act naming every item, never as a dozen entries that read like a dozen judgements. |
-| **Roles** | Seven templates over the 366 permissions, with each irreversible power in exactly one of them. |
+| **Roles** | Seven templates over the 372 permissions, with each irreversible power in exactly one of them. |
 | **Model chains** | Which model does the work, and a canary that must pass — on the same day, against the chain in service — before it changes. An untested chain cannot be promoted, and an inconclusive canary does not count as evidence. |
 | **Recall** | Local embeddings via ollama, so search finds "the tool that reads receipts" from "invoice OCR platform" — trigrams score that pair at 0.000. Nothing leaves the machine. |
 | **Deliverability** | DKIM signing, and a preflight that reads live DNS to say what a receiver would conclude. Plus whether a call may lawfully be recorded, by jurisdiction. |
@@ -1431,6 +1431,36 @@ volatility, drawdown, forecasts kept with their track record — and a daily
 brief written from it. A portfolio, paper or through a broker, where **an order
 fills only after a person approves it**. A newsroom of RSS and Atom feeds,
 tagged, scored for tone, and briefed daily.
+
+A **trading floor** for day trades, built on the
+[day-trader skill](https://github.com/Jakeschincariol/day-trader-skill) (MIT):
+a pre-market scan of daily setups, the opening range on five-minute bars, an
+entry only on a bar that *closes* above it, a stop and a target set before the
+entry, the plan replayed thousands of times through past sessions (the Time
+Machine) and through every past day its rule would have fired, a size that is
+the smallest of four limits, and a risk check that counts the loss already taken
+today. A Day Trader agent picks what to watch and reviews the day in R; it cannot
+size or send anything. The entry goes to the portfolio as a bracket order — its
+stop and target travel with it — and only a person approves it. Two losses in a
+row or the day's loss limit stop the floor until tomorrow.
+
+A **gold desk** that works by the second. Spot gold and silver come with a
+real bid and ask (Swissquote's public feed, then gold-api.com, then the gold
+future), read through the gate in short windows. Five forecasters — no change,
+drift, momentum, mean reversion and an autoregression — and an ensemble of them
+forecast 5, 15, 30 and 60 seconds and 5, 15 and 60 minutes ahead; **every
+forecast is written down before its moment and graded when it comes**, model by
+model, beside "the price stays the same". The desk improves itself in three
+ways: the ensemble re-weights after every grade (Hedge, with a fading memory),
+the error bands re-fit to the errors actually made, and every hour each model's
+settings are retuned on the last two hours and kept only if they do better. Ask
+it about any moment — a minute, a day or a month ahead — and it answers with a
+range and grades itself later. A trading screen (candles from one second to an
+hour, EMAs, Bollinger, RSI, MACD, stochastic, a technical summary and the
+forecast cone), a paper book with stops and targets, a bot that trades the
+forecasts on paper, and a simulator that replays them after the spread. The
+accuracy page leads with skill against "no change", because at seconds the
+error in percent is always tiny and means nothing.
 
 ### The approvals desk
 
@@ -1706,7 +1736,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
   answers nothing about the company), and `/webhooks/*` — carrier callbacks
   from the phone network, which cannot hold a token and are authenticated by
   the carrier's own signature instead
-- **366 atomic permissions** across 177 families (`decisions.approve`,
+- **372 atomic permissions** across 179 families (`decisions.approve`,
   `treasury.payout`, `egress.grant`, …). The superadmin holds `*`
 - The launch audit checks that every permission the API demands exists in the
   catalogue — a route guarded by a permission nobody can hold is permanently
@@ -1720,7 +1750,7 @@ what happens: `block` refuses, `gate` stops for a person, `warn` records.
 
 ### The API
 
-**1155 routes** — all JSON, all
+**1183 routes** — all JSON, all
 permission-checked, all under `/api`.
 
 ```bash
@@ -1796,7 +1826,7 @@ presence, the live ticker, and floor chat.
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with `--watch` |
-| `npm test` | 630 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
+| `npm test` | 668 tests, each on its own database file. The suite reports 373 cases: the boot matrix is one declaration that runs eight times. |
 | `npm run prove` | prove the outside-world layer end to end |
 | `npm run prove:platform` | prove the platform layer end to end |
 | `npm run seed` | sample agents, runs and a tribunal case (mock, $0) |
@@ -1888,11 +1918,11 @@ credential — keep them together.
 
 ```
 app/
-  src/                225 modules, ~62,600 lines
+  src/                231 modules, ~65,900 lines
     server.js         one process: HTTP + console + workers + scheduler + WS
-    db.js             366 tables, forward-only migrations
+    db.js             379 tables, forward-only migrations
     audit.js          the hash chain
-    auth.js           sessions, 366 permissions, password generation
+    auth.js           sessions, 372 permissions, password generation
     router.js         tier → provider chain, with reviewer separation
     policy.js         reservation-first budgets
     ledger.js         double-entry books: the chart, the journal, four statements
@@ -1958,7 +1988,7 @@ app/
     sweep.mjs         every page, both themes, both languages, two widths
   deploy/             a systemd unit, and Windows scripts that drain rather
                       than kill
-  test/               630 tests across fifty-three files
+  test/               668 tests across fifty-five files
   config/             agents, providers, rituals
   data/               yours, not the project's — gitignored
   workspace/          what the workforce produced — gitignored
@@ -1982,7 +2012,7 @@ Nothing here is claimed from inspection. Every number is measured — including
 the numbers in this file.
 
 ```bash
-npm test                        # 630 tests
+npm test                        # 668 tests
 npm run prove                   # the outside world, end to end
 npm run prove:platform          # the platform layer, end to end
 node scripts/launch-audit.mjs   # 21 checks; non-zero exit on a blocker
@@ -2066,8 +2096,8 @@ that fetched nothing is reported as hollow and everything else is reported with
 its numbers. The current reading is **156 of 156 backed by a live endpoint, none
 erroring**, with three bare on a fresh database.
 
-**The browser sweep** opens all 215 departments in both themes and both
-languages, at 1440×900 and again at 390×844 — 860 renders each — and fails on a
+**The browser sweep** opens all 217 departments in both themes and both
+languages, at 1440×900 and again at 390×844 — 868 renders each — and fails on a
 blank page, a console error, a horizontal overflow, a request to any host but its
 own, **or any control without an accessible name**. An accessibility pass
 somebody runs once is a state the code leaves within a month.

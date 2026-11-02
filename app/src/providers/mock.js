@@ -41,6 +41,44 @@ function pick(system, prompt) {
       confidence: 0.3,
     };
   }
+  // The trading floor. Mock can sort the scan by how many rules each symbol
+  // matched — that is arithmetic — but it has no judgement to add, so every
+  // pick is below the conviction the autopilot needs to watch it.
+  if (task.includes('[TRADE-GAMEPLAN]')) {
+    let hits = [];
+    try { hits = JSON.parse(((prompt || '').match(/SCAN_JSON: (\[[\s\S]*?\])\n/) || [])[1] || '[]'); } catch { hits = []; }
+    return {
+      summary: `[mock] ${hits.length} symbols matched a pre-market rule. No trader model is connected, so this lists the ones that matched the most rules, without judgement.`,
+      watch: hits.slice(0, 5).map((h) => ({ symbol: h.symbol, setup: 'orb', why: `[mock] matched ${(h.tags || []).join(', ')}`, risks: '[mock] not assessed', conviction: 0.4 })),
+      avoid: [],
+      rules: ['[mock] written without a model'],
+      confidence: 0.3,
+    };
+  }
+  if (task.includes('[TRADE-REVIEW]')) {
+    let trades = [];
+    try { trades = JSON.parse(((prompt || '').match(/TRADES_JSON: (\[[\s\S]*?\])\n/) || [])[1] || '[]'); } catch { trades = []; }
+    const total = trades.reduce((a, t) => a + (Number(t.R) || 0), 0);
+    return {
+      summary: `[mock] ${trades.length} trades, ${Math.round(total * 100) / 100}R in all. No trader model is connected to judge the process.`,
+      kept: [], mistakes: [], ruleChanges: [], confidence: 0.3,
+    };
+  }
+  // The gold desk. The levels were computed before the prompt was written, so
+  // mock can name them; it cannot judge them.
+  if (task.includes('[GOLD-BRIEF]')) {
+    let g = {};
+    try { g = JSON.parse(((prompt || '').match(/GOLD_JSON: (\{[\s\S]*?\})\n/) || [])[1] || '{}'); } catch { g = {}; }
+    const p = g.pivots || {};
+    return {
+      summary: `[mock] Pivot ${p.pivot ?? '—'}, 24-hour range ${p.low24 ?? '—'}–${p.high24 ?? '—'}. No analyst model is connected, so this restates the computed levels without judgement.`,
+      shortTerm: '[mock] see the scoreboard: the forecasts are graded there, beside the naive one',
+      intraday: '[mock] not assessed',
+      levels: { support: [p.s1, p.s2].filter((x) => x != null), resistance: [p.r1, p.r2].filter((x) => x != null) },
+      risks: ['[mock] written without a model'],
+      confidence: 0.3,
+    };
+  }
   if (task.includes('[NEWS-DIGEST]')) {
     const titles = [...(prompt || '').matchAll(/^- \[(\d+)\] (.+?) \((.+?)\)$/gm)].slice(0, 5);
     return {

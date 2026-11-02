@@ -104,6 +104,13 @@ function simulatedQuote(symbol) {
   return { symbol, price, prevClose: pc, change: price - pc, changePct: (price / pc - 1) * 100, dayHigh: Math.max(price, base), dayLow: Math.min(price, base), volume: null, source: 'simulated', marketState: 'SIMULATED' };
 }
 
+// Another desk may own the simulated tape for some symbols — the trading floor
+// walks five-minute bars, and a paper fill must read the same price its
+// trigger did. It registers here rather than being imported, so the markets
+// desk keeps no knowledge of who is listening.
+let simSource = null;
+export function setSimulatedQuoteSource(fn) { simSource = typeof fn === 'function' ? fn : null; }
+
 // ------------------------------------------------------------- watchlist --
 
 export function seedWatchlist({ actor = 'system:markets' } = {}) {
@@ -159,7 +166,7 @@ export async function refreshQuotes({ actor = 'system:markets' } = {}) {
       rows = r.result?.quotes || [];
     } else {
       for (const s of symbols) if (!one('SELECT 1 AS x FROM mkt_bars WHERE symbol = ? LIMIT 1', s)) storeBars(s, simulatedBars(s), 'simulated');
-      rows = symbols.map(simulatedQuote);
+      rows = symbols.map((s) => { try { return simSource?.(s) || simulatedQuote(s); } catch { return simulatedQuote(s); } });
     }
     let ok = 0;
     for (const x of rows) {

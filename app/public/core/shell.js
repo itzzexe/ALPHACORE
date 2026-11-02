@@ -484,6 +484,7 @@ export function currentRoute() {
   if (seg === 'servers' && arg) return { key: 'server', arg };
   if (seg === 'deploys' && arg) return { key: 'deployTarget', arg };
   if (seg === 'markets' && arg) return { key: 'symbol', arg: decodeURIComponent(arg) };
+  if (seg === 'trading' && arg) return { key: 'tradePlan', arg };
   if (seg === 'journeys' && arg) return { key: 'journey', arg };
   if (seg === 'systems' && arg) return { key: 'system', arg: hash.split('/').slice(1).join('/') };
   if (seg === 'requests' && arg) return { key: 'request', arg };
