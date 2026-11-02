@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="592" viewBox="0 0 1200 592" role="img" aria-labelledby="t d">
   <title id="t">AlphaCore by the numbers</title>
-  <desc id="d">217 departments, 637 relationships, 63 AI employees, 1,183 API routes, 372 permissions, 668 tests, 26 live public sources, 379 tables, 8 + 2 AI providers, 231 server modules, 1 dependency, 0 external requests. Measured from the code by npm run readme.</desc>
+  <desc id="d">217 departments, 637 relationships, 63 AI employees, 1,183 API routes, 372 permissions, 670 tests, 26 live public sources, 379 tables, 8 + 2 AI providers, 231 server modules, 1 dependency, 0 external requests. Measured from the code by npm run readme.</desc>
   <defs>
     <radialGradient id="glow" cx="0.86" cy="0.08" r="0.7">
       <stop offset="0" stop-color="#1b4f73" stop-opacity="0.75"/>
@@ -63,7 +63,7 @@
   <g transform="translate(322 270)">
     <rect width="270" height="122" rx="14" fill="url(#tile)" stroke="#1d2a44"/>
     <rect x="0" y="22" width="3" height="40" rx="1.5" fill="#45d49a"/>
-    <text x="22" y="62" font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="44" font-weight="300" fill="#45d49a">668</text>
+    <text x="22" y="62" font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="44" font-weight="300" fill="#45d49a">670</text>
     <text x="22" y="88" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="12.5" letter-spacing="1.6" fill="#d8e3f5">TESTS</text>
     <text x="22" y="108" font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8aa5">in 55 files, no network</text>
   </g>

@@ -228,6 +228,44 @@ test('the overview and the screen read without touching the network', () => {
   assert.match(o.note, /not financial advice/);
 });
 
+test('the screen keeps its finished candles, re-reads only the one forming, and draws with the periods a person chose', async () => {
+  G.live({ tf: '30s', bars: 60, now });
+  await run(75);
+  const kept = G.live({ tf: '30s', bars: 60, now });
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const fresh = M.candles(q("SELECT ts, mid, bid, ask FROM gold_ticks WHERE sym = 'XAU' AND ts >= ? ORDER BY ts", now - 30 * 500 * 1000), 30, 500).slice(-60);
+  assert.deepEqual(kept.candles.map((c) => [c.t, c.o, c.h, c.l, c.c, c.ticks]), fresh.map((c) => [c.t, r3(c.o), r3(c.h), r3(c.l), r3(c.c), c.ticks]));
+
+  const p = G.live({ tf: '5s', bars: 40, p: { ema: '5,10,20', bb: '10,1.5', rsi: '7', macd: '26,12,9' }, now });
+  assert.deepEqual(p.params.ema, [5, 10, 20]);
+  assert.deepEqual(p.params.bb, [10, 1.5]);
+  assert.equal(p.params.rsi, 7);
+  assert.deepEqual(p.params.macd, [12, 26, 9], 'a fast average slower than the slow one is refused');
+  assert.equal(p.candles.length, 40);
+  assert.equal(p.ind.ema.length, 3);
+  assert.ok(p.ind.ema.every((e) => e.length === 40));
+  assert.ok(p.ind.ema[2].every((v) => v != null), 'computed over the kept candles, so warm from the first one shown');
+
+  assert.equal(G.live({ tf: 'constructor', now }).tf, '15s');
+  const bad = G.chartParams({ ema: 'x,1,999', rsi: '1.5', bb: '20,9' });
+  assert.deepEqual(bad.ema, [9, 21, 50]);
+  assert.equal(bad.rsi, 14);
+  assert.deepEqual(bad.bb, [20, 2]);
+});
+
+test('a live quote reaches the desk as it is read, not when its window closes', async () => {
+  const { stream, sink } = await import('../src/connectors/goldfeed.js');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify([{ ts: Date.now(), spreadProfilePrices: [{ bid: 4001.1, ask: 4001.5 }] }]), { status: 200 });
+  const seen = [];
+  sink.tick = (t) => seen.push(t);
+  try {
+    const r = await stream({ symbols: ['XAU', 'XAG'], duration: 1, interval: 1 }, { config: {} });
+    assert.equal(seen.length, r.ticks.length);
+    assert.ok(seen.length >= 2 && seen.every((t) => t.src === 'swissquote' && t.mid === 4001.3));
+  } finally { sink.tick = null; globalThis.fetch = realFetch; }
+});
+
 test('the brief is written from computed levels, and the feed is a person’s to arm', async () => {
   const n = G.requestBrief({ actor: ME, now });
   for (let i = 0; i < 10; i++) { const r = leaseNext(); if (!r) break; await executeRun(r); }

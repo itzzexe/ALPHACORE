@@ -30,6 +30,7 @@ import { getSecret, setSetting } from './settings.js';
 import { notify } from './notify.js';
 import { enqueueRun } from './workflow.js';
 import { callConnector, connect, setConnectorState } from './connectors/index.js';
+import { sink as feedSink } from './connectors/goldfeed.js';
 import { readRun } from './markets/fold.js';
 import { forecast as dailyForecast } from './markets/quant.js';
 import { headlinesFor } from './newsroom.js';
@@ -44,7 +45,7 @@ const SYS = 'system:gold';
 const BOT = 'system:gold-bot';
 const AGENT = 'AGT-GLD-001';
 const EVERY = { 5: 5, 15: 5, 30: 5, 60: 5, 300: 30, 900: 30, 3600: 300 };
-const TF = { '1s': 1, '5s': 5, '15s': 15, '1m': 60, '5m': 300, '15m': 900, '1h': 3600 };
+const TF = { '1s': 1, '5s': 5, '15s': 15, '30s': 30, '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600 };
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 const num = (k, d, lo = -Infinity, hi = Infinity) => {
@@ -56,7 +57,7 @@ const num = (k, d, lo = -Infinity, hi = Infinity) => {
 export function config() {
   return {
     streamSeconds: num('GD_STREAM_SECONDS', 10, 3, 60),
-    streamInterval: num('GD_STREAM_INTERVAL', 2, 1, 30),
+    streamInterval: num('GD_STREAM_INTERVAL', 1, 1, 30),
     spread: num('GD_SPREAD', 0.3, 0.01, 20),
     startCash: num('GD_START_CASH', 100_000, 100, 1e9),
     leverage: num('GD_LEVERAGE', 10, 1, 100),
@@ -178,13 +179,16 @@ let lastStreamError = null;
 async function streamLive(actor = SYS) {
   if (streaming) return;
   streaming = true;
+  // Each quote is stored as it is read, so the screen moves every second; the
+  // window's own list at the end only repeats rows already written.
+  feedSink.tick = (t) => store([t]);
   try {
     const cfg = config();
     const r = await callConnector({ connector: 'goldfeed', capability: 'spot.stream', args: { symbols: ['XAU', 'XAG'], duration: cfg.streamSeconds, interval: cfg.streamInterval }, actor, reason: `watch gold for ${cfg.streamSeconds} seconds` });
     if (r.verdict !== 'allowed') { lastStreamError = r.why || r.verdict; return; }
     lastStreamError = r.result?.errors?.[0] || null;
     store(r.result?.ticks || []);
-  } catch (e) { lastStreamError = String(e.message || e).slice(0, 200); } finally { streaming = false; }
+  } catch (e) { lastStreamError = String(e.message || e).slice(0, 200); } finally { streaming = false; feedSink.tick = null; }
 }
 
 /** A person switches the desk onto the real feed; reading prices changes nothing out there, but it is the company reaching the world on a clock. */
@@ -194,7 +198,7 @@ export function goLive({ provider = null, actor }) {
   if (provider) exec('UPDATE connectors SET config = ? WHERE id = ?', JSON.stringify({ provider }), 'goldfeed');
   setConnectorState('goldfeed', 'live', { actor });
   // The simulated tape and the real one must never be read as one series.
-  series.XAU = null; series.XAG = null; sim.XAU = null; sim.XAG = null;
+  series.XAU = null; series.XAG = null; sim.XAU = null; sim.XAG = null; forgetCharts();
   exec("DELETE FROM gold_ticks WHERE src = 'simulated'");
   exec('DELETE FROM gold_preds WHERE actual IS NULL');
   audit({ actorType: 'human', actorId: actor, action: 'gold.live', subjectType: 'gold', subjectId: 'feed', payload: { provider } });
@@ -203,7 +207,7 @@ export function goLive({ provider = null, actor }) {
 
 export function goSimulated({ actor }) {
   setConnectorState('goldfeed', 'paused', { actor });
-  series.XAU = null; series.XAG = null;
+  series.XAU = null; series.XAG = null; forgetCharts();
   exec('DELETE FROM gold_preds WHERE actual IS NULL');
   audit({ actorType: actorType(actor), actorId: actor, action: 'gold.simulated', subjectType: 'gold', subjectId: 'feed' });
   return { source: source() };
@@ -633,30 +637,91 @@ export function learningCurve({ hours = 48, horizon = 60, now = Date.now() } = {
     .map((r) => ({ at: new Date(r.hr * 3600_000).toISOString(), n: r.n, mae: round(r.mae, 4), naive: round(r.naive, 4), skillPct: r.naive ? round((1 - r.mae / r.naive) * 100, 2) : null, hit: round(r.hit, 3), coverage: round(r.cov, 3) }));
 }
 
-export function live({ tf = '15s', now = Date.now() } = {}) {
-  const sec = TF[tf] || 15;
-  const span = Math.min(3 * 86400_000, sec * 160 * 1000);
-  const ticks = q("SELECT ts, mid, bid, ask FROM gold_ticks WHERE sym = 'XAU' AND ts >= ? ORDER BY ts", now - span);
-  const cs = G.candles(ticks, sec, 160);
-  const ind = G.indicators(cs);
-  const r4 = (a) => a.map((x) => round(x, 3));
-  // SQLite fills a bare column from the row that holds the MIN: the first price of the last twenty-four hours.
-  const day = q("SELECT sym, mid, MIN(ts) AS ts FROM gold_ticks WHERE ts >= ? AND sym IN ('XAU','XAG') GROUP BY sym", now - 86400_000);
+// The screen asks every second, and the hour chart spans three days of
+// one-second ticks: reading them all each time would be a quarter of a million
+// rows a second. A finished candle never changes, so each timeframe keeps the
+// candles it has and re-reads only from the start of the one still forming.
+// The whole set is rebuilt every ten minutes, which is when pruning shows.
+const MAX_BARS = 500;
+const charts = new Map();
+const days = new Map();
+function forgetCharts() { charts.clear(); days.clear(); }
+
+const TICKS_FROM = "SELECT ts, mid, bid, ask FROM gold_ticks WHERE sym = 'XAU' AND ts >= ? ORDER BY ts";
+function candlesOf(tf, sec, now) {
+  let c = charts.get(tf);
+  if (!c || !c.cs.length || now - c.built > 600_000 || now < c.built) {
+    const span = Math.min(3 * 86400_000, sec * MAX_BARS * 1000);
+    c = { built: now, cs: G.candles(q(TICKS_FROM, now - span), sec, MAX_BARS) };
+  } else {
+    const fresh = G.candles(q(TICKS_FROM, c.cs[c.cs.length - 1].t), sec, MAX_BARS);
+    c.cs = [...c.cs.slice(0, -1), ...fresh].slice(-MAX_BARS);
+  }
+  charts.set(tf, c);
+  return c.cs;
+}
+
+/** The first price and the range of the last day move slowly; read them every fifteen seconds, not every second. */
+function dayOf24(sym, now) {
+  const d = days.get(sym);
+  if (d && now >= d.at && now - d.at < 15_000) return d;
+  const ref = one('SELECT mid FROM gold_ticks WHERE sym = ? AND ts >= ? ORDER BY ts LIMIT 1', sym, now - 86400_000)?.mid
+    ?? one('SELECT mid FROM gold_ticks WHERE sym = ? ORDER BY ts LIMIT 1', sym)?.mid;
+  const hl = one('SELECT MAX(mid) AS h, MIN(mid) AS l FROM gold_ticks WHERE sym = ? AND ts >= ?', sym, now - 86400_000);
+  const v = { at: now, ref, h: hl?.h ?? null, l: hl?.l ?? null };
+  days.set(sym, v);
+  return v;
+}
+
+const PERIOD = (v, d) => { const n = Number(v); return Number.isInteger(n) && n >= 2 && n <= 200 ? n : d; };
+const periods = (s, d) => { const xs = String(s ?? '').split(','); return d.map((x, i) => PERIOD(xs[i], x)); };
+
+/** The chart's settings arrive from the address of a request; each is held to a range a chart can draw. */
+export function chartParams(p = {}) {
+  const k = Number(String(p.bb ?? '').split(',')[1]);
+  const m = periods(p.macd, [12, 26, 9]);
+  return {
+    ema: periods(p.ema, [9, 21, 50]),
+    sma: PERIOD(p.sma, 20),
+    bb: [periods(p.bb, [20])[0], Number.isFinite(k) && k >= 0.5 && k <= 4 ? k : 2],
+    rsi: PERIOD(p.rsi, 14),
+    macd: m[0] < m[1] ? m : [12, 26, 9],
+    stoch: periods(p.stoch, [14, 3]),
+    cci: PERIOD(p.cci, 20),
+    wr: PERIOD(p.wr, 14),
+    atr: PERIOD(p.atr, 14),
+  };
+}
+
+export function live({ tf = '15s', bars = 160, p = {}, now = Date.now() } = {}) {
+  // The timeframe comes from the address bar of a request: it is matched
+  // against the list before it names anything.
+  const key = Object.hasOwn(TF, tf) ? tf : '15s';
+  const sec = TF[key];
+  const n = Math.min(MAX_BARS, Math.max(30, Math.round(Number(bars)) || 160));
+  const params = chartParams(p);
+  const all = candlesOf(key, sec, now);
+  // Indicators run over everything kept and are cut to what is shown, so a
+  // fifty-candle average is warm from the first candle on the screen.
+  const ind = G.chartIndicators(all, params);
+  const from = Math.max(0, all.length - n);
+  const cs = all.slice(from);
+  const cut = (a) => a.slice(from).map((x) => round(x, 3));
   const mk = (sym) => {
     const t = lastTick(sym); if (!t) return null;
-    const ref = day.find((d) => d.sym === sym)?.mid ?? one('SELECT mid FROM gold_ticks WHERE sym = ? ORDER BY ts LIMIT 1', sym)?.mid;
-    const hl = one('SELECT MAX(mid) AS h, MIN(mid) AS l FROM gold_ticks WHERE sym = ? AND ts >= ?', sym, now - 86400_000);
-    return { sym, mid: t.mid, bid: t.bid, ask: t.ask, src: t.src, ts: t.ts, change: ref ? round(t.mid - ref, 3) : null, changePct: ref ? round((t.mid / ref - 1) * 100, 3) : null, high24: hl.h, low24: hl.l };
+    const d = dayOf24(sym, now);
+    return { sym, mid: t.mid, bid: t.bid, ask: t.ask, src: t.src, ts: t.ts, change: d.ref ? round(t.mid - d.ref, 3) : null, changePct: d.ref ? round((t.mid / d.ref - 1) * 100, 3) : null,
+      high24: d.h == null ? t.mid : Math.max(d.h, t.mid), low24: d.l == null ? t.mid : Math.min(d.l, t.mid) };
   };
   const xau = mk('XAU'); const xag = mk('XAG');
   const tape = q('SELECT id, made_at, due_at, horizon, base, ens, low80, high80, actual, err, hit, inside80 FROM gold_preds WHERE actual IS NOT NULL AND horizon IN (5,15,30,60) ORDER BY graded_at DESC, id DESC LIMIT 30');
   const pending = q('SELECT id, made_at, due_at, horizon, base, ens, low80, high80, p_up FROM gold_preds WHERE actual IS NULL ORDER BY due_at LIMIT 12');
   syncNotes();
   return {
-    source: source(), tf, now,
+    source: source(), tf: key, now, params,
     quote: quote(), xau, xag, ratio: xau && xag ? round(xau.mid / xag.mid, 2) : null,
     candles: cs.map((c) => ({ ...c, o: round(c.o, 3), h: round(c.h, 3), l: round(c.l, 3), c: round(c.c, 3) })),
-    ind: Object.fromEntries(Object.entries(ind).map(([k, v]) => [k, r4(v)])),
+    ind: Object.fromEntries(Object.entries(ind).map(([k, v]) => [k, k === 'ema' ? v.map(cut) : cut(v)])),
     tech: G.technicalSummary(cs),
     forecasts: currentForecasts(),
     tape, pending,
@@ -752,6 +817,6 @@ export async function goldTick({ now = Date.now() } = {}) {
 }
 
 /** For tests: forget the in-memory series, the simulator and the learned state, as a restart would. */
-export function _restart() { series.XAU = null; series.XAG = null; sim.XAU = null; sim.XAG = null; mem = null; }
+export function _restart() { series.XAU = null; series.XAG = null; sim.XAU = null; sim.XAG = null; mem = null; forgetCharts(); }
 
 export { TF };

@@ -21,8 +21,79 @@ const pct = (x, d = 1) => (x == null ? '—' : `${(x * 100).toFixed(d)}%`);
 const hz = (h) => (h < 60 ? `${h}s` : h < 3600 ? `${h / 60}m` : `${h / 3600}h`);
 const clock = (ms) => new Date(ms).toISOString().slice(11, 19);
 const MODEL = { naive: 'No change', drift: 'Drift', momentum: 'Momentum', meanrev: 'Mean reversion', ar: 'Autoregression', ens: 'Ensemble' };
-const TFS = ['1s', '5s', '15s', '1m', '5m', '15m', '1h'];
+const TF_SEC = { '1s': 1, '5s': 5, '15s': 15, '30s': 30, '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600 };
+const TFS = Object.keys(TF_SEC);
 const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(`gold:${k}`)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(`gold:${k}`, JSON.stringify(v)); } catch { /* a private window */ } } };
+
+// ------------------------------------------------------------ the chart --
+//
+// Everything a person sets on the chart lives in one record in this browser:
+// the timeframe, the drawing, the history, the indicators and their periods,
+// and the levels they drew. The zoom and the scroll are this visit's only.
+
+const TYPES = [['candles', 'Candles'], ['hollow', 'Hollow candles'], ['ha', 'Heikin Ashi'], ['bars', 'OHLC bars'], ['line', 'Line'], ['area', 'Area']];
+const HEIGHTS = { s: 260, m: 380, l: 520, xl: 680 };
+const IND = [['ema', 'EMA'], ['sma', 'SMA'], ['bb', 'Bollinger'], ['cone', 'Forecast'], ['pos', 'Positions'], ['levels', 'Levels'], ['rsi', 'RSI'], ['macd', 'MACD'], ['stoch', 'Stochastic'], ['cci', 'CCI'], ['wr', 'Williams %R'], ['atr', 'ATR']];
+const SUBS = ['rsi', 'macd', 'stoch', 'cci', 'wr', 'atr'];
+const DEF = {
+  tf: '15s', type: 'candles', bars: 240, height: 'm', time: 'utc', cross: true, levels: [],
+  ind: { ema: true, sma: false, bb: true, cone: true, pos: true, levels: true, rsi: true, macd: true, stoch: false, cci: false, wr: false, atr: false },
+  p: { ema: [9, 21, 50], sma: 20, bb: [20, 2], rsi: 14, macd: [12, 26, 9], stoch: [14, 3], cci: 20, wr: 14, atr: 14 },
+};
+
+/** What this browser kept, held to the lists it may name — a stored value is read like an address bar's. */
+function chartCfg() {
+  const s = store.get('chart', null) || { tf: store.get('tf', DEF.tf), ind: store.get('ind', {}) };
+  const one = (v, ok, d) => (ok.includes(v) ? v : d);
+  return {
+    tf: one(s.tf, TFS, DEF.tf),
+    type: one(s.type, TYPES.map(([k]) => k), DEF.type),
+    bars: one(Number(s.bars), [120, 240, 500], DEF.bars),
+    height: one(s.height, Object.keys(HEIGHTS), DEF.height),
+    time: one(s.time, ['utc', 'local'], DEF.time),
+    cross: s.cross !== false,
+    levels: Array.isArray(s.levels) ? s.levels.map(Number).filter(Number.isFinite).slice(0, 20) : [],
+    ind: Object.fromEntries(IND.map(([k]) => [k, typeof s.ind?.[k] === 'boolean' ? s.ind[k] : DEF.ind[k]])),
+    p: { ...DEF.p, ...(s.p && typeof s.p === 'object' ? s.p : {}) },
+  };
+}
+const saveCfg = (c) => store.set('chart', c);
+const query = (c) => new URLSearchParams({
+  tf: c.tf, bars: String(c.bars), ema: c.p.ema.join(','), sma: String(c.p.sma), bb: c.p.bb.join(','), rsi: String(c.p.rsi),
+  macd: c.p.macd.join(','), stoch: c.p.stoch.join(','), cci: String(c.p.cci), wr: String(c.p.wr), atr: String(c.p.atr),
+}).toString();
+
+const vw = { span: null, off: 0 };
+let screen = null;
+let hover = null;
+let geo = null;
+let drawing = false;
+let drag = null;
+let frame = 0;
+let timer = null;
+let inflight = false;
+const redraw = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; drawChart(); }); };
+
+// The screen keeps its own one-second clock. The console's poll stops while
+// anything on a page is being typed into or differs from how it loaded — the
+// right rule for a form, and the wrong one here: ticking an indicator or typing
+// a stop into the ticket froze the price. Only the live regions are replaced,
+// so nothing typed is lost.
+function startLoop() {
+  if (timer) return;
+  timer = setInterval(() => {
+    if (!view.querySelector('#gd-root[data-tab="terminal"]')) { clearInterval(timer); timer = null; return; }
+    if (!document.hidden) refreshTerminal();
+  }, 1000);
+}
+
+let sized = false;
+function watchSize() {
+  if (sized) return;
+  sized = true;
+  window.addEventListener('resize', redraw);
+  document.addEventListener('fullscreenchange', redraw);
+}
 const srcChip = (s) => (s === 'live' ? `<span class="chip chip-ok">${esc(t('live prices'))}</span>` : `<span class="chip chip-bad">${esc(t('simulated prices'))}</span>`);
 const disclaimer = () => `<p class="hint mk-disclaimer">${esc(t('Analysis and simulation, not financial advice. At a horizon of seconds gold is close to a random walk: the error in percent looks tiny because the price barely moves — skill against "no change" and the direction hit rate are the numbers that matter. Paper only; nothing here moves money.'))}</p>`;
 const VERDICT_CLS = { 'strong buy': 'chip-ok', buy: 'chip-ok', neutral: '', sell: 'chip-bad', 'strong sell': 'chip-bad' };
@@ -41,7 +112,7 @@ export async function renderGold() {
   const root = view.querySelector('#gd-root');
   // A poll on a mounted page refreshes only what moves.
   if (root && root.dataset.tab === tab) {
-    if (tab === 'terminal') return refreshTerminal();
+    if (tab === 'terminal') return startLoop();
     if (Date.now() - lastSlow < 8000) return;
     lastSlow = Date.now();
     const d = await api('/api/gold');
@@ -66,25 +137,53 @@ export async function renderGold() {
   view.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { location.hash = `#/gold?tab=${b.dataset.tab}`; }));
   wireActs(view, api, toast, () => { view.innerHTML = ''; renderGold(); });
   wire(tab);
-  if (tab === 'terminal') await refreshTerminal();
+  if (tab === 'terminal') { await refreshTerminal(); startLoop(); }
 }
 
 // ================================================================ terminal ==
 
 const STATIC = {
   terminal: (d, { canManage }) => {
-    const ind = store.get('ind', { ema: true, bb: true, cone: true, rsi: true, macd: true, stoch: false });
-    const tf = store.get('tf', '15s');
+    const c = chartCfg();
+    const sel = (key, label, opts) => `<label class="gd-sel"><span class="sub">${esc(t(label))}</span><select data-cc="${key}">${opts.map(([v, l]) => `<option value="${v}" ${String(c[key]) === String(v) ? 'selected' : ''}>${esc(t(l))}</option>`).join('')}</select></label>`;
+    const zb = (k, label, glyph) => `<button type="button" class="btn btn-sm btn-ghost" data-cz="${k}" aria-label="${esc(t(label))}" title="${esc(t(label))}">${glyph}</button>`;
+    const pf = (k, label, v) => `<div><label class="fl" for="gp-${k}">${esc(t(label))}</label><input id="gp-${k}" data-p="${k}" class="ltr" value="${esc(Array.isArray(v) ? v.join(', ') : String(v))}"></div>`;
     return `
   <div id="gd-quotes" class="gd-bar"></div>
   <div class="gd-term">
     <aside class="panel gd-watch"><div class="panel-title">${esc(t('Market watch'))}</div><div id="gd-watch"></div></aside>
-    <section class="panel gd-chartwrap">
+    <section class="panel gd-chartwrap" id="gd-chartwrap">
       <div class="gd-tools">
-        <div class="seg" role="group" aria-label="${esc(t('Timeframe'))}">${TFS.map((x) => `<button type="button" class="btn btn-sm ${x === tf ? 'btn-primary' : 'btn-ghost'}" data-tf="${x}">${x}</button>`).join('')}</div>
-        <div class="inline">${[['ema', 'EMA 9/21/50'], ['bb', 'Bollinger'], ['cone', 'Forecast'], ['rsi', 'RSI'], ['macd', 'MACD'], ['stoch', 'Stochastic']].map(([k, l]) => `<label class="eng-chk"><input type="checkbox" data-ind="${k}" ${ind[k] ? 'checked' : ''}> ${esc(t(l))}</label>`).join('')}</div>
+        <div class="seg" role="group" aria-label="${esc(t('Timeframe'))}">${TFS.map((x) => `<button type="button" class="btn btn-sm ${x === c.tf ? 'btn-primary' : 'btn-ghost'}" data-tf="${x}">${x}</button>`).join('')}</div>
+        <div class="inline">
+          ${sel('type', 'Chart type', TYPES)}
+          ${sel('bars', 'History', [[120, '120 candles'], [240, '240 candles'], [500, '500 candles']])}
+          ${sel('height', 'Height', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large'], ['xl', 'Extra large']])}
+          ${sel('time', 'Time', [['utc', 'UTC'], ['local', 'Your clock']])}
+        </div>
       </div>
-      <div id="gd-chart"></div>
+      <div class="gd-tools">
+        <div class="inline" role="group" aria-label="${esc(t('Chart controls'))}">
+          ${zb('in', 'Zoom in', '+')}${zb('out', 'Zoom out', '−')}${zb('left', 'Older', '◀')}${zb('right', 'Newer', '▶')}${zb('fit', 'Show all candles', '⤢')}
+          <button type="button" class="btn btn-sm btn-ghost" data-cz="cross" aria-pressed="${c.cross}">${esc(t('Crosshair'))}</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-cz="draw" aria-pressed="false">${esc(t('Draw a level'))}</button>
+          ${zb('full', 'Full screen', '⛶')}
+          <button type="button" class="btn btn-sm btn-primary" data-cz="live" id="gd-golive" hidden>${esc(t('Back to live'))} ▶▶</button>
+        </div>
+        <span id="gd-tick" class="sub"></span>
+      </div>
+      <div class="gd-tools gd-inds" role="group" aria-label="${esc(t('Indicators'))}">${IND.map(([k, l]) => `<label class="eng-chk"><input type="checkbox" data-ind="${k}" ${c.ind[k] ? 'checked' : ''}> ${esc(t(l))}</label>`).join('')}</div>
+      <details class="gd-params"><summary class="sub">${esc(t('Indicator settings'))}</summary>
+        <form id="gd-params" class="fields">
+          ${pf('ema', 'EMA periods (three)', c.p.ema)}${pf('sma', 'SMA period', c.p.sma)}${pf('bb', 'Bollinger: period, deviations', c.p.bb)}
+          ${pf('rsi', 'RSI period', c.p.rsi)}${pf('macd', 'MACD: fast, slow, signal', c.p.macd)}${pf('stoch', 'Stochastic: %K, %D', c.p.stoch)}
+          ${pf('cci', 'CCI period', c.p.cci)}${pf('wr', 'Williams %R period', c.p.wr)}${pf('atr', 'ATR period', c.p.atr)}
+          <div class="wide inline"><button class="btn btn-sm btn-primary" type="submit">${esc(t('Apply'))}</button><button class="btn btn-sm btn-ghost" type="button" data-cz="pdefault">${esc(t('Standard settings'))}</button></div>
+        </form>
+      </details>
+      <div id="gd-levels" class="inline gd-levels"></div>
+      <div id="gd-readout" class="gd-readout ltr" dir="ltr"></div>
+      <div id="gd-chart" class="gd-chart" dir="ltr" tabindex="0" role="group" aria-label="${esc(t('Gold chart: drag to scroll, the wheel or + and − to zoom, arrow keys to move, Home for live'))}"></div>
     </section>
     <aside class="gd-side">
       <div class="panel"><div class="panel-title">${esc(t('Order ticket'))} <span class="chip chip-dim">${esc(t('paper'))}</span></div>
@@ -164,15 +263,7 @@ const STATIC = {
 };
 
 function wire(tab) {
-  view.querySelectorAll('[data-tf]').forEach((b) => b.addEventListener('click', () => {
-    store.set('tf', b.dataset.tf);
-    view.querySelectorAll('[data-tf]').forEach((x) => x.classList.toggle('btn-primary', x === b));
-    view.querySelectorAll('[data-tf]').forEach((x) => x.classList.toggle('btn-ghost', x !== b));
-    refreshTerminal();
-  }));
-  view.querySelectorAll('[data-ind]').forEach((b) => b.addEventListener('change', () => {
-    const ind = store.get('ind', {}); ind[b.dataset.ind] = b.checked; store.set('ind', ind); refreshTerminal();
-  }));
+  if (tab === 'terminal') wireChart();
   view.querySelectorAll('#gd-ticket [data-side]').forEach((b) => b.addEventListener('click', async () => {
     try {
       const body = { side: b.dataset.side, oz: Number($('#gd-oz').value), sl: $('#gd-sl').value || null, tp: $('#gd-tp').value || null, expiresIn: $('#gd-exp').value ? Number($('#gd-exp').value) : null };
@@ -215,12 +306,27 @@ function wire(tab) {
   }
 }
 
+const shown = new WeakMap();
+/** Replace a region only when what it shows changed: a table rebuilt every second loses the text a person selected in it. */
+const set = (id, html) => { const el = $(id); if (!el || shown.get(el) === html) return false; el.innerHTML = html; shown.set(el, html); return true; };
+
+function tickNote(d) {
+  const x = d.xau;
+  if (!x) return '';
+  const age = Math.max(0, Math.round((d.now - x.ts) / 1000));
+  return `${esc(t('Last price'))} <span class="ltr">${clock(x.ts)} UTC</span> ${age > 5
+    ? `<span class="chip chip-bad">${esc(t('no new price for'))} ${num(`${age}s`)}</span>`
+    : `<span class="chip chip-ok">${esc(t('updating every second'))}</span>`}`;
+}
+
 async function refreshTerminal() {
-  const tf = store.get('tf', '15s');
-  const ind = store.get('ind', { ema: true, bb: true, cone: true, rsi: true, macd: true, stoch: false });
+  if (inflight) return;
+  inflight = true;
   let d;
-  try { d = await api(`/api/gold/live?tf=${encodeURIComponent(tf)}`); } catch { return; }
-  const set = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  try { d = await api(`/api/gold/live?${query(chartCfg())}`); } catch { return; } finally { inflight = false; }
+  // The timeframe may have changed while the answer was on its way.
+  if (d.tf !== chartCfg().tf || !$('#gd-chart')) return;
+  screen = d;
   const x = d.xau; const s = d.xag;
   set('#gd-quotes', x ? `
     <div class="gd-q"><span class="sub">XAU/USD</span><b class="ltr gd-big">${f2(x.mid)}</b><span class="ltr ${dir(x.change)}">${sg(x.change)} (${sg(x.changePct, 3)}%)</span></div>
@@ -239,8 +345,10 @@ async function refreshTerminal() {
     ${s ? `<tr><td><b>XAG/USD</b></td><td class="ltr">${f2(s.mid, 3)}</td><td class="ltr ${dir(s.changePct)}">${sg(s.changePct, 2)}%</td></tr>` : ''}
     ${d.watch.map((w) => `<tr><td>${esc(w.symbol)}</td><td class="ltr">${f2(w.price)}</td><td class="ltr ${dir(w.change_pct)}">${sg(w.change_pct, 2)}%</td></tr>`).join('')}
     </tbody></table><p class="sub">${esc(t('Others from the markets desk'))}</p>`);
-  set('#gd-chart', chart(d, ind, tf));
-  set('#gd-tech', techPanel(d.tech));
+  drawChart();
+  set('#gd-tick', tickNote(d));
+  const open = $('#gd-tech details')?.open;
+  if (set('#gd-tech', techPanel(d.tech)) && open) $('#gd-tech details').open = true;
   const a = d.account;
   set('#gd-acct', `<div class="panel-title">${esc(t('Paper account'))}</div>
     <div class="kv"><span>${esc(t('Equity'))}</span><b class="ltr">${f2(a.equity)}</b></div>
@@ -278,62 +386,341 @@ function techPanel(tech) {
     <p class="sub">${esc(t('A description of the chart, not a forecast — the accuracy page shows how little it says about the next minute.'))}</p>`;
 }
 
+/** Heikin Ashi: each candle averaged with the one before it, so a run reads as one colour. */
+function heikin(cs) {
+  const out = [];
+  cs.forEach((k, i) => {
+    const c = (k.o + k.h + k.l + k.c) / 4;
+    const o = i ? (out[i - 1].o + out[i - 1].c) / 2 : (k.o + k.c) / 2;
+    out.push({ ...k, o, c, h: Math.max(k.h, o, c), l: Math.min(k.l, o, c) });
+  });
+  return out;
+}
+
+/** Round prices for the scale: steps of 1, 2, 2.5 or 5 times a power of ten. */
+function niceTicks(lo, hi, want) {
+  const raw = (hi - lo) / Math.max(1, want);
+  if (!(raw > 0)) return [];
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) out.push(Number(v.toFixed(6)));
+  return out;
+}
+
+function stamp(ms, tfs, c, long = false) {
+  const d = new Date(ms);
+  const u = c.time !== 'local';
+  const p2 = (n) => String(n).padStart(2, '0');
+  const hh = p2(u ? d.getUTCHours() : d.getHours());
+  const mm = p2(u ? d.getUTCMinutes() : d.getMinutes());
+  const ss = p2(u ? d.getUTCSeconds() : d.getSeconds());
+  if (long) return `${p2((u ? d.getUTCMonth() : d.getMonth()) + 1)}-${p2(u ? d.getUTCDate() : d.getDate())} ${hh}:${mm}:${ss}`;
+  return tfs < 60 ? `${hh}:${mm}:${ss}` : `${hh}:${mm}`;
+}
+
 /**
- * Candles, the overlays a person chose, and the forecast cone running off the
- * right edge — each horizon placed as many candles ahead as it is long, so a
- * 15-second forecast on a 15-second chart sits one candle out.
+ * The chart, drawn from the last answer, the settings and this visit's zoom.
+ * It is redrawn on every price and on every movement of the pointer, so it
+ * reads nothing from the server itself. The candles are placed one per slot;
+ * at the live edge the forecast cone runs off the right, each horizon as many
+ * candles ahead as it is long, so a 15-second forecast on a 15-second chart
+ * sits one candle out.
  */
-function chart(d, ind, tf) {
-  const cs = d.candles;
-  if (cs.length < 3) return `<div class="empty">${esc(t('Not enough candles yet.'))}</div>`;
-  const tfs = { '1s': 1, '5s': 5, '15s': 15, '1m': 60, '5m': 300, '15m': 900, '1h': 3600 }[tf] || 15;
-  const cone = ind.cone ? d.forecasts.filter((f) => f.horizon / tfs <= 40 && f.horizon >= tfs) : [];
-  const ahead = cone.length ? Math.max(...cone.map((f) => f.horizon / tfs)) + 2 : 2;
-  const W = 900; const padR = 70; const H = 360; const padT = 10; const padB = 20;
-  const n = cs.length + ahead;
+function drawChart() {
+  const host = $('#gd-chart');
+  if (!host) return;
+  const d = screen;
+  const c = chartCfg();
+  const golive = $('#gd-golive');
+  if (!d || d.candles.length < 3) {
+    set('#gd-chart', `<div class="empty">${esc(t(d ? 'Not enough candles yet.' : 'Loading…'))}</div>`); set('#gd-readout', ''); geo = null;
+    return;
+  }
+  const real = d.candles;
+  const all = c.type === 'ha' ? heikin(real) : real;
+  const len = all.length;
+  const span = Math.min(len, Math.max(10, Math.round(vw.span ?? Math.min(len, 120))));
+  const off = Math.min(len - span, Math.max(0, Math.round(vw.off)));
+  vw.off = off;
+  if (vw.span != null) vw.span = span;
+  const a = len - off - span; const b = len - off;
+  const cs = all.slice(a, b); const rs = real.slice(a, b);
+  const cut = (arr) => (arr || []).slice(a, b);
+  const I = Object.fromEntries(Object.entries(d.ind).map(([k, v]) => [k, k === 'ema' ? v.map(cut) : cut(v)]));
+  const tfs = TF_SEC[d.tf] || 15;
+  const atLive = off === 0;
+  const cone = c.ind.cone && atLive ? d.forecasts.filter((f) => f.horizon >= tfs && f.horizon / tfs <= Math.max(8, span / 2)) : [];
+  const ahead = cone.length ? Math.max(...cone.map((f) => f.horizon / tfs)) + 2 : atLive ? 3 : 1;
+  const subs = SUBS.filter((k) => c.ind[k]);
+  const full = Boolean(document.fullscreenElement?.contains(host));
+  const W = Math.max(320, Math.round(host.clientWidth || 900));
+  const H = full ? Math.max(HEIGHTS[c.height], Math.round(window.innerHeight - 300 - subs.length * 104)) : HEIGHTS[c.height];
+  const padR = 78; const padT = 14; const padB = 24;
+  const n = span + ahead;
   const bw = (W - padR) / n;
-  const vals = [...cs.flatMap((c) => [c.h, c.l]), ...(ind.bb ? [...d.ind.bbUpper, ...d.ind.bbLower].filter((v) => v != null) : []), ...cone.flatMap((f) => [f.low95, f.high95])];
-  const lo = Math.min(...vals); const hi = Math.max(...vals);
-  const y = (v) => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo || 1));
   const x = (i) => i * bw + bw / 2;
-  const line = (arr, cls) => { let p = ''; arr.forEach((v, i) => { if (v != null) p += `${p ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`; }); return p ? `<path class="${cls}" d="${p}"/>` : ''; };
-  const candles = cs.map((c, i) => `<line class="tr-wick" x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${y(c.h).toFixed(1)}" y2="${y(c.l).toFixed(1)}"/><rect class="${c.c >= c.o ? 'tr-up' : 'tr-down'}" x="${(x(i) - bw * 0.35).toFixed(1)}" width="${Math.max(1, bw * 0.7).toFixed(1)}" y="${y(Math.max(c.o, c.c)).toFixed(1)}" height="${Math.max(1, Math.abs(y(c.o) - y(c.c))).toFixed(1)}"/>`).join('');
-  const last = cs[cs.length - 1];
+  const vals = [
+    ...cs.flatMap((k) => [k.h, k.l]),
+    ...(c.ind.bb ? [...I.bbUpper, ...I.bbLower] : []),
+    ...(c.ind.ema ? I.ema.flat() : []),
+    ...(c.ind.sma ? I.sma : []),
+    ...cone.flatMap((f) => [f.low95, f.high95]),
+  ].filter((v) => v != null && Number.isFinite(v));
+  let lo = Math.min(...vals); let hi = Math.max(...vals);
+  const padV = (hi - lo) * 0.06 || 1;
+  lo -= padV; hi += padV;
+  const y = (v) => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  const inY = (v) => v != null && v >= lo && v <= hi;
+  const P = (v) => v.toFixed(1);
+  const path = (arr, cls, yy = y) => { let p = ''; arr.forEach((v, i) => { if (v != null) p += `${p ? 'L' : 'M'}${P(x(i))} ${P(yy(v))}`; }); return p ? `<path class="${cls}" d="${p}"/>` : ''; };
+  const hline = (v, cls) => `<line class="${cls}" x1="0" x2="${W - padR}" y1="${P(y(v))}" y2="${P(y(v))}"/>`;
+  const tag = (v, cls, label) => `<rect class="${cls}" x="${W - padR + 2}" y="${P(y(v) - 9)}" width="${padR - 4}" height="18" rx="3"/><text class="${cls}t" x="${W - 6}" y="${P(y(v) + 4)}" text-anchor="end">${label}</text>`;
+
+  const ticks = niceTicks(lo, hi, Math.max(3, Math.round(H / 60)));
+  const dec = ticks.length > 1 && ticks[1] - ticks[0] < 0.1 ? 3 : 2;
+  const every = Math.max(1, Math.ceil(110 / bw));
+  const grid = ticks.map((v) => `${hline(v, 'gd-grid')}<text class="mk-tick" x="${W - 6}" y="${P(y(v) + 4)}" text-anchor="end">${f2(v, dec)}</text>`).join('')
+    // Labels are pinned to the clock, not to the slot, so they stay on their candle as the chart scrolls.
+    + cs.map((k, i) => (Math.round(k.t / 1000 / tfs) % every === 0 ? `<line class="gd-grid" x1="${P(x(i))}" x2="${P(x(i))}" y1="${padT}" y2="${H - padB}"/><text class="mk-tick" x="${P(x(i))}" y="${H - 7}" text-anchor="middle">${stamp(k.t, tfs, c)}</text>` : '')).join('');
+
+  let series = '';
+  if (c.type === 'line' || c.type === 'area') {
+    const closes = cs.map((k) => k.c);
+    if (c.type === 'area') series += `<path class="gd-area" d="M${P(x(0))} ${P(y(lo))} ${closes.map((v, i) => `L${P(x(i))} ${P(y(v))}`).join(' ')} L${P(x(cs.length - 1))} ${P(y(lo))} Z"/>`;
+    series += path(closes, 'gd-line');
+  } else if (c.type === 'bars') {
+    const tk = Math.max(1.5, bw * 0.35);
+    series = cs.map((k, i) => `<path class="${k.c >= k.o ? 'gd-bar-up' : 'gd-bar-down'}" d="M${P(x(i))} ${P(y(k.h))}V${P(y(k.l))}M${P(x(i) - tk)} ${P(y(k.o))}H${P(x(i))}M${P(x(i))} ${P(y(k.c))}H${P(x(i) + tk)}"/>`).join('');
+  } else {
+    const hollow = c.type === 'hollow';
+    series = cs.map((k, i) => {
+      const up = k.c >= k.o;
+      return `<line class="tr-wick" x1="${P(x(i))}" x2="${P(x(i))}" y1="${P(y(k.h))}" y2="${P(y(k.l))}"/><rect class="${up ? (hollow ? 'gd-hup' : 'tr-up') : 'tr-down'}" x="${P(x(i) - bw * 0.35)}" width="${P(Math.max(1, bw * 0.7))}" y="${P(y(Math.max(k.o, k.c)))}" height="${P(Math.max(1, Math.abs(y(k.o) - y(k.c))))}"/>`;
+    }).join('');
+  }
+
+  const overlays = (c.ind.bb ? path(I.bbUpper, 'gd-bb') + path(I.bbLower, 'gd-bb') + path(I.bbMid, 'gd-bbm') : '')
+    + (c.ind.sma ? path(I.sma, 'gd-sma') : '')
+    + (c.ind.ema ? I.ema.map((e, j) => path(e, ['gd-e9', 'gd-e21', 'gd-e50'][j])).join('') : '');
+
+  const lastReal = real[len - 1];
   const i0 = cs.length - 1;
   let conePath = '';
   if (cone.length) {
     const pts = cone.map((f) => ({ i: i0 + f.horizon / tfs, f }));
-    const band = (lk, hk, cls) => `<path class="${cls}" d="M${x(i0)} ${y(last.c)} ${pts.map((p) => `L${x(p.i).toFixed(1)} ${y(p.f[hk]).toFixed(1)}`).join(' ')} ${[...pts].reverse().map((p) => `L${x(p.i).toFixed(1)} ${y(p.f[lk]).toFixed(1)}`).join(' ')} Z"/>`;
+    const band = (lk, hk, cls) => `<path class="${cls}" d="M${P(x(i0))} ${P(y(lastReal.c))} ${pts.map((p) => `L${P(x(p.i))} ${P(y(p.f[hk]))}`).join(' ')} ${[...pts].reverse().map((p) => `L${P(x(p.i))} ${P(y(p.f[lk]))}`).join(' ')} Z"/>`;
     conePath = band('low95', 'high95', 'mk-cone95') + band('low80', 'high80', 'mk-cone80')
-      + `<path class="mk-mid" d="M${x(i0)} ${y(last.c)} ${pts.map((p) => `L${x(p.i).toFixed(1)} ${y(p.f.ens).toFixed(1)}`).join(' ')}"/>`
-      + pts.map((p) => `<circle class="gd-pt" cx="${x(p.i).toFixed(1)}" cy="${y(p.f.ens).toFixed(1)}" r="2.5"/><text class="mk-tick" x="${x(p.i).toFixed(1)}" y="${(y(p.f.high95) - 4).toFixed(1)}" text-anchor="middle">${hz(p.f.horizon)}</text>`).join('');
+      + `<path class="mk-mid" d="M${P(x(i0))} ${P(y(lastReal.c))} ${pts.map((p) => `L${P(x(p.i))} ${P(y(p.f.ens))}`).join(' ')}"/>`
+      + pts.map((p) => `<circle class="gd-pt" cx="${P(x(p.i))}" cy="${P(y(p.f.ens))}" r="2.5"/><text class="mk-tick" x="${P(x(p.i))}" y="${P(y(p.f.high95) - 4)}" text-anchor="middle">${hz(p.f.horizon)}</text>`).join('');
   }
-  const main = `<svg direction="ltr" style="direction:ltr" class="mk-chart gd-main tr-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('Gold candles with indicators and the forecast'))}" preserveAspectRatio="none">
-    ${ind.bb ? line(d.ind.bbUpper, 'gd-bb') + line(d.ind.bbLower, 'gd-bb') + line(d.ind.bbMid, 'gd-bbm') : ''}
-    ${candles}
-    ${ind.ema ? line(d.ind.ema9, 'gd-e9') + line(d.ind.ema21, 'gd-e21') + line(d.ind.ema50, 'gd-e50') : ''}
-    ${conePath}
-    <line class="gd-now" x1="0" x2="${W - padR}" y1="${y(last.c).toFixed(1)}" y2="${y(last.c).toFixed(1)}"/>
-    <rect class="gd-tag" x="${W - padR + 2}" y="${(y(last.c) - 9).toFixed(1)}" width="${padR - 4}" height="18" rx="3"/><text class="gd-tagt" x="${W - 6}" y="${(y(last.c) + 4).toFixed(1)}" text-anchor="end">${f2(last.c)}</text>
-    <text class="mk-tick" x="${W - 6}" y="${padT + 10}" text-anchor="end">${f2(hi)}</text><text class="mk-tick" x="${W - 6}" y="${H - padB - 2}" text-anchor="end">${f2(lo)}</text>
-    <text class="mk-tick" x="2" y="${H - 5}">${clock(cs[0].t)}</text><text class="mk-tick" x="${x(i0).toFixed(1)}" y="${H - 5}" text-anchor="end">${clock(last.t)}</text>
-  </svg>
-  <div class="mk-legend">${ind.ema ? `<span class="k-e9">EMA 9</span><span class="k-e21">EMA 21</span><span class="k-e50">EMA 50</span>` : ''}${ind.bb ? `<span class="k-sma">${esc(t('Bollinger (20, 2)'))}</span>` : ''}${cone.length ? `<span class="k-cone">${esc(t('Forecast: ensemble, 80% and 95% bands'))}</span>` : ''}</div>`;
-  const sub = (name, series, { lo: a, hi: b, lines = [], bars = null } = {}) => {
-    const h = 80; const all = [...series.flat().filter((v) => v != null), ...(bars || []).filter((v) => v != null), ...lines];
-    const l = a ?? Math.min(...all); const u = b ?? Math.max(...all);
-    const yy = (v) => 4 + (h - 8) * (1 - (v - l) / (u - l || 1));
-    const ln = (arr, cls) => { let p = ''; arr.forEach((v, i) => { if (v != null) p += `${p ? 'L' : 'M'}${x(i).toFixed(1)} ${yy(v).toFixed(1)}`; }); return p ? `<path class="${cls}" d="${p}"/>` : ''; };
-    const bs = bars ? bars.map((v, i) => (v == null ? '' : `<rect class="${v >= 0 ? 'tr-up' : 'tr-down'}" x="${(x(i) - bw * 0.3).toFixed(1)}" width="${Math.max(1, bw * 0.6).toFixed(1)}" y="${Math.min(yy(v), yy(0)).toFixed(1)}" height="${Math.max(0.5, Math.abs(yy(v) - yy(0))).toFixed(1)}" opacity="0.6"/>`)).join('') : '';
-    return `<div class="gd-subhead sub">${esc(name)} <span class="ltr">${series.map((s) => f2(s[s.length - 1], 2)).join(' · ')}</span></div>
-      <svg direction="ltr" style="direction:ltr" class="mk-chart gd-sub" viewBox="0 0 ${W} ${h}" role="img" aria-label="${esc(name)}" preserveAspectRatio="none">
-      ${lines.map((v) => `<line class="mk-axis" x1="0" x2="${W - padR}" y1="${yy(v).toFixed(1)}" y2="${yy(v).toFixed(1)}"/><text class="mk-tick" x="${W - 6}" y="${(yy(v) + 4).toFixed(1)}" text-anchor="end">${v}</text>`).join('')}
-      ${bs}${ln(series[0], 'gd-e9')}${series[1] ? ln(series[1], 'gd-e21') : ''}</svg>`;
+
+  const positions = c.ind.pos ? d.account.open.flatMap((o) => [
+    [o.open_price, 'tr-entry', `#${o.id} ${t(o.side)} ${o.oz} oz`], [o.sl, 'tr-stop', `SL #${o.id}`], [o.tp, 'tr-target', `TP #${o.id}`],
+  ]).filter(([v]) => inY(v)).map(([v, cls, label]) => `${hline(v, cls)}<text class="mk-tick" x="4" y="${P(y(v) - 3)}">${esc(label)}</text>`).join('') : '';
+  const levels = c.ind.levels ? c.levels.filter(inY).map((v) => hline(v, 'gd-level') + tag(v, 'gd-ltag', f2(v))).join('') : '';
+
+  const h = c.cross && hover ? hover : null;
+  const hi_ = h && h.i >= 0 && h.i < cs.length ? h.i : null;
+  const cross = h ? `${hi_ != null ? `<line class="gd-cross" x1="${P(x(hi_))}" x2="${P(x(hi_))}" y1="${padT}" y2="${H - padB}"/><rect class="gd-ctag" x="${P(x(hi_) - 52)}" y="${H - padB + 3}" width="104" height="18" rx="3"/><text class="gd-ctagt" x="${P(x(hi_))}" y="${H - 8}" text-anchor="middle">${stamp(cs[hi_].t, tfs, c, true)}</text>` : ''}
+    ${h.price != null && inY(h.price) ? hline(h.price, 'gd-cross') + tag(h.price, 'gd-ctag', f2(h.price, dec)) : ''}` : '';
+
+  const main = `<svg class="mk-chart gd-main tr-chart" style="block-size:${H}px" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(t('Gold candles with indicators and the forecast'))}">
+    ${grid}${overlays}${series}${conePath}${positions}${levels}
+    ${atLive ? hline(lastReal.c, 'gd-now') + tag(lastReal.c, 'gd-tag', f2(lastReal.c)) : ''}
+    ${cross}</svg>`;
+
+  // The panes below share the candles' slots, so the crosshair runs through all of them.
+  const p = d.params;
+  const SPEC = {
+    rsi: [`RSI (${p.rsi})`, [I.rsi], { lo: 0, hi: 100, lines: [30, 70] }],
+    macd: [`MACD (${p.macd.join(', ')})`, [I.macd, I.macdSignal], { bars: I.macdHist, lines: [0] }],
+    stoch: [`Stochastic (${p.stoch.join(', ')})`, [I.stochK, I.stochD], { lo: 0, hi: 100, lines: [20, 80] }],
+    cci: [`CCI (${p.cci})`, [I.cci], { lines: [-100, 0, 100] }],
+    wr: [`Williams %R (${p.wr})`, [I.willR], { lo: -100, hi: 0, lines: [-80, -20] }],
+    atr: [`ATR (${p.atr})`, [I.atr], {}],
   };
-  return main
-    + (ind.rsi ? sub('RSI (14)', [d.ind.rsi], { lo: 0, hi: 100, lines: [30, 70] }) : '')
-    + (ind.macd ? sub('MACD (12, 26, 9)', [d.ind.macd, d.ind.macdSignal], { bars: d.ind.macdHist, lines: [0] }) : '')
-    + (ind.stoch ? sub('Stochastic (14, 3)', [d.ind.stochK, d.ind.stochD], { lo: 0, hi: 100, lines: [20, 80] }) : '');
+  const pane = (key) => {
+    const [name, series2, { lo: l0, hi: u0, lines = [], bars = null }] = SPEC[key];
+    const ph = 84;
+    const all2 = [...series2.flat(), ...(bars || []), ...lines].filter((v) => v != null && Number.isFinite(v));
+    const l = l0 ?? Math.min(...all2); const u = u0 ?? Math.max(...all2);
+    const yy = (v) => 4 + (ph - 8) * (1 - (v - l) / (u - l || 1));
+    const at = hi_ ?? cs.length - 1;
+    const bs = bars ? bars.map((v, i) => (v == null ? '' : `<rect class="${v >= 0 ? 'tr-up' : 'tr-down'}" x="${P(x(i) - bw * 0.3)}" width="${P(Math.max(1, bw * 0.6))}" y="${P(Math.min(yy(v), yy(0)))}" height="${P(Math.max(0.5, Math.abs(yy(v) - yy(0))))}" opacity="0.6"/>`)).join('') : '';
+    return `<div class="gd-subhead sub">${esc(t(name.split(' (')[0]))} <span class="ltr">(${esc(name.split(' (')[1] || '')} ${series2.map((s) => f2(s[at], 2)).join(' · ')}</span></div>
+      <svg class="mk-chart gd-sub" style="block-size:${ph}px" viewBox="0 0 ${W} ${ph}" preserveAspectRatio="none" role="img" aria-label="${esc(name)}">
+      ${lines.map((v) => `<line class="mk-axis" x1="0" x2="${W - padR}" y1="${P(yy(v))}" y2="${P(yy(v))}"/><text class="mk-tick" x="${W - 6}" y="${P(yy(v) + 4)}" text-anchor="end">${v}</text>`).join('')}
+      ${bs}${path(series2[0], 'gd-e9', yy)}${series2[1] ? path(series2[1], 'gd-e21', yy) : ''}
+      ${hi_ != null ? `<line class="gd-cross" x1="${P(x(hi_))}" x2="${P(x(hi_))}" y1="0" y2="${ph}"/>` : ''}</svg>`;
+  };
+
+  // The readout: the candle under the pointer, or the last one — real prices even when Heikin Ashi is drawn.
+  const ri = hi_ ?? cs.length - 1;
+  const k = rs[ri];
+  const prev = real[a + ri - 1];
+  const chg = prev ? k.c - prev.c : null;
+  set('#gd-readout', `<b>${stamp(k.t, tfs, c, true)}</b>
+    <span>O <b>${f2(k.o)}</b></span><span>H <b>${f2(k.h)}</b></span><span>L <b>${f2(k.l)}</b></span><span>C <b>${f2(k.c)}</b></span>
+    ${chg != null ? `<span class="${dir(chg)}">${sg(chg)} (${sg((chg / prev.c) * 100, 3)}%)</span>` : ''}
+    ${c.ind.ema ? p.ema.map((e, j) => `<span class="r-e${j}">EMA ${e} <b>${f2(I.ema[j][ri])}</b></span>`).join('') : ''}
+    ${c.ind.sma ? `<span class="r-sma">SMA ${p.sma} <b>${f2(I.sma[ri])}</b></span>` : ''}
+    ${c.ind.bb ? `<span class="r-bb">BB ${p.bb.join(', ')} <b>${f2(I.bbUpper[ri])} / ${f2(I.bbLower[ri])}</b></span>` : ''}
+    ${c.type === 'ha' ? `<span class="sub">${esc(t('Heikin Ashi drawn; the prices read here are the real ones'))}</span>` : ''}`);
+
+  host.innerHTML = main + subs.map(pane).join('');
+  shown.delete(host);
+  host.classList.toggle('gd-drawing', drawing);
+  geo = { W, H, padT, padB, padR, bw, lo, hi, span, a, len };
+  if (golive) golive.hidden = atLive;
+}
+
+/** Where the pointer is, in candles and in price; null off the candles. */
+function pointAt(e) {
+  const svg = $('#gd-chart .gd-main');
+  if (!svg || !geo) return null;
+  const r = svg.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (geo.W / r.width);
+  if (px < 0 || px > geo.W - geo.padR) return null;
+  const py = (e.clientY - r.top) * (geo.H / r.height);
+  const inside = py >= geo.padT && py <= geo.H - geo.padB;
+  return { i: Math.floor(px / geo.bw), price: inside ? geo.lo + (1 - (py - geo.padT) / (geo.H - geo.padT - geo.padB)) * (geo.hi - geo.lo) : null };
+}
+
+/** Zoom keeps the live edge where it is; scrolled back, it keeps the candle under the pointer where it is. */
+function zoom(f, at = null) {
+  if (!geo) return;
+  const next = Math.min(geo.len, Math.max(10, Math.round(geo.span * f)));
+  if (next === geo.span) return;
+  if (vw.off > 0) {
+    const fr = at == null ? 0.5 : Math.min(1, Math.max(0, at / geo.span));
+    vw.off = Math.round(geo.len - (geo.a + fr * (geo.span - next) + next));
+  }
+  vw.span = next;
+  redraw();
+}
+const pan = (by) => { if (!geo) return; vw.off = Math.min(geo.len - geo.span, Math.max(0, vw.off + by)); redraw(); };
+const step = () => Math.max(1, Math.round((geo?.span || 60) / 10));
+
+function paintLevels() {
+  const c = chartCfg();
+  set('#gd-levels', c.levels.length ? `<span class="sub">${esc(t('Levels'))}</span> ${c.levels.map((v, i) => `<span class="chip">${num(f2(v))} <button type="button" class="gd-x" data-unlevel="${i}" aria-label="${esc(t('Remove level'))} ${f2(v)}">×</button></span>`).join('')}
+    <button type="button" class="btn btn-sm btn-ghost" data-cz="clear">${esc(t('Clear levels'))}</button>` : '');
+}
+
+const parseNums = (s, n, lo, hi, whole = true) => {
+  const xs = String(s).split(/[\s,،]+/).filter(Boolean).map(Number);
+  return xs.length === n && xs.every((v) => Number.isFinite(v) && v >= lo && v <= hi && (!whole || Number.isInteger(v))) ? xs : null;
+};
+
+function wireChart() {
+  watchSize();
+  hover = null; drawing = false; drag = null;
+  const host = $('#gd-chart');
+  const wrap = $('#gd-chartwrap');
+  if (!host || !wrap) return;
+  paintLevels();
+  const update = (fn, { refetch = false } = {}) => { const c = chartCfg(); fn(c); saveCfg(c); if (refetch) refreshTerminal(); redraw(); };
+
+  view.querySelectorAll('[data-tf]').forEach((b) => b.addEventListener('click', () => {
+    update((c) => { c.tf = b.dataset.tf; });
+    view.querySelectorAll('[data-tf]').forEach((x) => { x.classList.toggle('btn-primary', x === b); x.classList.toggle('btn-ghost', x !== b); });
+    vw.span = null; vw.off = 0; hover = null; screen = null;
+    refreshTerminal();
+  }));
+  // Each control is marked as matching what was loaded once it is stored, so
+  // the console does not count a chart setting as an unsaved form.
+  wrap.querySelectorAll('[data-cc]').forEach((s) => s.addEventListener('change', () => {
+    const k = s.dataset.cc;
+    update((c) => { c[k] = k === 'bars' ? Number(s.value) : s.value; }, { refetch: k === 'bars' });
+    for (const o of s.options) o.defaultSelected = o.selected;
+  }));
+  wrap.querySelectorAll('[data-ind]').forEach((b) => b.addEventListener('change', () => {
+    update((c) => { c.ind[b.dataset.ind] = b.checked; });
+    b.defaultChecked = b.checked;
+  }));
+  $('#gd-params')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = (k) => $(`#gp-${k}`).value;
+    const bbp = parseNums(v('bb'), 2, 0.5, 200, false);
+    const p = {
+      ema: parseNums(v('ema'), 3, 2, 200), sma: parseNums(v('sma'), 1, 2, 200)?.[0],
+      bb: bbp && Number.isInteger(bbp[0]) && bbp[0] >= 2 && bbp[1] <= 4 ? bbp : null,
+      rsi: parseNums(v('rsi'), 1, 2, 200)?.[0], macd: parseNums(v('macd'), 3, 2, 200), stoch: parseNums(v('stoch'), 2, 2, 200),
+      cci: parseNums(v('cci'), 1, 2, 200)?.[0], wr: parseNums(v('wr'), 1, 2, 200)?.[0], atr: parseNums(v('atr'), 1, 2, 200)?.[0],
+    };
+    if (Object.values(p).some((x) => x == null) || p.macd[0] >= p.macd[1]) {
+      toast(t('Each period is a whole number from 2 to 200, Bollinger’s deviations are from 0.5 to 4, and MACD’s fast average is shorter than its slow one.'), true);
+      return;
+    }
+    update((c) => { c.p = p; }, { refetch: true });
+    wrap.querySelectorAll('#gd-params [data-p]').forEach((el) => { el.defaultValue = el.value; });
+    toast(t('Saved'));
+  });
+
+  wrap.addEventListener('click', (e) => {
+    const un = e.target.closest('[data-unlevel]');
+    if (un) { update((c) => { c.levels.splice(Number(un.dataset.unlevel), 1); }); paintLevels(); return; }
+    const b = e.target.closest('[data-cz]');
+    if (!b) return;
+    const k = b.dataset.cz;
+    if (k === 'in') zoom(1 / 1.25);
+    else if (k === 'out') zoom(1.25);
+    else if (k === 'left') pan(step());
+    else if (k === 'right') pan(-step());
+    else if (k === 'fit') { vw.span = geo?.len || null; vw.off = 0; redraw(); }
+    else if (k === 'live') { vw.off = 0; redraw(); }
+    else if (k === 'cross') { update((c) => { c.cross = !c.cross; }); b.setAttribute('aria-pressed', String(chartCfg().cross)); }
+    else if (k === 'draw') { drawing = !drawing; b.setAttribute('aria-pressed', String(drawing)); host.classList.toggle('gd-drawing', drawing); if (drawing) toast(t('Click the chart where the level goes.')); }
+    else if (k === 'clear') { update((c) => { c.levels = []; }); paintLevels(); }
+    else if (k === 'full') { if (document.fullscreenElement) document.exitFullscreen?.(); else wrap.requestFullscreen?.().catch(() => {}); }
+    else if (k === 'pdefault') {
+      update((c) => { c.p = { ...DEF.p }; }, { refetch: true });
+      wrap.querySelectorAll('#gd-params [data-p]').forEach((el) => { const v = DEF.p[el.dataset.p]; el.value = Array.isArray(v) ? v.join(', ') : String(v); el.defaultValue = el.value; });
+    }
+  });
+
+  host.addEventListener('pointermove', (e) => {
+    if (drag && geo) {
+      const r = $('#gd-chart .gd-main')?.getBoundingClientRect();
+      const px = r ? geo.bw * (r.width / geo.W) : geo.bw;
+      vw.off = Math.min(geo.len - geo.span, Math.max(0, drag.off + Math.round((e.clientX - drag.x) / px)));
+      hover = null;
+      redraw();
+      return;
+    }
+    hover = pointAt(e);
+    redraw();
+  });
+  host.addEventListener('pointerleave', () => { hover = null; redraw(); });
+  host.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    if (drawing) {
+      const pt = pointAt(e);
+      if (pt?.price == null) return;
+      update((c) => { c.levels = [...c.levels, Math.round(pt.price * 100) / 100].slice(-20); });
+      drawing = false;
+      wrap.querySelector('[data-cz="draw"]')?.setAttribute('aria-pressed', 'false');
+      paintLevels();
+      return;
+    }
+    drag = { x: e.clientX, off: vw.off };
+    host.setPointerCapture?.(e.pointerId);
+  });
+  const endDrag = () => { drag = null; };
+  host.addEventListener('pointerup', endDrag);
+  host.addEventListener('pointercancel', endDrag);
+  host.addEventListener('dblclick', () => { vw.span = null; vw.off = 0; redraw(); });
+  host.addEventListener('wheel', (e) => {
+    if (!geo) return;
+    e.preventDefault();
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { pan(Math.sign(e.deltaX || e.deltaY) * -step()); return; }
+    zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, pointAt(e)?.i ?? null);
+  }, { passive: false });
+  host.addEventListener('keydown', (e) => {
+    const keys = { '+': () => zoom(1 / 1.25), '=': () => zoom(1 / 1.25), '-': () => zoom(1.25), ArrowLeft: () => pan(step()), ArrowRight: () => pan(-step()), Home: () => { vw.off = 0; redraw(); }, End: () => { vw.off = geo?.len || 0; redraw(); }, Escape: () => { drawing = false; redraw(); } };
+    if (Object.hasOwn(keys, e.key)) { e.preventDefault(); keys[e.key](); }
+  });
 }
 
 // ================================================================ the rest ==
